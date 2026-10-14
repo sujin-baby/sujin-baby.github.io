@@ -1039,6 +1039,7 @@ function ensureEditTab_() {
       .setNote('B1에서 진행을 고르고, 카톡 공지(옵션 아래 이름 적은 것)를 통째로 여기 붙여넣으세요.\n명단 시트 \'배정\' 탭에 사람별 옵션이 들어가고, 명단 탭 \'옵션 확인\' 칸에서 틀리게 산 사람이 빨간색이 돼요.\n이름 뒤 숫자(이혜미2)는 계정 수.');
     sh.setColumnWidth(5, 220);
   }
+  ensureDupControl_(sh);
   const titles = readRuns_().filter(function (r) { return r['진행 상태'] !== '종료' && r['시트ID']; }).map(function (r) { return String(r['명단 제목']); }).reverse();
   sh.getRange('B1').setDataValidation(titles.length ? SpreadsheetApp.newDataValidation().requireValueInList(titles, true).setAllowInvalid(true).build() : null);
   const has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'onAdminEdit'; });
@@ -1052,6 +1053,9 @@ function onAdminEdit(e) {
   if (sh.getName() !== EDIT_TAB) return;
   const a1 = e.range.getA1Notation();
   if (a1 === 'B1') loadEditTab_(sh);
+  else if (a1 === 'G2' && String(e.value).toUpperCase() === 'TRUE') {
+    try { sh.getRange('G1').setValue(pickDups_(sh)); } finally { sh.getRange('G2').setValue(false); }
+  }
   else if (a1 === 'E2' && String(e.range.getValue()).trim()) {
     try { sh.getRange('G1').setValue(applyAssign_(sh, String(e.range.getValue()))); sh.getRange('E2').clearContent(); }
     catch (err) { sh.getRange('G1').setValue('배정 실패: ' + err.message); }
@@ -1059,6 +1063,43 @@ function onAdminEdit(e) {
   else if (a1 === 'E1' && String(e.value).toUpperCase() === 'TRUE') {
     try { deleteChecked_(sh); } finally { sh.getRange('E1').setValue(false); }
   }
+}
+
+// 폼수정 탭 F2 '중복 고르기' + G2 체크박스 (휴대폰에서도 B1만 바꾸면 생김)
+function ensureDupControl_(sh) {
+  if (sh.getRange('F2').getValue() === '중복 고르기 →') return;
+  sh.getRange('F2').setValue('중복 고르기 →').setFontWeight('bold').setHorizontalAlignment('right');
+  sh.getRange('G2').insertCheckboxes().setBackground('#f8c9c4')
+    .setNote('체크하면 명단에서 빨간색(중복)인 응답을 A열에서 골라 줘요. 같은 것끼리 맨 처음 낸 것은 남겨요. 확인하고 E1 삭제 실행을 체크하면 지워져요.');
+}
+
+// 명단 탭에서 빨간색인 응답(주문번호, 이름, 아이디, 전화, 주소 중 하나라도 앞 응답과 같음)을 골라서 A열 체크
+//  같은 것끼리 맨 처음 낸 것 하나는 남기고 뒤에 낸 것만 고름. 옵션 확인 빨간색은 해당 없음
+function dupRows_(sh) {
+  const last = sh.getLastRow(), width = sh.getLastColumn();
+  if (last < 4 || width < 3) return [];
+  const head = sh.getRange(3, 2, 1, width - 1).getValues()[0].map(String);
+  const vals = sh.getRange(4, 2, last - 3, width - 1).getValues();
+  const cols = [];
+  head.forEach(function (h, c) { if (MATCH.dup.test(h) && !MATCH.account.test(h)) cols.push(c); });
+  const norm = function (x) { return String(x).trim().toLowerCase(); };
+  const seen = cols.map(function () { return {}; });
+  return vals.map(function (v) {
+    if (!(v[0] instanceof Date)) return false;
+    let dup = false;
+    cols.forEach(function (c, k) { const x = norm(v[c]); if (!x) return; if (seen[k][x]) dup = true; seen[k][x] = true; });
+    return dup;
+  });
+}
+
+function pickDups_(sh) {
+  if (!editRun_(sh)) return '먼저 B1에서 진행을 고르세요.';
+  loadEditTab_(sh);
+  const marks = dupRows_(sh);
+  const n = marks.filter(Boolean).length;
+  if (!n) return '중복이 없어요.';
+  sh.getRange(4, 1, marks.length, 1).setValues(marks.map(function (m) { return [m]; }));
+  return '빨간색 중복 ' + n + '개 골랐어요 (같은 것끼리 맨 처음 낸 것은 남김). 확인하고 E1 삭제 실행을 체크하면 지워져요.';
 }
 
 function editRun_(sh) {
@@ -1071,6 +1112,7 @@ function loadEditTab_(sh, msg) {
   if (max > 3) { sh.getRange(4, 1, max - 3, sh.getMaxColumns()).clearContent().clearDataValidations(); }
   sh.getRange('B2').clearContent();
   sh.getRange('G1').setValue(msg || '');
+  try { ensureDupControl_(sh); } catch (e) {}
   const r = editRun_(sh);
   if (!r) { sh.getRange(3, 1, 1, sh.getMaxColumns()).clearContent(); return; }
   const raw = responseSheet_(SpreadsheetApp.openById(r['시트ID']));
