@@ -122,17 +122,32 @@ function runCount_(runs, r, times) {
   return (times || respTimes_(r['시트ID'])).filter(function (t) { return t >= w.from && t < w.to; }).length;
 }
 
-// 구매 마감 시각이 지났는지 (자정 ~ 오전 8시 20분 → 진행일 8:20). 시간이 없으면 진행일이 지났을 때만
+// 이 진행의 구매 시간 글: 폼 설명(공지) 맨 윗줄이 시간 글이면 그걸(직접 고친 공지 반영), 아니면 진행목록 구매시간
+const SLOT_CACHE = {};
+function runSlot_(r) {
+  const id = String(r['폼ID'] || '');
+  if (id && SLOT_CACHE[id] === undefined) {
+    SLOT_CACHE[id] = '';
+    try {
+      const first = String(FormApp.openById(id).getDescription() || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean)[0] || '';
+      if (/자정|바로구매|오전|오후/.test(first) && first.length < 40) SLOT_CACHE[id] = first;
+    } catch (e) {}
+  }
+  return (id && SLOT_CACHE[id]) || String(r['구매시간'] || '');
+}
+
+// 구매 마감 시각이 지났는지 (자정 ~ 오전 7시 00분 → 진행일 7:00). 시간이 없으면 진행일이 지났을 때만
 function pastEnd_(r) {
   if (!(r['진행일'] instanceof Date)) return false;
-  const m = String(r['구매시간'] || '').match(/~\s*(오전|오후)\s*(\d{1,2})\s*시\s*(?:(\d{1,2})\s*분)?/);
+  const m = runSlot_(r).match(/~\s*(오전|오후)\s*(\d{1,2})\s*시\s*(?:(\d{1,2})\s*분)?/);
   const end = new Date(r['진행일']);
   if (m) end.setHours((m[1] === '오후' && Number(m[2]) < 12 ? 12 : 0) + Number(m[2]), Number(m[3] || 0), 0, 0);
   else end.setHours(23, 59, 59, 0);
   return Date.now() > end.getTime();
 }
 
-function isFruit_(r) { return /자정|오전\s*8\s*시/.test(String(r['구매시간'] || '')); }
+// 과일: 공지 구매 시간이 '자정 ~ 오전 7시' (업체 마감 8시라 잠수 대비 7시로 공지). 다른 자정 진행은 오전 8시 20분
+function isFruit_(r) { return /자정[^\n]*오전\s*7\s*시/.test(runSlot_(r)); }
 
 // 명단 시트·폼·폴더 이름: 방제에서 날짜를 뺀 것 (#택10.14 모두의농수산옥광밤외12 → #택 모두의농수산옥광밤외12)
 function sheetName_(s) {
@@ -159,8 +174,13 @@ function normalizeRuns_() {
     if (!String(r['캠페인']).trim() && r['명단 제목']) { r['캠페인'] = campOf_(r['명단 제목']); setRun_(r.row, '캠페인', r['캠페인']); }
   });
   // 일차 바로잡기: 2일차를 1일차로 만들었어도 같은 의뢰의 순서대로 1, 2, 3...
+  //  업체, 포토, 업체방이 빈 날은 같은 의뢰 다른 날 값으로 채움 (추가 모집 등)
   chainsOf_(runs).forEach(function (c) {
     c.runs.forEach(function (r, i) { if (Number(r['일차']) !== i + 1) { r['일차'] = i + 1; setRun_(r.row, '일차', i + 1); } });
+    ['업체', '포토', '업체방'].forEach(function (h) {
+      const v = (c.runs.filter(function (x) { return String(x[h]).trim(); })[0] || {})[h];
+      if (v) c.runs.forEach(function (r) { if (!String(r[h]).trim()) { r[h] = v; setRun_(r.row, h, v); } });
+    });
   });
   const key = function (r) { return String(r['캠페인']).replace(/\d+\s*$/, '').replace(/\s+/g, ''); };
   runs.forEach(function (r) {
@@ -728,8 +748,12 @@ function optionCounts_(st) {
     if (x[3] !== '' && Number(x[3]) === 0) o.canc++;
     else { o.need += Number(x[3]) || 1; if (o.names.indexOf(String(x[1]).trim()) === -1) o.names.push(String(x[1]).trim()); }
   });
+  // 여러 옵션이 같은 가격이면 금액으로는 어느 옵션인지 모름
+  const priceUse = {};
+  Object.keys(by).forEach(function (l) { if (by[l].price) priceUse[by[l].price] = (priceUse[by[l].price] || 0) + 1; });
   Object.keys(by).forEach(function (l) {
     const o = by[l];
+    if (o.price && priceUse[o.price] > 1) o.price = 0;
     if (o.choice && st.info.optCol) o.got = st.data.filter(function (y) { return k(y[st.info.optCol - 1]) === k(o.choice); }).length;
     else if (o.price && st.info.priceCol) o.got = st.data.filter(function (y) { return num(y[st.info.priceCol - 1]) === o.price; }).length;
     else o.got = o.need;   // 어느 옵션인지 알 수 없으면 셈에서 뺌
@@ -798,10 +822,10 @@ function shortProduct_(t) {
 function noticeProducts_(text) {
   return String(text || '').split(/\n-{5,}\s*\n?/).map(function (b) {
     const line = function (re) { const m = b.match(re); return m ? m[1].trim() : ''; };
-    const name = shortProduct_(line(/🐥\s*★?\s*키워드\s*[:：]\s*(.+)/) || line(/🐥\s*상품명\s*[:：]\s*(.+)/));
+    const name = shortProduct_(line(/(?:🐥\s*)?★?\s*키워드\s*[:：]\s*(.+)/) || line(/(?:🐥\s*)?상품명\s*[:：]\s*(.+)/));
     const prices = [];
-    b.split('\n').forEach(function (l) { if (/가격/.test(l)) (l.match(/\d{1,3}(?:,\d{3})+|\d{4,}/g) || []).forEach(function (x) { x = Number(x.replace(/,/g, '')); if (prices.indexOf(x) === -1) prices.push(x); }); });
-    return { name: name, shop: line(/🐥\s*판매처\s*[:：]\s*(.+)/).replace(/\s+/g, ''), prices: prices };
+    b.split('\n').forEach(function (l) { if (/가격|결제\s*[:：]/.test(l)) (l.match(/\d{1,3}(?:,\d{3})+|\d{4,}/g) || []).forEach(function (x) { x = Number(x.replace(/,/g, '')); if (prices.indexOf(x) === -1) prices.push(x); }); });
+    return { name: name, shop: line(/판매처\s*[:：]\s*(.+)/).replace(/판매자\s*[:：]?|주식회사|\(주\)|㈜|\s+/g, ''), prices: prices };
   }).filter(function (x) { return x.name; });
 }
 
@@ -852,7 +876,7 @@ function parseAssign_(text, choices) {
       if (/^\s*🐥\s*가격/.test(next)) { const m = next.match(/\d{1,3}(?:,\d{3})+|\d{4,}/); if (m) return Number(m[0].replace(/,/g, '')); }
       const o = k(opt);
       for (let i = 0; i < lines.length; i++) {
-        if (!/가격/.test(lines[i])) continue;
+        if (!/가격|결제\s*[:：]/.test(lines[i])) continue;
         const segs = lines[i].split('/');
         for (let j = 0; j < segs.length; j++) {
           const sg = segs[j].replace(/🐥[^:：]*[:：]/g, ' ');
@@ -862,7 +886,9 @@ function parseAssign_(text, choices) {
           if (m) return Number(m[0].replace(/,/g, ''));
         }
       }
-      return 0;
+      // 옵션마다 가격이 따로 없고 가이드에 가격이 하나뿐이면 그 가격 (예: 🐥결제 : 108500)
+      const all = (noticeProducts_(b)[0] || {}).prices || [];
+      return all.length === 1 ? all[0] : 0;
     };
     let cur = null;
     lines.forEach(function (line, idx) {
@@ -1466,7 +1492,7 @@ function noticeForMore_(desc, short) {
       const c = want[k([prod, opt].filter(Boolean).join(' '))] || want[k(opt)] || 0;
       if (!c) { if (/^\s*🐥\s*가격/.test(lines[j + 1] || '') && ((lines[j + 1].match(/\d{1,3}(?:,\d{3})+|\d{4,}/g) || []).length === 1)) j++; continue; }
       total += c;
-      out.push(m[1] + opt + ' (' + c + '명)');
+      out.push(m[1] + opt + (/\(\s*\d+\s*명/.test(t) ? ' (' + c + '명)' : ' ' + c + '명'));   // 원래 모양 그대로 (N명) 또는 N명
     }
     if (multi && !total && i > 0) continue;
     if (multi && !total) { /* 첫 가이드는 상단 공지가 들어 있어서 옵션 줄만 빠진 채로 둠 */ }
@@ -1478,7 +1504,7 @@ function noticeForMore_(desc, short) {
     .join('\n\n------------------------------------------------\n\n').replace(/\n{3,}/g, '\n\n');
 }
 
-// 과일(자정 ~ 오전 8시 20분): 7시에 배정에서 아직 안 산 사람을 모아 보낼 메시지함 + 메일, 7시 30분에 한 번 더 메일
+// 과일(자정 ~ 오전 7시): 7시에 배정에서 아직 안 산 사람을 모아 보낼 메시지함 + 메일, 7시 30분에 한 번 더 메일
 function fruitCheck_(runs) {
   const hm = Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'HHmm'));
   if (hm < 700 || hm > 830) return;
@@ -1761,7 +1787,11 @@ function updatePay_() {
     // 전월: 지난달에 시작한 캠페인이 이번 달로 넘어오면 지난달까지 끝낸 건수 (남은 = 총액 - 전월 - 누계 수식에 맞춰 총액에 다시 더함)
     const ym = function (d) { return d.getFullYear() * 12 + d.getMonth(); };
     const prev = mine.filter(function (x) { return ym(x['진행일']) < ym(r['진행일']); }).reduce(function (a, x) { return a + got(x); }, 0);
-    writePayRow_(r, nameOf(r), Math.max(total - before, 0) + prev, prev, siblings_(all, r).length > 1);
+    // 같은 의뢰에 과일(자정 ~ 오전 7시) 진행이 있으면 모든 날 진행시간을 그걸로, 스토어·포토는 비었으면 같은 의뢰 값
+    const fruit = mine.filter(isFruit_)[0];
+    const pick = function (h) { return r[h] || (mine.filter(function (x) { return x[h]; })[0] || {})[h] || ''; };
+    writePayRow_(r, nameOf(r), Math.max(total - before, 0) + prev, prev, siblings_(all, r).length > 1,
+      { store: pick('업체'), time: payTime_(fruit ? runSlot_(fruit) : runSlot_(r)), photo: pick('포토') });
   });
 }
 
@@ -1769,11 +1799,12 @@ function updatePay_() {
 function payTime_(t) {
   t = String(t || '');
   if (/바로구매/.test(t)) return '긴급건';
-  const x = t.replace(/★/g, '').replace(/\s*구매\s*$/, '').trim();
+  const x = t.replace(/★/g, '').replace(/\s*구매\s*$/, '').replace(/\s+00\s*분/, '').replace(/\s+/g, ' ').trim();
   return /오전|오후/.test(x) && !/자정/.test(x) ? '시간지정' : x;
 }
 
-function writePayRow_(r, name, remain, prevMonth, shared) {
+function writePayRow_(r, name, remain, prevMonth, shared, ex) {
+  ex = ex || { store: r['업체'], time: payTime_(r['구매시간']), photo: r['포토'] };
   const day = r['진행일'];
   const sh = payTab_(day.getMonth() + 1);
   const L = payLayout_(sh);
@@ -1811,9 +1842,19 @@ function writePayRow_(r, name, remain, prevMonth, shared) {
   if (prevMonth) put(L.prev, prevMonth);
   // 스토어, 진행시간, 특이사항은 비어 있을 때만 채움 (직접 고친 건 그대로)
   const putIfEmpty = function (col, val) { if (col && val && sh.getRange(row, col).getValue() === '' && !sh.getRange(row, col).getFormula()) sh.getRange(row, col).setValue(val); };
-  putIfEmpty(L.store, String(r['업체'] || ''));
-  putIfEmpty(L.time, payTime_(r['구매시간']));
-  putIfEmpty(L.note, [r['택대'] === 'Y' ? '택대' : '', r['실배송'] === 'Y' ? '실배송' : '', Number(r['일차']) ? r['일차'] + '일차' : '', /유/.test(String(r['포토'])) ? '포토' : ''].filter(Boolean).join(' / '));
+  // 스토어가 없으면 월급시트에서 같은 캠페인 다른 줄의 스토어를 가져옴 (직접 적어 둔 것)
+  let store = String(ex.store || '');
+  if (!store && L.store) {
+    const ck = campKey_(name), stores = sh.getRange(L.head + 1, L.store, Math.max(last - L.head, 1), 1).getValues();
+    names.forEach(function (nm, i) { if (!store && nm && i !== row - L.head - 1 && campKey_(nm) === ck && stores[i][0]) store = String(stores[i][0]); });
+  }
+  putIfEmpty(L.store, store.replace(/\s+/g, ''));
+  // 진행시간: 비었거나 스크립트가 넣던 말(긴급건, 시간지정, 자정 ~ …)이면 지금 값으로 바꿈
+  if (L.time && ex.time) {
+    const c = sh.getRange(row, L.time), cur = String(c.getValue()).trim();
+    if (!c.getFormula() && cur !== ex.time && (cur === '' || /^(긴급건|시간지정|자정\s*~)/.test(cur))) c.setValue(ex.time);
+  }
+  putIfEmpty(L.note, [r['택대'] === 'Y' ? '택대' : '', r['실배송'] === 'Y' ? '실배송' : '', Number(r['일차']) ? r['일차'] + '일차' : '', /유/.test(String(ex.photo || '')) ? '포토' : ''].filter(Boolean).join(' / '));
   const col = L.days[(day.getMonth() + 1) + '-' + day.getDate()] || L.days[String(day.getDate())];
   put(col, Number(r['인원']) || 0);
 }
