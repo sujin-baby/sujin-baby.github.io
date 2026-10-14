@@ -60,6 +60,31 @@ function campOf_(title) {
   return String(title || '').replace(/\s*\([^)]*\)\s*$/, '').replace(/^[#업택\s]*\d{1,2}\.\d{1,2}\s*/, '').replace(/\s*\d+\s*$/, '').trim();
 }
 
+// 같은 캠페인인지 비교할 때 쓰는 키 (#택, 날짜, 끝 건수, 띄어쓰기 뺌)
+function campKey_(s) { return campOf_(s).replace(/\s+/g, ''); }
+
+// 같은 캠페인 진행들을 날짜순으로 묶어서 '한 의뢰'씩 나눔: 총건수를 다 채우면 다음 진행은 새 의뢰
+function chainsOf_(runs) {
+  const by = {};
+  runs.filter(function (r) { return r['진행일'] instanceof Date; }).forEach(function (r) {
+    const k = campKey_(r['캠페인'] || r['명단 제목']);
+    (by[k] = by[k] || []).push(r);
+  });
+  const chains = [];
+  Object.keys(by).forEach(function (k) {
+    const list = by[k].sort(function (a, b) { return a['진행일'] - b['진행일']; });
+    let cur = null;
+    list.forEach(function (r) {
+      const total = Number(r['총건수']) || 0;
+      if (!cur || (cur.total && cur.done >= cur.total)) { cur = { key: k, total: total, done: 0, runs: [] }; chains.push(cur); }
+      if (!cur.total && total) cur.total = total;
+      cur.runs.push(r);
+      cur.done += Number(r['목표인원']) || 0;
+    });
+  });
+  return chains;
+}
+
 // 공지(폼 설명)의 '🐥가격' 줄에서 가격만 뽑기
 function pricesFromNotice_(text) {
   const out = []; let on = false;
@@ -78,6 +103,10 @@ function normalizeRuns_() {
   const runs = readRuns_();
   runs.forEach(function (r) {
     if (!String(r['캠페인']).trim() && r['명단 제목']) { r['캠페인'] = campOf_(r['명단 제목']); setRun_(r.row, '캠페인', r['캠페인']); }
+  });
+  // 일차 바로잡기: 2일차를 1일차로 만들었어도 같은 의뢰의 순서대로 1, 2, 3...
+  chainsOf_(runs).forEach(function (c) {
+    c.runs.forEach(function (r, i) { if (Number(r['일차']) !== i + 1) { r['일차'] = i + 1; setRun_(r.row, '일차', i + 1); } });
   });
   const key = function (r) { return String(r['캠페인']).replace(/\d+\s*$/, '').replace(/\s+/g, ''); };
   runs.forEach(function (r) {
@@ -519,6 +548,7 @@ function reformatSelected() {
 /* ---------------- 4) 진행목록 인원, 명단 마감 ---------------- */
 
 function dailyCheck() {
+  try { archiveOld_(); } catch (e) { Logger.log('보관 실패: ' + e); }
   try { normalizeRuns_(); } catch (e) {}
   readRuns_().forEach(function (r) {
     if (r['진행 상태'] === '종료' || !r['시트ID']) return;
@@ -918,6 +948,7 @@ function planSheet_() {
     sh.getRange('D:D').setNumberFormat('yyyy-mm-dd');
     sh.setColumnWidth(10, 80);
   }
+  try { if (!sh.isSheetHidden()) sh.hideSheet(); } catch (e) {}
   return sh;
 }
 
@@ -959,7 +990,12 @@ function makeDueDays_() {
     if (x[8] !== '대기') return;
     const cfg = JSON.parse(x[9]);
     const k = Number(x[2]);
-    const prev = runs.filter(function (r) { return String(r['캠페인']) === String(x[1]) && Number(r['일차']) === k - 1; })[0];
+    // 이 캠페인이 이미 총건수만큼 진행됐으면(직접 다음 일차를 만든 경우 등) 만들지 않음
+    const ck = campKey_(x[1]);
+    const chain = chainsOf_(runs).filter(function (c) { return c.key === ck; }).pop();
+    if (chain && chain.total && chain.done >= chain.total) { sh.getRange(i + 2, 9).setValue('건너뜀 (이미 다 진행)'); return; }
+    if (chain && chain.runs.some(function (r) { return r['진행일'] instanceof Date && Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd') === Utilities.formatDate(new Date(x[3]), CONFIG.TIMEZONE, 'yyyyMMdd'); })) { sh.getRange(i + 2, 9).setValue('건너뜀 (그날 진행 있음)'); return; }
+    const prev = chain ? chain.runs[chain.runs.length - 1] : null;
     const due = new Date(x[3]); due.setDate(due.getDate() - 1); due.setHours(CONFIG.NEXT_DAY_HOUR, 0, 0, 0);
     if (!((prev && prev['마감 시각']) || now >= due)) return;
     const lock = LockService.getScriptLock();
@@ -1137,7 +1173,7 @@ function putFileChip_(sh, row, col, url) {
 // 택배시트는 바로가기만 걸고 절대 고치지 않음
 
 const DASH_TAB = '한눈에';
-const DASH_VER = '2';   // 모양을 바꾸면 올려서 다시 만들게 함
+const DASH_VER = '3';   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
   buildDashboard_(true);
@@ -1164,7 +1200,7 @@ function buildDashboard_(force) {
   sh.clear();
   sh.setFrozenRows(0);
   const q = function (t) { return '"' + String(t).replace(/"/g, '""') + '"'; };
-  const head = ['진행일', '방제', '상태', '목표', '신청', '남은', '마감 시각', '명단', '폼', '월급시트', '택배시트'];
+  const head = ['진행일', '방제', '상태', '목표', '신청', '남은', '마감 시각', '명단', '폼', '택배시트'];
   sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold').setBackground('#efe6f7');
   const payUrl = CONFIG.PAY_SHEET_ID ? 'https://docs.google.com/spreadsheets/d/' + CONFIG.PAY_SHEET_ID + '/edit#gid=' + CONFIG.PAY_TAB_GID : '';
   const info = runs.map(function (r) {
@@ -1185,9 +1221,9 @@ function buildDashboard_(force) {
     sh.getRange(row, 7).setValue(r['마감 시각']);
     sh.getRange(row, 8).setFormula('=HYPERLINK(' + q(x.url) + ',"명단")');
     if (r['폼 링크']) sh.getRange(row, 9).setFormula('=HYPERLINK(' + q(r['폼 링크']) + ',"폼")');
-    if (payUrl) sh.getRange(row, 10).setFormula('=HYPERLINK(' + q(payUrl) + ',"월급")');
-    if (r['택대'] === 'Y' && CONFIG.TAKBAE_SHEET_URL) sh.getRange(row, 11).setFormula('=HYPERLINK(' + q(CONFIG.TAKBAE_SHEET_URL) + ',"택배")');
+    if (r['택대'] === 'Y' && CONFIG.TAKBAE_SHEET_URL) sh.getRange(row, 10).setFormula('=HYPERLINK(' + q(CONFIG.TAKBAE_SHEET_URL) + ',"택배")');
   });
+  if (payUrl) sh.getRange(1, 12).setFormula('=HYPERLINK(' + q(payUrl) + ',"▶ 월급시트 열기")').setFontWeight('bold');
   if (info.length) {
     sh.getRange(2, 1, info.length, 1).setNumberFormat('M/d');
     sh.getRange(2, 7, info.length, 1).setNumberFormat('M/d HH:mm');
@@ -1219,4 +1255,39 @@ function removeOldUpdateTrigger_() {
 function updateNow() {
   try { CacheService.getScriptCache().removeAll(['ori_src_n', 'ori_src_0', 'ori_src_1']); } catch (e) {}
   SpreadsheetApp.getUi().alert('최신 버전을 받도록 했어요. 다음 실행부터 바로 새 버전으로 돌아가요.');
+}
+
+/* ---------------- 12) 오래된 줄 정리 (매일 9시) ---------------- */
+// 진행일이 6개월(CONFIG.ARCHIVE_DAYS, 기본 180일) 지난 진행은 진행목록에서 숨긴 '보관' 탭으로 옮김 (지우지 않음, 폼과 시트 파일도 그대로)
+// 보낼메시지는 보냄 처리된 지 30일 지난 줄, 일정은 끝난 지 30일 지난 줄을 지움
+
+function archiveOld_() {
+  const days = Number(CONFIG.ARCHIVE_DAYS) || 180;
+  const list = ensureListSheet_();
+  const runs = readRuns_();
+  const old = runs.filter(function (r) { return r['진행일'] instanceof Date && (today_() - r['진행일']) / 864e5 > days; });
+  if (old.length) {
+    const ss = adminSs_();
+    let ar = ss.getSheetByName('보관');
+    if (!ar) {
+      ar = ss.insertSheet('보관');
+      ar.getRange(1, 1, 1, LIST_HEADER.length).setValues([LIST_HEADER]).setFontWeight('bold');
+      ar.setFrozenRows(1);
+      ar.hideSheet();
+    }
+    const vals = list.getRange(2, 1, list.getLastRow() - 1, LIST_HEADER.length).getValues();
+    old.forEach(function (r) { ar.appendRow(vals[r.row - 2]); });
+    old.map(function (r) { return r.row; }).sort(function (a, b) { return b - a; }).forEach(function (row) { list.deleteRow(row); });
+  }
+  const cut = new Date(Date.now() - 30 * 864e5);
+  const ob = outboxSheet_();
+  if (ob.getLastRow() >= 2) {
+    const v = ob.getRange(2, 1, ob.getLastRow() - 1, 6).getValues();
+    for (let i = v.length - 1; i >= 0; i--) if (v[i][5] === '보냄' && v[i][1] instanceof Date && v[i][1] < cut) ob.deleteRow(i + 2);
+  }
+  const pl = planSheet_();
+  if (pl.getLastRow() >= 2) {
+    const v = pl.getRange(2, 1, pl.getLastRow() - 1, PLAN_HEAD.length).getValues();
+    for (let i = v.length - 1; i >= 0; i--) if (v[i][8] !== '대기' && v[i][3] instanceof Date && v[i][3] < cut) pl.deleteRow(i + 2);
+  }
 }
