@@ -185,7 +185,7 @@ function cp(id){var t=document.getElementById(id||'notice');t.select();
 function go(){
   var d={daily:document.getElementById('daily').value.trim(),title:document.getElementById('title').value.trim(),type:document.getElementById('type').value,
     takdae:document.getElementById('takdae').checked,realship:document.getElementById('realship').checked,
-    platform:document.getElementById('platform').value,desc:document.getElementById('desc').value,fname:window.__FNAME||'',k:window.__K||'',n:window.__N||'',shop:window.__SHOP||'',slot:window.__SLOT||'',photo:window.__PHOTO||'',date:window.__DATE||'',plan:window.__PLAN||'',slot2:window.__SLOT2||'',day:window.__DAY||'',total:window.__TOTAL||'',room:window.__ROOM||'',croom:window.__CROOM||''};
+    platform:document.getElementById('platform').value,desc:document.getElementById('desc').value,fname:window.__FNAME||'',k:window.__K||'',n:window.__N||'',opts:window.__OPTS||'',shop:window.__SHOP||'',slot:window.__SLOT||'',photo:window.__PHOTO||'',date:window.__DATE||'',plan:window.__PLAN||'',slot2:window.__SLOT2||'',day:window.__DAY||'',total:window.__TOTAL||'',room:window.__ROOM||'',croom:window.__CROOM||''};
   if(!d.title){document.getElementById('msg').textContent='명단 제목을 넣어 주세요.';return;}
   document.getElementById('go').disabled=true;
   document.getElementById('msg').textContent='만드는 중이에요… (10~20초)';
@@ -227,7 +227,7 @@ function doGet(e) {
     delete p.d64;
   }
   // 생성기 버튼으로 열면(auto=1) 값이 다 채워진 채로 바로 만들기 실행. 같은 요청ID는 한 번만 만들어짐
-  const pre = '<script>window.__N=' + JSON.stringify(p.n || '') + ';window.__ROOM=' + JSON.stringify(p.room || '') + ';window.__DATE=' + JSON.stringify(p.date || '') + ';window.__SHOP=' + JSON.stringify(p.shop || '') + ';window.__SLOT=' + JSON.stringify(p.slot || '') + ';window.__PHOTO=' + JSON.stringify(p.photo || '') + ';window.__PLAN=' + JSON.stringify(p.plan || '') + ';window.__SLOT2=' + JSON.stringify(p.slot2 || '') + ';window.__DAY=' + JSON.stringify(p.day || '') + ';window.__TOTAL=' + JSON.stringify(p.total || '') + ';window.__CROOM=' + JSON.stringify(p.croom || '') + ';window.__AUTO=' + (p.auto === '1' && p.title ? 'true' : 'false') + ';</' + 'script>';
+  const pre = '<script>window.__N=' + JSON.stringify(p.n || '') + ';window.__ROOM=' + JSON.stringify(p.room || '') + ';window.__DATE=' + JSON.stringify(p.date || '') + ';window.__SHOP=' + JSON.stringify(p.shop || '') + ';window.__OPTS=' + JSON.stringify(p.opts || '') + ';window.__SLOT=' + JSON.stringify(p.slot || '') + ';window.__PHOTO=' + JSON.stringify(p.photo || '') + ';window.__PLAN=' + JSON.stringify(p.plan || '') + ';window.__SLOT2=' + JSON.stringify(p.slot2 || '') + ';window.__DAY=' + JSON.stringify(p.day || '') + ';window.__TOTAL=' + JSON.stringify(p.total || '') + ';window.__CROOM=' + JSON.stringify(p.croom || '') + ';window.__AUTO=' + (p.auto === '1' && p.title ? 'true' : 'false') + ';</' + 'script>';
   const fill = pre + '<script>window.__K=' + JSON.stringify(CONFIG.KEY) + ';window.__FNAME=' + JSON.stringify(p.fname || '') + ';(function(){var p=' + JSON.stringify(p).replace(/</g, '\\u003c') + ';var $=function(i){return document.getElementById(i)};if(p.title)$("title").value=p.title;if(p.daily)$("daily").value=p.daily;if(p.desc)$("desc").value=p.desc;if(p.type)$("type").value=p.type;if(p.platform)$("platform").value=p.platform;$("takdae").checked=p.takdae==="1";$("realship").checked=p.realship==="1";autoGo();})();</' + 'script>';
   return HtmlService.createHtmlOutput(DIALOG_HTML + fill).setTitle('새 진행 만들기').addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
@@ -268,6 +268,7 @@ function createRunInner_(d) {
   // 새 구글폼은 복사본이 '게시 안 됨' 상태라 먼저 게시
   if (typeof form.setPublished === 'function') form.setPublished(true);
   form.setAcceptingResponses(true);
+  try { setOptionChoices_(form, d.opts); } catch (e) { Logger.log('옵션 질문 바꾸기 실패: ' + e); }
 
   // 응답 시트 생성·연결
   const ss = SpreadsheetApp.create(fname + ' (응답)');
@@ -321,6 +322,20 @@ function createRunInner_(d) {
   if (d.realship) list.getRange(r, 1, 1, LIST_HEADER.length).setBackground('#fff2a8');
 
   return { notice: notice, formUrl: formUrl, sheetUrl: ss.getUrl(), folderUrl: folder.getUrl() };
+}
+
+// 폼의 '옵션' 질문 보기를 이번 가이드 옵션으로 바꿈 (예전 템플릿은 '단일옵션' 하나뿐이라 다 단일옵션으로 들어왔음)
+function setOptionChoices_(form, opts) {
+  const list = String(opts || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean);
+  if (!list.length) return;
+  form.getItems().forEach(function (it) {
+    if (!/옵션/.test(it.getTitle())) return;
+    const t = it.getType();
+    if (t === FormApp.ItemType.MULTIPLE_CHOICE) it.asMultipleChoiceItem().setChoiceValues(list);
+    else if (t === FormApp.ItemType.LIST) it.asListItem().setChoiceValues(list);
+    else if (t === FormApp.ItemType.CHECKBOX) it.asCheckboxItem().setChoiceValues(list);
+    else if (t === FormApp.ItemType.TEXT) it.asTextItem().setHelpText('구매한 옵션을 그대로 적어 주세요: ' + list.join(' / '));
+  });
 }
 
 function shareFile_(id, editorsOnly, extra) {
@@ -911,7 +926,7 @@ function savePlan_(d) {
   if (!plan.length) return;
   const camp = campOf_(d.title);
   const cfg = JSON.stringify({ type: d.type, takdae: !!d.takdae, realship: !!d.realship, platform: d.platform, prices: d.prices,
-    croom: d.croom, shop: d.shop, photo: d.photo, desc: String(d.desc || ''), slot2: d.slot2 || '자정 ~ 오전 8시 20분 구매', total: d.total, camp: camp, base: d.n });
+    croom: d.croom, shop: d.shop, photo: d.photo, opts: d.opts, desc: String(d.desc || ''), slot2: d.slot2 || '자정 ~ 오전 8시 20분 구매', total: d.total, camp: camp, base: d.n });
   const sh = planSheet_();
   plan.forEach(function (x) {
     sh.appendRow([String(d.n || camp) + '-' + x.k, camp, x.k, new Date(x.date + 'T00:00:00'), x.room, x.title, x.n, JSON.stringify(x.c), '대기', cfg]);
@@ -956,7 +971,7 @@ function makeDueDays_() {
       const res = createRunInner_({
         k: CONFIG.KEY, n: x[0], title: x[5], room: x[4], fname: x[4], camp: cfg.camp, day: k, total: cfg.total,
         daily: String(x[6]), date: dateIso, desc: desc, type: cfg.type, takdae: cfg.takdae, realship: cfg.realship,
-        platform: cfg.platform, prices: cfg.prices, croom: cfg.croom, shop: cfg.shop, photo: cfg.photo, slot: cfg.slot2
+        platform: cfg.platform, prices: cfg.prices, croom: cfg.croom, opts: cfg.opts, shop: cfg.shop, photo: cfg.photo, slot: cfg.slot2
       });
       sh.getRange(i + 2, 9).setValue('생성됨');
       MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[체험단] ' + k + '일차 준비됐어요: ' + x[4], [
@@ -1122,6 +1137,7 @@ function putFileChip_(sh, row, col, url) {
 // 택배시트는 바로가기만 걸고 절대 고치지 않음
 
 const DASH_TAB = '한눈에';
+const DASH_VER = '2';   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
   buildDashboard_(true);
@@ -1139,23 +1155,27 @@ function grantImport_(destId, srcId) {
 function buildDashboard_(force) {
   const runs = readRuns_().filter(function (r) { return r['진행 상태'] !== '종료' && r['시트ID']; })
     .sort(function (a, b) { return (b['진행일'] || 0) - (a['진행일'] || 0); });
-  const sig = runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태']; }).join('|');
+  const sig = DASH_VER + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태']; }).join('|');
   const props = PropertiesService.getScriptProperties();
   const ss = adminSs_();
   let sh = ss.getSheetByName(DASH_TAB);
   if (!force && sh && props.getProperty('DASH_SIG') === sig) return;
   if (!sh) sh = ss.insertSheet(DASH_TAB, 0);
   sh.clear();
-  sh.setFrozenRows(1);
+  sh.setFrozenRows(0);
   const q = function (t) { return '"' + String(t).replace(/"/g, '""') + '"'; };
   const head = ['진행일', '방제', '상태', '목표', '신청', '남은', '마감 시각', '명단', '폼', '월급시트', '택배시트'];
   sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold').setBackground('#efe6f7');
   const payUrl = CONFIG.PAY_SHEET_ID ? 'https://docs.google.com/spreadsheets/d/' + CONFIG.PAY_SHEET_ID + '/edit#gid=' + CONFIG.PAY_TAB_GID : '';
   const info = runs.map(function (r) {
-    let raw = '', cols = 12;
-    try { const rs = responseSheet_(SpreadsheetApp.openById(r['시트ID'])); raw = rs.getName(); cols = Math.max(rs.getLastColumn(), 1); } catch (e) {}
+    let raw = '', cols = 12, keep = [];
+    try {
+      const rs = responseSheet_(SpreadsheetApp.openById(r['시트ID'])); raw = rs.getName(); cols = Math.max(rs.getLastColumn(), 1);
+      // 계좌, 은행, 예금주 열은 빼고 보여 줌
+      headers_(rs).forEach(function (h, k) { if (h && !MATCH.account.test(h) && OLD_HELPER.indexOf(h) === -1 && k < 26) keep.push(k + 1); });
+    } catch (e) {}
     grantImport_(ss.getId(), r['시트ID']);
-    return { r: r, ref: "'" + raw.replace(/'/g, "''") + "'!", cols: Math.min(cols, 26), url: 'https://docs.google.com/spreadsheets/d/' + r['시트ID'] + '/edit' };
+    return { r: r, keep: keep, ref: "'" + raw.replace(/'/g, "''") + "'!", cols: Math.min(cols, 26), url: 'https://docs.google.com/spreadsheets/d/' + r['시트ID'] + '/edit' };
   });
   info.forEach(function (x, i) {
     const row = i + 2, r = x.r;
@@ -1178,7 +1198,10 @@ function buildDashboard_(force) {
     const n = Number(x.r['목표인원']) || 30;
     sh.getRange(row, 1, 1, Math.max(x.cols, 6)).setBackground('#f0e8f8');
     sh.getRange(row, 1).setValue('■ ' + x.r['명단 제목'] + '   목표 ' + (x.r['목표인원'] || '?') + '명').setFontWeight('bold');
-    sh.getRange(row + 1, 1).setFormula('=IFERROR(IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A1:' + colLetter_(x.cols) + (n + 3)) + '),"이 칸을 눌러 액세스 허용을 한 번 눌러 주세요")');
+    const imp = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A1:' + colLetter_(x.cols) + (n + 3)) + ')';
+    const body = x.keep.length ? 'CHOOSECOLS(' + imp + ',' + x.keep.join(',') + ')' : imp;
+    sh.getRange(row + 1, 1).setFormula('=IFERROR(' + body + ',"이 칸을 눌러 액세스 허용을 한 번 눌러 주세요")');
+    sh.getRange(row + 1, 1, 1, Math.max(x.keep.length || x.cols, 6)).setFontWeight('bold').setBackground('#faf7fd');
     sh.getRange(row + 2, 1, n + 2, 1).setNumberFormat('M/d HH:mm');
     row += n + 6;
   });
