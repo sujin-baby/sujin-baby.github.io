@@ -28,7 +28,7 @@ const MATCH = {
   order: /주문\s*번호/,
   name: /이름|성함|주문자|예금주/,
   account: /계좌|예금주|은행/,
-  dup: /주문\s*번호|이름|성함|주문자|아이디|전화|연락처|휴대폰|주소/,   // 겹치면 빨간색으로 표시하는 열
+  dup: /아이디|계정|이메일|전화|연락처|휴대폰|핸드폰|주소/,   // 한 명단 시트에서 겹치면 중복(빨간색). 이름은 동명이인이 많아서 뺌
   reviewFee: /리뷰비/,
   nick: /카카오\s*톡?\s*닉네임|카톡\s*닉네임/,   // '방에 참여한 카카오톡 닉네임' (옵션 확인은 이 닉네임으로)
   opt: /옵션/
@@ -39,7 +39,7 @@ const NICK_Q = '방에 참여한 카카오톡 닉네임';
 //  시트ID: 응답 시트를 찾아 인원 세기, 명단 양식 적용, 폼수정 탭에서 씀
 //  폼ID: 명단이 차면 폼 닫기, 폼수정 탭에서 응답 삭제할 때 씀
 //  요청ID: 새 진행 만들기를 두 번 눌러도 한 번만 만들어지게 할 때 씀
-const LIST_HEADER = ['등록일', '진행일', '명단 제목', '유형', '택대', '실배송', '플랫폼', '목표인원', '인원', '진행 상태', '마감 시각', '캠페인', '일차', '총건수', '업체', '구매시간', '포토', '가격', '카톡방', '업체방', '폼 링크', '시트 링크', '폴더 링크', '시트ID', '폼ID', '요청ID'];
+const LIST_HEADER = ['등록일', '진행일', '명단 제목', '유형', '택대', '실배송', '플랫폼', '목표인원', '인원', '진행 상태', '마감 시각', '택배 옮김', '캠페인', '일차', '총건수', '업체', '구매시간', '포토', '가격', '카톡방', '업체방', '폼 링크', '시트 링크', '폴더 링크', '시트ID', '폼ID', '요청ID'];
 const LIST_HIDDEN = ['시트ID', '폼ID', '요청ID'];
 const LIST_ALIAS = { '마감': '마감 시각' };   // 예전 열 이름 → 새 이름
 
@@ -199,6 +199,7 @@ function formatList_(sh) {
   sh.getRange(2, lc_('진행일'), n, 1).setNumberFormat('yyyy-mm-dd');
   sh.getRange(2, lc_('마감 시각'), n, 1).setNumberFormat('M/d HH:mm');
   sh.getRange(2, lc_('가격'), n, 1).setNumberFormat('@');
+  sh.getRange(2, lc_('택배 옮김'), n, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
   sh.getRange(2, lc_('진행 상태'), n, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['진행예정', '진행중', '종료'], true).build());
 }
 
@@ -603,7 +604,7 @@ function formatResponseSheet_(ss, opts) {
 
 const CHECK_HEAD = '옵션 확인';
 const ASSIGN_TAB = '배정';
-const ASSIGN_HEAD = ['명단 제목', '닉네임', '옵션', '계정수', '산 수', '확인', '시트ID'];
+const ASSIGN_HEAD = ['명단 제목', '닉네임', '공지 옵션', '계정수', '산 수', '확인', '시트ID', '폼 옵션', '가격'];
 const CHECK_ROWS = 500;
 const NORM = function (r) { return 'LOWER(REGEXREPLACE(TO_TEXT(' + r + '),"\\s",""))'; };
 
@@ -614,13 +615,14 @@ function checkFormula_(nkR, okR, rows, sid) {
   const A = "'" + ASSIGN_TAB + "'!";
   const f = function (c) { return 'FILTER(' + A + c + '2:' + c + ',' + A + 'G2:G="' + sid + '")'; };
   return '=IFERROR(LET(' +
-    'an,ARRAYFORMULA(' + NORM(f('B')) + '),ao,ARRAYFORMULA(' + NORM(f('C')) + '),ac,ARRAYFORMULA(IF(' + f('D') + '="",1,IFERROR(VALUE(' + f('D') + '),1))),' +
+    'an,ARRAYFORMULA(' + NORM(f('B')) + '),ao,ARRAYFORMULA(' + NORM(f('H')) + '),ac,ARRAYFORMULA(IF(' + f('D') + '="",1,IFERROR(VALUE(' + f('D') + '),1))),' +
     'nk,ARRAYFORMULA(' + NORM(nkR) + '),ok,ARRAYFORMULA(' + NORM(okR) + '),ix,SEQUENCE(' + rows + '),' +
     'MAP(nk,ok,ix,LAMBDA(nn,oo,ii,IF(nn="","",LET(' +
       'hasn,SUMPRODUCT((an=nn)*1),' +
       'got,SUMPRODUCT((an=nn)*(((ao=oo)+(ao=""))>0)*ac),' +
       'used,SUMPRODUCT((ix<=ii)*(nk=nn)*(ok=oo)),' +
-      'IF(hasn=0,"닉네임 확인",IF(got=0,"옵션 틀림",IF(used>got,"초과 구매","✔")))))))),"")';
+      'canc,SUMPRODUCT((an=nn)*(ac=0)),' +
+      'IF(hasn=0,"닉네임 확인",IF(AND(got=0,canc>0),"취소한 사람",IF(got=0,"옵션 틀림",IF(used>got,"초과 구매","✔"))))))))),"")';
 }
 
 // 관리 시트 '배정' 탭: 명단 제목 | 닉네임 | 옵션 | 계정수 | 산 수 | 확인 | (숨김) 시트ID
@@ -628,17 +630,21 @@ function checkFormula_(nkR, okR, rows, sid) {
 function assignSheet_() {
   const ss = adminSs_();
   let sh = ss.getSheetByName(ASSIGN_TAB);
+  // 예전 모양(옵션 칸 하나)이면 비우고 새로 (잘못 읽힌 줄이라 다시 붙여넣기)
+  if (sh && sh.getRange(1, 1, 1, ASSIGN_HEAD.length).getValues()[0].join('|') !== ASSIGN_HEAD.join('|')) { ss.deleteSheet(sh); sh = null; }
   if (!sh) {
     sh = ss.insertSheet(ASSIGN_TAB);
     sh.getRange(1, 1, 1, ASSIGN_HEAD.length).setValues([ASSIGN_HEAD]).setFontWeight('bold').setBackground('#efe6f7');
     sh.getRange('B1').setNote('공지에 적은 이름(카톡 닉네임). 한 사람이 두 계정으로 다른 옵션을 사면 옵션마다 한 줄씩.');
-    sh.getRange('D1').setNote('빈칸이면 1');
+    sh.getRange('D1').setNote('빈칸이면 1, 0이면 취소한 사람(다음 날 추가 모집 인원에 들어감)');
+    sh.getRange('C1').setNote('공지에 적힌 옵션. 숨긴 H열(폼 옵션)이 폼 보기와 맞는 것이고, 비어 있으면 닉네임만 확인');
     sh.setFrozenRows(1);
-    sh.setColumnWidth(1, 260); sh.setColumnWidth(3, 220);
-    sh.hideColumns(7);
+    sh.setColumnWidth(1, 260); sh.setColumnWidth(3, 160);
+    sh.hideColumns(7, 3);
     sh.setConditionalFormatRules([
       SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('초과').setBackground('#ea9999').setRanges([sh.getRange('F2:F')]).build(),
-      SpreadsheetApp.newConditionalFormatRule().whenTextStartsWith('아직').setBackground('#fff2cc').setRanges([sh.getRange('F2:F')]).build()
+      SpreadsheetApp.newConditionalFormatRule().whenTextStartsWith('아직').setBackground('#fff2cc').setRanges([sh.getRange('F2:F')]).build(),
+      SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('취소').setFontColor('#999999').setRanges([sh.getRange('A2:F')]).build()
     ]);
   }
   return sh;
@@ -648,23 +654,25 @@ function assignSheet_() {
 function boughtFormula_(row, info) {
   const imp = function (c) { return 'IMPORTRANGE("' + info.url + '","' + info.ref + c + '2:' + c + '2000")'; };
   const day = function (t) { return isFinite(t) && t > 0 ? 'DATE(' + Utilities.formatDate(new Date(t), CONFIG.TIMEZONE, 'yyyy,M,d') + ')' : (t > 0 ? '99999' : '0'); };
-  return '=IFERROR(LET(t,' + imp('A') + ',nk,' + imp(info.nick) + ',ok,' + imp(info.opt) + ',' +
+  return '=IFERROR(LET(t,' + imp('A') + ',nk,' + imp(info.nick) + ',ok,' + imp(info.opt || info.nick) + ',' +
     'SUMPRODUCT(ISNUMBER(t)*(t>=' + day(info.from) + ')*(t<' + day(info.to) + ')*(ARRAYFORMULA(' + NORM('nk') + ')=' + NORM('$B' + row) + ')*' +
-    '(((ARRAYFORMULA(' + NORM('ok') + ')=' + NORM('$C' + row) + ')+($C' + row + '=""))>0))),"")';
+    '(((ARRAYFORMULA(' + NORM('ok') + ')=' + NORM('$H' + row) + ')+($H' + row + '=""))>0))),"")';
 }
 
 function needFormula_(row) {
   const n = 'IF($D' + row + '="",1,$D' + row + ')';
-  return '=IF(OR($B' + row + '="",$E' + row + '=""),"",IF($E' + row + '<' + n + ',"아직 "&(' + n + '-$E' + row + '),IF($E' + row + '>' + n + ',"초과","✔")))';
+  return '=IF($B' + row + '="","",IF(AND($D' + row + '<>"",$D' + row + '=0),"취소",IF($E' + row + '="","",IF($E' + row + '<' + n + ',"아직 "&(' + n + '-$E' + row + '),IF($E' + row + '>' + n + ',"초과","✔")))))';
 }
 
 // 명단 시트의 응답 탭 이름, 닉네임·옵션 열 글자
 function rawInfo_(sheetId) {
   const raw = responseSheet_(SpreadsheetApp.openById(sheetId));
   const head = headers_(raw);
+  // 닉네임 질문이 없는 예전 폼은 사람별 확인은 못 하고(수취인 이름은 공지 이름과 다름) 옵션별 인원만 셈
   const n = head.findIndex(function (h) { return MATCH.nick.test(h); }) + 1;
+  const pc = head.findIndex(function (h) { return /결제\s*금액|금액|가격/.test(h); }) + 1;
   const o = head.findIndex(function (h) { return MATCH.opt.test(h) && !MATCH.nick.test(h); }) + 1;
-  return { raw: raw, head: head, nickCol: n, optCol: o, nick: n ? colLetter_(n) : '', opt: o ? colLetter_(o) : '',
+  return { raw: raw, head: head, nickCol: n, optCol: o, priceCol: pc, nick: n ? colLetter_(n) : '', opt: o ? colLetter_(o) : '',
     ref: "'" + raw.getName().replace(/'/g, "''") + "'!", url: 'https://docs.google.com/spreadsheets/d/' + sheetId + '/edit' };
 }
 
@@ -683,37 +691,81 @@ function writeAssign_(r, rows) {
   }
   if (!rows.length) return;
   const start = Math.max(sh.getLastRow(), 1) + 1;
-  sh.getRange(start, 1, rows.length, 7).setValues(rows.map(function (x, i) {
+  sh.getRange(start, 1, rows.length, 9).setValues(rows.map(function (x, i) {
     const row = start + i;
-    return [title, x[0], x[1], x[2], info.nick && info.opt ? boughtFormula_(row, info) : '', needFormula_(row), String(r['시트ID'])];
+    return [title, x[0], x[1], x[2], info.nick ? boughtFormula_(row, info) : '', needFormula_(row), String(r['시트ID']), x[3] || '', x[4] || ''];
   }));
   grantImport_(adminSs_().getId(), r['시트ID']);
   try {
     const form = formOf_(info.raw);
     const choices = form ? formChoices_(form) : [];
-    if (choices.length) sh.getRange(start, 3, rows.length, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(choices, true).setAllowInvalid(true).build());
+    if (choices.length > 1) sh.getRange(start, 8, rows.length, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(choices, true).setAllowInvalid(true).build());
   } catch (e) {}
 }
 
-// 이 진행 배정에서 아직 안 산 사람 [닉네임, 남은 수] (스크립트가 직접 셈)
-function notBought_(runs, r) {
+// 이 진행의 배정 줄 + 그 기간 응답
+function assignState_(runs, r) {
   const sh = assignSheet_();
   const last = sh.getLastRow();
   if (last < 2) return null;
-  const mine = sh.getRange(2, 1, last - 1, 4).getValues().filter(function (x) { return String(x[0]) === String(r['명단 제목']) && String(x[1]).trim(); });
+  const mine = sh.getRange(2, 1, last - 1, 9).getValues().filter(function (x) { return String(x[0]) === String(r['명단 제목']) && String(x[1]).trim(); });
   if (!mine.length) return null;
   const info = rawInfo_(r['시트ID']);
   const w = windowOf_(runs, r);
   const lr = info.raw.getLastRow();
-  const data = lr < 2 || !info.nickCol ? [] : info.raw.getRange(2, 1, lr - 1, info.head.length).getValues()
+  const data = lr < 2 ? [] : info.raw.getRange(2, 1, lr - 1, info.head.length).getValues()
     .filter(function (x) { return x[0] instanceof Date && x[0].getTime() >= w.from && x[0].getTime() < w.to; });
+  return { mine: mine, info: info, data: data };
+}
+
+// 옵션별 [필요, 산 수, 취소] : 폼 보기가 나뉘어 있으면 고른 옵션으로, 아니면 결제금액으로 어느 옵션인지 셈
+function optionCounts_(st) {
+  const k = function (x) { return String(x || '').toLowerCase().replace(/\s+/g, ''); };
+  const num = function (x) { return Number(String(x).replace(/[^0-9]/g, '')) || 0; };
+  const by = {};
+  st.mine.forEach(function (x) {
+    const o = by[x[2]] = by[x[2]] || { need: 0, canc: 0, got: 0, choice: x[7], price: Number(x[8]) || 0, names: [] };
+    if (x[3] !== '' && Number(x[3]) === 0) o.canc++;
+    else { o.need += Number(x[3]) || 1; if (o.names.indexOf(String(x[1]).trim()) === -1) o.names.push(String(x[1]).trim()); }
+  });
+  Object.keys(by).forEach(function (l) {
+    const o = by[l];
+    if (o.choice && st.info.optCol) o.got = st.data.filter(function (y) { return k(y[st.info.optCol - 1]) === k(o.choice); }).length;
+    else if (o.price && st.info.priceCol) o.got = st.data.filter(function (y) { return num(y[st.info.priceCol - 1]) === o.price; }).length;
+    else o.got = o.need;   // 어느 옵션인지 알 수 없으면 셈에서 뺌
+  });
+  return by;
+}
+
+// 아직 안 산 사람 [이름, 남은 수, 공지 옵션]. 닉네임 칸이 있으면 사람별, 없으면 옵션별(그 옵션에 배정된 이름들)
+function notBought_(runs, r) {
+  const st = assignState_(runs, r);
+  if (!st) return null;
   const k = function (x) { return String(x || '').toLowerCase().replace(/\s+/g, ''); };
   const out = [];
-  mine.forEach(function (x) {
-    const need = Number(x[3]) || 1;
-    const got = data.filter(function (y) { return k(y[info.nickCol - 1]) === k(x[1]) && (!String(x[2]).trim() || !info.optCol || k(y[info.optCol - 1]) === k(x[2])); }).length;
-    if (got < need) out.push([String(x[1]).trim(), need - got]);
-  });
+  if (st.info.nickCol) {
+    st.mine.forEach(function (x) {
+      if (x[3] !== '' && Number(x[3]) === 0) return;
+      const need = Number(x[3]) || 1;
+      const got = st.data.filter(function (y) { return k(y[st.info.nickCol - 1]) === k(x[1]) && (!String(x[7]).trim() || !st.info.optCol || k(y[st.info.optCol - 1]) === k(x[7])); }).length;
+      if (got < need) out.push([String(x[1]).trim(), need - got, String(x[2])]);
+    });
+    return out;
+  }
+  const by = optionCounts_(st);
+  Object.keys(by).forEach(function (l) { const o = by[l]; if (o.got < o.need) out.push([o.names.join(' '), o.need - o.got, l]); });
+  return out;
+}
+
+// 다음 날 추가 모집 인원 {공지 옵션: 수} = 옵션별 (배정 - 산 수) + 취소한 사람
+function shortByOption_(runs, r) {
+  const out = {};
+  const st = assignState_(runs, r);
+  if (st) {
+    const by = optionCounts_(st);
+    Object.keys(by).forEach(function (l) { const c = Math.max(by[l].need - by[l].got, 0) + by[l].canc; if (c) out[l] = c; });
+  }
+  Object.defineProperty(out, '__any', { value: Object.keys(out).length > 0, enumerable: false });
   return out;
 }
 
@@ -723,7 +775,7 @@ function moveOldAssign_(ss) {
   if (old) {
     const last = old.getLastRow();
     const rows = last < 2 ? [] : old.getRange(2, 1, last - 1, 3).getValues().filter(function (x) { return String(x[0]).trim(); })
-      .map(function (x) { return [x[0], x[1], Number(x[2]) || 1]; });
+      .map(function (x) { return [x[0], x[1], Number(x[2]) || 1, x[1], 0]; });
     const r = rows.length ? readRuns_().filter(function (x) { return String(x['시트ID']) === ss.getId(); }).pop() : null;
     if (r) writeAssign_(r, rows);
     ss.deleteSheet(old);
@@ -735,77 +787,104 @@ function moveOldAssign_(ss) {
   }
 }
 
-// 공지 글에서 '옵션 → 이름들' 읽기. 이름 뒤 숫자 하나(2~9)는 계정 수 (이혜미2 = 2계정)
-//  🐥옵션 : 1kg (3명) 이혜미 정진아2      ← 옵션 줄 뒤에 이름
-//  2kg (2명)                              ← 또는 옵션 줄 아래 줄에 이름
-//  박수진 김아라
-//  옵션 줄이 없으면 붙여넣은 이름 전부를 (옵션이 하나면 그 옵션, 여럿이면 옵션 빈칸 = 닉네임만 확인)
+// 상품 짧은 이름: 꾸밈말을 빼고 마지막 낱말 (유기농 공주 햇 옥광밤 대과 → 옥광밤, GAP인증 프리미엄 제주산 황금향 → 황금향)
+function shortProduct_(t) {
+  const drop = /^(유기농|무농약|친환경|햇|햇것|대과|특대|특|왕|대|중|소|프리미엄|고당도|꿀|명품|국내산|국산|산지직송|당일수확|정품|가정용|선물용|제철)$|인증$|산$/;
+  const w = String(t || '').replace(/\([^)]*\)/g, ' ').split(',')[0].split(/\s+/).filter(function (x) { return x && !drop.test(x) && !/\d/.test(x); });
+  return w.length ? w[w.length - 1] : '';
+}
+
+// 공지(폼 설명)에서 가이드마다 상품 짧은 이름, 판매처, 가격들
+function noticeProducts_(text) {
+  return String(text || '').split(/\n-{5,}\s*\n?/).map(function (b) {
+    const line = function (re) { const m = b.match(re); return m ? m[1].trim() : ''; };
+    const name = shortProduct_(line(/🐥\s*★?\s*키워드\s*[:：]\s*(.+)/) || line(/🐥\s*상품명\s*[:：]\s*(.+)/));
+    const prices = [];
+    b.split('\n').forEach(function (l) { if (/가격/.test(l)) (l.match(/\d{1,3}(?:,\d{3})+|\d{4,}/g) || []).forEach(function (x) { x = Number(x.replace(/,/g, '')); if (prices.indexOf(x) === -1) prices.push(x); }); });
+    return { name: name, shop: line(/🐥\s*판매처\s*[:：]\s*(.+)/).replace(/\s+/g, ''), prices: prices };
+  }).filter(function (x) { return x.name; });
+}
+
+// 공지 글에서 '옵션 → 이름들' 읽기 (사용자 공지 모양)
+//  1) 1kg*1 2명 (박지수(취소) 정수연)          ← 'N명' 뒤 괄호 안 이름
+//  🐥옵션 : 1kg×3 (2명) 송기주 2              ← '(N명)' 뒤 이름, 이름 뒤 숫자(띄어 써도) = 계정 수
+//  이름(취소) = 취소한 사람 (계정수 0, 다음 날 추가 모집 인원에 들어감)
+//  옵션 줄 바로 아래 줄에 이름만 있어도 읽음
+// 돌려주는 줄: [닉네임, 공지 옵션(가이드 여럿이면 상품명 붙임), 계정수, 폼 보기(맞는 게 없으면 빈칸), 가격]
 function parseAssign_(text, choices) {
   const k = function (x) { return String(x || '').toLowerCase().replace(/\s+/g, ''); };
-  const bare = function (c) { return String(c).replace(/\s*\([\d,\s]+원\)\s*$/, '').trim(); };
-  // 보기마다 찾을 글자: '천혜향 1kg' → ['천혜향1kg', '1kg'] (가이드 이름이 붙은 보기도 옵션 이름만으로 찾게)
-  const keys = choices.map(function (c) {
-    const w = bare(c).split(/\s+/).filter(Boolean), out = [];
-    for (let i = 0; i < w.length; i++) out.push(k(w.slice(i).join('')));
-    return out.filter(Boolean);
-  });
-  const esc = function (x) { return x.split('').map(function (ch) { return ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('\\s*'); };
-  const junk = /http|★|☆|\d\s*원|\d{1,3},\d{3}|[:!?~]|구매|리뷰|링크|폼|가격|배송|사지|검색/;
-  const rows = [], at = {};
-  const add = function (line, opt) {
-    line.replace(/@/g, ' ').split(/[\s,\/·]+/).forEach(function (tok) {
-      tok = tok.replace(/^[^0-9A-Za-z가-힣]+|[^0-9A-Za-z가-힣]+$/g, '');
+  const bare = function (c) { return k(String(c).replace(/\s*\([\d,\s]+원\)\s*$/, '')); };
+  const blocks = String(text || '').split(/\n-{5,}\s*\n?/);
+  const multi = noticeProducts_(text).length > 1 || blocks.length > 1;
+  const junk = /http|★|☆|▶|▼|※|🐥|[:!?]|\d\s*원|\d{1,3},\d{3}|구매|리뷰|링크|가격|배송|검색|사업자|입금|참고|안내/;
+  const rows = [], at = {}, priceMemo = {};
+  const toChoice = function (label, opt) {
+    const a = k(label), b = k(opt);
+    let hit = choices.filter(function (c) { return bare(c) === a || bare(c) === b; })[0];
+    if (!hit) hit = choices.filter(function (c) { return a && bare(c).indexOf(a) >= 0; })[0];
+    if (!hit && !multi) hit = choices.filter(function (c) { return b && bare(c).indexOf(b) >= 0; })[0];
+    return hit || '';
+  };
+  const add = function (names, label, choice) {
+    let lastKey = null;
+    String(names).replace(/\(\s*취소\s*\)/g, '#취소').replace(/[()\[\],·\/]/g, ' ').split(/\s+/).forEach(function (tok) {
+      tok = tok.replace(/^@+/, '').trim();
+      if (!tok) return;
+      if (/^[2-9]$/.test(tok) && lastKey) { rows[at[lastKey]][2] = Number(tok); return; }   // '송기주 2'
       if (!/[A-Za-z가-힣]/.test(tok) || /^\d+명$/.test(tok)) return;
+      const cancel = /#취소$/.test(tok);
+      tok = tok.replace(/#취소$/, '');
       let n = 1;
       const m = tok.match(/^(.*\D)([2-9])$/);
-      if (m) { tok = m[1]; n = Number(m[2]); }
-      const key = k(tok) + '|' + opt;
-      if (at[key] !== undefined) { rows[at[key]][2] += n; return; }
-      at[key] = rows.length; rows.push([tok, opt, n]);
+      if (m && !cancel) { tok = m[1]; n = Number(m[2]); }
+      if (cancel) n = 0;
+      const key = k(tok) + '|' + label;
+      if (at[key] !== undefined) { rows[at[key]][2] += n; lastKey = key; return; }
+      at[key] = rows.length; rows.push([tok, label, n, choice, 0]); lastKey = key;
     });
   };
-  const lines = String(text || '').split(/\r?\n/);
-  const findOpt = function (t, block) {
-    const lt = k(t);
-    let best = -1, len = 0;
-    keys.forEach(function (ks, i) {
-      ks.forEach(function (x, j) {
-        if (lt.indexOf(x) === -1) return;
-        // 같은 길이면 앞에 붙은 가이드 이름이 이 가이드 글에 있는 보기를 고름
-        const bonus = j > 0 && block.indexOf(ks[0].slice(0, ks[0].length - x.length)) >= 0 ? 0.5 : 0;
-        if (x.length + bonus > len) { len = x.length + bonus; best = i; }
-      });
-    });
-    return best < 0 ? null : { i: best, key: keys[best].filter(function (x) { return lt.indexOf(x) >= 0; })[0] };
-  };
-  // 가이드 글(------ 로 나뉨)마다 텍스트, 가이드 이름 찾기용
-  let blk = '', blocks = [];
-  lines.forEach(function (l) { if (/^-{5,}/.test(l.trim())) { blocks.push(k(blk)); blk = ''; } else blk += l; });
-  blocks.push(k(blk));
-  let b = 0, cur = null, any = false;
-  lines.forEach(function (line) {
-    const t = line.trim();
-    if (/^-{5,}/.test(t)) { b++; cur = null; return; }
-    if (!t) { cur = null; return; }
-    if (/^🐥/.test(t) && !/^🐥\s*옵션/.test(t)) { cur = null; return; }
-    const f = keys.length ? findOpt(t.replace(/^🐥\s*옵션\s*:?/, ''), blocks[b] || '') : null;
-    if (f && !/\d{1,3},\d{3}|\d\s*원/.test(t)) {
-      any = true; cur = choices[f.i];
-      let rest = t.replace(/^🐥\s*옵션\s*:?/, '').replace(new RegExp(esc(f.key), 'i'), ' ');
-      rest = rest.replace(/\(\s*\d*\s*명\s*\)/g, ' ').replace(/\d+\s*명/g, ' ').replace(/\([^)]*\)/g, ' ');
-      add(rest, cur);
-      return;
-    }
-    if (cur !== null) { if (junk.test(t)) { cur = null; return; } add(t.replace(/^\d+\)\s*/, ''), cur); }
-  });
-  if (!any) {
-    const opt = choices.length === 1 ? choices[0] : '';
-    lines.forEach(function (line) {
+  blocks.forEach(function (b) {
+    const prod = multi ? (noticeProducts_(b)[0] || {}).name || '' : '';
+    const lines = b.split(/\r?\n/);
+    // 옵션 가격: '🐥옵션 : X (N명)' 다음 '🐥가격 : 20500', 또는 '1kg*1 : 17200원 / 1kg*2개 : 29200' 같은 줄
+    const priceOf = function (opt, idx) {
+      const next = lines[idx + 1] || '';
+      if (/^\s*🐥\s*가격/.test(next)) { const m = next.match(/\d{1,3}(?:,\d{3})+|\d{4,}/); if (m) return Number(m[0].replace(/,/g, '')); }
+      const o = k(opt);
+      for (let i = 0; i < lines.length; i++) {
+        if (!/가격/.test(lines[i])) continue;
+        const segs = lines[i].split('/');
+        for (let j = 0; j < segs.length; j++) {
+          const sg = segs[j].replace(/🐥[^:：]*[:：]/g, ' ');
+          const pos = k(sg).indexOf(o);
+          if (pos === -1) continue;
+          const m = sg.replace(new RegExp('^.*?' + opt.split('').map(function (ch) { return ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('\\s*')), '').match(/\d{1,3}(?:,\d{3})+|\d{4,}/);
+          if (m) return Number(m[0].replace(/,/g, ''));
+        }
+      }
+      return 0;
+    };
+    let cur = null;
+    lines.forEach(function (line, idx) {
       const t = line.trim();
-      if (!t || /^🐥/.test(t) || /^-{5,}/.test(t) || junk.test(t)) return;
-      add(t.replace(/^\d+\)\s*/, '').replace(/\d+\s*명/g, ' '), opt);
+      if (!t) { cur = null; return; }
+      const m = t.match(/^(.*?)\(?\s*(\d+)\s*명\s*\)?(.*)$/);
+      if (m) {
+        const opt = m[1].replace(/^\d+\)\s*/, '').replace(/^🐥\s*옵션\s*[:：]?\s*/, '').trim();
+        if (!opt || /가격|원$/.test(opt)) { cur = null; return; }
+        const label = [prod, opt].filter(Boolean).join(' ');
+        cur = { label: label, choice: toChoice(label, opt) };
+        const before = rows.length;
+        add(m[3], cur.label, cur.choice);
+        const pr = priceOf(opt, idx);
+        rows.forEach(function (x) { if (x[1] === label && !x[4]) x[4] = pr; });
+        if (rows.length === before && pr) priceMemo[label] = pr;
+        return;
+      }
+      if (cur && !junk.test(t) && t.split(/\s+/).length <= 8) { add(t, cur.label, cur.choice); rows.forEach(function (x) { if (x[1] === cur.label && !x[4]) x[4] = priceMemo[cur.label] || 0; }); return; }
+      cur = null;
     });
-  }
+  });
   return rows;
 }
 
@@ -888,6 +967,7 @@ function checkFull() {
   const runs = readRuns_(), times = {};
   try { cleanListSheetsOnce_(runs); } catch (e) { Logger.log('명단 시트 표시 정리 실패: ' + e); }
   try { fruitCheck_(runs); } catch (e) { Logger.log('안 산 사람 확인 실패: ' + e); }
+  try { takbaeCheck_(runs); } catch (e) { Logger.log('택배시트 알림 실패: ' + e); }
   runs.forEach(function (r) {
     if (r['진행 상태'] === '종료' || !r['폼ID'] || !r['목표인원'] || r['마감 시각']) return;
     let form;
@@ -922,7 +1002,8 @@ function checkFull() {
       '',
       '보낼 메시지함 (아이폰에서 복사해서 보내기): ' + outboxUrl_(),
       '',
-      '잘못 산 사람을 빼려면 관리 시트 폼수정 탭에서 지우세요. 인원이 모자라면 폼이 다시 열려요.'
+      '잘못 산 사람을 빼려면 관리 시트 폼수정 탭에서 지우세요. 인원이 모자라면 폼이 다시 열려요.',
+      r['택대'] === 'Y' ? '\n★ 택배시트에 옮겨 적기 (2시 전까지): 한눈에 탭에서 A~K 복사 → 붙여넣기 → \'택배 옮김\' 체크' : ''
     ].join('\n'));
   });
   try { buildDashboard_(false); } catch (e) { Logger.log('한눈에 탭 실패: ' + e); }
@@ -1180,6 +1261,13 @@ function ensureEditTab_() {
 function onAdminEdit(e) {
   if (!e || !e.range) return;
   const sh = e.range.getSheet();
+  if (sh.getName() === DASH_TAB && e.range.getColumn() === 12 && e.range.getRow() >= 2) {
+    // 한눈에 탭 '택배 옮김' 체크 → 진행목록에 저장
+    const t = String(sh.getRange(e.range.getRow(), 2).getValue());
+    const r = readRuns_().filter(function (x) { return String(x['명단 제목']).replace(/\s*\([^)]*\)\s*$/, '') === t; }).pop();
+    if (r) setRun_(r.row, '택배 옮김', String(e.value).toUpperCase() === 'TRUE');
+    return;
+  }
   if (sh.getName() !== EDIT_TAB) return;
   const a1 = e.range.getA1Notation();
   if (a1 === 'B1') loadEditTab_(sh);
@@ -1304,9 +1392,10 @@ function applyAssign_(sh, text) {
   if (!rows.length) return '이름을 못 찾았어요. 옵션 줄 뒤나 아래 줄에 이름을 띄어쓰기로 적어 주세요.';
   writeAssign_(r, rows);
   const by = {};
-  rows.forEach(function (x) { const o = String(x[1]).replace(/\s*\([\d,\s]+원\)\s*$/, '') || '옵션 모름'; by[o] = (by[o] || 0) + x[2]; });
+  let canc = [];
+  rows.forEach(function (x) { if (!x[2]) { canc.push(x[0]); return; } const o = String(x[1]) || '옵션 모름'; by[o] = (by[o] || 0) + x[2]; });
   try { buildDashboard_(true); } catch (e) {}
-  return '배정 ' + rows.length + '명 넣었어요 (' + Object.keys(by).map(function (o) { return o + ' ' + by[o]; }).join(', ') + '). 관리 시트 배정 탭, 한눈에 탭에서 확인하세요.' + note;
+  return '배정 넣었어요: ' + Object.keys(by).map(function (o) { return o + ' ' + by[o]; }).join(', ') + (canc.length ? ' / 취소 ' + canc.join(' ') : '') + '. 관리 시트 배정 탭에서 확인하세요.' + note;
 }
 
 // 모자란 인원을 다음 날 같은 명단 시트(같은 폼)로 더 받기
@@ -1314,18 +1403,23 @@ function applyAssign_(sh, text) {
 function addMore_(sh, n) {
   const r = editRun_(sh);
   if (!r) return '먼저 B1에서 진행을 고르세요.';
-  if (!n) return '인원을 1 이상으로 적어 주세요.';
   const base = r['진행일'] instanceof Date && r['진행일'] >= today_() ? new Date(r['진행일']) : today_();
   base.setDate(base.getDate() + 1);
   const md = (base.getMonth() + 1) + '.' + base.getDate();
   const iso = Utilities.formatDate(base, CONFIG.TIMEZONE, 'yyyy-MM-dd');
   const reqId = 'add-' + r['시트ID'] + '-' + iso;
   if (findRunByRequest_(reqId)) return md + ' 추가 모집은 이미 만들었어요.';
+  if (!n && !shortByOption_(readRuns_(), r).__any) return '인원을 1 이상으로 적어 주세요.';
   const nick = (String(r['명단 제목']).match(/\s*\([^)]*\)\s*$/) || [''])[0];
   const roomOld = String(r['카톡방'] || String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''));
   const room = roomOld.replace(/\d{1,2}\.\d{1,2}/, md).replace(/\d+\s*$/, String(n));
   const form = FormApp.openById(r['폼ID']);
-  const notice = String(form.getDescription() || '').replace(/\(\s*\d*\s*명\)/g, '(  명)');
+  // 모자란 옵션별 인원 = 배정에서 안 산 계정 + 취소한 사람 (배정이 없으면 옵션 인원은 비워 둠)
+  const short = shortByOption_(readRuns_(), r);
+  const sum = Object.keys(short).reduce(function (a, o) { return a + short[o]; }, 0);
+  const desc = String(form.getDescription() || '');
+  const notice = sum ? noticeForMore_(desc, short) : desc.replace(/\(\s*\d*\s*명\)/g, '(  명)');
+  if (sum && !n) n = sum;
   const lock = LockService.getScriptLock();
   lock.waitLock(60000);
   let res;
@@ -1339,14 +1433,49 @@ function addMore_(sh, n) {
   } finally { lock.releaseLock(); }
   MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[체험단] ' + md + ' 추가 모집 ' + n + '명: ' + room, [
     room + ' (' + n + '명, 같은 명단 시트)',
-    '카톡방을 이 방제로 만들고 아래 공지를 올리세요. 옵션 인원 (  명)은 채워 주세요. 보낼 메시지함에도 들어가 있어요.',
+    '카톡방을 이 방제로 만들고 아래 공지를 올리세요.' + (sum ? ' 옵션 인원은 배정(안 산 계정 + 취소)으로 채웠어요.' : ' 옵션 인원 (  명)은 채워 주세요.') + ' 보낼 메시지함에도 들어가 있어요.',
     '폼은 ' + md + ' 0시에 다시 열려요.',
     '',
     res.notice,
     '',
     '보낼 메시지함: ' + outboxUrl_()
   ].join('\n'));
-  return md + ' 추가 ' + n + '명 진행을 만들었어요: ' + room + '. 공지는 보낼 메시지함과 메일에 있어요 (옵션 인원은 채워 주세요). 폼은 ' + md + ' 0시에 열려요.';
+  const what = sum ? Object.keys(short).map(function (o) { return o + ' ' + short[o]; }).join(', ') : '옵션 인원은 공지에서 채워 주세요';
+  return md + ' 추가 ' + n + '명 진행을 만들었어요: ' + room + ' (' + what + ')' + (sum && sum !== n ? ' ※ 적은 수(' + n + ')와 배정으로 센 수(' + sum + ')가 달라요' : '') + '. 공지는 보낼 메시지함과 메일에 있어요. 폼은 ' + md + ' 0시에 열려요.';
+}
+
+// 추가 모집 공지: 옵션 인원을 모자란 수로 바꾸고 이름은 지움. 0명인 옵션 줄(바로 아래 가격 줄도), 0명인 가이드는 뺌
+function noticeForMore_(desc, short) {
+  const k = function (x) { return String(x || '').toLowerCase().replace(/\s+/g, ''); };
+  const want = {};
+  Object.keys(short).forEach(function (o) { want[k(o)] = short[o]; });
+  const parts = String(desc).split(/(\n\s*-{5,}\s*\n)/);
+  const multi = parts.length > 1;
+  const kept = [];
+  for (let i = 0; i < parts.length; i += 2) {
+    const prod = multi ? (noticeProducts_(parts[i])[0] || {}).name || '' : '';
+    let total = 0, header = -1;
+    const lines = parts[i].split('\n'), out = [];
+    for (let j = 0; j < lines.length; j++) {
+      const t = lines[j];
+      const m = t.match(/^(\s*(?:\d+\)\s*)?(?:🐥\s*옵션\s*[:：]?\s*)?)(.*?)\s*\(?\s*(\d+)\s*명\s*\)?(.*)$/);
+      if (!m) { out.push(t); continue; }
+      const opt = m[2].trim();
+      if (!opt) { header = out.length; out.push(t); continue; }   // '1) 5명' 가이드 머리
+      if (/가격|원$/.test(opt)) { out.push(t); continue; }
+      const c = want[k([prod, opt].filter(Boolean).join(' '))] || want[k(opt)] || 0;
+      if (!c) { if (/^\s*🐥\s*가격/.test(lines[j + 1] || '') && ((lines[j + 1].match(/\d{1,3}(?:,\d{3})+|\d{4,}/g) || []).length === 1)) j++; continue; }
+      total += c;
+      out.push(m[1] + opt + ' (' + c + '명)');
+    }
+    if (multi && !total && i > 0) continue;
+    if (multi && !total) { /* 첫 가이드는 상단 공지가 들어 있어서 옵션 줄만 빠진 채로 둠 */ }
+    if (header >= 0) out[header] = out[header].replace(/\d+\s*명/, total + '명');
+    kept.push(out.join('\n'));
+  }
+  let g = 0;
+  return kept.map(function (b) { return b.replace(/^(\s*)\d+\)/m, function (x, sp) { return sp + (++g) + ')'; }); })
+    .join('\n\n------------------------------------------------\n\n').replace(/\n{3,}/g, '\n\n');
 }
 
 // 과일(자정 ~ 오전 8시 20분): 7시에 배정에서 아직 안 산 사람을 모아 보낼 메시지함 + 메일, 7시 30분에 한 번 더 메일
@@ -1365,7 +1494,7 @@ function fruitCheck_(runs) {
     if (list === null) return;   // 배정을 아직 안 넣음
     props.setProperty(step === 7 ? k7 : k73, '1');
     if (!list.length) return;
-    const names = list.map(function (x) { return '@' + x[0] + (x[1] > 1 ? ' (' + x[1] + '건)' : ''); });
+    const names = list.map(function (x) { return x[0].split(' ').map(function (nm) { return '@' + nm; }).join(' ') + (x[1] > 1 ? ' (' + x[1] + '건)' : '') + (x[0].indexOf(' ') >= 0 ? ' - ' + x[2] : ''); });
     const me = Session.getEffectiveUser().getEmail();
     if (step === 7) {
       const msg = '📢 아직 구매 확인이 안 된 분들이에요\n' + names.join('\n') + '\n\n7시 30분까지 구매하고 폼 작성 부탁드려요!\n답이 없으면 다른 분으로 바꿀게요 🙏';
@@ -1375,6 +1504,26 @@ function fruitCheck_(runs) {
       MailApp.sendEmail(me, '[체험단] 7시 30분 아직 안 산 사람 ' + list.length + '명: ' + r['명단 제목'], names.join(' ') + '\n\n답이 없으면 새로 구하세요. 8시 전에 구매가 끝나야 명단을 넘길 수 있어요.');
     }
   });
+}
+
+// 택배시트는 2시 전까지: 오늘 택대 진행 중 '택배 옮김' 체크가 안 된 것을 12시 30분, 1시 30분에 메일로 알림
+function takbaeCheck_(runs) {
+  const hm = Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'HHmm'));
+  const step = hm >= 1330 && hm < 1400 ? 2 : hm >= 1230 && hm < 1400 ? 1 : 0;
+  if (!step) return;
+  const today = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
+  const props = PropertiesService.getScriptProperties();
+  const key = 'TAKBAE_' + step + '_' + today;
+  if (props.getProperty(key)) return;
+  const left = runs.filter(function (r) {
+    return r['택대'] === 'Y' && r['진행 상태'] !== '종료' && r['택배 옮김'] !== true && r['진행일'] instanceof Date &&
+      Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd') === today;
+  });
+  props.setProperty(key, '1');
+  if (!left.length) return;
+  MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[체험단] 택배시트 2시까지! 아직 안 옮긴 명단 ' + left.length + '개',
+    left.map(function (r) { return '- ' + r['명단 제목'] + ' (' + (r['인원'] || 0) + '/' + (r['목표인원'] || '?') + '명)'; }).join('\n') +
+    '\n\n관리 시트 한눈에 탭 명단 덩어리의 A~K를 복사해서 택배시트에 붙여넣고, 위 표 \'택배 옮김\'을 체크하세요.\n택배시트: ' + (CONFIG.TAKBAE_SHEET_URL || ''));
 }
 
 // 명단 시트(업체도 봄)에 예전에 넣은 중복·금액·옵션 표시를 한 번 지움 (진행 중인 것만)
@@ -1688,7 +1837,7 @@ function putFileChip_(sh, row, col, url) {
 // 택배시트는 바로가기만 걸고 절대 고치지 않음
 
 const DASH_TAB = '한눈에';
-const DASH_VER = '5';   // 모양을 바꾸면 올려서 다시 만들게 함
+const DASH_VER = '6';   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
   buildDashboard_(true);
@@ -1707,7 +1856,7 @@ function buildDashboard_(force) {
   const allRuns = readRuns_();
   const runs = allRuns.filter(function (r) { return r['진행 상태'] !== '종료' && r['시트ID']; })
     .sort(function (a, b) { return (b['진행일'] || 0) - (a['진행일'] || 0); });
-  const sig = DASH_VER + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태'] + ':' + r['진행일']; }).join('|');
+  const sig = DASH_VER + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태'] + ':' + r['진행일'] + ':' + r['택배 옮김']; }).join('|');
   const props = PropertiesService.getScriptProperties();
   const ss = adminSs_();
   let sh = ss.getSheetByName(DASH_TAB);
@@ -1716,7 +1865,7 @@ function buildDashboard_(force) {
   sh.clear();
   sh.setFrozenRows(0);
   const q = function (t) { return '"' + String(t).replace(/"/g, '""') + '"'; };
-  const head = ['진행일', '방제', '상태', '목표', '신청', '남은', '마감 시각', '명단', '폼', '택배시트', '틀린 옵션'];
+  const head = ['진행일', '방제', '상태', '목표', '신청', '남은', '마감 시각', '명단', '폼', '택배시트', '틀린 옵션', '택배 옮김'];
   sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold').setBackground('#efe6f7');
   const payUrl = CONFIG.PAY_SHEET_ID ? 'https://docs.google.com/spreadsheets/d/' + CONFIG.PAY_SHEET_ID + '/edit#gid=' + CONFIG.PAY_TAB_GID : '';
   // 명단 시트(의뢰)마다 한 덩어리
@@ -1742,11 +1891,22 @@ function buildDashboard_(force) {
     const total = x.runs.reduce(function (m, r) { return Math.max(m, Number(r['총건수']) || 0); }, 0);
     x.n = Math.max(total, x.runs.reduce(function (a, r) { return a + (Number(r['목표인원']) || 0); }, 0), Number(x.runs[0]['목표인원']) || 0, 10) + 5;
     x.top = row;
-    const view = x.keep.length ? x.keep : Array.from({ length: x.cols }, function (_, k) { return k + 1; });
-    x.view = view;
-    const pos = function (re, not) { const k = x.hd.findIndex(function (h) { return re.test(h) && !(not && not.test(h)); }); return k < 0 ? 0 : view.indexOf(k + 1) + 1; };
-    x.nick = pos(MATCH.nick); x.opt = pos(MATCH.opt, MATCH.nick);
-    x.chk = x.nick && x.opt ? view.length + 1 : 0;
+    // 택배시트 칸 순서 그대로 (A 시간, B 이름, C 아이디, D 전화, E 주소, F 옵션, G 금액, H~J 빈칸, K 업체+상품) → 그대로 복사해서 붙여넣기
+    //  그 뒤에 나머지 질문(닉네임, 주문번호 등), 맨 끝에 옵션 확인
+    const find = function (re, not) { return x.hd.findIndex(function (h) { return h && re.test(h) && !(not && not.test(h)) && !MATCH.account.test(h); }) + 1; };
+    const T = [['타임스탬프', 1], ['이름', find(MATCH.name)], ['아이디', find(/아이디|계정|이메일/)], ['전화번호', find(/전화|연락처|휴대폰|핸드폰/)],
+      ['주소', find(/주소/, /이메일/)], ['옵션', find(MATCH.opt, MATCH.nick)], ['결제금액', find(/결제\s*금액|금액|가격/)], ['', 0], ['', 0], ['', 0], ['택배 상품', 'K']];
+    const used = T.map(function (t) { return t[1]; });
+    const rest = (x.keep.length ? x.keep : []).filter(function (c) { return used.indexOf(c) === -1; });
+    x.layout = T.concat(rest.map(function (c) { return [x.hd[c - 1], c]; }));
+    const at = function (src) { return x.layout.findIndex(function (t) { return t[1] === src && src; }) + 1; };
+    x.nick = at(find(MATCH.nick));
+    x.opt = T[5][1] ? 6 : 0;
+    x.chk = x.nick && x.opt ? x.layout.length + 1 : 0;
+    // 택배 상품 = 업체명 + 상품 짧은 이름 (옵션 글자나 결제금액으로 어느 상품인지 찾음)
+    x.prods = [];
+    try { x.prods = noticeProducts_(FormApp.openById(x.runs[0]['폼ID']).getDescription()); } catch (e) {}
+    x.shop = String(x.runs[0]['업체'] || (x.prods[0] || {}).shop || '').replace(/\s+/g, '');
     row += x.n + 6;
   });
   const fmt = function (t) { return 'DATE(' + Utilities.formatDate(new Date(t), CONFIG.TIMEZONE, 'yyyy,M,d') + ')'; };
@@ -1764,12 +1924,14 @@ function buildDashboard_(force) {
     sh.getRange(rr, 8).setFormula('=HYPERLINK(' + q(x.url) + ',"명단")');
     if (r['폼 링크']) sh.getRange(rr, 9).setFormula('=HYPERLINK(' + q(r['폼 링크']) + ',"폼")');
     if (r['택대'] === 'Y' && CONFIG.TAKBAE_SHEET_URL) sh.getRange(rr, 10).setFormula('=HYPERLINK(' + q(CONFIG.TAKBAE_SHEET_URL) + ',"택배")');
+    // 택대면 '택배 옮김' 체크 (명단을 택배시트에 옮겨 적었으면 체크, 2시 전까지). 체크하면 진행목록에도 저장
+    if (r['택대'] === 'Y') sh.getRange(rr, 12).insertCheckboxes().setValue(r['택배 옮김'] === true);
     if (x.chk) {
       const c = colLetter_(x.chk), rg = c + (x.top + 2) + ':' + c + (x.top + 1 + x.n);
       sh.getRange(rr, 11).setFormula('=COUNTIF(' + rg + ',"옵션 틀림")+COUNTIF(' + rg + ',"초과 구매")');
     }
   });
-  if (payUrl) sh.getRange(1, 12).setFormula('=HYPERLINK(' + q(payUrl) + ',"▶ 월급시트 열기")').setFontWeight('bold');
+  if (payUrl) sh.getRange(1, 14).setFormula('=HYPERLINK(' + q(payUrl) + ',"▶ 월급시트 열기")').setFontWeight('bold');
   if (runs.length) {
     sh.getRange(2, 1, runs.length, 1).setNumberFormat('M/d');
     sh.getRange(2, 7, runs.length, 1).setNumberFormat('M/d HH:mm');
@@ -1778,51 +1940,72 @@ function buildDashboard_(force) {
   const rules = [];
   const A = "'" + ASSIGN_TAB + "'!";
   order.forEach(function (id) {
-    const x = sheets[id], top = x.top, n = x.n, width = Math.max(x.view.length + (x.chk ? 1 : 0), 6);
+    const x = sheets[id], top = x.top, n = x.n, width = Math.max(x.layout.length + (x.chk ? 1 : 0), 6);
     const titles = x.runs.map(function (r) { return String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''); }).reverse();
     sh.getRange(top, 1, 1, width).setBackground('#f0e8f8');
     // 제목 + 안 산 사람 (관리 시트 배정 탭에서 '아직'인 사람, 응답이 들어오면 바로 바뀜)
     const label = '■ ' + sheetName_(x.runs[x.runs.length - 1]['명단 제목']) + '   ' + titles.join(', ');
     sh.getRange(top, 1).setFormula('=' + q(label) + '&IFERROR("   ▶ 안 산 사람: "&TEXTJOIN(" ",TRUE,FILTER(' + A + 'B2:B&IF(' + A + 'F2:F="아직 1","","("&MID(' + A + 'F2:F,4,9)&"건)"),' + A + 'G2:G="' + id + '",LEFT(' + A + 'F2:F,2)="아직")),"")')
       .setFontWeight('bold');
-    const imp = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A1:' + colLetter_(x.cols) + (n + 2)) + ')';
-    const body = x.keep.length ? 'CHOOSECOLS(' + imp + ',' + x.keep.join(',') + ')' : imp;
-    sh.getRange(top + 1, 1).setFormula('=IFERROR(' + body + ',"이 칸을 눌러 액세스 허용을 한 번 눌러 주세요")');
-    sh.getRange(top + 1, 1, 1, width).setFontWeight('bold').setBackground('#faf7fd');
+    const width2 = x.layout.length + (x.chk ? 1 : 0);
+    const c = function (k) { return 'CHOOSECOLS(e,' + k + ')'; };
+    const blank = 'MAKEARRAY(ROWS(e),1,LAMBDA(rr,cc,""))';
+    const prodOf = function () {
+      if (x.prods.length <= 1) return q((x.prods[0] || {}).name || '');
+      let f = '""';
+      if (x.layout[6][1]) {
+        const nn = 'IFERROR(VALUE(REGEXREPLACE(TO_TEXT(pp),"[^0-9]","")),0)';
+        x.prods.slice().reverse().forEach(function (p) { if (p.prices.length) f = 'IF(OR(' + p.prices.map(function (v) { return nn + '=' + v; }).join(',') + '),' + q(p.name) + ',' + f + ')'; });
+      }
+      x.prods.slice().reverse().forEach(function (p) { f = 'IF(REGEXMATCH(TO_TEXT(oo),' + q(p.name) + '),' + q(p.name) + ',' + f + ')'; });
+      return f;
+    };
+    const kcol = 'MAP(' + c(x.layout[5][1] || 1) + ',' + c(x.layout[6][1] || 1) + ',LAMBDA(oo,pp,TRIM(' + q(x.shop) + '&" "&' + prodOf() + ')))';
+    const parts = x.layout.map(function (t) { return t[1] === 'K' ? kcol : t[1] ? c(t[1]) : blank; });
+    const imp = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A2:' + colLetter_(x.cols) + (n + 1)) + ')';
+    sh.getRange(top + 1, 1, 1, x.layout.length).setValues([x.layout.map(function (t) { return t[0]; })]);
+    sh.getRange(top + 2, 1).setFormula('=IFERROR(LET(d,' + imp + ',IF(COUNTA(INDEX(d,0,1))=0,"",LET(e,FILTER(d,INDEX(d,0,1)<>""),HSTACK(' + parts.join(',') + ')))),"이 칸을 눌러 액세스 허용을 한 번 눌러 주세요")');
+    sh.getRange(top + 1, 1, 1, Math.max(width2, 6)).setFontWeight('bold').setBackground('#faf7fd');
+    sh.getRange(top + 1, 11).setNote('택배시트 K열에 그대로 붙여넣는 칸 (업체명 + 상품). A~K를 한 번에 복사하면 택배시트 칸 순서와 같아요.');
     sh.getRange(top + 2, 1, n, 1).setNumberFormat('M/d HH:mm');
     const r0 = top + 2, r1 = top + 1 + n;
-    const colRange = function (c) { return sh.getRange(r0, c, n, 1); };
+    const colRange = function (k) { return sh.getRange(r0, k, n, 1); };
     if (x.chk) {
-      const L = function (c) { return colLetter_(c) + r0 + ':' + colLetter_(c) + r1; };
-      sh.getRange(top + 1, x.chk).setValue(CHECK_HEAD).setNote('관리 시트 배정 탭과 비교. ✔ 맞음 / 옵션 틀림 / 초과 구매 / 닉네임 확인(배정에 없음). 배정이 없으면 빈칸');
+      const L = function (k) { return colLetter_(k) + r0 + ':' + colLetter_(k) + r1; };
+      sh.getRange(top + 1, x.chk).setValue(CHECK_HEAD).setNote('관리 시트 배정 탭과 비교. ✔ 맞음 / 옵션 틀림 / 초과 구매 / 닉네임 확인(배정에 없음) / 취소한 사람. 배정이 없으면 빈칸');
       sh.getRange(r0, x.chk).setFormula(checkFormula_(L(x.nick), L(x.opt), n, id));
       const X = colLetter_(x.chk);
       const rg = [x.nick, x.opt, x.chk].map(colRange);
       rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=OR($' + X + r0 + '="옵션 틀림",$' + X + r0 + '="초과 구매")')
         .setBackground('#ea9999').setFontColor('#7f0000').setBold(true).setRanges(rg).build());
-      rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$' + X + r0 + '="닉네임 확인"').setBackground('#ffe599').setRanges(rg).build());
+      rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=OR($' + X + r0 + '="닉네임 확인",$' + X + r0 + '="취소한 사람")').setBackground('#ffe599').setRanges(rg).build());
     }
-    // 중복 빨간색 (주문번호, 이름, 아이디, 전화, 주소)
-    x.view.forEach(function (rawCol, k) {
-      const h = x.hd[rawCol - 1] || '';
-      const c = colLetter_(k + 1);
+    // 중복 빨간색: 한 명단 시트 안에서 계정(아이디), 전화번호, 주소 중 하나라도 겹치면 (이름은 동명이인이 많아서 뺌)
+    x.layout.forEach(function (t, k) {
+      if (typeof t[1] !== 'number' || !t[1]) return;
+      const h = x.hd[t[1] - 1] || '', L = colLetter_(k + 1);
       if (MATCH.dup.test(h) && !MATCH.account.test(h)) {
         rules.push(SpreadsheetApp.newConditionalFormatRule()
-          .whenFormulaSatisfied('=AND(' + c + r0 + '<>"",COUNTIF($' + c + '$' + r0 + ':$' + c + '$' + r1 + ',' + c + r0 + ')>1)')
-          .setBackground('#f8c9c4').setFontColor('#8a1c12').setRanges([colRange(k + 1)]).build());
-      }
-      // 결제금액이 가이드 가격과 다르면 주황색
-      const prices = (String(x.runs[0]['가격'] || '').match(/\d+/g) || []).filter(function (v, i2, a) { return a.indexOf(v) === i2 && v.length >= 3; });
-      if (prices.length && /결제\s*금액|금액|가격/.test(h)) {
-        const num = 'VALUE(REGEXREPLACE(TO_TEXT(' + c + r0 + '),"[^0-9]",""))';
-        rules.push(SpreadsheetApp.newConditionalFormatRule()
-          .whenFormulaSatisfied('=AND(' + c + r0 + '<>"",NOT(OR(' + prices.map(function (v) { return num + '=' + v; }).join(',') + ')))')
-          .setBackground('#f9cb9c').setFontColor('#7a3a00').setRanges([colRange(k + 1)]).build());
+          .whenFormulaSatisfied('=AND(' + L + r0 + '<>"",COUNTIF($' + L + '$' + r0 + ':$' + L + '$' + r1 + ',' + L + r0 + ')>1)')
+          .setBackground('#ea9999').setFontColor('#7f0000').setBold(true).setRanges([colRange(k + 1)]).build());
       }
     });
+    // 결제금액이 가이드 가격과 다르면 주황색
+    const prices = [];
+    x.prods.forEach(function (p) { p.prices.forEach(function (v) { if (prices.indexOf(v) === -1) prices.push(v); }); });
+    (String(x.runs[0]['가격'] || '').match(/\d{3,}/g) || []).forEach(function (v) { v = Number(v); if (prices.indexOf(v) === -1) prices.push(v); });
+    if (prices.length && x.layout[6][1]) {
+      const num = 'VALUE(REGEXREPLACE(TO_TEXT(G' + r0 + '),"[^0-9]",""))';
+      rules.push(SpreadsheetApp.newConditionalFormatRule()
+        .whenFormulaSatisfied('=AND(G' + r0 + '<>"",NOT(OR(' + prices.map(function (v) { return num + '=' + v; }).join(',') + ')))')
+        .setBackground('#f9cb9c').setFontColor('#7a3a00').setRanges([colRange(7)]).build());
+    }
   });
   sh.setColumnWidth(2, 260);
-  if (runs.length) rules.push(SpreadsheetApp.newConditionalFormatRule().whenNumberGreaterThan(0).setBackground('#ea9999').setFontColor('#7f0000').setBold(true).setRanges([sh.getRange(2, 11, runs.length, 1)]).build());
+  if (runs.length) {
+    rules.push(SpreadsheetApp.newConditionalFormatRule().whenNumberGreaterThan(0).setBackground('#ea9999').setFontColor('#7f0000').setBold(true).setRanges([sh.getRange(2, 11, runs.length, 1)]).build());
+    rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISLOGICAL(L2),L2=FALSE)').setBackground('#ea9999').setRanges([sh.getRange(2, 12, runs.length, 1)]).build());
+  }
   sh.setConditionalFormatRules(rules);
   props.setProperty('DASH_SIG', sig);
 }
