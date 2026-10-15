@@ -57,6 +57,14 @@ function report_(name, ok) {
   globalThis.__ORI_T0 = 0;
   const head = ok === false ? '⚠ ' + when + ' ' + name + ': 다른 작업 중이라 건너뜀' : (notes.length ? '⚠ ' + when + ' ' + name + ' 문제 ' + notes.length + '건' + took + ' ↓' : '✔ ' + when + ' ' + name + ' 정상' + took);
   const lines = notes.map(function (x) { return '⚠ ' + x; }).concat(done.map(function (x) { return '· ' + x.replace(/^✓\s*/, ''); }));
+  // 단계별 걸린 시간 (오래 걸린 것만, 느린 원인 찾기용)
+  const st = globalThis.__ORI_STEPS || [];
+  globalThis.__ORI_STEPS = [];
+  if (st.length) {
+    st[st.length - 1].s = Math.round((Date.now() - st[st.length - 1].t) / 1000);
+    const slow = st.filter(function (x) { return x.s >= 10; });
+    if (slow.length) lines.push('· 걸린 시간: ' + slow.map(function (x) { return x.w + ' ' + x.s + '초'; }).join(', '));
+  }
   const text = head + (lines.length ? '\n' + lines.join('\n') : '');
   // 한눈에 Q1은 한 줄 요약, 자세한 건 Q2부터 한 줄씩 (위 표 옆이라 잘 보이게)
   try {
@@ -1088,6 +1096,7 @@ function noticeProducts_(text) {
 //  1) 1kg*1 2명 (박지수(취소) 정수연)          ← 'N명' 뒤 괄호 안 이름
 //  🐥옵션 : 1kg×3 (2명) 송기주 2              ← '(N명)' 뒤 이름, 이름 뒤 숫자(띄어 써도) = 계정 수
 //  이름(취소) = 취소한 사람 (계정수 0, 다음 날 추가 모집 인원에 들어감)
+//  이름(타) = 타계정(다른 사람 계정으로 구매). 닉네임은 그 사람 것이라 표시만 빼고 그대로 셈
 //  옵션 줄 바로 아래 줄에 이름만 있어도 읽음
 // 돌려주는 줄: [닉네임, 공지 옵션(가이드 여럿이면 상품명 붙임), 계정수, 폼 보기(맞는 게 없으면 빈칸), 가격]
 function parseAssign_(text, choices) {
@@ -1106,7 +1115,7 @@ function parseAssign_(text, choices) {
   };
   const add = function (names, label, choice) {
     let lastKey = null;
-    String(names).replace(/\(\s*취소\s*\)/g, '#취소').replace(/[()\[\],·\/]/g, ' ').split(/\s+/).forEach(function (tok) {
+    String(names).replace(/\(\s*타\s*(?:계정|아이디)?\s*\)/g, '').replace(/\(\s*취소\s*\)/g, '#취소').replace(/[()\[\],·\/]/g, ' ').split(/\s+/).forEach(function (tok) {
       tok = tok.replace(/^@+/, '').trim();
       if (!tok) return;
       if (/^[2-9]$/.test(tok) && lastKey) { rows[at[lastKey]][2] = Number(tok); return; }   // '송기주 2'
@@ -1275,6 +1284,9 @@ function checkFull() {
 
 // 한눈에 Q1에 지금 어디까지 했는지 (6분 제한에 걸려 멈추면 ⏳가 그대로 남아서 알 수 있게)
 function step_(what) {
+  const now = Date.now(), st = globalThis.__ORI_STEPS = globalThis.__ORI_STEPS || [];
+  if (st.length) st[st.length - 1].s = Math.round((now - st[st.length - 1].t) / 1000);
+  st.push({ w: what, t: now, s: 0 });
   try {
     const d = adminSs_().getSheetByName(DASH_TAB);
     if (d) d.getRange(1, 17).setValue('⏳ ' + Utilities.formatDate(new Date(globalThis.__ORI_T0 || Date.now()), CONFIG.TIMEZONE, 'HH:mm') + ' 확인 중: ' + what).setFontColor('#9a6700');
@@ -1325,6 +1337,7 @@ function checkFullInner_() {
   try { takbaeCheck_(runs); } catch (e) { note_('택배시트 알림 실패: ' + e); }
   try { fixOct16Once_(); } catch (e) { note_('10.16 정리 실패: ' + e); }
   try { fixNamesOnce_(); } catch (e) { note_('공지 이름 정리 실패: ' + e); }
+  try { fixTaOnce_(); } catch (e) { note_('배정 (타) 정리 실패: ' + e); }
   const errs = {}, listed = {};
   step_('폼 인원');
   try { ensureSubmitTriggers_(runs); } catch (e) { note_('응답 트리거 실패: ' + e); }
@@ -1662,7 +1675,9 @@ function toolAction_(d) {
 function findRunByNotice_(list, text) {
   const link = (String(text).match(FORM_LINK_RE) || [])[0] || '';
   const prods = noticeProducts_(text);
-  const scored = list.map(function (r) {
+  // 빠르게: 진행목록의 폼 링크가 같으면 폼을 안 열고 바로 (폼 여는 데 한 개에 1초쯤 걸림)
+  const quick = link ? list.filter(function (r) { return String(r['폼 링크']).trim() === link; }) : [];
+  const scored = quick.length ? quick.map(function (r) { return { r: r, sc: 2 }; }) : list.map(function (r) {
     let desc = '';
     try { desc = FormApp.openById(r['폼ID']).getDescription() || ''; } catch (e) {}
     let sc = 0;
@@ -1753,6 +1768,19 @@ function fixNamesOnce_() {
   if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) {
     if (v[2] === '방 공지' && v[5] !== '보냄' && rooms[String(v[3])]) { const nm = stripTrailingNames_(String(v[4])); if (nm !== String(v[4])) ob.getRange(i + 2, 5).setValue(nm); }
   });
+}
+
+// (한 번만) (타)를 이름으로 잘못 읽어 배정에 들어간 '타' 줄 지우기
+function fixTaOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FIX_TA_V1')) return;
+  props.setProperty('FIX_TA_V1', '1');
+  const as = assignSheet_(), last = as.getLastRow();
+  if (last < 2) return;
+  const v = as.getRange(2, 1, last - 1, 2).getValues();
+  let n = 0;
+  for (let i = v.length - 1; i >= 0; i--) if (/^타(계정|아이디)?$/.test(String(v[i][1]).trim())) { as.deleteRow(i + 2); n++; }
+  if (n) note_('✓ 배정에서 (타)를 이름으로 읽은 줄 ' + n + '개 지움');
 }
 
 // 붙여넣은 공지가 이 진행 공지와 같은 상품인지 (폼 링크나 판매처·상품 이름으로)
@@ -2205,7 +2233,7 @@ function assignRun_(r, text) {
   const by = {};
   let canc = [];
   rows.forEach(function (x) { if (!x[2]) { canc.push(x[0]); return; } const o = String(x[1]) || '옵션 모름'; by[o] = (by[o] || 0) + x[2]; });
-  try { buildDashboard_(true); } catch (e) {}
+  // 한눈에 탭은 배정 탭을 수식으로 보고 있어서 다시 만들 필요 없음 (다시 만들면 30초 넘게 걸림)
   return '배정 넣었어요: ' + Object.keys(by).map(function (o) { return o + ' ' + by[o]; }).join(', ') + (canc.length ? ' / 취소 ' + canc.join(' ') : '') + '. 관리 시트 배정 탭에서 확인하세요.' + note;
 }
 
@@ -2861,9 +2889,13 @@ function rebuildDashboard() {
 
 function grantImport_(destId, srcId) {
   // 같은 계정의 시트끼리 IMPORTRANGE '액세스 허용'을 미리 눌러 둠 (안 되면 칸의 '허용'을 한 번 누르면 됨)
+  //  한 번 허용되면 계속 유지되니 짝마다 한 번만 (매번 하면 느려짐)
+  const key = 'GRANT_' + destId + '_' + srcId, props = PropertiesService.getScriptProperties();
+  if (props.getProperty(key)) return;
   try {
-    UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + destId + '/externaldata/addimportrangepermissions?donorDocId=' + srcId,
+    const res = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + destId + '/externaldata/addimportrangepermissions?donorDocId=' + srcId,
       { method: 'post', headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+    if (res && res.getResponseCode && res.getResponseCode() === 200) props.setProperty(key, '1');
   } catch (e) {}
 }
 
@@ -2930,6 +2962,8 @@ function buildDashboard_(force) {
     });
     if (changed) { force = true; try { updatePay_(); } catch (e) {} }
   }
+  // 남은·신청 칸이 날짜로 보이지 않게 숫자 서식은 매번 (다시 만들지 않을 때도)
+  if (sh && runs.length) { try { sh.getRange(2, 4, runs.length, 4).setNumberFormat('0'); } catch (e) {} }
   if (!force && sh && props.getProperty('DASH_SIG') === sig) return;
   order.forEach(function (id) { grantImport_(ss.getId(), sheets[id].sid); });
   if (!sh) sh = ss.insertSheet(DASH_TAB, 0);
