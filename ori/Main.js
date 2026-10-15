@@ -45,6 +45,18 @@ const LIST_ALIAS = { '마감': '마감 시각' };   // 예전 열 이름 → 새
 
 function lc_(name) { return LIST_HEADER.indexOf(name) + 1; }
 
+// 실행 중 생긴 문제를 모아 둠 (메뉴로 돌리면 창으로, 자동 실행이면 한눈에 탭 P1에 보임)
+function note_(msg) { (globalThis.__ORI_NOTES = globalThis.__ORI_NOTES || []).push(String(msg)); Logger.log(msg); }
+
+function report_(name, ok) {
+  const notes = (globalThis.__ORI_NOTES || []).filter(function (x) { return !/메시지함 기록 실패: TypeError: Utilities/.test(x); });
+  globalThis.__ORI_NOTES = [];
+  const when = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'M/d HH:mm');
+  const text = ok === false ? '⚠ ' + when + ' ' + name + ': 다른 작업 중이라 건너뜀' : (notes.length ? '⚠ ' + when + ' ' + name + ' 문제: ' + notes.join(' / ') : '✔ ' + when + ' ' + name + ' 정상');
+  try { const d = adminSs_().getSheetByName(DASH_TAB); if (d) d.getRange(1, 16).setValue(text.slice(0, 500)).setFontColor(notes.length || ok === false ? '#b91c1c' : '#2f7a2f'); } catch (e) {}
+  try { SpreadsheetApp.getUi().alert(text); } catch (e) {}   // 메뉴로 돌렸을 때만 창이 뜸
+}
+
 // 한 번에 한 작업만 진행목록을 고치게 (진행목록을 최신순으로 정렬해서 줄 번호가 바뀌기 때문). 이미 잡고 있으면 그대로 실행
 function locked_(fn, ms) {
   if (globalThis.__ORI_LOCK) return fn();
@@ -487,8 +499,8 @@ function createRunInner_(d) {
     // 새 구글폼은 복사본이 '게시 안 됨' 상태라 먼저 게시
     if (typeof form.setPublished === 'function') form.setPublished(true);
     form.setAcceptingResponses(true);
-    try { setOptionChoices_(form, d.opts); } catch (e) { Logger.log('옵션 질문 바꾸기 실패: ' + e); }
-    try { ensureNickQuestion_(form); } catch (e) { Logger.log('닉네임 질문 넣기 실패: ' + e); }
+    try { setOptionChoices_(form, d.opts); } catch (e) { note_('옵션 질문 바꾸기 실패: ' + e); }
+    try { ensureNickQuestion_(form); } catch (e) { note_('닉네임 질문 넣기 실패: ' + e); }
 
     // 응답 시트 생성·연결
     ss = SpreadsheetApp.create(fname);
@@ -528,17 +540,17 @@ function createRunInner_(d) {
   };
   list.appendRow(LIST_HEADER.map(function (h) { return rec[h]; }));
   formatList_(list);
-  try { ensureEditTab_(); } catch (e) { Logger.log('폼수정 탭 갱신 실패: ' + e); }
-  try { buildDashboard_(true); } catch (e) { Logger.log('한눈에 탭 실패: ' + e); }
-  try { ensureCheckTrigger_(); } catch (e) { Logger.log('마감 확인 트리거 실패: ' + e); }
+  try { ensureEditTab_(); } catch (e) { note_('폼수정 탭 갱신 실패: ' + e); }
+  try { buildDashboard_(true); } catch (e) { note_('한눈에 탭 실패: ' + e); }
+  try { ensureCheckTrigger_(); } catch (e) { note_('마감 확인 트리거 실패: ' + e); }
 
   // 공지의 '(구글폼 링크)' 자리에 폼 링크를 넣어서 폼 설명과 카톡 공지를 한 번에 완성
   const notice = String(d.desc || '').split('(구글폼 링크)').join(formUrl);
   if (notice) form.setDescription(notice);
   if (notice && d.room) queueMsg_(d.room, notice, '방 공지');
   // 여러 날 진행이면 다음 일차 계획 저장 (공지는 폼 링크 넣기 전 원본을 템플릿으로)
-  if (d.plan) { try { savePlan_(d); } catch (e) { Logger.log('일정 저장 실패: ' + e); } }
-  try { updatePay_(); } catch (e) { Logger.log('월급시트 갱신 실패: ' + e); }
+  if (d.plan) { try { savePlan_(d); } catch (e) { note_('일정 저장 실패: ' + e); } }
+  try { updatePay_(); } catch (e) { note_('월급시트 갱신 실패: ' + e); }
   const r = list.getLastRow();
   if (d.realship) list.getRange(r, 1, 1, LIST_HEADER.length).setBackground('#fff2a8');
   if (d.takdae) list.getRange(r, lc_('택배 옮김')).insertCheckboxes();
@@ -593,13 +605,13 @@ function formOf_(raw) {
 function shareFile_(id, editorsOnly, extra) {
   const file = DriveApp.getFileById(id);
   CONFIG.TEAM_EMAILS.concat(extra || []).filter(Boolean).forEach(function (m) {
-    try { file.addEditor(m); } catch (e) { Logger.log('권한 추가 실패 ' + m + ': ' + e); }
+    try { file.addEditor(m); } catch (e) { note_('권한 추가 실패 ' + m + ': ' + e); }
   });
   if (editorsOnly) return;
   try {
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   } catch (e) {
-    Logger.log('링크 공유 설정 실패(회사 계정 정책일 수 있음): ' + e);
+    note_('링크 공유 설정 실패(회사 계정 정책일 수 있음): ' + e);
   }
 }
 
@@ -776,7 +788,7 @@ function formatResponseSheet_(ss, opts) {
   if (opts.takdae) { extra++; manual['송장번호'] = extra; sh.getRange(2, extra).setValue('송장번호').setNote('한진택배, 오후 3~5시 도착. 가끔 익일.'); }
   if (opts.realship) { extra++; manual['실배송'] = extra; sh.getRange(2, extra).setValue('실배송'); }
   // 명단 시트는 업체도 보는 곳이라 중복, 옵션, 금액 확인 표시는 넣지 않음 (관리 시트 한눈에, 폼수정 탭에서만 보임)
-  try { moveOldAssign_(ss); } catch (e) { Logger.log('예전 배정 탭 옮기기 실패: ' + e); }
+  try { moveOldAssign_(ss); } catch (e) { note_('예전 배정 탭 옮기기 실패: ' + e); }
 
   const maxRows = sh.getMaxRows();
   sh.getRange(2, 1, 1, extra).setWrap(true).setVerticalAlignment('bottom').setFontWeight('normal');
@@ -1154,7 +1166,7 @@ function reformatSelected() {
 // 폼에 닉네임 질문이 없으면 넣고 명단 양식을 다시 적용. 질문을 넣었으면 true
 function reformatRun_(r) {
   let added = false;
-  if (r['폼ID']) { try { added = ensureNickQuestion_(FormApp.openById(r['폼ID'])); } catch (e) { Logger.log('닉네임 질문 넣기 실패: ' + e); } }
+  if (r['폼ID']) { try { added = ensureNickQuestion_(FormApp.openById(r['폼ID'])); } catch (e) { note_('닉네임 질문 넣기 실패: ' + e); } }
   if (added) { SpreadsheetApp.flush(); Utilities.sleep(2000); }
   formatResponseSheet_(SpreadsheetApp.openById(r['시트ID']), {
     type: r['유형'], takdae: r['택대'] === 'Y', realship: r['실배송'] === 'Y', platform: r['플랫폼'], target: Number(r['총건수']) || r['목표인원'], prices: r['가격']
@@ -1164,10 +1176,14 @@ function reformatRun_(r) {
 
 /* ---------------- 4) 진행목록 인원, 명단 마감 ---------------- */
 
-function dailyCheck() { return locked_(dailyCheckInner_, 120000); }
+function dailyCheck() {
+  let ran = false;
+  locked_(function () { ran = true; try { dailyCheckInner_(); } catch (e) { note_('멈춤: ' + (e && e.message || e)); } }, 120000);
+  report_('현황 업데이트', ran);
+}
 
 function dailyCheckInner_() {
-  try { archiveOld_(); } catch (e) { Logger.log('보관 실패: ' + e); }
+  try { archiveOld_(); } catch (e) { note_('보관 실패: ' + e); }
   try { normalizeRuns_(); } catch (e) {}
   const runs = readRuns_();
   runs.forEach(function (r) {
@@ -1179,7 +1195,7 @@ function dailyCheckInner_() {
     try { setRun_(r.row, '인원', runCount_(runs, r)); } catch (e) {}
   });
   try { ensureEditTab_(); } catch (e) {}
-  try { updatePay_(); } catch (e) { Logger.log('월급시트 갱신 실패: ' + e); }
+  try { updatePay_(); } catch (e) { note_('월급시트 갱신 실패: ' + e); }
 }
 
 function countResponses_(sheetId) {
@@ -1188,28 +1204,32 @@ function countResponses_(sheetId) {
   return last < 2 ? 0 : sheet.getRange(2, 1, last - 1, 1).getValues().filter(function (x) { return x[0] !== ''; }).length;
 }
 
-function checkFull() { return locked_(checkFullInner_, 120000); }
+function checkFull() {
+  let ran = false;
+  locked_(function () { ran = true; try { checkFullInner_(); } catch (e) { note_('멈춤: ' + (e && e.message || e)); } }, 120000);
+  report_('15분 확인', ran);
+}
 
 function checkFullInner_() {
   try { removeOldUpdateTrigger_(); } catch (e) {}
-  try { normalizeRuns_(); } catch (e) { Logger.log('진행목록 정리 실패: ' + e); }
-  try { ensureEditTab_(); } catch (e) { Logger.log('폼수정 탭 만들기 실패: ' + e); }
-  try { makeDueDays_(); } catch (e) { Logger.log('다음 일차 만들기 실패: ' + e); }
+  try { normalizeRuns_(); } catch (e) { note_('진행목록 정리 실패: ' + e); }
+  try { ensureEditTab_(); } catch (e) { note_('폼수정 탭 만들기 실패: ' + e); }
+  try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
   const me = Session.getEffectiveUser().getEmail();
   const props = PropertiesService.getScriptProperties();
   let changed = false;
   const runs = readRuns_(), times = {};
-  try { cleanListSheetsOnce_(runs); } catch (e) { Logger.log('명단 시트 표시 정리 실패: ' + e); }
-  try { fruitCheck_(runs); } catch (e) { Logger.log('안 산 사람 확인 실패: ' + e); }
-  try { takbaeCheck_(runs); } catch (e) { Logger.log('택배시트 알림 실패: ' + e); }
-  try { refreshAssignFormulasOnce_(runs); } catch (e) { Logger.log('배정 수식 갱신 실패: ' + e); }
-  try { tidyOutbox_(); } catch (e) { Logger.log('보낼메시지 정리 실패: ' + e); }
+  try { cleanListSheetsOnce_(runs); } catch (e) { note_('명단 시트 표시 정리 실패: ' + e); }
+  try { fruitCheck_(runs); } catch (e) { note_('안 산 사람 확인 실패: ' + e); }
+  try { takbaeCheck_(runs); } catch (e) { note_('택배시트 알림 실패: ' + e); }
+  try { refreshAssignFormulasOnce_(runs); } catch (e) { note_('배정 수식 갱신 실패: ' + e); }
+  try { tidyOutbox_(); } catch (e) { note_('보낼메시지 정리 실패: ' + e); }
   const errs = {}, listed = {};
-  try { ensureSubmitTriggers_(runs); } catch (e) { Logger.log('응답 트리거 실패: ' + e); }
+  try { ensureSubmitTriggers_(runs); } catch (e) { note_('응답 트리거 실패: ' + e); }
   runs.forEach(function (r) {
     if (r['진행 상태'] === '종료' || !r['폼ID']) return;
     // 진행 하나에서 오류가 나도 다른 진행은 계속 (오류는 한눈에 탭 '확인 필요' 칸에 보임)
-    try { checkRun_(r); } catch (e) { errs[r['명단 제목']] = String(e.message || e).slice(0, 120); Logger.log('진행 확인 실패 ' + r['명단 제목'] + ': ' + e); }
+    try { checkRun_(r); } catch (e) { errs[r['명단 제목']] = String(e.message || e).slice(0, 120); note_('진행 확인 실패 ' + r['명단 제목'] + ': ' + e); }
   });
   // 폼을 다 연결한 뒤 명단 탭이 그 시트의 모든 폼 응답을 합쳐 보여 주게
   Object.keys(listed).forEach(function (id) {
@@ -1221,7 +1241,7 @@ function checkFullInner_() {
       const total = mine.reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0) ||
         mine.reduce(function (a, x) { return a + (Number(x['목표인원']) || 0); }, 0);
       listSummary_(lss, total);
-    } catch (e) { Logger.log('명단 탭 합치기 실패: ' + e); }
+    } catch (e) { note_('명단 탭 합치기 실패: ' + e); }
   });
   props.setProperty('RUN_ERRORS', JSON.stringify(errs));
   function checkRun_(r) {
@@ -1285,9 +1305,9 @@ function checkFullInner_() {
       r['택대'] === 'Y' ? '\n★ 택배시트에 옮겨 적기 (2시 전까지): 한눈에 탭에서 A~K 복사 → 붙여넣기 → \'택배 옮김\' 체크' : ''
     ].join('\n'));
   }
-  try { buildDashboard_(false); } catch (e) { Logger.log('한눈에 탭 실패: ' + e); }
+  try { buildDashboard_(false); } catch (e) { note_('한눈에 탭 실패: ' + e); }
   // 월급시트도 15분마다 같이 갱신 (계약 수량 링크, 총액, 그날 수량)
-  try { updatePay_(); } catch (e) { Logger.log('월급시트 갱신 실패: ' + e); }
+  try { updatePay_(); } catch (e) { note_('월급시트 갱신 실패: ' + e); }
 }
 
 function dupSummary_(sheetId) {
@@ -1444,7 +1464,7 @@ function queueMsg_(room, msg, kind) {
     ob.getRange(2, 1, 1, 6).setWrap(false).setVerticalAlignment('middle').setFontWeight('normal').setBackground(null);
     ob.getRange(2, 5).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
     ob.setRowHeight(2, 21);
-  } catch (e) { Logger.log('메시지함 기록 실패: ' + e); }
+  } catch (e) { note_('메시지함 기록 실패: ' + e); }
 }
 
 function outboxItems_() {
@@ -1798,7 +1818,7 @@ function ensureSubmitTriggers_(runs) {
   });
   want.slice(0, 15).forEach(function (id) {
     if (have[id]) return;
-    try { ScriptApp.newTrigger('onAdminEdit').forForm(id).onFormSubmit().create(); } catch (e) { Logger.log('폼 트리거 만들기 실패 ' + id + ': ' + e); }
+    try { ScriptApp.newTrigger('onAdminEdit').forForm(id).onFormSubmit().create(); } catch (e) { note_('폼 트리거 만들기 실패 ' + id + ': ' + e); }
   });
 }
 
@@ -1816,7 +1836,7 @@ function onRunSubmit_(e) {
       if (Number(r['인원']) !== n) setRun_(r.row, '인원', n);
       if (r['목표인원'] && !r['마감 시각'] && n >= Number(r['목표인원'])) full = true;
     });
-    try { updatePay_(); } catch (err) { Logger.log('월급시트 갱신 실패: ' + err); }
+    try { updatePay_(); } catch (err) { note_('월급시트 갱신 실패: ' + err); }
     try { buildDashboard_(false); } catch (err) {}
     if (full) checkFull();
   }, 20000);
@@ -2069,7 +2089,7 @@ function cleanListSheetsOnce_(runs) {
         }
       }
       moveOldAssign_(ss);
-    } catch (e) { Logger.log('정리 실패 ' + r['명단 제목'] + ': ' + e); }
+    } catch (e) { note_('정리 실패 ' + r['명단 제목'] + ': ' + e); }
   });
   props.setProperty('CLEAN_LIST_V1', '1');
 }
@@ -2373,7 +2393,7 @@ function putFileChip_(sh, row, col, url) {
       fields: 'userEnteredValue,chipRuns'
     } }] }, sh.getParent().getId());
     return true;
-  } catch (e) { Logger.log('파일 칩 실패: ' + e); PropertiesService.getScriptProperties().setProperty('CHIP_ERROR', String(e)); return false; }
+  } catch (e) { note_('파일 칩 실패: ' + e); PropertiesService.getScriptProperties().setProperty('CHIP_ERROR', String(e)); return false; }
 }
 
 /* ---------------- 10) 한눈에 탭: 진행 중인 것 전부 한 화면에 ---------------- */
