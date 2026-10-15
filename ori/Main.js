@@ -45,6 +45,22 @@ const LIST_ALIAS = { '마감': '마감 시각' };   // 예전 열 이름 → 새
 
 function lc_(name) { return LIST_HEADER.indexOf(name) + 1; }
 
+// 한 번에 한 작업만 진행목록을 고치게 (진행목록을 최신순으로 정렬해서 줄 번호가 바뀌기 때문). 이미 잡고 있으면 그대로 실행
+function locked_(fn, ms) {
+  if (globalThis.__ORI_LOCK) return fn();
+  const l = LockService.getScriptLock();
+  if (!l.tryLock(ms || 60000)) return;
+  globalThis.__ORI_LOCK = true;
+  try { return fn(); } finally { globalThis.__ORI_LOCK = false; l.releaseLock(); }
+}
+
+// 진행목록 최신순 (진행일, 등록일 늦은 게 위)
+function sortList_() {
+  const sh = ensureListSheet_(), last = sh.getLastRow();
+  if (last < 3) return;
+  sh.getRange(2, 1, last - 1, LIST_HEADER.length).sort([{ column: lc_('진행일'), ascending: false }, { column: lc_('등록일'), ascending: false }]);
+}
+
 function readRuns_() {
   const list = ensureListSheet_();
   const last = list.getLastRow();
@@ -260,7 +276,12 @@ function normalizeRuns_() {
         if (ps.length) setRun_(r.row, '가격', ps.join(', '));
       } catch (e) {}
     }
+    // '택배 옮김' 체크칸은 택대 진행만 (택배시트에 옮길 게 없는 진행은 빈칸)
+    const tc = ensureListSheet_().getRange(r.row, lc_('택배 옮김'));
+    if (r['택대'] === 'Y') { if (!tc.getDataValidation()) tc.insertCheckboxes(); }
+    else if (tc.getDataValidation() || tc.getValue() !== '') { tc.clearDataValidations(); tc.clearContent(); }
   });
+  sortList_();
 }
 
 function today_() { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }
@@ -284,7 +305,9 @@ function formatList_(sh) {
   sh.getRange(2, lc_('진행일'), n, 1).setNumberFormat('yyyy-mm-dd');
   sh.getRange(2, lc_('마감 시각'), n, 1).setNumberFormat('M/d HH:mm');
   sh.getRange(2, lc_('가격'), n, 1).setNumberFormat('@');
-  sh.getRange(2, lc_('택배 옮김'), n, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
+  // 보기 좋게: 가운데 맞춤, 명단 제목·링크는 왼쪽
+  sh.getRange(1, 1, n + 1, LIST_HEADER.length).setHorizontalAlignment('center').setVerticalAlignment('middle');
+  ['명단 제목', '캠페인', '카톡방', '업체방', '폼 링크', '시트 링크', '폴더 링크'].forEach(function (h) { sh.getRange(2, lc_(h), n, 1).setHorizontalAlignment('left'); });
   sh.getRange(2, lc_('진행 상태'), n, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['진행예정', '진행중', '종료'], true).build());
 }
 
@@ -405,13 +428,11 @@ function doGet(e) {
 
 function createRun(d) {
   if (!d || d.k !== CONFIG.KEY) throw new Error('권한이 없어요. 생성기 버튼이나 시트 메뉴로 열어 주세요.');
-  const lock = LockService.getScriptLock();
-  lock.waitLock(60000);
-  try {
+  return locked_(function () {
     const prev = d.n ? findRunByRequest_(d.n) : null;
     if (prev) return prev;
     return createRunInner_(d);
-  } finally { lock.releaseLock(); }
+  }, 60000);
 }
 
 function findRunByRequest_(n) {
@@ -506,6 +527,8 @@ function createRunInner_(d) {
   try { updatePay_(); } catch (e) { Logger.log('월급시트 갱신 실패: ' + e); }
   const r = list.getLastRow();
   if (d.realship) list.getRange(r, 1, 1, LIST_HEADER.length).setBackground('#fff2a8');
+  if (d.takdae) list.getRange(r, lc_('택배 옮김')).insertCheckboxes();
+  sortList_();
 
   return { notice: notice, formUrl: formUrl, sheetUrl: ss.getUrl(), folderUrl: folder.getUrl() };
 }
@@ -1108,7 +1131,9 @@ function reformatRun_(r) {
 
 /* ---------------- 4) 진행목록 인원, 명단 마감 ---------------- */
 
-function dailyCheck() {
+function dailyCheck() { return locked_(dailyCheckInner_, 120000); }
+
+function dailyCheckInner_() {
   try { archiveOld_(); } catch (e) { Logger.log('보관 실패: ' + e); }
   try { normalizeRuns_(); } catch (e) {}
   const runs = readRuns_();
@@ -1130,7 +1155,9 @@ function countResponses_(sheetId) {
   return last < 2 ? 0 : sheet.getRange(2, 1, last - 1, 1).getValues().filter(function (x) { return x[0] !== ''; }).length;
 }
 
-function checkFull() {
+function checkFull() { return locked_(checkFullInner_, 120000); }
+
+function checkFullInner_() {
   try { removeOldUpdateTrigger_(); } catch (e) {}
   try { normalizeRuns_(); } catch (e) { Logger.log('진행목록 정리 실패: ' + e); }
   try { ensureEditTab_(); } catch (e) { Logger.log('폼수정 탭 만들기 실패: ' + e); }
@@ -1163,7 +1190,17 @@ function checkFull() {
   });
   props.setProperty('RUN_ERRORS', JSON.stringify(errs));
   function checkRun_(r) {
-    const form = FormApp.openById(r['폼ID']);
+    let form;
+    try { form = FormApp.openById(r['폼ID']); } catch (e) {
+      // 폼ID가 잘못됐으면 같은 폼 링크나 같은 명단 시트의 다른 날 폼으로 고침
+      const alt = runs.filter(function (x) { return x !== r && x['폼ID'] && String(x['폼ID']) !== String(r['폼ID']) && ((x['폼 링크'] && x['폼 링크'] === r['폼 링크']) || (x['시트ID'] && String(x['시트ID']) === String(r['시트ID']))); })
+        .sort(function (a, b) { return (b['진행일'] || 0) - (a['진행일'] || 0); });
+      for (let i = 0; i < alt.length && !form; i++) {
+        try { form = FormApp.openById(alt[i]['폼ID']); if (alt[i]['폼 링크'] !== r['폼 링크'] && r['폼 링크'] && alt[i]['폼 링크']) form = null; } catch (e2) { form = null; }
+        if (form) { setRun_(r.row, '폼ID', alt[i]['폼ID']); r['폼ID'] = alt[i]['폼ID']; }
+      }
+      if (!form) throw e;
+    }
     // 폼 응답이 진행목록의 명단 시트가 아닌 다른 시트로 가면 알려 줌 (명단이 안 보이는 원인)
     // 폼 응답이 진행목록의 명단 시트로 가게 연결 (다르면 그 시트에 응답 탭이 새로 생기고 지금까지 응답도 같이 들어감)
     if (r['시트ID']) {
@@ -1320,6 +1357,16 @@ const OUTBOX_SHEET = '보낼메시지';
 function outboxSheet_() {
   const ss = adminSs_();
   let sh = ss.getSheetByName(OUTBOX_SHEET);
+  // 예전 줄도 한 번 최신순으로 정렬, 상태는 고를 수 있게
+  if (sh && !PropertiesService.getScriptProperties().getProperty('OUTBOX_SORTED')) {
+    const last = sh.getLastRow();
+    if (last >= 3) sh.getRange(2, 1, last - 1, 6).sort({ column: 2, ascending: false });
+    if (last >= 2) sh.getRange(2, 6, last - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['대기', '보냄', '방 못 찾음'], true).build());
+    sh.getRange(1, 1, Math.max(last, 1), 6).setVerticalAlignment('middle');
+    sh.getRange(1, 1, Math.max(last, 1), 4).setHorizontalAlignment('center');
+    sh.getRange(1, 6, Math.max(last, 1), 1).setHorizontalAlignment('center');
+    PropertiesService.getScriptProperties().setProperty('OUTBOX_SORTED', '1');
+  }
   if (!sh) {
     sh = ss.insertSheet(OUTBOX_SHEET, 1);
     sh.appendRow(['ID', '시각', '종류', '카톡방', '메시지', '상태']);
@@ -1333,7 +1380,11 @@ function outboxSheet_() {
 function queueMsg_(room, msg, kind) {
   if (!msg) return;
   try {
-    outboxSheet_().appendRow([Utilities.getUuid().replace(/-/g, '').slice(0, 10), new Date(), kind || '', String(room || ''), String(msg), '대기']);
+    // 최신 메시지가 맨 위
+    const ob = outboxSheet_();
+    ob.insertRowBefore(2);
+    ob.getRange(2, 1, 1, 6).setValues([[Utilities.getUuid().replace(/-/g, '').slice(0, 10), new Date(), kind || '', String(room || ''), String(msg), '대기']]);
+    ob.getRange(2, 6).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['대기', '보냄', '방 못 찾음'], true).build());
   } catch (e) { Logger.log('메시지함 기록 실패: ' + e); }
 }
 
@@ -1402,7 +1453,8 @@ ITEMS.forEach(function (x) {
   var bs = document.createElement('div'); bs.className = 'btns';
   var cp = document.createElement('button'); cp.className = 'b1'; cp.textContent = '복사';
   cp.onclick = function () {
-    var done = function () { cp.textContent = '복사됨'; };
+    // 복사하면 보낸 걸로 표시 (최종 보내기는 카톡에서 직접)
+    var done = function () { cp.textContent = '복사됨 (보냄 표시)'; google.script.run.markSentFromPage(K, x.id); };
     if (navigator.clipboard) navigator.clipboard.writeText(x.msg).then(done, function () { fallback(); });
     else fallback();
     function fallback() { var t = document.createElement('textarea'); t.value = x.msg; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); done(); }
@@ -1468,6 +1520,10 @@ function ensureEditTab_() {
 function onAdminEdit(e) {
   if (e && e.response) return onRunSubmit_(e);   // 폼 제출 트리거도 이 이름으로 받음 (로더에 이미 있는 이름이라)
   if (!e || !e.range) return;
+  return locked_(function () { return onAdminEditInner_(e); }, 30000);
+}
+
+function onAdminEditInner_(e) {
   const sh = e.range.getSheet();
   if (sh.getName() === DASH_TAB && e.range.getColumn() === 2 && e.range.getRow() >= 2 && e.oldValue && e.value) {
     // 한눈에 탭 방제를 고치면 진행목록, 카톡방, 보낼 메시지함, 월급시트까지 같이
@@ -1561,9 +1617,8 @@ function ensureSubmitTriggers_(runs) {
 
 // 폼이 제출되면: 그 폼 진행들의 인원 → 월급시트, 한눈에 탭. 다 찼으면 마감 확인까지
 function onRunSubmit_(e) {
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(20000)) return;   // 다른 작업 중이면 15분 확인이 이어서 함
-  try {
+  // 다른 작업 중이면 20초 기다리고, 그래도 바쁘면 15분 확인이 이어서 함
+  return locked_(function () {
     const formId = e.source.getId();
     const runs = readRuns_();
     const times = e.source.getResponses().map(function (x) { return x.getTimestamp().getTime(); });
@@ -1576,8 +1631,8 @@ function onRunSubmit_(e) {
     });
     try { updatePay_(); } catch (err) { Logger.log('월급시트 갱신 실패: ' + err); }
     try { buildDashboard_(false); } catch (err) {}
-    if (full) { lock.releaseLock(); checkFull(); }
-  } finally { try { lock.releaseLock(); } catch (err) {} }
+    if (full) checkFull();
+  }, 20000);
 }
 
 function editRun_(sh) {
@@ -1678,17 +1733,16 @@ function addMore_(sh, n) {
   const desc = String(form.getDescription() || '');
   const notice = sum ? noticeForMore_(desc, short) : desc.replace(/\(\s*\d*\s*명\)/g, '(  명)');
   if (sum && !n) n = sum;
-  const lock = LockService.getScriptLock();
-  lock.waitLock(60000);
   let res;
-  try {
+  locked_(function () {
     res = createRunInner_({
       k: CONFIG.KEY, n: reqId, title: room + nick, room: room, fname: room, camp: r['캠페인'] || campOf_(r['명단 제목']),
       day: (Number(r['일차']) || 1) + 1, total: r['총건수'], daily: String(n), date: iso, desc: notice, type: r['유형'],
       takdae: r['택대'] === 'Y', realship: r['실배송'] === 'Y', platform: r['플랫폼'], prices: r['가격'], croom: r['업체방'],
       shop: r['업체'], photo: r['포토'], slot: r['구매시간'], reuse: firstSheetRun_(r)
     });
-  } finally { lock.releaseLock(); }
+  }, 60000);
+  if (!res) return '다른 작업 중이라 못 만들었어요. 잠시 뒤 I2에 다시 적어 주세요.';
   MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[체험단] ' + md + ' 추가 모집 ' + n + '명: ' + room, [
     room + ' (' + n + '명, 같은 명단 시트)',
     '카톡방을 이 방제로 만들고 아래 공지를 올리세요.' + (sum ? ' 옵션 인원은 배정(안 산 계정 + 취소)으로 채웠어요.' : ' 옵션 인원 (  명)은 채워 주세요.') + ' 보낼 메시지함에도 들어가 있어요.',
@@ -1916,9 +1970,7 @@ function makeDueDays_() {
     const prev = chain ? chain.runs[chain.runs.length - 1] : null;
     const due = new Date(x[3]); due.setDate(due.getDate() - 1); due.setHours(CONFIG.NEXT_DAY_HOUR, 0, 0, 0);
     if (!((prev && prev['마감 시각']) || now >= due)) return;
-    const lock = LockService.getScriptLock();
-    lock.waitLock(60000);
-    try {
+    locked_(function () {
       if (findRunByRequest_(x[0])) { sh.getRange(i + 2, 9).setValue('생성됨'); return; }
       const dateIso = Utilities.formatDate(new Date(x[3]), CONFIG.TIMEZONE, 'yyyy-MM-dd');
       const desc = adjustNotice_(cfg.desc, JSON.parse(x[7]), cfg.slot2);
@@ -1939,7 +1991,7 @@ function makeDueDays_() {
         '',
         '보낼 메시지함: ' + outboxUrl_()
       ].join('\n'));
-    } finally { lock.releaseLock(); }
+    }, 60000);
   });
 }
 
@@ -2114,7 +2166,7 @@ function putFileChip_(sh, row, col, url) {
 // 택배시트는 바로가기만 걸고 절대 고치지 않음
 
 const DASH_TAB = '한눈에';
-const DASH_VER = '7';   // 모양을 바꾸면 올려서 다시 만들게 함
+const DASH_VER = '8';   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
   buildDashboard_(true);
@@ -2182,8 +2234,10 @@ function buildDashboard_(force) {
   if (!force && sh && props.getProperty('DASH_SIG') === sig) return;
   order.forEach(function (id) { grantImport_(ss.getId(), id); });
   if (!sh) sh = ss.insertSheet(DASH_TAB, 0);
-  sh.clear();
-  sh.setFrozenRows(0);
+  // 1행은 글자만 지우고 서식은 둠 (직접 칠한 색이 안 풀리게)
+  sh.getRange(1, 1, 1, sh.getMaxColumns()).clearContent();
+  sh.getRange(2, 1, sh.getMaxRows() - 1, sh.getMaxColumns()).clear().clearDataValidations();
+  sh.setFrozenRows(1);
   const q = function (t) { return '"' + String(t).replace(/"/g, '""') + '"'; };
   const head = ['진행일', '방제', '상태', '목표', '신청', '남은', '마감 시각', '명단', '폼', '택배시트', '틀린 옵션', '택배 옮김', '확인 필요'];
   let errs = {};
@@ -2198,8 +2252,11 @@ function buildDashboard_(force) {
     // 택배시트 칸 순서 그대로 (A 시간, B 이름, C 아이디, D 전화, E 주소, F 옵션, G 금액, H~J 빈칸, K 업체+상품) → 그대로 복사해서 붙여넣기
     //  그 뒤에 나머지 질문(닉네임, 주문번호 등), 맨 끝에 옵션 확인
     const find = function (re, not) { return x.hd.findIndex(function (h) { return h && re.test(h) && !(not && not.test(h)) && !MATCH.account.test(h); }) + 1; };
+    //  택대가 아니면 택배시트에 옮길 게 없으니 H~K(택배 상품)는 빼고 A~G 다음에 나머지 질문
+    x.tak = x.runs.some(function (r) { return r['택대'] === 'Y'; });
     const T = [['타임스탬프', 1], ['이름', find(MATCH.name)], ['아이디', find(/아이디|계정|이메일/)], ['전화번호', find(/전화|연락처|휴대폰|핸드폰/)],
-      ['주소', find(/주소/, /이메일/)], ['옵션', find(MATCH.opt, MATCH.nick)], ['결제금액', find(/결제\s*금액|금액|가격/)], ['', 0], ['', 0], ['', 0], ['택배 상품', 'K']];
+      ['주소', find(/주소/, /이메일/)], ['옵션', find(MATCH.opt, MATCH.nick)], ['결제금액', find(/결제\s*금액|금액|가격/)]]
+      .concat(x.tak ? [['', 0], ['', 0], ['', 0], ['택배 상품', 'K']] : []);
     const used = T.map(function (t) { return t[1]; });
     const rest = (x.keep.length ? x.keep : []).filter(function (c) { return used.indexOf(c) === -1; });
     x.layout = T.concat(rest.map(function (c) { return [x.hd[c - 1], c]; }));
@@ -2211,6 +2268,10 @@ function buildDashboard_(force) {
     x.prods = [];
     try { x.prods = noticeProducts_(FormApp.openById(x.runs[0]['폼ID']).getDescription()); } catch (e) {}
     x.shop = String(x.runs[0]['업체'] || (x.prods[0] || {}).shop || '').replace(/\s+/g, '');
+    // 판매 상품 이름: 방제의 상품명(업체명, '외' 뺌) 예) 고구마말랭이, 옥광밤. 상품이 여럿이면 공지의 상품마다 이름
+    x.item = campOf_(x.runs[x.runs.length - 1]['명단 제목']).replace(/\s+/g, '');
+    if (x.shop && x.item.indexOf(x.shop) === 0) x.item = x.item.slice(x.shop.length);
+    x.item = x.item.replace(/외$/, '');
     row += x.n + 4;
   });
   const fmt = function (t) { return 'DATE(' + Utilities.formatDate(new Date(t), CONFIG.TIMEZONE, 'yyyy,M,d') + ')'; };
@@ -2238,7 +2299,12 @@ function buildDashboard_(force) {
   });
   if (payUrl) sh.getRange(1, 15).setFormula('=HYPERLINK(' + q(payUrl) + ',"▶ 월급시트 열기")').setFontWeight('bold');
   if (runs.length) {
-    sh.getRange(2, 6, runs.length, 1).setFontColor('#d00000').setFontWeight('bold');   // 남은 = 빨간 글씨
+    // 위 표 보기 좋게: 가운데 맞춤, 방제는 왼쪽, 테두리
+    sh.getRange(1, 1, runs.length + 1, head.length).setHorizontalAlignment('center').setVerticalAlignment('middle')
+      .setBorder(true, true, true, true, true, true, '#d9d2e9', SpreadsheetApp.BorderStyle.SOLID);
+    sh.getRange(2, 2, runs.length, 1).setHorizontalAlignment('left');
+    sh.getRange(2, 13, runs.length, 1).setHorizontalAlignment('left');
+    sh.setRowHeight(1, 28);
     sh.getRange(2, 1, runs.length, 1).setNumberFormat('M/d');
     sh.getRange(2, 7, runs.length, 1).setNumberFormat('M/d HH:mm');
   }
@@ -2257,7 +2323,7 @@ function buildDashboard_(force) {
     const c = function (k) { return 'CHOOSECOLS(e,' + k + ')'; };
     const blank = 'MAKEARRAY(ROWS(e),1,LAMBDA(rr,cc,""))';
     const prodOf = function () {
-      if (x.prods.length <= 1) return q((x.prods[0] || {}).name || '');
+      if (x.prods.length <= 1) return q(x.item || (x.prods[0] || {}).name || '');
       let f = '""';
       if (x.layout[6][1]) {
         const nn = 'IFERROR(VALUE(REGEXREPLACE(TO_TEXT(pp),"[^0-9]","")),0)';
@@ -2272,7 +2338,13 @@ function buildDashboard_(force) {
     sh.getRange(top + 1, 1, 1, x.layout.length).setValues([x.layout.map(function (t) { return t[0]; })]);
     sh.getRange(top + 2, 1).setFormula('=IFERROR(LET(d,' + imp + ',IF(COUNTA(INDEX(d,0,1))=0,"",LET(e,FILTER(d,INDEX(d,0,1)<>""),HSTACK(' + parts.join(',') + ')))),"이 칸을 눌러 액세스 허용을 한 번 눌러 주세요")');
     sh.getRange(top + 1, 1, 1, Math.max(width2, 6)).setFontWeight('bold').setBackground('#faf7fd');
-    sh.getRange(top + 1, 11).setNote('택배시트 K열에 그대로 붙여넣는 칸 (업체명 + 상품). A~K를 한 번에 복사하면 택배시트 칸 순서와 같아요.');
+    if (x.tak) sh.getRange(top + 1, 11).setNote('택배시트 K열에 그대로 붙여넣는 칸 (업체명 + 판매 상품). A~K를 한 번에 복사하면 택배시트 칸 순서와 같아요.');
+    // 보기 좋게: 가운데 맞춤, 제목 줄은 왼쪽, 머리글 굵게, 테두리
+    sh.getRange(top + 1, 1, n + 1, Math.max(width2, 6)).setHorizontalAlignment('center').setVerticalAlignment('middle')
+      .setBorder(true, true, true, true, true, false, '#d9d2e9', SpreadsheetApp.BorderStyle.SOLID);
+    sh.getRange(top + 1, 1, 1, Math.max(width2, 6)).setWrap(true);
+    sh.setRowHeight(top, 28);
+    sh.getRange(top, 1).setHorizontalAlignment('left').setFontSize(11);
     sh.getRange(top + 2, 1, n, 1).setNumberFormat('M/d HH:mm');
     const r0 = top + 2, r1 = top + 1 + n;
     const colRange = function (k) { return sh.getRange(r0, k, n, 1); };
@@ -2307,11 +2379,19 @@ function buildDashboard_(force) {
         .setBackground('#f9cb9c').setFontColor('#7a3a00').setRanges([colRange(7)]).build());
     }
   });
-  sh.setColumnWidth(2, 260);
+  [[1, 95], [2, 240], [3, 170], [4, 120], [5, 220], [6, 100], [7, 100]].forEach(function (w) { sh.setColumnWidth(w[0], w[1]); });
   if (runs.length) {
+    // 남은이 0이 아니면 빨간 굵은 글씨
+    rules.unshift(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER(F2),F2<>0)').setFontColor('#d00000').setBold(true).setRanges([sh.getRange(2, 6, runs.length, 1)]).build());
     rules.push(SpreadsheetApp.newConditionalFormatRule().whenNumberGreaterThan(0).setBackground('#ea9999').setFontColor('#7f0000').setBold(true).setRanges([sh.getRange(2, 11, runs.length, 1)]).build());
     rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISLOGICAL(L2),L2=FALSE)').setBackground('#ea9999').setRanges([sh.getRange(2, 12, runs.length, 1)]).build());
   }
+  // 명단 줄 번갈아 연한 색 (읽기 쉽게, 다른 표시보다 약하게 맨 뒤에)
+  order.forEach(function (id) {
+    const x = sheets[id];
+    rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND($A' + (x.top + 2) + '<>"",ISEVEN(ROW()))').setBackground('#f6f4fb')
+      .setRanges([sh.getRange(x.top + 2, 1, x.n, Math.max(x.layout.length + (x.chk ? 1 : 0), 6))]).build());
+  });
   sh.setConditionalFormatRules(rules);
   props.setProperty('DASH_SIG', sig);
 }
