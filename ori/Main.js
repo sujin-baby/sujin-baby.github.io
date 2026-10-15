@@ -681,7 +681,11 @@ function responseSheet_(ss) {
 function rawFor_(ss, formId) {
   const tabs = ss.getSheets().filter(function (s) { return !!s.getFormUrl(); });
   if (formId) {
+    // 응답 탭의 폼 주소에 폼 ID가 들어 있으면 폼을 안 열고 비교 (폼 여는 게 느리고 가끔 구글 쪽 시간 초과가 남)
+    const idOf = function (t) { const m = String(t.getFormUrl()).match(/\/forms\/d\/([-\w]{25,})/); return m ? m[1] : ''; };
+    for (let i = 0; i < tabs.length; i++) if (idOf(tabs[i]) === String(formId)) return tabs[i];
     for (let i = 0; i < tabs.length; i++) {
+      if (idOf(tabs[i])) continue;
       try { if (FormApp.openByUrl(tabs[i].getFormUrl()).getId() === String(formId)) return tabs[i]; } catch (e) {}
     }
   }
@@ -933,6 +937,12 @@ function needFormula_(row) {
 
 // 명단 시트의 응답 탭 이름, 닉네임·옵션 열 글자
 function rawInfo_(sheetId, formId) {
+  // 한 번 실행하는 동안 같은 시트·폼은 한 번만 찾음
+  const memo = globalThis.__RAWINFO = globalThis.__RAWINFO || {}, mk = sheetId + '|' + formId;
+  if (memo[mk]) return memo[mk];
+  return (memo[mk] = rawInfo0_(sheetId, formId));
+}
+function rawInfo0_(sheetId, formId) {
   const raw = rawFor_(SpreadsheetApp.openById(sheetId), formId);
   const head = headers_(raw);
   // 닉네임 질문이 없는 예전 폼은 사람별 확인은 못 하고(수취인 이름은 공지 이름과 다름) 옵션별 인원만 셈
@@ -986,8 +996,7 @@ function writeAssign_(r, rows) {
   }));
   grantImport_(adminSs_().getId(), r['시트ID']);
   try {
-    const form = formOf_(info.raw);
-    const choices = form ? formChoices_(form) : [];
+    const choices = globalThis.__CHOICES || formChoices_(formOf_(info.raw));
     if (choices.length > 1) sh.getRange(start, 8, rows.length, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(choices, true).setAllowInvalid(true).build());
   } catch (e) {}
 }
@@ -1700,6 +1709,9 @@ function toolAction_(d) {
     if (found.run) r = found.run;
     else if (!r || !noticeMatches_(r, d.text)) { out.msg = found.msg || '⚠ 이 공지가 어느 진행 건지 못 찾았어요. (저장 안 함)'; return out; }
     out.msg = '✔ [' + bareTitle_(r['명단 제목']) + '] 에 저장했어요. (진행이 다르면 아래 \'잘못 넣었을 때 → 배정 비우기\')\n' + assignRun_(r, String(d.text));
+    // 저장은 여기서 끝. 중복·모자란 인원은 화면이 바로 이어서 따로 불러옴 (저장 결과가 빨리 보이게)
+    out.title = String(r['명단 제목']); out.saved = true;
+    return out;
   }
   if (!r) return out;   // 진행을 고르기 전에는 아무것도 안 함
   if (d.act === 'unassign') { writeAssign_(r, []); out.msg = '이 진행 배정을 비웠어요.'; }
@@ -1722,8 +1734,12 @@ function findRunByNotice_(list, text) {
   const link = (String(text).match(FORM_LINK_RE) || [])[0] || '';
   const prods = noticeProducts_(text);
   // 빠르게: 진행목록의 폼 링크가 같으면 폼을 안 열고 바로 (폼 여는 데 한 개에 1초쯤 걸림)
-  const quick = link ? list.filter(function (r) { return String(r['폼 링크']).trim() === link; }) : [];
-  const scored = quick.length ? quick.map(function (r) { return { r: r, sc: 2 }; }) : list.map(function (r) {
+  let quick = link ? list.filter(function (r) { return String(r['폼 링크']).trim() === link; }) : [];
+  // 그다음: 진행목록 업체 이름이 공지 판매처와 같은 것 (폼 안 열고)
+  const nk = function (x) { return String(x || '').replace(/\s+/g, ''); };
+  if (!quick.length && prods.length) quick = list.filter(function (r) { return nk(r['업체']) && prods.some(function (p) { return p.shop && nk(p.shop) === nk(r['업체']); }); });
+  const yday = today_().getTime() - 864e5;
+  const scored = quick.length ? quick.map(function (r) { return { r: r, sc: 2 }; }) : list.filter(function (r) { return !(r['진행일'] instanceof Date) || r['진행일'].getTime() >= yday; }).map(function (r) {
     let desc = '';
     try { desc = FormApp.openById(r['폼ID']).getDescription() || ''; } catch (e) {}
     let sc = 0;
@@ -1937,9 +1953,14 @@ function outbox(list) {
     box.appendChild(c);
   });
 }
-function call(d) {
-  busy(true); d.k = K; d.title = $('run').value;
-  google.script.run.withSuccessHandler(function (o) { busy(false); show(o); }).withFailureHandler(function (e) { busy(false); say('오류: ' + e.message); }).createRun(d);
+var tick = null;
+function call(d, keep) {
+  busy(true); d.k = K; if (!d.title) d.title = $('run').value;
+  var t0 = Date.now(), base = keep ? keep + '\n\n중복·인원 불러오는 중…' : (d.act === 'assign' ? '저장 중이에요…' : d.act === 'info' ? '' : '처리 중이에요…');
+  clearInterval(tick);
+  if (base) tick = setInterval(function () { say(base + ' ' + Math.round((Date.now() - t0) / 1000) + '초'); }, 1000);
+  google.script.run.withSuccessHandler(function (o) { clearInterval(tick); busy(false); show(o); if (keep && !(o && o.msg)) say(keep); if (o && o.saved) call({ act: 'info', title: o.title }, o.msg || '저장했어요.'); })
+    .withFailureHandler(function (e) { clearInterval(tick); busy(false); say('오류: ' + e.message + '\n(한 번 더 눌러 보고, 또 나오면 이 글을 캡처해서 보내 주세요)'); }).createRun(d);
 }
 function say(t) { $('msg').style.display = t ? 'block' : 'none'; $('msg').textContent = t || ''; }
 function show(o) {
@@ -1968,7 +1989,7 @@ function show(o) {
   $('n').value = sum || left || '';
 }
 $('run').onchange = function () { say(''); call({ act: 'info' }); };
-$('b1').onclick = function () { if (!$('txt').value.trim()) return say('공지를 붙여넣어 주세요.'); say('저장 중이에요… (몇 초 걸려요)'); call({ act: 'assign', text: $('txt').value }); $('txt').value = ''; };
+$('b1').onclick = function () { if (!$('txt').value.trim()) return say('공지를 붙여넣어 주세요.'); call({ act: 'assign', text: $('txt').value, title: '' }); $('txt').value = ''; };
 $('b2').onclick = function () {
   var t = [].slice.call(document.querySelectorAll('#dups input:checked')).map(function (x) { return x.value; });
   if (!t.length) return say('지울 걸 체크해 주세요.');
@@ -2273,13 +2294,11 @@ function applyAssign_(sh, text) {
 }
 
 function assignRun_(r, text) {
-  let note = '';
-  let info = rawInfo_(r['시트ID'], r['폼ID']);
-  if (!info.nickCol && r['폼ID']) {
-    if (ensureNickQuestion_(FormApp.openById(r['폼ID']))) { note = ' 폼에 닉네임 질문이 없어서 넣었어요 (이미 낸 사람은 확인 못 해요).'; SpreadsheetApp.flush(); Utilities.sleep(2000); }
-  }
-  const form = formOf_(info.raw);
-  const choices = form ? formChoices_(form) : [];
+  const note = '';
+  const info = rawInfo_(r['시트ID'], r['폼ID']);
+  let choices = [];
+  try { choices = formChoices_(r['폼ID'] ? FormApp.openById(r['폼ID']) : formOf_(info.raw)); } catch (e) {}
+  globalThis.__CHOICES = choices;
   const rows = parseAssign_(text, choices);
   if (!rows.length) return '이름을 못 찾았어요. 옵션 줄 뒤나 아래 줄에 이름을 띄어쓰기로 적어 주세요.';
   writeAssign_(r, rows);
@@ -2933,7 +2952,7 @@ function putFileChip_(sh, row, col, url) {
 // 택배시트는 바로가기만 걸고 절대 고치지 않음
 
 const DASH_TAB = '한눈에';
-const DASH_VER = '12';   // 모양을 바꾸면 올려서 다시 만들게 함
+const DASH_VER = '13';   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
   buildDashboard_(true);
@@ -3084,7 +3103,6 @@ function buildDashboard_(force) {
       sh.getRange(rr, 12).setFormula('=COUNTIF(' + rg + ',"옵션 틀림")+COUNTIF(' + rg + ',"초과 구매")');
     }
   });
-  if (CONFIG.WEBAPP_URL) sh.getRange(1, 16).setFormula('=HYPERLINK(' + q(toolsUrl_()) + ',"▶ 진행 도우미")').setFontWeight('bold');
   // 위 표 바로 아래 줄(왼쪽): 진행 도우미 체크(시트 오른쪽에 열림), 휴대폰용 링크, 마지막 확인 결과
   const bar = runs.length + 2;
   props.setProperty('DASH_BAR_ROW', String(bar));
@@ -3094,7 +3112,7 @@ function buildDashboard_(force) {
   if (CONFIG.WEBAPP_URL) sh.getRange(bar, 4).setFormula('=HYPERLINK(' + q(toolsUrl_()) + ',"휴대폰: ▶ 진행 도우미")').setFontWeight('bold').setHorizontalAlignment('left');
   if (payUrl) sh.getRange(bar, 6).setFormula('=HYPERLINK(' + q(payUrl) + ',"▶ 월급시트")').setFontWeight('bold').setHorizontalAlignment('left');
   try { sh.getRange(bar, 8).setValue(String(props.getProperty('LAST_REPORT') || '')).setFontWeight('bold').setHorizontalAlignment('left').setWrap(false); } catch (e) {}
-  if (payUrl) sh.getRange(1, 15).setFormula('=HYPERLINK(' + q(payUrl) + ',"▶ 월급시트 열기")').setFontWeight('bold');
+  // 월급시트·진행 도우미 링크는 위 표 바로 아래 줄에만 (O1, P1은 비움)
   if (runs.length) {
     // 위 표 보기 좋게: 가운데 맞춤, 방제는 왼쪽, 테두리
     sh.getRange(1, 1, runs.length + 1, head.length).setHorizontalAlignment('center').setVerticalAlignment('middle')
