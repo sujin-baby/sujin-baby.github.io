@@ -182,6 +182,25 @@ function normalizeRuns_() {
     const m = String(r['시트 링크'] || '').match(/\/d\/([-\w]{25,})/);
     if (m && m[1] !== String(r['시트ID'])) { r['시트ID'] = m[1]; setRun_(r.row, '시트ID', m[1]); }
   });
+  // 업체, 구매시간, 포토가 비었으면 폼 공지(설명)에서 채움 → 월급시트 스토어, 진행시간, 특이사항에 씀
+  runs.forEach(function (r) {
+    if (!r['폼ID'] || r['진행 상태'] === '종료' || (String(r['업체']).trim() && String(r['구매시간']).trim() && String(r['포토']).trim())) return;
+    let desc = '';
+    try { desc = FormApp.openById(r['폼ID']).getDescription() || ''; } catch (e) { return; }
+    if (!String(r['업체']).trim()) {
+      const p = noticeProducts_(desc)[0];
+      const shop = p ? p.shop : (desc.match(/판매처\s*[:：]\s*(.+)/) || ['', ''])[1].replace(/판매자\s*[:：]?|주식회사|\(주\)|㈜|\s+/g, '');
+      if (shop) { r['업체'] = shop; setRun_(r.row, '업체', shop); }
+    }
+    if (!String(r['구매시간']).trim()) {
+      const slot = runSlot_(r).replace(/★/g, '').trim();
+      if (slot) { r['구매시간'] = slot; setRun_(r.row, '구매시간', slot); }
+    }
+    if (!String(r['포토']).trim()) {
+      const m = desc.match(/포토[^\n]{0,12}?(없음|미제공|무|있음|제공|유|필수)/);
+      if (m) { r['포토'] = /없음|미제공|무/.test(m[1]) ? '무' : '유'; setRun_(r.row, '포토', r['포토']); }
+    }
+  });
   // 의뢰서 하나 = 명단 시트 하나: 같은 의뢰(총건수가 있는 묶음)의 날들은 첫 날 명단 시트로 모음
   //  (폼은 날마다 달라도 됨. 15분 확인에서 폼 응답이 이 시트로 가게 연결하고 명단 탭이 합쳐 보여 줌)
   chainsOf_(runs).forEach(function (c) {
@@ -556,6 +575,16 @@ function rawHead_(raw) {
   return all.slice(0, n);
 }
 
+// 명단 탭 1행: 총건수 = 의뢰 총건수, 진행건수 = 지금까지 들어온 응답(모든 날), 잔여건수 = 총건수 - 진행건수
+function listSummary_(ss, total) {
+  const sh = ss.getSheetByName(LIST_TAB);
+  if (!sh || String(sh.getRange('A1').getValue()) !== '총건수') return;
+  if (total && Number(sh.getRange('B1').getValue()) !== Number(total)) sh.getRange('B1').setValue(Number(total));
+  const f = '=SUMPRODUCT(--(LEN(A3:A)>0))';
+  if (sh.getRange('D1').getFormula() !== f) sh.getRange('D1').setFormula(f);
+  if (sh.getRange('F1').getFormula() !== '=IF(B1="","",B1-D1)') sh.getRange('F1').setFormula('=IF(B1="","",B1-D1)');
+}
+
 // 명단 탭이 이 시트에 연결된 모든 폼 응답 탭을 합쳐 보여 주게 (의뢰서 하나 = 명단 시트 하나, 날마다 폼이 달라도 아래로 이어짐)
 //  머리글은 첫 탭 기준 + 다른 탭에만 있는 질문은 뒤에. 손으로 적는 칸(송장번호, 실배송)은 밀어서 안 겹치게
 function ensureListTab_(ss) {
@@ -579,8 +608,13 @@ function ensureListTab_(ss) {
   const manual = row2.findIndex(function (h, i) { return i >= heads[0].length && /송장번호|실배송/.test(h); }) + 1;
   if (manual && manual <= union.length) sh.insertColumnsBefore(manual, union.length - manual + 1);
   sh.getRange(2, 1, 1, union.length).setValues([union]);
+  // 합친 명단이 펼쳐질 자리에 손으로 붙여넣은 응답 줄(A열이 날짜 값)이 있으면 지움 (같은 응답이 합친 명단에 들어오고, 남아 있으면 #REF! 오류)
+  const lastRow = sh.getLastRow();
+  if (lastRow >= 4) {
+    const vals = sh.getRange(4, 1, lastRow - 3, 1).getValues();
+    vals.forEach(function (v, i) { if (v[0] instanceof Date) sh.getRange(4 + i, 1, 1, union.length).clearContent(); });
+  }
   sh.getRange('A3').setFormula(f);
-  sh.getRange('D1').setFormula('=COUNTA(A3:A)');
   tabs.forEach(function (t) { try { t.hideSheet(); } catch (e) {} });
   return true;
 }
@@ -640,7 +674,7 @@ function formatResponseSheet_(ss, opts) {
   // 1행 요약
   const target = /^\d+$/.test(String(opts.target || '')) ? Number(opts.target) : '';
   sh.getRange('A1:F1').setValues([['총건수', target, '진행건수', '', '잔여건수', '']]);
-  sh.getRange('D1').setFormula('=COUNTA(' + ref + 'A2:A)');
+  sh.getRange('D1').setFormula('=SUMPRODUCT(--(LEN(A3:A)>0))');
   sh.getRange('F1').setFormula('=IF(B1="","",B1-D1)');
   const top = sh.getRange('A1:F1');
   top.setFontWeight('bold').setFontSize(11).setHorizontalAlignment('center').setVerticalAlignment('middle').setBackground('#ffffff')
@@ -1072,7 +1106,15 @@ function checkFull() {
   });
   // 폼을 다 연결한 뒤 명단 탭이 그 시트의 모든 폼 응답을 합쳐 보여 주게
   Object.keys(listed).forEach(function (id) {
-    try { ensureListTab_(SpreadsheetApp.openById(id)); } catch (e) { Logger.log('명단 탭 합치기 실패: ' + e); }
+    try {
+      const lss = SpreadsheetApp.openById(id);
+      ensureListTab_(lss);
+      // 총건수 = 이 명단 시트를 쓰는 의뢰의 총건수 (없으면 날마다 목표인원 합)
+      const mine = runs.filter(function (x) { return String(x['시트ID']) === id; });
+      const total = mine.reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0) ||
+        mine.reduce(function (a, x) { return a + (Number(x['목표인원']) || 0); }, 0);
+      listSummary_(lss, total);
+    } catch (e) { Logger.log('명단 탭 합치기 실패: ' + e); }
   });
   props.setProperty('RUN_ERRORS', JSON.stringify(errs));
   function checkRun_(r) {
