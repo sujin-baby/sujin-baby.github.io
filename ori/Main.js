@@ -885,8 +885,6 @@ function rawInfo_(sheetId, formId) {
 
 // 배정 탭 '산 수' 수식을 새 모양으로 한 번 다시 씀 (닉네임 질문 전 응답이면 빈칸)
 function refreshAssignFormulasOnce_(runs) {
-  const props = PropertiesService.getScriptProperties();
-  if (props.getProperty('ASSIGN_F_V3')) return;
   const sh = assignSheet_(), last = sh.getLastRow();
   if (last >= 2) {
     const infos = {};
@@ -895,10 +893,11 @@ function refreshAssignFormulasOnce_(runs) {
       if (!r || !r['시트ID']) return;
       if (!infos[v[0]]) { const info = rawInfo_(r['시트ID'], r['폼ID']); const w = windowOf_(runs, r); info.from = w.from; info.to = w.to; infos[v[0]] = info; }
       const info = infos[v[0]];
-      sh.getRange(i + 2, 5).setValue(info.nick ? boughtFormula_(i + 2, info) : '');
+      const f = info.nick ? boughtFormula_(i + 2, info) : '';
+      const c = sh.getRange(i + 2, 5);
+      if (c.getFormula() !== f) { if (f) c.setFormula(f); else c.clearContent(); }
     });
   }
-  props.setProperty('ASSIGN_F_V3', '1');
 }
 
 // 이 진행의 배정 줄을 통째로 바꿈
@@ -1204,6 +1203,7 @@ function checkFullInner_() {
   try { fruitCheck_(runs); } catch (e) { Logger.log('안 산 사람 확인 실패: ' + e); }
   try { takbaeCheck_(runs); } catch (e) { Logger.log('택배시트 알림 실패: ' + e); }
   try { refreshAssignFormulasOnce_(runs); } catch (e) { Logger.log('배정 수식 갱신 실패: ' + e); }
+  try { tidyOutbox_(); } catch (e) { Logger.log('보낼메시지 정리 실패: ' + e); }
   const errs = {}, listed = {};
   try { ensureSubmitTriggers_(runs); } catch (e) { Logger.log('응답 트리거 실패: ' + e); }
   runs.forEach(function (r) {
@@ -1419,6 +1419,18 @@ function outboxSheet_() {
     sh.setColumnWidth(5, 420);
   }
   return sh;
+}
+
+// 보낼메시지: 최신순, 한 줄씩(메시지 칸은 잘라 보이고 시각·종류·카톡방·상태가 위로 맞춰 보이게)
+function tidyOutbox_() {
+  const sh = outboxSheet_(), last = sh.getLastRow();
+  if (last < 2) return;
+  if (last >= 3) sh.getRange(2, 1, last - 1, 6).sort({ column: 2, ascending: false });
+  sh.getRange(1, 1, last, 6).setVerticalAlignment('top').setWrap(false);
+  sh.getRange(2, 5, last - 1, 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
+  sh.setRowHeights(2, last - 1, 21);
+  sh.getRange(2, 2, last - 1, 1).setNumberFormat('M/d HH:mm');
+  sh.setFrozenRows(1);
 }
 
 function queueMsg_(room, msg, kind) {
