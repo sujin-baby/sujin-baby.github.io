@@ -591,7 +591,11 @@ function ensureListTab_(ss) {
   const sh = ss.getSheetByName(LIST_TAB);
   if (!sh) return false;
   const tabs = ss.getSheets().filter(function (s) { return !!s.getFormUrl(); });
-  if (tabs.length < 2) return false;
+  if (tabs.length < 2) {
+    // 폼이 하나여도 손으로 붙여넣은 줄 때문에 명단이 막혔으면(#REF!) 치움
+    if (tabs.length && /^#/.test(sh.getRange('A3').getDisplayValue())) clearPasted_(sh, rawHead_(tabs[0]).length);
+    return false;
+  }
   const heads = tabs.map(rawHead_);
   const union = heads[0].slice();
   heads.slice(1).forEach(function (h) { h.forEach(function (x) { if (x && union.indexOf(x) === -1) union.push(x); }); });
@@ -602,21 +606,37 @@ function ensureListTab_(ss) {
     return 'LET(d,' + ref(t) + 'A2:' + L + ',HSTACK(' + cols.join(',') + '))';
   });
   const f = '=IFERROR(LET(v,VSTACK(' + parts.join(',') + '),SORT(FILTER(v,INDEX(v,0,1)<>""),1,TRUE)),"")';
-  if (sh.getRange('A3').getFormula() === f) return false;
+  if (sh.getRange('A3').getFormula() === f) {
+    if (/^#/.test(sh.getRange('A3').getDisplayValue())) clearPasted_(sh, union.length);
+    return false;
+  }
   // 손으로 적는 칸이 합친 머리글과 겹치면 칸을 끼워 넣어 뒤로 밀기
   const row2 = sh.getRange(2, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(String);
   const manual = row2.findIndex(function (h, i) { return i >= heads[0].length && /송장번호|실배송/.test(h); }) + 1;
   if (manual && manual <= union.length) sh.insertColumnsBefore(manual, union.length - manual + 1);
   sh.getRange(2, 1, 1, union.length).setValues([union]);
-  // 합친 명단이 펼쳐질 자리에 손으로 붙여넣은 응답 줄(A열이 날짜 값)이 있으면 지움 (같은 응답이 합친 명단에 들어오고, 남아 있으면 #REF! 오류)
-  const lastRow = sh.getLastRow();
-  if (lastRow >= 4) {
-    const vals = sh.getRange(4, 1, lastRow - 3, 1).getValues();
-    vals.forEach(function (v, i) { if (v[0] instanceof Date) sh.getRange(4 + i, 1, 1, union.length).clearContent(); });
-  }
   sh.getRange('A3').setFormula(f);
+  clearPasted_(sh, union.length);
   tabs.forEach(function (t) { try { t.hideSheet(); } catch (e) {} });
   return true;
+}
+
+// 명단 탭에 손으로 붙여넣은 응답 줄(A열이 날짜 값) 지우기. 같은 응답은 폼에서 자동으로 들어오고, 남아 있으면 명단 수식이 막힘(#REF!)
+//  수식을 잠깐 비워서 수식이 펼친 값과 붙여넣은 값을 구분한 뒤 다시 넣음
+function clearPasted_(sh, width) {
+  const f = sh.getRange('A3').getFormula();
+  if (!f) return 0;
+  sh.getRange('A3').clearContent();
+  SpreadsheetApp.flush();
+  const last = sh.getLastRow();
+  let n = 0;
+  if (last >= 4) {
+    sh.getRange(4, 1, last - 3, 1).getValues().forEach(function (v, i) {
+      if (v[0] instanceof Date || /^\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2}/.test(String(v[0]))) { sh.getRange(4 + i, 1, 1, width).clearContent(); n++; }
+    });
+  }
+  sh.getRange('A3').setFormula(f);
+  return n;
 }
 
 function headers_(sheet) {
