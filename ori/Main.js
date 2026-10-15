@@ -117,9 +117,15 @@ function respTimes_(sheetId) {
   return raw.getRange(2, 1, last - 1, 1).getValues().map(function (x) { return x[0] instanceof Date ? x[0].getTime() : null; }).filter(function (t) { return t !== null; });
 }
 
+// 폼에 실제로 들어온 응답 시각 (명단 시트보다 폼이 정확: 시트 연결이 끊겨도 셀 수 있음)
+function formTimes_(formId) {
+  return FormApp.openById(formId).getResponses().map(function (x) { return x.getTimestamp().getTime(); });
+}
+
 function runCount_(runs, r, times) {
   const w = windowOf_(runs, r);
-  return (times || respTimes_(r['시트ID'])).filter(function (t) { return t >= w.from && t < w.to; }).length;
+  if (!times) { try { times = r['폼ID'] ? formTimes_(r['폼ID']) : respTimes_(r['시트ID']); } catch (e) { times = respTimes_(r['시트ID']); } }
+  return times.filter(function (t) { return t >= w.from && t < w.to; }).length;
 }
 
 // 이 진행의 구매 시간 글: 폼 설명(공지) 맨 윗줄이 시간 글이면 그걸(직접 고친 공지 반영), 아니면 진행목록 구매시간
@@ -366,7 +372,7 @@ function createRunInner_(d) {
   if (!reuse && Number(d.day) > 1) {
     const ck = campKey_(d.camp || campOf_(d.title));
     const chain = chainsOf_(readRuns_()).filter(function (c) { return c.key === ck; }).pop();
-    reuse = chain ? chain.runs.filter(function (x) { return x['시트ID'] && x['폼ID']; }).pop() || null : null;
+    reuse = chain ? chain.runs.filter(function (x) { return x['시트ID'] && x['폼ID']; })[0] || null : null;   // 그 의뢰의 첫 명단 시트
   }
   let form, ss, folder, formUrl;
   if (reuse) {
@@ -994,24 +1000,36 @@ function checkFull() {
   try { cleanListSheetsOnce_(runs); } catch (e) { Logger.log('명단 시트 표시 정리 실패: ' + e); }
   try { fruitCheck_(runs); } catch (e) { Logger.log('안 산 사람 확인 실패: ' + e); }
   try { takbaeCheck_(runs); } catch (e) { Logger.log('택배시트 알림 실패: ' + e); }
+  const errs = {};
   runs.forEach(function (r) {
-    if (r['진행 상태'] === '종료' || !r['폼ID'] || !r['목표인원'] || r['마감 시각']) return;
-    let form;
-    try { form = FormApp.openById(r['폼ID']); } catch (e) { return; }
+    if (r['진행 상태'] === '종료' || !r['폼ID']) return;
+    // 진행 하나에서 오류가 나도 다른 진행은 계속 (오류는 한눈에 탭 '확인 필요' 칸에 보임)
+    try { checkRun_(r); } catch (e) { errs[r['명단 제목']] = String(e.message || e).slice(0, 120); Logger.log('진행 확인 실패 ' + r['명단 제목'] + ': ' + e); }
+  });
+  props.setProperty('RUN_ERRORS', JSON.stringify(errs));
+  function checkRun_(r) {
+    const form = FormApp.openById(r['폼ID']);
+    // 폼 응답이 진행목록의 명단 시트가 아닌 다른 시트로 가면 알려 줌 (명단이 안 보이는 원인)
+    try {
+      const dest = form.getDestinationId();
+      if (r['시트ID'] && dest && dest !== String(r['시트ID'])) errs[r['명단 제목']] = '폼 응답이 진행목록의 명단 시트가 아닌 다른 시트로 들어가요';
+      else if (r['시트ID'] && !dest) errs[r['명단 제목']] = '폼에 응답 시트가 연결돼 있지 않아요';
+    } catch (e) {}
     const w = windowOf_(runs, r);
     if (Date.now() < w.from) return;   // 아직 시작 전인 다음 일차
     // 같은 폼을 쓰는 다음 일차: 진행일 0시가 되면 폼을 한 번 다시 엶 (그 뒤에 손으로 닫으면 다시 안 엶)
-    if (!w.first && w.last) {
+    if (!w.first && w.last && !r['마감 시각']) {
       const key = 'OPEN_' + r['폼ID'] + '_' + Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd');
       if (!props.getProperty(key)) {
         if (!form.isAcceptingResponses() && !pastEnd_(r)) form.setAcceptingResponses(true);
         props.setProperty(key, '1');
       }
     }
-    if (!times[r['시트ID']]) times[r['시트ID']] = respTimes_(r['시트ID']);
-    const n = runCount_(runs, r, times[r['시트ID']]);
+    // 인원은 폼에 들어온 응답으로 셈 (마감된 뒤에도 지우거나 늦게 들어온 게 반영되게)
+    if (!times[r['폼ID']]) times[r['폼ID']] = form.getResponses().map(function (x) { return x.getTimestamp().getTime(); });
+    const n = runCount_(runs, r, times[r['폼ID']]);
     if (Number(r['인원']) !== n) setRun_(r.row, '인원', n);
-    if (n < Number(r['목표인원'])) return;
+    if (!r['목표인원'] || r['마감 시각'] || n < Number(r['목표인원'])) return;
     form.setAcceptingResponses(false);
     setRun_(r.row, '마감 시각', new Date());
     changed = true;
@@ -1031,7 +1049,7 @@ function checkFull() {
       '잘못 산 사람을 빼려면 관리 시트 폼수정 탭에서 지우세요. 인원이 모자라면 폼이 다시 열려요.',
       r['택대'] === 'Y' ? '\n★ 택배시트에 옮겨 적기 (2시 전까지): 한눈에 탭에서 A~K 복사 → 붙여넣기 → \'택배 옮김\' 체크' : ''
     ].join('\n'));
-  });
+  }
   try { buildDashboard_(false); } catch (e) { Logger.log('한눈에 탭 실패: ' + e); }
   // 월급시트도 15분마다 같이 갱신 (계약 수량 링크, 총액, 그날 수량)
   try { updatePay_(); } catch (e) { Logger.log('월급시트 갱신 실패: ' + e); }
@@ -1424,6 +1442,13 @@ function applyAssign_(sh, text) {
   return '배정 넣었어요: ' + Object.keys(by).map(function (o) { return o + ' ' + by[o]; }).join(', ') + (canc.length ? ' / 취소 ' + canc.join(' ') : '') + '. 관리 시트 배정 탭에서 확인하세요.' + note;
 }
 
+// 이 진행이 속한 의뢰의 첫 명단 시트(첫 진행). 예전에 날마다 시트를 따로 만든 의뢰도 첫 시트로 모음
+function firstSheetRun_(r) {
+  const ck = campKey_(r['캠페인'] || r['명단 제목']);
+  const chain = chainsOf_(readRuns_()).filter(function (c) { return c.key === ck && c.runs.some(function (x) { return x.row === r.row; }); })[0];
+  return (chain && chain.runs.filter(function (x) { return x['시트ID'] && x['폼ID']; })[0]) || r;
+}
+
 // 모자란 인원을 다음 날 같은 명단 시트(같은 폼)로 더 받기
 //  방제: #택10.15 모두의농수산옥광밤외12 → #택10.16 모두의농수산옥광밤외5, 공지는 지금 폼 설명에서 옵션 인원만 비움
 function addMore_(sh, n) {
@@ -1454,7 +1479,7 @@ function addMore_(sh, n) {
       k: CONFIG.KEY, n: reqId, title: room + nick, room: room, fname: room, camp: r['캠페인'] || campOf_(r['명단 제목']),
       day: (Number(r['일차']) || 1) + 1, total: r['총건수'], daily: String(n), date: iso, desc: notice, type: r['유형'],
       takdae: r['택대'] === 'Y', realship: r['실배송'] === 'Y', platform: r['플랫폼'], prices: r['가격'], croom: r['업체방'],
-      shop: r['업체'], photo: r['포토'], slot: r['구매시간'], reuse: r
+      shop: r['업체'], photo: r['포토'], slot: r['구매시간'], reuse: firstSheetRun_(r)
     });
   } finally { lock.releaseLock(); }
   MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[체험단] ' + md + ' 추가 모집 ' + n + '명: ' + room, [
@@ -1897,7 +1922,7 @@ function buildDashboard_(force) {
   const allRuns = readRuns_();
   const runs = allRuns.filter(function (r) { return r['진행 상태'] !== '종료' && r['시트ID']; })
     .sort(function (a, b) { return (b['진행일'] || 0) - (a['진행일'] || 0); });
-  const sig = DASH_VER + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태'] + ':' + r['진행일'] + ':' + r['택배 옮김']; }).join('|');
+  const sig = DASH_VER + '|' + PropertiesService.getScriptProperties().getProperty('RUN_ERRORS') + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태'] + ':' + r['진행일'] + ':' + r['택배 옮김']; }).join('|');
   const props = PropertiesService.getScriptProperties();
   const ss = adminSs_();
   let sh = ss.getSheetByName(DASH_TAB);
@@ -1906,7 +1931,9 @@ function buildDashboard_(force) {
   sh.clear();
   sh.setFrozenRows(0);
   const q = function (t) { return '"' + String(t).replace(/"/g, '""') + '"'; };
-  const head = ['진행일', '방제', '상태', '목표', '신청', '남은', '마감 시각', '명단', '폼', '택배시트', '틀린 옵션', '택배 옮김'];
+  const head = ['진행일', '방제', '상태', '목표', '신청', '남은', '마감 시각', '명단', '폼', '택배시트', '틀린 옵션', '택배 옮김', '확인 필요'];
+  let errs = {};
+  try { errs = JSON.parse(props.getProperty('RUN_ERRORS') || '{}'); } catch (e) {}
   sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold').setBackground('#efe6f7');
   const payUrl = CONFIG.PAY_SHEET_ID ? 'https://docs.google.com/spreadsheets/d/' + CONFIG.PAY_SHEET_ID + '/edit#gid=' + CONFIG.PAY_TAB_GID : '';
   // 명단 시트(의뢰)마다 한 덩어리
@@ -1967,12 +1994,13 @@ function buildDashboard_(force) {
     if (r['택대'] === 'Y' && CONFIG.TAKBAE_SHEET_URL) sh.getRange(rr, 10).setFormula('=HYPERLINK(' + q(CONFIG.TAKBAE_SHEET_URL) + ',"택배")');
     // 택대면 '택배 옮김' 체크 (명단을 택배시트에 옮겨 적었으면 체크, 2시 전까지). 체크하면 진행목록에도 저장
     if (r['택대'] === 'Y') sh.getRange(rr, 12).insertCheckboxes().setValue(r['택배 옮김'] === true);
+    if (errs[r['명단 제목']]) sh.getRange(rr, 13).setValue('⚠ ' + errs[r['명단 제목']]).setFontColor('#b91c1c');
     if (x.chk) {
       const c = colLetter_(x.chk), rg = c + (x.top + 2) + ':' + c + (x.top + 1 + x.n);
       sh.getRange(rr, 11).setFormula('=COUNTIF(' + rg + ',"옵션 틀림")+COUNTIF(' + rg + ',"초과 구매")');
     }
   });
-  if (payUrl) sh.getRange(1, 14).setFormula('=HYPERLINK(' + q(payUrl) + ',"▶ 월급시트 열기")').setFontWeight('bold');
+  if (payUrl) sh.getRange(1, 15).setFormula('=HYPERLINK(' + q(payUrl) + ',"▶ 월급시트 열기")').setFontWeight('bold');
   if (runs.length) {
     sh.getRange(2, 1, runs.length, 1).setNumberFormat('M/d');
     sh.getRange(2, 7, runs.length, 1).setNumberFormat('M/d HH:mm');
