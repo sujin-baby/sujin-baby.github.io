@@ -1247,6 +1247,7 @@ function checkFullInner_() {
   try { normalizeRuns_(); } catch (e) { note_('진행목록 정리 실패: ' + e); }
   try { ensureEditTab_(); } catch (e) { note_('폼수정 탭 만들기 실패: ' + e); }
   try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
+  try { autoNextDay_(); } catch (e) { note_('다음 날 진행 만들기 실패: ' + e); }
   const me = Session.getEffectiveUser().getEmail();
   const props = PropertiesService.getScriptProperties();
   let changed = false;
@@ -2045,6 +2046,31 @@ function firstSheetRun_(r) {
   return (chain && chain.runs.filter(function (x) { return x['시트ID'] && x['폼ID']; })[0]) || r;
 }
 
+// 의뢰 총건수가 남았는데 내일 진행이 없으면(일정 탭 계획이 없는 의뢰 등) 오늘 오전 10시(NEXT_DAY_HOUR)부터 내일 진행을 자동으로
+//  같은 폼·같은 명단 시트, 공지는 오늘 공지(폼 설명)에서 이름을 뺀 것, 건수 = min(일 진행 건수, 남은 건수)
+function autoNextDay_() {
+  if (Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'H')) < (Number(CONFIG.NEXT_DAY_HOUR) || 10)) return;
+  const runs = readRuns_();
+  const todayKey = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
+  // 일정 탭에 이 캠페인의 대기 중인 계획이 있으면 그쪽(makeDueDays_)이 만듦
+  const pend = {};
+  try {
+    const ps = planSheet_(), pl = ps.getLastRow();
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x) { if (x[8] === '대기') pend[campKey_(x[1])] = 1; });
+  } catch (e) {}
+  chainsOf_(runs).forEach(function (c) {
+    if (!c.total || pend[c.key]) return;
+    const last = c.runs[c.runs.length - 1];
+    if (!last['폼ID'] || last['진행 상태'] === '종료' || !(last['진행일'] instanceof Date)) return;
+    if (Utilities.formatDate(last['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd') !== todayKey) return;   // 오늘이 마지막 진행인 의뢰만
+    const planned = c.runs.reduce(function (a, x) { return a + (x['진행일'] < today_() ? (Number(x['인원']) || 0) : (Number(x['목표인원']) || 0)); }, 0);
+    const left = c.total - planned;
+    if (left <= 0) return;
+    const daily = Number(c.runs[0]['목표인원']) || Number(last['목표인원']) || left;
+    note_('다음 날 진행: ' + addMoreRun_(last, Math.min(daily, left), { next: true }));
+  });
+}
+
 // 모자란 인원을 다음 날 같은 명단 시트(같은 폼)로 더 받기
 //  방제: #택10.15 모두의농수산옥광밤외12 → #택10.16 모두의농수산옥광밤외5, 공지는 지금 폼 설명에서 옵션 인원만 비움
 function addMore_(sh, n) {
@@ -2053,20 +2079,34 @@ function addMore_(sh, n) {
   return addMoreRun_(r, n);
 }
 
-function addMoreRun_(r, n) {
+function addMoreRun_(r, n, opt) {
+  opt = opt || {};
   const base = r['진행일'] instanceof Date && r['진행일'] >= today_() ? new Date(r['진행일']) : today_();
   base.setDate(base.getDate() + 1);
   const md = (base.getMonth() + 1) + '.' + base.getDate();
   const iso = Utilities.formatDate(base, CONFIG.TIMEZONE, 'yyyy-MM-dd');
-  const reqId = 'add-' + r['시트ID'] + '-' + iso;
-  if (findRunByRequest_(reqId)) return md + ' 추가 모집은 이미 만들었어요.';
-  if (!n && !shortByOption_(readRuns_(), r).__any) return '인원을 1 이상으로 적어 주세요.';
+  const reqId = (opt.next ? 'next-' : 'add-') + r['시트ID'] + '-' + iso;
+  if (findRunByRequest_(reqId)) return md + (opt.next ? ' 진행은 이미 만들었어요.' : ' 추가 모집은 이미 만들었어요.');
+  if (!n && (opt.next || !shortByOption_(readRuns_(), r).__any)) return '인원을 1 이상으로 적어 주세요.';
+  // 그날 같은 명단 시트 진행이 이미 있으면(자동으로 만든 다음 날 진행 등) 새로 만들지 않고 그 진행 인원을 늘림
+  if (!opt.next) {
+    if (!n) n = Object.keys(shortByOption_(readRuns_(), r)).reduce(function (a, o) { return a + shortByOption_(readRuns_(), r)[o]; }, 0);
+    const same = readRuns_().filter(function (x) { return x['진행 상태'] !== '종료' && x['진행일'] instanceof Date && Utilities.formatDate(x['진행일'], CONFIG.TIMEZONE, 'yyyy-MM-dd') === iso && campKey_(x['캠페인'] || x['명단 제목']) === campKey_(r['캠페인'] || r['명단 제목']); })[0];
+    if (same) {
+      const total = (Number(same['목표인원']) || 0) + n;
+      renameRun_(same, bareTitle_(same['명단 제목']).replace(/\d+\s*$/, String(total)));
+      setRun_(same.row, '목표인원', total);
+      const left0 = Number(r['목표인원']) - n, me0 = readRuns_().filter(function (x) { return String(x['명단 제목']) === String(r['명단 제목']); })[0];
+      if (left0 > 0 && me0) { renameRun_(me0, bareTitle_(me0['명단 제목']).replace(/\d+\s*$/, String(left0))); setRun_(me0.row, '목표인원', left0); }
+      return md + ' 진행이 이미 있어서 거기에 ' + n + '명을 더했어요 → ' + bareTitle_(same['명단 제목']).replace(/\d+\s*$/, String(total)) + '. 카톡 공지의 인원도 ' + total + '명으로 고쳐 주세요.';
+    }
+  }
   const nick = (String(r['명단 제목']).match(/\s*\([^)]*\)\s*$/) || [''])[0];
   const roomOld = String(r['카톡방'] || String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''));
   const room = roomOld.replace(/\d{1,2}\.\d{1,2}/, md).replace(/\d+\s*$/, String(n));
   const form = FormApp.openById(r['폼ID']);
   // 모자란 옵션별 인원 = 배정에서 안 산 계정 + 취소한 사람 (배정이 없으면 옵션 인원은 비워 둠)
-  const short = shortByOption_(readRuns_(), r);
+  const short = opt.next ? {} : shortByOption_(readRuns_(), r);
   const sum = Object.keys(short).reduce(function (a, o) { return a + short[o]; }, 0);
   const desc = String(form.getDescription() || '');
   // 새로 모집하는 공지라 옵션 줄 뒤의 이름(어제 사람)은 지움
@@ -2082,6 +2122,18 @@ function addMoreRun_(r, n) {
     });
   }, 60000);
   if (!res) return '다른 작업 중이라 못 만들었어요. 잠시 뒤 다시 해 주세요.';
+  if (opt.next) {
+    MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[체험단] ' + md + ' 진행 준비됐어요: ' + room, [
+      room + ' (' + n + '건, 같은 폼·같은 명단 시트)',
+      '카톡방을 이 방제로 만들고 아래 공지를 올리세요. 보낼 메시지함에도 들어가 있어요. 옵션이 여러 개면 옵션 인원 (  명)은 채워 주세요.',
+      '폼은 ' + md + ' 0시에 다시 열려요.',
+      '',
+      res.notice,
+      '',
+      '보낼 메시지함: ' + outboxUrl_()
+    ].join('\n'));
+    return md + ' 진행을 만들었어요: ' + room;
+  }
   // 오늘 진행은 실제로 한 인원으로: 목표와 방제 끝 숫자를 (목표 - 추가 모집 인원)으로 (예: 12 → 7)
   const left = Number(r['목표인원']) - n;
   if (left > 0) {
