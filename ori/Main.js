@@ -71,6 +71,10 @@ function report_(name, ok) {
     const d = adminSs_().getSheetByName(DASH_TAB);
     if (d) {
       d.getRange(1, 17).setValue(head).setFontColor(notes.length || ok === false ? '#b91c1c' : '#2f7a2f').setFontWeight('bold').setWrap(false);
+      // 왼쪽(위 표 바로 아래 줄)에도 같은 한 줄 + 자세한 건 메모(마우스 올리면 보임)
+      const bar = Number(PropertiesService.getScriptProperties().getProperty('DASH_BAR_ROW')) || 0;
+      PropertiesService.getScriptProperties().setProperty('LAST_REPORT', head);
+      if (bar) d.getRange(bar, 8).setValue(head).setNote(lines.join('\n')).setFontColor(notes.length || ok === false ? '#b91c1c' : '#2f7a2f').setFontWeight('bold').setWrap(false).setHorizontalAlignment('left');
       d.getRange(2, 17, 12, 1).clearContent();
       if (lines.length) d.getRange(2, 17, Math.min(lines.length, 12), 1).setValues(lines.slice(0, 12).map(function (x) { return [x.slice(0, 120)]; }))
         .setFontColor('#555555').setFontWeight('normal').setWrap(false).setHorizontalAlignment('left');
@@ -492,6 +496,8 @@ function doGet(e) {
 function createRun(d) {
   if (!d || d.k !== CONFIG.KEY) throw new Error('권한이 없어요. 생성기 버튼이나 시트 메뉴로 열어 주세요.');
   // 진행 도우미 페이지의 버튼도 이 이름으로 받음 (로더에 이미 있는 이름이라 붙여넣기 없이 됨)
+  //  보기·공지 저장은 진행목록 줄을 안 바꿔서 15분 확인이 돌고 있어도 바로 (기다리면 버튼이 안 눌리는 것처럼 보임)
+  if (d.act && /^(info|sent|assign|unassign)$/.test(d.act)) return toolAction_(d);
   if (d.act) return locked_(function () { return toolAction_(d); }, 30000) || { msg: '다른 작업 중이에요. 잠시 뒤 다시 눌러 주세요.' };
   return locked_(function () {
     const prev = d.n ? findRunByRequest_(d.n) : null;
@@ -1338,6 +1344,7 @@ function checkFullInner_() {
   try { fixOct16Once_(); } catch (e) { note_('10.16 정리 실패: ' + e); }
   try { fixNamesOnce_(); } catch (e) { note_('공지 이름 정리 실패: ' + e); }
   try { fixTaOnce_(); } catch (e) { note_('배정 (타) 정리 실패: ' + e); }
+  try { ensureListMsgs_(runs); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   const errs = {}, listed = {};
   step_('폼 인원');
   try { ensureSubmitTriggers_(runs); } catch (e) { note_('응답 트리거 실패: ' + e); }
@@ -1411,10 +1418,7 @@ function checkFullInner_() {
     form.setAcceptingResponses(false);
     setRun_(r.row, '마감 시각', new Date());
     changed = true;
-    // 명단방 형식 (사장님 예시): 시트 링크 → 빈 줄 → 명단 제목
-    const listMsg = r['시트 링크'] + '\n\n' + r['명단 제목'];
-    queueMsg_(CONFIG.ROOM_LIST, listMsg, '명단 전달');
-    queueMsg_(r['업체방'], r['시트 링크'] + '\n\n' + r['명단 제목'] + '\n오늘 명단입니다. 실시간 시트에서 확인 부탁드립니다!', '업체 명단');
+    const listMsg = queueListMsgs_(r);
     MailApp.sendEmail(me, '[체험단] 명단 마감: ' + r['명단 제목'], [
       '신청 ' + n + '명이 모여서 폼을 자동으로 닫았어요.',
       dupSummary_(r['시트ID']),
@@ -1439,6 +1443,36 @@ function checkFullInner_() {
   try { cleanListSheetsOnce_(readRuns_()); } catch (e) { note_('명단 시트 표시 정리 실패: ' + e); }
   try { refreshAssignFormulasOnce_(readRuns_()); } catch (e) { note_('배정 수식 갱신 실패: ' + e); }
   try { ensureEditTab_(); } catch (e) { note_('폼수정 탭 만들기 실패: ' + e); }
+}
+
+// 명단방 형식 (사장님 예시): 시트 링크 → 빈 줄 → 명단 제목. 업체방에도
+function queueListMsgs_(r, onlyWithRoom) {
+  const listMsg = r['시트 링크'] + '\n\n' + r['명단 제목'];
+  queueMsg_(CONFIG.ROOM_LIST, listMsg, '명단 전달');
+  if (!onlyWithRoom || String(r['업체방'] || '').trim()) queueMsg_(r['업체방'], listMsg + '\n오늘 명단입니다. 실시간 시트에서 확인 부탁드립니다!', '업체 명단');
+  return listMsg;
+}
+
+// 오늘 마감됐는데 명단 전달 메시지가 없는 진행(방제 숫자를 고쳐서 조용히 마감된 것 등)은 지금 넣음.
+//  대기 중인 명단 전달이 옛 방제면 새 방제로 고침
+function ensureListMsgs_(runs) {
+  const tk = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
+  const ob = outboxSheet_(), last = ob.getLastRow();
+  const v = last >= 2 ? ob.getRange(2, 1, last - 1, 6).getValues() : [];
+  runs.forEach(function (r) {
+    if (r['진행 상태'] === '종료' || !(r['마감 시각'] instanceof Date) || !r['시트 링크']) return;
+    if (Utilities.formatDate(r['마감 시각'], CONFIG.TIMEZONE, 'yyyyMMdd') !== tk) return;
+    const want = r['시트 링크'] + '\n\n' + r['명단 제목'];
+    let found = false;
+    v.forEach(function (x, i) {
+      if (x[2] !== '명단 전달') return;
+      const t = String(x[4]).split('\n').filter(function (l) { return l.trim(); }).pop() || '';
+      if (!sameRunTitle_(t, r['명단 제목'])) return;
+      found = true;
+      if (x[5] === '대기' && String(x[4]) !== want) ob.getRange(i + 2, 5).setValue(want);
+    });
+    if (!found) { queueListMsgs_(r, true); note_('✓ 명단 전달 메시지 넣음: ' + bareTitle_(r['명단 제목'])); }
+  });
 }
 
 function dupSummary_(sheetId) {
@@ -1637,6 +1671,10 @@ function markSentFromPage(k, id) {
 }
 
 /* ---------------- 진행 도우미 (휴대폰 페이지): 공지 붙여넣기, 중복 지우기, 내일 추가 모집을 한 화면에서 ---------------- */
+
+function showToolsSidebar_() {
+  SpreadsheetApp.getUi().showSidebar(HtmlService.createHtmlOutput(TOOLS_HTML.replace('__K__', JSON.stringify(CONFIG.KEY))).setTitle('진행 도우미'));
+}
 
 function toolsUrl_() { return (CONFIG.WEBAPP_URL || '') + '?p=tools&k=' + CONFIG.KEY; }
 
@@ -1922,7 +1960,7 @@ function show(o) {
   $('n').value = sum || left || '';
 }
 $('run').onchange = function () { say(''); call({ act: 'info' }); };
-$('b1').onclick = function () { if (!$('txt').value.trim()) return say('공지를 붙여넣어 주세요.'); call({ act: 'assign', text: $('txt').value }); $('txt').value = ''; };
+$('b1').onclick = function () { if (!$('txt').value.trim()) return say('공지를 붙여넣어 주세요.'); say('저장 중이에요… (몇 초 걸려요)'); call({ act: 'assign', text: $('txt').value }); $('txt').value = ''; };
 $('b2').onclick = function () {
   var t = [].slice.call(document.querySelectorAll('#dups input:checked')).map(function (x) { return x.value; });
   if (!t.length) return say('지울 걸 체크해 주세요.');
@@ -2036,6 +2074,13 @@ function ensureEditTab_() {
 function onAdminEdit(e) {
   if (e && e.response) return onRunSubmit_(e);   // 폼 제출 트리거도 이 이름으로 받음 (로더에 이미 있는 이름이라)
   if (!e || !e.range) return;
+  // 한눈에 탭 '진행 도우미' 체크 → 시트 오른쪽에 진행 도우미 (새 탭 없이)
+  if (e.range.getSheet().getName() === DASH_TAB && e.range.getColumn() === 1 && String(e.range.getRow()) === PropertiesService.getScriptProperties().getProperty('DASH_BAR_ROW')) {
+    if (String(e.value).toUpperCase() !== 'TRUE') return;
+    e.range.setValue(false);
+    try { showToolsSidebar_(); } catch (err) { e.range.getSheet().getRange(e.range.getRow(), 2).setValue('도우미 열기 실패: ' + err.message + ' → 옆 링크로 열어 주세요'); }
+    return;
+  }
   return locked_(function () { return onAdminEditInner_(e); }, 30000);
 }
 
@@ -2880,7 +2925,7 @@ function putFileChip_(sh, row, col, url) {
 // 택배시트는 바로가기만 걸고 절대 고치지 않음
 
 const DASH_TAB = '한눈에';
-const DASH_VER = '11';   // 모양을 바꾸면 올려서 다시 만들게 함
+const DASH_VER = '12';   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
   buildDashboard_(true);
@@ -3032,6 +3077,15 @@ function buildDashboard_(force) {
     }
   });
   if (CONFIG.WEBAPP_URL) sh.getRange(1, 16).setFormula('=HYPERLINK(' + q(toolsUrl_()) + ',"▶ 진행 도우미")').setFontWeight('bold');
+  // 위 표 바로 아래 줄(왼쪽): 진행 도우미 체크(시트 오른쪽에 열림), 휴대폰용 링크, 마지막 확인 결과
+  const bar = runs.length + 2;
+  props.setProperty('DASH_BAR_ROW', String(bar));
+  sh.getRange(bar, 1).insertCheckboxes().setValue(false);
+  sh.getRange(bar, 1, 1, 2).setBackground('#efe6f7');
+  sh.getRange(bar, 2).setValue('◀ 체크하면 진행 도우미가 시트 오른쪽에 열려요').setFontWeight('bold').setFontColor('#5b2a86').setHorizontalAlignment('left');
+  if (CONFIG.WEBAPP_URL) sh.getRange(bar, 4).setFormula('=HYPERLINK(' + q(toolsUrl_()) + ',"휴대폰: ▶ 진행 도우미")').setFontWeight('bold').setHorizontalAlignment('left');
+  if (payUrl) sh.getRange(bar, 6).setFormula('=HYPERLINK(' + q(payUrl) + ',"▶ 월급시트")').setFontWeight('bold').setHorizontalAlignment('left');
+  try { sh.getRange(bar, 8).setValue(String(props.getProperty('LAST_REPORT') || '')).setFontWeight('bold').setHorizontalAlignment('left').setWrap(false); } catch (e) {}
   if (payUrl) sh.getRange(1, 15).setFormula('=HYPERLINK(' + q(payUrl) + ',"▶ 월급시트 열기")').setFontWeight('bold');
   if (runs.length) {
     // 위 표 보기 좋게: 가운데 맞춤, 방제는 왼쪽, 테두리
