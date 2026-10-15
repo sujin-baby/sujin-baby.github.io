@@ -49,10 +49,12 @@ function lc_(name) { return LIST_HEADER.indexOf(name) + 1; }
 function note_(msg) { (globalThis.__ORI_NOTES = globalThis.__ORI_NOTES || []).push(String(msg)); Logger.log(msg); }
 
 function report_(name, ok) {
-  const notes = (globalThis.__ORI_NOTES || []).filter(function (x) { return !/메시지함 기록 실패: TypeError: Utilities/.test(x); });
+  const all = (globalThis.__ORI_NOTES || []).filter(function (x) { return !/메시지함 기록 실패: TypeError: Utilities/.test(x); });
   globalThis.__ORI_NOTES = [];
+  const done = all.filter(function (x) { return /^✓/.test(x); }), notes = all.filter(function (x) { return !/^✓/.test(x); });
   const when = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'M/d HH:mm');
-  const text = ok === false ? '⚠ ' + when + ' ' + name + ': 다른 작업 중이라 건너뜀' : (notes.length ? '⚠ ' + when + ' ' + name + ' 문제: ' + notes.join(' / ') : '✔ ' + when + ' ' + name + ' 정상');
+  const text = ok === false ? '⚠ ' + when + ' ' + name + ': 다른 작업 중이라 건너뜀' : (notes.length ? '⚠ ' + when + ' ' + name + ' 문제: ' + notes.join(' / ') : '✔ ' + when + ' ' + name + ' 정상') +
+    (done.length ? '  | 한 일: ' + done.map(function (x) { return x.replace(/^✓\s*/, ''); }).join(' / ') : '');
   try { const d = adminSs_().getSheetByName(DASH_TAB); if (d) d.getRange(1, 17).setValue(text.slice(0, 500)).setFontColor(notes.length || ok === false ? '#b91c1c' : '#2f7a2f'); } catch (e) {}
   try { SpreadsheetApp.getUi().alert(text); } catch (e) {}   // 메뉴로 돌렸을 때만 창이 뜸
 }
@@ -211,7 +213,17 @@ function pastEnd_(r) {
 }
 
 // 과일: 공지 구매 시간이 '자정 ~ 오전 7시' (업체 마감 8시라 잠수 대비 7시로 공지). 다른 자정 진행은 오전 8시 20분
-function isFruit_(r) { return /자정[^\n]*오전\s*7\s*시/.test(runSlot_(r)); }
+const FRUIT_RE = /(사과|감귤|귤|한라봉|천혜향|황금향|레드향|오렌지|포도|샤인머스캣|복숭아|천도|자두|딸기|수박|참외|멜론|키위|망고|블루베리|체리|단감|대봉|홍시|곶감|대추|석류|무화과|자몽|레몬|파인애플|바나나|아보카도|매실|살구|유자|신고배|나주배)$/;
+const DESC_CACHE = {};
+function isFruit_(r) {
+  if (/자정[^\n]*오전\s*7\s*시/.test(runSlot_(r))) return true;
+  const id = String(r['폼ID'] || '');
+  if (id && DESC_CACHE[id] === undefined) { DESC_CACHE[id] = ''; try { DESC_CACHE[id] = FormApp.openById(id).getDescription() || ''; } catch (e) {} }
+  const words = [];
+  noticeProducts_(DESC_CACHE[id] || '').forEach(function (p) { words.push(p.name); });
+  (String(DESC_CACHE[id] || '').match(/(?:키워드|상품명)\s*[:：][^\n]*/g) || []).forEach(function (l) { l.replace(/^.*?[:：]/, '').split(/[\s,]+/).forEach(function (w) { words.push(w); }); });
+  return words.some(function (w) { return FRUIT_RE.test(String(w)) || w === '배' || w === '감'; });
+}
 
 // 명단 시트·폼·폴더 이름: 방제에서 날짜를 뺀 것 (#택10.14 모두의농수산옥광밤외12 → #택 모두의농수산옥광밤외12)
 function sheetName_(s) {
@@ -485,7 +497,7 @@ function createRunInner_(d) {
     const ck = campKey_(d.camp || campOf_(d.title));
     const chain = chainsOf_(readRuns_()).filter(function (c) { return c.key === ck; }).pop();
     const withForm = chain ? chain.runs.filter(function (x) { return x['시트ID'] && x['폼ID']; }) : [];
-    reuse = withForm[withForm.length - 1] || null;   // 폼은 마지막 진행 폼(공지에 들어간 링크)
+    reuse = withForm[0] || null;   // 의뢰서 하나 = 폼 하나 (첫 날 폼, 공지의 '(구글폼 링크)'도 이 폼 링크로)
     if (reuse && !d.sheetId) d.sheetId = withForm[0]['시트ID'];   // 명단 시트는 그 의뢰의 첫 명단 시트
   }
   let form, ss, folder, formUrl;
@@ -1310,7 +1322,9 @@ function checkFullInner_() {
       listed[r['시트ID']] = 1;
     }
     // 오늘·앞으로 진행할 폼에는 '방에 참여한 카카오톡 닉네임' 질문이 꼭 있게 (예전 폼을 이어 쓰는 의뢰도)
-    if (r['진행일'] instanceof Date && r['진행일'] >= today_()) { try { ensureNickQuestion_(form); } catch (e) {} }
+    if (r['진행일'] instanceof Date && r['진행일'] >= today_()) {
+      try { if (ensureNickQuestion_(form)) note_('✓ ' + bareTitle_(r['명단 제목']) + ' 폼에 닉네임 질문 넣음'); } catch (e) { note_(bareTitle_(r['명단 제목']) + ' 닉네임 질문 실패: ' + e.message); }
+    }
     const w = windowOf_(runs, r);
     if (Date.now() < w.from) return;   // 아직 시작 전인 다음 일차
     // 같은 폼을 쓰는 다음 일차: 진행일 0시가 되면 폼을 한 번 다시 엶 (그 뒤에 손으로 닫으면 다시 안 엶)
@@ -1604,7 +1618,7 @@ function fixOct16Once_() {
   props.setProperty('FIX_1016_V1', '1');
   let runs = readRuns_();
   runs.filter(function (r) { return /^add-.*2026-10-17$/.test(String(r['요청ID'])) && /모두의농수산옥광밤외/.test(String(r['명단 제목'])) && !Number(r['인원']); })
-    .sort(function (a, b) { return b.row - a.row; }).forEach(function (r) { note_('정리: ' + deleteRun_(r)); });
+    .sort(function (a, b) { return b.row - a.row; }).forEach(function (r) { note_('✓ 정리: ' + deleteRun_(r)); });
   const as = assignSheet_(), al = as.getLastRow();
   if (al >= 2) { const v = as.getRange(2, 1, al - 1, 3).getValues(); for (let i = v.length - 1; i >= 0; i--) if (/^#택10\.16 모두의농수산옥광밤외/.test(String(v[i][0])) && String(v[i][2]) === '1개') as.deleteRow(i + 2); }
   runs = readRuns_();
@@ -2097,7 +2111,7 @@ function autoNextDay_() {
     const left = c.total - planned;
     if (left <= 0) return;
     const daily = Number(c.runs[0]['목표인원']) || Number(last['목표인원']) || left;
-    note_('다음 날 진행: ' + addMoreRun_(last, Math.min(daily, left), { next: true }));
+    note_('✓ 다음 날 진행: ' + addMoreRun_(last, Math.min(daily, left), { next: true }));
   });
 }
 
@@ -2142,13 +2156,15 @@ function addMoreRun_(r, n, opt) {
   // 새로 모집하는 공지라 옵션 줄 뒤의 이름(어제 사람)은 지움
   const notice = stripTrailingNames_(sum ? noticeForMore_(desc, short) : desc.split('\n').map(function (l) { return l.replace(/(\(\s*\d*\s*명\s*\)|\d+\s*명).*$/, '(  명)'); }).join('\n'));
   if (sum && !n) n = sum;
+  // 의뢰서 하나 = 폼 하나: 첫 날 폼을 계속 씀 (공지 안 폼 링크도 첫 날 폼으로)
+  const first = firstSheetRun_(r);
   let res;
   locked_(function () {
     res = createRunInner_({
       k: CONFIG.KEY, n: reqId, title: room + nick, room: room, fname: room, camp: r['캠페인'] || campOf_(r['명단 제목']),
-      day: (Number(r['일차']) || 1) + 1, total: r['총건수'], daily: String(n), date: iso, desc: notice, type: r['유형'],
+      day: (Number(r['일차']) || 1) + 1, total: r['총건수'], daily: String(n), date: iso, desc: first['폼 링크'] ? notice.replace(FORM_LINK_RE, first['폼 링크']) : notice, type: r['유형'],
       takdae: r['택대'] === 'Y', realship: r['실배송'] === 'Y', platform: r['플랫폼'], prices: r['가격'], croom: r['업체방'],
-      shop: r['업체'], photo: r['포토'], slot: r['구매시간'], reuse: r, sheetId: firstSheetRun_(r)['시트ID']
+      shop: r['업체'], photo: r['포토'], slot: r['구매시간'], reuse: first, sheetId: first['시트ID']
     });
   }, 60000);
   if (!res) return '다른 작업 중이라 못 만들었어요. 잠시 뒤 다시 해 주세요.';
@@ -2196,7 +2212,7 @@ function chainFruit_(r) {
 
 // 공지 모양 맞추기: '🐥포토 : 포토대기' → '🐥리뷰 : ★★★포토대기★★★', 과일은 구매 시간 줄을 '★★★자정 ~ 오전 7시까지 구매★★★'
 function noticeStyle_(text, fruit) {
-  let t = String(text || '').replace(/🐥\s*포토\s*[:：]\s*포토\s*대기/g, '🐥리뷰 : ★★★포토대기★★★');
+  let t = String(text || '').split('\n').map(function (l) { return /포토\s*[:：]\s*포토\s*대기/.test(l) && !/★/.test(l) && l.length < 30 ? '🐥리뷰 : ★★★포토대기★★★' : l; }).join('\n');
   if (fruit) {
     const lines = t.split('\n');
     const i = lines.findIndex(function (l) { return l.trim(); });
@@ -2206,32 +2222,38 @@ function noticeStyle_(text, fruit) {
   return t;
 }
 
-// (한 번만) 이미 만든 공지 고치기: 포토대기 줄, 과일 7시 줄, 다음 날 진행이 공지 링크와 다른 폼을 가리키면 공지 링크의 폼으로
+// (15분마다) 오늘·앞으로 진행 공지 맞추기
+//  - 의뢰서 하나 = 폼 하나: 다음 날·추가 모집 진행이 다른 폼을 가리키고 공지를 아직 안 보냈으면 첫 날 폼으로 바꾸고 공지 링크도 바꿈
+//  - 포토대기 줄, 과일 '자정 ~ 오전 7시까지 구매' 줄, 맨 아래 어제 이름 줄 (보낸 공지도 글은 고쳐 둠, 링크는 안 바꿈)
+const FORM_LINK_RE = /https?:\/\/(?:forms\.gle\/[\w-]+|docs\.google\.com\/forms\/[^\s]+)/g;
 function fixStyleOnce_() {
-  const props = PropertiesService.getScriptProperties();
-  if (props.getProperty('FIX_STYLE_V1')) return;
-  props.setProperty('FIX_STYLE_V1', '1');
   const runs = readRuns_();
   const ob = outboxSheet_(), last = ob.getLastRow();
   const msgs = last >= 2 ? ob.getRange(2, 1, last - 1, 6).getValues() : [];
   runs.filter(function (r) { return r['진행 상태'] !== '종료' && r['진행일'] instanceof Date && r['진행일'] >= today_(); }).forEach(function (r) {
     const fruit = chainFruit_(r), room = String(r['카톡방'] || bareTitle_(r['명단 제목']));
-    // 추가 모집·다음 날 진행: 폼은 바로 앞 진행 폼(공지 링크)이어야 함
+    const mine = msgs.map(function (v, i) { return { v: v, i: i }; }).filter(function (m) { return String(m.v[3]) === room && m.v[2] === '방 공지'; });
     if (/^(add|next)-/.test(String(r['요청ID']))) {
-      const ck = campKey_(r['캠페인'] || r['명단 제목']);
-      const prev = runs.filter(function (x) { return x !== r && campKey_(x['캠페인'] || x['명단 제목']) === ck && x['진행일'] instanceof Date && x['진행일'] < r['진행일'] && x['폼ID']; })
-        .sort(function (a, b) { return b['진행일'] - a['진행일']; })[0];
-      const msg = msgs.filter(function (v) { return String(v[3]) === room && v[2] === '방 공지'; })[0];
-      if (prev && String(prev['폼ID']) !== String(r['폼ID']) && msg && prev['폼 링크'] && String(msg[4]).indexOf(prev['폼 링크']) >= 0) {
-        setRun_(r.row, '폼ID', prev['폼ID']); setRun_(r.row, '폼 링크', prev['폼 링크']); r['폼ID'] = prev['폼ID'];
+      const first = firstSheetRun_(r);
+      const unsent = mine.filter(function (m) { return m.v[5] !== '보냄'; });
+      if (first && first['폼ID'] && first['폼 링크'] && String(first['폼ID']) !== String(r['폼ID']) && unsent.length && !(Number(r['인원']) > 0)) {
+        setRun_(r.row, '폼ID', first['폼ID']); setRun_(r.row, '폼 링크', first['폼 링크']); r['폼ID'] = first['폼ID']; r['폼 링크'] = first['폼 링크'];
+        unsent.forEach(function (m) { m.v[4] = String(m.v[4]).replace(FORM_LINK_RE, first['폼 링크']); ob.getRange(m.i + 2, 5).setValue(m.v[4]); });
+        note_('✓ ' + room + ': 첫 날 폼으로 바꿈 (공지 링크도)');
       }
     }
-    try { const f = FormApp.openById(r['폼ID']); const dsc = f.getDescription() || '', nd = noticeStyle_(stripTrailingNames_(dsc), fruit); if (nd !== dsc) f.setDescription(nd); } catch (e) {}
-    msgs.forEach(function (v, i) {
-      if (String(v[3]) !== room || v[2] !== '방 공지') return;
-      const nm = noticeStyle_(String(v[4]), fruit);
-      if (nm !== String(v[4])) ob.getRange(i + 2, 5).setValue(nm);
+    mine.forEach(function (m) {
+      const nm = noticeStyle_(stripTrailingNames_(String(m.v[4])), fruit);
+      if (nm !== String(m.v[4])) { ob.getRange(m.i + 2, 5).setValue(nm); m.v[4] = nm; note_('✓ ' + room + ' 공지 고침'); }
     });
+    // 폼 설명 = 그 진행 공지 (아직 시작 안 한 진행만, 같은 폼으로 오늘 받는 중이면 그대로)
+    const busyToday = runs.some(function (x) { return x !== r && String(x['폼ID']) === String(r['폼ID']) && x['진행일'] instanceof Date && Utilities.formatDate(x['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd') === Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd') && !x['마감 시각']; });
+    if (!busyToday) try {
+      const f = FormApp.openById(r['폼ID']);
+      const src = mine.length && r['진행일'] > today_() ? String(mine[0].v[4]) : (f.getDescription() || '');
+      const nd = noticeStyle_(stripTrailingNames_(src), fruit);
+      if (nd !== (f.getDescription() || '')) f.setDescription(nd);
+    } catch (e) {}
   });
   // 보내기 전인 다른 공지도 포토대기 줄은 바꿈
   msgs.forEach(function (v, i) { if (v[2] === '방 공지' && v[5] !== '보냄') { const nm = noticeStyle_(String(v[4]), false); if (nm !== String(v[4])) ob.getRange(i + 2, 5).setValue(nm); } });
@@ -2584,7 +2606,7 @@ function updatePay_() {
     // 총액 = 의뢰서 총 구매 건수(날마다 같음). 남은 = 총액 - 전월 - 그날 수량 - 이번 달 앞 날들 수량 (남은 칸 수식에 앞 날들 수를 빼 줌)
     const earlier = mine.filter(function (x) { return x['진행일'] < r['진행일'] && ym(x['진행일']) === ym(r['진행일']); }).reduce(function (a, x) { return a + got(x); }, 0);
     writePayRow_(r, nameOf(r), total, prev, siblings_(all, r).length > 1,
-      { store: pick('업체'), time: payTime_(fruit ? runSlot_(fruit) : runSlot_(r)), photo: pick('포토'), earlier: earlier });
+      { store: pick('업체'), time: fruit ? '자정 ~ 오전 7시' : payTime_(runSlot_(r)), photo: pick('포토'), earlier: earlier });
   });
 }
 
