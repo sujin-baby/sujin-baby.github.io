@@ -834,9 +834,10 @@ const NORM = function (r) { return 'LOWER(REGEXREPLACE(TO_TEXT(' + r + '),"\\s",
 // 옵션 확인 수식 (한눈에 탭 명단 옆 칸). nkR, okR: 닉네임, 옵션 칸 범위, rows: 줄 수, sid: 명단 시트ID
 //  관리 시트 '배정' 탭에서 같은 명단 시트 줄만 가져와 비교. 닉네임과 옵션은 띄어쓰기, 대소문자 무시
 //  한 사람이 두 계정이면 계정수 2, 또는 옵션마다 한 줄씩
-function checkFormula_(nkR, okR, rows, sid) {
+function checkFormula_(nkR, okR, rows, sid, title) {
   const A = "'" + ASSIGN_TAB + "'!";
-  const f = function (c) { return 'FILTER(' + A + c + '2:' + c + ',' + A + 'G2:G="' + sid + '")'; };
+  const cond = title ? A + 'A2:A="' + String(title).replace(/"/g, '""') + '"' : A + 'G2:G="' + sid + '"';   // 그 진행(날짜) 배정만
+  const f = function (c) { return 'FILTER(' + A + c + '2:' + c + ',' + cond + ')'; };
   return '=IFERROR(LET(' +
     'an,ARRAYFORMULA(' + NORM(f('B')) + '),ao,ARRAYFORMULA(' + NORM(f('H')) + '),ac,ARRAYFORMULA(IF(' + f('D') + '="",1,IFERROR(VALUE(' + f('D') + '),1))),' +
     'nk,ARRAYFORMULA(' + NORM(nkR) + '),ok,ARRAYFORMULA(' + NORM(okR) + '),ix,SEQUENCE(' + rows + '),' +
@@ -1630,6 +1631,7 @@ function noticeMatches_(r, text) {
 function dupList_(r) {
   const ss = SpreadsheetApp.openById(r['시트ID']);
   const own = rawFor_(ss, r['폼ID']);
+  const w = windowOf_(readRuns_(), r);   // 보여 주는 건 그 진행 날짜 응답만 (다른 날 응답과 겹치는 것도 잡음)
   const rows = [];
   ss.getSheets().filter(function (t) { return !!t.getFormUrl(); }).forEach(function (t) {
     const h = rawHead_(t), last = t.getLastRow();
@@ -1651,7 +1653,7 @@ function dupList_(r) {
       if (seen[key]) why.push(key.split('|')[0]); else keys.push(key);
     });
     keys.forEach(function (k) { seen[k] = 1; });
-    if (why.length && x.own) out.push({ t: x.t, label: Utilities.formatDate(new Date(x.t), CONFIG.TIMEZONE, 'M/d HH:mm') + '  ' + name + '  ' + phone, why: why.join(', ') });
+    if (why.length && x.own && x.t >= w.from && x.t < w.to) out.push({ t: x.t, label: Utilities.formatDate(new Date(x.t), CONFIG.TIMEZONE, 'M/d HH:mm') + '  ' + name + '  ' + phone, why: why.join(', ') });
   });
   return out;
 }
@@ -1977,7 +1979,10 @@ function loadEditTab_(sh, msg) {
   sh.getRange(3, 1, 1, sh.getMaxColumns()).clearContent();
   sh.getRange(3, 1, 1, head.length + 1).setValues([['삭제'].concat(head)]).setFontWeight('bold').setBackground('#efe6f7').setWrap(true);
   const last = raw.getLastRow();
-  const data = last < 2 ? [] : raw.getRange(2, 1, last - 1, head.length).getValues().filter(function (x) { return x[0] !== ''; });
+  // 그 진행 날짜 몫만 (같은 폼을 여러 날 쓰니까 다른 날 응답은 안 보이게: 진행일 0시 ~ 다음 진행 0시)
+  const w = windowOf_(readRuns_(), r);
+  const data = last < 2 ? [] : raw.getRange(2, 1, last - 1, head.length).getValues()
+    .filter(function (x) { return x[0] instanceof Date && x[0].getTime() >= w.from && x[0].getTime() < w.to; });
   if (data.length) {
     if (sh.getMaxColumns() < head.length + 1) sh.insertColumnsAfter(sh.getMaxColumns(), head.length + 1 - sh.getMaxColumns());
     sh.getRange(4, 2, data.length, head.length).setValues(data);
@@ -2584,7 +2589,7 @@ function putFileChip_(sh, row, col, url) {
 // 택배시트는 바로가기만 걸고 절대 고치지 않음
 
 const DASH_TAB = '한눈에';
-const DASH_VER = '8';   // 모양을 바꾸면 올려서 다시 만들게 함
+const DASH_VER = '9';   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
   buildDashboard_(true);
@@ -2606,7 +2611,7 @@ function buildDashboard_(force) {
   const props = PropertiesService.getScriptProperties();
   const ss = adminSs_();
   // 명단 시트(의뢰)마다 한 덩어리. 명단 탭(여러 날 폼 응답을 합친 것)이 있으면 거기서 가져옴
-  const sheets = {}, order = [];
+  let sheets = {}, order = [];
   runs.forEach(function (r) {
     const id = String(r['시트ID']);
     if (sheets[id]) { sheets[id].runs.push(r); return; }
@@ -2629,12 +2634,22 @@ function buildDashboard_(force) {
     } catch (e) {}
     sheets[id] = { id: id, runs: [r], keep: keep, hd: hd, count: count, start: start, ref: "'" + src.replace(/'/g, "''") + "'!", cols: Math.min(cols, 26), url: 'https://docs.google.com/spreadsheets/d/' + id + '/edit' };
   });
+  // 진행(날짜)마다 한 덩어리: 같은 명단 시트를 여러 날 써도 그날 응답만 보여 줌 (택배시트에도 그날 것만 옮기게)
+  const blk = {}, border = [];
+  runs.forEach(function (r, i) {
+    const b0 = sheets[String(r['시트ID'])];
+    if (!b0) return;
+    const w = windowOf_(allRuns, r);
+    const b = Object.assign({}, b0, { key: 'b' + i, sid: b0.id, runs: [r], from: w.from, to: w.to, count: Number(r['인원']) || 0 });
+    blk[b.key] = b; border.push(b.key);
+  });
+  sheets = blk; order = border;
   // 덩어리 줄 수는 지금 인원 + 여유 5줄 (넘칠 것 같으면 다시 만듦). 빈칸이 너무 길지 않게
   order.forEach(function (id) {
     const x = sheets[id];
-    const total = x.runs.reduce(function (m, r) { return Math.max(m, Number(r['총건수']) || 0); }, 0);
+    const goal = Number(x.runs[0]['목표인원']) || 0;
     x.n = Math.max(Math.ceil((x.count + 5) / 5) * 5, 6);   // 5줄 단위라 응답 몇 개마다만 다시 만듦
-    if (total) x.n = Math.min(x.n, Math.max(total + 2, x.count + 2));
+    if (goal) x.n = Math.min(x.n, Math.max(goal + 3, x.count + 2));
   });
   const sig = DASH_VER + '|' + props.getProperty('RUN_ERRORS') + '|' + order.map(function (id) { return id + ':' + sheets[id].n; }).join(',') + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태'] + ':' + r['진행일'] + ':' + r['택배 옮김']; }).join('|');
   let sh = ss.getSheetByName(DASH_TAB);
@@ -2653,7 +2668,7 @@ function buildDashboard_(force) {
     if (changed) { force = true; try { updatePay_(); } catch (e) {} }
   }
   if (!force && sh && props.getProperty('DASH_SIG') === sig) return;
-  order.forEach(function (id) { grantImport_(ss.getId(), id); });
+  order.forEach(function (id) { grantImport_(ss.getId(), sheets[id].sid); });
   if (!sh) sh = ss.insertSheet(DASH_TAB, 0);
   // 1행은 글자만 지우고 서식은 둠 (직접 칠한 색이 안 풀리게)
   sh.getRange(1, 1, 1, sh.getMaxColumns()).clearContent();
@@ -2697,7 +2712,7 @@ function buildDashboard_(force) {
   });
   const fmt = function (t) { return 'DATE(' + Utilities.formatDate(new Date(t), CONFIG.TIMEZONE, 'yyyy,M,d') + ')'; };
   runs.forEach(function (r, i) {
-    const rr = i + 2, x = sheets[String(r['시트ID'])];
+    const rr = i + 2, x = sheets['b' + i];
     sh.getRange(rr, 1, 1, 4).setValues([[r['진행일'], String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''), r['진행 상태'], r['목표인원']]]);
     const w = windowOf_(allRuns, r);
     const ts = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A' + x.start + ':A') + ')';
@@ -2738,8 +2753,9 @@ function buildDashboard_(force) {
     const titles = x.runs.map(function (r) { return String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''); }).reverse();
     sh.getRange(top, 1, 1, width).setBackground('#f0e8f8');
     // 제목 + 안 산 사람 (관리 시트 배정 탭에서 '아직'인 사람, 응답이 들어오면 바로 바뀜)
-    const label = '■ ' + sheetName_(x.runs[x.runs.length - 1]['명단 제목']) + '   ' + titles.join(', ');
-    sh.getRange(top, 1).setFormula('=' + q(label) + '&IFERROR("   ▶ 안 산 사람: "&TEXTJOIN(" ",TRUE,FILTER(' + A + 'B2:B&IF(' + A + 'F2:F="아직 1","","("&MID(' + A + 'F2:F,4,9)&"건)"),' + A + 'G2:G="' + id + '",LEFT(' + A + 'F2:F,2)="아직")),"")')
+    const label = '■ ' + titles[0] + '   (명단 시트: ' + sheetName_(titles[0]) + ')';
+    const rt = String(x.runs[0]['명단 제목']).replace(/"/g, '""');
+    sh.getRange(top, 1).setFormula('=' + q(label) + '&IFERROR("   ▶ 안 산 사람: "&TEXTJOIN(" ",TRUE,FILTER(' + A + 'B2:B&IF(' + A + 'F2:F="아직 1","","("&MID(' + A + 'F2:F,4,9)&"건)"),' + A + 'A2:A="' + rt + '",LEFT(' + A + 'F2:F,2)="아직")),"")')
       .setFontWeight('bold');
     const width2 = x.layout.length + (x.chk ? 1 : 0);
     const c = function (k) { return 'CHOOSECOLS(e,' + k + ')'; };
@@ -2756,9 +2772,11 @@ function buildDashboard_(force) {
     };
     const kcol = 'MAP(' + c(x.layout[5][1] || 1) + ',' + c(x.layout[6][1] || 1) + ',LAMBDA(oo,pp,TRIM(' + q(x.shop) + '&" "&' + prodOf() + ')))';
     const parts = x.layout.map(function (t) { return t[1] === 'K' ? kcol : t[1] ? c(t[1]) : blank; });
-    const imp = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A' + x.start + ':' + colLetter_(x.cols) + (x.start + n - 1)) + ')';
+    const imp = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A' + x.start + ':' + colLetter_(x.cols)) + ')';   // 시트 전체를 가져와 그날 것만 거름
     sh.getRange(top + 1, 1, 1, x.layout.length).setValues([x.layout.map(function (t) { return t[0]; })]);
-    sh.getRange(top + 2, 1).setFormula('=IFERROR(LET(d,' + imp + ',IF(COUNTA(INDEX(d,0,1))=0,"",LET(e,FILTER(d,INDEX(d,0,1)<>""),HSTACK(' + parts.join(',') + ')))),"이 칸을 눌러 액세스 허용을 한 번 눌러 주세요")');
+    const dt = function (t) { return isFinite(t) && t > 0 ? 'DATE(' + Utilities.formatDate(new Date(t), CONFIG.TIMEZONE, 'yyyy,M,d') + ')' : (t > 0 ? '99999' : '0'); };
+    const inWin = '(INDEX(d,0,1)<>"")*(INDEX(d,0,1)>=' + dt(x.from) + ')*(INDEX(d,0,1)<' + dt(x.to) + ')';
+    sh.getRange(top + 2, 1).setFormula('=IFERROR(LET(d,' + imp + ',IF(COUNTA(INDEX(d,0,1))=0,"",IFERROR(LET(e,FILTER(d,' + inWin + '),HSTACK(' + parts.join(',') + ')),""))),"이 칸을 눌러 액세스 허용을 한 번 눌러 주세요")');
     sh.getRange(top + 1, 1, 1, Math.max(width2, 6)).setFontWeight('bold').setBackground('#faf7fd');
     if (x.tak) sh.getRange(top + 1, 11).setNote('택배시트 K열에 그대로 붙여넣는 칸 (업체명 + 판매 상품). A~K를 한 번에 복사하면 택배시트 칸 순서와 같아요.');
     // 보기 좋게: 가운데 맞춤, 제목 줄은 왼쪽, 머리글 굵게, 테두리
@@ -2774,7 +2792,7 @@ function buildDashboard_(force) {
     if (x.chk) {
       const L = function (k) { return colLetter_(k) + r0 + ':' + colLetter_(k) + r1; };
       sh.getRange(top + 1, x.chk).setValue(CHECK_HEAD).setNote('관리 시트 배정 탭과 비교. ✔ 맞음 / 옵션 틀림 / 초과 구매 / 닉네임 확인(배정에 없음) / 취소한 사람. 배정이 없으면 빈칸');
-      sh.getRange(r0, x.chk).setFormula(checkFormula_(L(x.nick), L(x.opt), n, id));
+      sh.getRange(r0, x.chk).setFormula(checkFormula_(L(x.nick), L(x.opt), n, x.sid, String(x.runs[0]['명단 제목'])));
       const X = colLetter_(x.chk);
       const rg = [x.nick, x.opt, x.chk].map(colRange);
       rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=OR($' + X + r0 + '="옵션 틀림",$' + X + r0 + '="초과 구매")')
