@@ -89,6 +89,28 @@ function chainsOf_(runs) {
   return chains;
 }
 
+// 같은 진행인지 (방제 끝 숫자만 다를 때): 날짜(10.15)와 캠페인 이름이 같으면 같은 진행
+function dateTok_(t) { const m = String(t || '').match(/(\d{1,2})\.(\d{1,2})/); return m ? Number(m[1]) + '.' + Number(m[2]) : ''; }
+function sameRunTitle_(a, b) { return !!dateTok_(a) && dateTok_(a) === dateTok_(b) && campKey_(a) === campKey_(b); }
+function bareTitle_(t) { return String(t || '').replace(/\s*\([^)]*\)\s*$/, '').trim(); }
+
+// 방제(명단 제목) 바꾸기: 진행목록 명단 제목·카톡방, 보낼 메시지함의 대기 중인 방 이름. 월급시트 캠페인명은 15분 갱신 때 같은 날짜·캠페인 줄을 찾아 바꿈
+function renameRun_(r, title) {
+  title = bareTitle_(title);
+  if (!title || title === bareTitle_(r['명단 제목'])) return false;
+  const nick = (String(r['명단 제목']).match(/\s*\([^)]*\)\s*$/) || [''])[0];
+  const oldRoom = String(r['카톡방'] || bareTitle_(r['명단 제목']));
+  setRun_(r.row, '명단 제목', title + nick); r['명단 제목'] = title + nick;
+  setRun_(r.row, '카톡방', title); r['카톡방'] = title;
+  try {
+    const ob = outboxSheet_(), last = ob.getLastRow();
+    if (last >= 2) ob.getRange(2, 4, last - 1, 3).getValues().forEach(function (v, i) {
+      if (String(v[0]) === oldRoom && (v[2] === '대기' || v[2] === '방 못 찾음')) ob.getRange(i + 2, 4).setValue(title);
+    });
+  } catch (e) {}
+  return true;
+}
+
 // 의뢰서 하나 = 명단 시트(폼) 하나. 날짜마다 카톡방만 새로 만들고 같은 폼, 같은 명단 시트에 이어서 받음
 // 같은 명단 시트를 쓰는 진행들 (진행일 순)
 function siblings_(runs, r) {
@@ -178,6 +200,9 @@ function normalizeRuns_() {
   const runs = readRuns_();
   runs.forEach(function (r) {
     if (!String(r['캠페인']).trim() && r['명단 제목']) { r['캠페인'] = campOf_(r['명단 제목']); setRun_(r.row, '캠페인', r['캠페인']); }
+    // 진행목록에서 명단 제목 끝 숫자를 고치면 카톡방도 같이
+    const bt = bareTitle_(r['명단 제목']);
+    if (bt && String(r['카톡방']).trim() && String(r['카톡방']).trim() !== bt && sameRunTitle_(r['카톡방'], bt)) { r['카톡방'] = bt; setRun_(r.row, '카톡방', bt); }
     // 진행목록 '시트 링크'를 직접 바꾸면 그 시트를 씀
     const m = String(r['시트 링크'] || '').match(/\/d\/([-\w]{25,})/);
     if (m && m[1] !== String(r['시트ID'])) { r['시트ID'] = m[1]; setRun_(r.row, '시트ID', m[1]); }
@@ -1444,6 +1469,12 @@ function onAdminEdit(e) {
   if (e && e.response) return onRunSubmit_(e);   // 폼 제출 트리거도 이 이름으로 받음 (로더에 이미 있는 이름이라)
   if (!e || !e.range) return;
   const sh = e.range.getSheet();
+  if (sh.getName() === DASH_TAB && e.range.getColumn() === 2 && e.range.getRow() >= 2 && e.oldValue && e.value) {
+    // 한눈에 탭 방제를 고치면 진행목록, 카톡방, 보낼 메시지함, 월급시트까지 같이
+    const r = readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']) === String(e.oldValue).trim() || sameRunTitle_(x['명단 제목'], e.oldValue); }).pop();
+    if (r && renameRun_(r, e.value)) { try { updatePay_(); } catch (err) {} }
+    return;
+  }
   if (sh.getName() === DASH_TAB && e.range.getColumn() === 12 && e.range.getRow() >= 2) {
     // 한눈에 탭 '택배 옮김' 체크 → 진행목록에 저장
     const t = String(sh.getRange(e.range.getRow(), 2).getValue());
@@ -2017,10 +2048,14 @@ function writePayRow_(r, name, remain, prevMonth, shared, ex) {
   const linkOf = function (rt) { try { if (rt.getLinkUrl()) return rt.getLinkUrl(); const runs = rt.getRuns(); for (let i = 0; i < runs.length; i++) if (runs[i].getLinkUrl()) return runs[i].getLinkUrl(); } catch (e) {} return ''; };
   const links = L.qty ? sh.getRange(L.head + 1, L.qty, Math.max(last - L.head, 1), 1).getRichTextValues().map(function (x) { return x[0] ? linkOf(x[0]) : ''; }) : [];
   // 명단 시트 하나를 여러 날이 같이 쓰면 링크가 같으니 이름(날짜 들어간 방제)으로 먼저 찾음
-  const byName = names.indexOf(name.replace(/\s+/g, ''));
+  let byName = names.indexOf(name.replace(/\s+/g, ''));
+  // 방제 끝 숫자를 고친 경우: 같은 날짜·캠페인 줄을 찾아 캠페인명을 새 이름으로
+  let renamed = false;
+  if (byName === -1) { byName = names.findIndex(function (nm) { return nm && sameRunTitle_(nm, name); }); renamed = byName !== -1; }
   let row = shared && byName !== -1 ? byName : links.findIndex(function (u, i) { return u && u.indexOf(sid) !== -1 && (!shared || !names[i]); });
   const hasLink = row !== -1 && !!links[row];
   if (row === -1) row = byName;
+  if (renamed && row === byName && !sh.getRange(L.head + 1 + row, L.name).getFormula()) sh.getRange(L.head + 1 + row, L.name).setValue(name);
   if (row === -1) row = names.indexOf('');
   row = row === -1 ? last + 1 : L.head + 1 + row;
   const put = function (col, val) {
@@ -2133,6 +2168,17 @@ function buildDashboard_(force) {
   });
   const sig = DASH_VER + '|' + props.getProperty('RUN_ERRORS') + '|' + order.map(function (id) { return id + ':' + sheets[id].n; }).join(',') + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태'] + ':' + r['진행일'] + ':' + r['택배 옮김']; }).join('|');
   let sh = ss.getSheetByName(DASH_TAB);
+  // 한눈에 탭에서 방제를 직접 고쳐 둔 게 있으면 다시 만들기 전에 진행목록에 반영
+  if (sh && sh.getLastRow() >= 2) {
+    let changed = false;
+    sh.getRange(2, 2, Math.min(sh.getLastRow() - 1, 60), 1).getValues().forEach(function (v) {
+      const t = String(v[0]).trim();
+      if (!t || t.charAt(0) === '■') return;
+      const r = runs.filter(function (x) { return sameRunTitle_(x['명단 제목'], t) && bareTitle_(x['명단 제목']) !== t; })[0];
+      if (r && renameRun_(r, t)) changed = true;
+    });
+    if (changed) { force = true; try { updatePay_(); } catch (e) {} }
+  }
   if (!force && sh && props.getProperty('DASH_SIG') === sig) return;
   order.forEach(function (id) { grantImport_(ss.getId(), id); });
   if (!sh) sh = ss.insertSheet(DASH_TAB, 0);
