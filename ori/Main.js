@@ -130,7 +130,13 @@ function renameRun_(r, title) {
   if (cm && Number(cm[1]) > 0) { setRun_(r.row, '목표인원', Number(cm[1])); r['목표인원'] = Number(cm[1]); }
   const nick = (String(r['명단 제목']).match(/\s*\([^)]*\)\s*$/) || [''])[0];
   const oldRoom = String(r['카톡방'] || bareTitle_(r['명단 제목']));
+  const oldTitle = String(r['명단 제목']);
   setRun_(r.row, '명단 제목', title + nick); r['명단 제목'] = title + nick;
+  // 배정 탭의 명단 제목도 새 이름으로
+  try {
+    const as = assignSheet_(), al = as.getLastRow();
+    if (al >= 2) as.getRange(2, 1, al - 1, 1).getValues().forEach(function (v, i) { if (String(v[0]) === oldTitle) as.getRange(i + 2, 1).setValue(title + nick); });
+  } catch (e) {}
   setRun_(r.row, '카톡방', title); r['카톡방'] = title;
   try {
     const ob = outboxSheet_(), last = ob.getLastRow();
@@ -900,9 +906,14 @@ function refreshAssignFormulasOnce_(runs) {
   const sh = assignSheet_(), last = sh.getLastRow();
   if (last >= 2) {
     const infos = {};
-    sh.getRange(2, 1, last - 1, 1).getValues().forEach(function (v, i) {
-      const r = runs.filter(function (x) { return String(x['명단 제목']) === String(v[0]); })[0];
+    const vals = sh.getRange(2, 1, last - 1, 7).getValues();
+    vals.forEach(function (v, i) {
+      let r = runs.filter(function (x) { return String(x['명단 제목']) === String(v[0]); })[0];
+      // 방제 끝 숫자를 바꿔서 제목이 달라졌으면 같은 날짜·캠페인 진행을 찾아 제목을 맞춤
+      if (!r) r = runs.filter(function (x) { return sameRunTitle_(x['명단 제목'], v[0]) && (!v[6] || String(x['시트ID']) === String(v[6]) || x['폼ID']); })[0];
       if (!r || !r['시트ID']) return;
+      if (String(v[0]) !== String(r['명단 제목'])) { sh.getRange(i + 2, 1).setValue(r['명단 제목']); v[0] = r['명단 제목']; }
+      if (String(v[6]) !== String(r['시트ID'])) sh.getRange(i + 2, 7).setValue(String(r['시트ID']));
       if (!infos[v[0]]) { const info = rawInfo_(r['시트ID'], r['폼ID']); const w = windowOf_(runs, r); info.from = w.from; info.to = w.to; infos[v[0]] = info; }
       const info = infos[v[0]];
       const f = info.nick ? boughtFormula_(i + 2, info) : '';
@@ -1083,6 +1094,26 @@ function parseAssign_(text, choices) {
       at[key] = rows.length; rows.push([tok, label, n, choice, 0]); lastKey = key;
     });
   };
+  // 옵션 줄에 'N명'이 없는 공지(옵션 하나): 공지 아래쪽에 이름만 적은 줄을 그 옵션으로 읽음
+  //  예) 🐥옵션 : 1개 … (빈 줄) 정진아 이혜미2 신선영 / 이강희2 임수진 이수진
+  const namesOnly = function () {
+    const all = String(text || '').split(/\r?\n/);
+    const optLine = all.filter(function (l) { return /🐥\s*옵션\s*[:：]/.test(l); })[0] || '';
+    const opt = optLine.replace(/^.*?옵션\s*[:：]\s*/, '').trim();
+    const choice = choices.length === 1 ? choices[0] : toChoice(opt, opt);
+    const priceM = String(text).match(/🐥\s*(?:가격|결제)\s*[:：]\s*([\d,]+)/);
+    const price = priceM ? Number(priceM[1].replace(/,/g, '')) : 0;
+    const firstBird = all.findIndex(function (l) { return /🐥/.test(l); });
+    const nameTok = /^@?[A-Za-z가-힣][^\s\d:!?~]{0,11}\d?$/;
+    all.forEach(function (l, i) {
+      const t = l.trim();
+      if (!t || i < firstBird || junk.test(t)) return;
+      const toks = t.split(/[\s,]+/).filter(Boolean);
+      if (toks.length > 12 || !toks.every(function (x) { return nameTok.test(x) || /^[2-9]$/.test(x) || /^[^\s]+\(\s*취소\s*\)$/.test(x); })) return;
+      add(t, opt || choice || '', choice);
+    });
+    rows.forEach(function (x) { if (!x[4]) x[4] = price; });
+  };
   blocks.forEach(function (b) {
     const prod = multi ? (noticeProducts_(b)[0] || {}).name || '' : '';
     const lines = b.split(/\r?\n/);
@@ -1127,6 +1158,7 @@ function parseAssign_(text, choices) {
       cur = null;
     });
   });
+  if (!rows.length) namesOnly();
   return rows;
 }
 
@@ -1756,7 +1788,10 @@ function onAdminEditInner_(e) {
     catch (err) { sh.getRange('G1').setValue('추가 모집 실패: ' + err.message); }
   }
   else if (a1 === 'E2' && String(e.range.getValue()).trim()) {
-    try { sh.getRange('G1').setValue(applyAssign_(sh, String(e.range.getValue()))); sh.getRange('E2').clearContent(); }
+    const text = String(e.range.getValue());
+    sh.getRange('E2').clearContent().setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);   // 긴 글이 칸을 키우지 않게 바로 비움
+    sh.setRowHeight(2, 42);
+    try { sh.getRange('G1').setValue(applyAssign_(sh, text)); }
     catch (err) { sh.getRange('G1').setValue('배정 실패: ' + err.message); }
   }
   else if (a1 === 'E1' && String(e.value).toUpperCase() === 'TRUE') {
@@ -2458,11 +2493,14 @@ function buildDashboard_(force) {
   const sig = DASH_VER + '|' + props.getProperty('RUN_ERRORS') + '|' + order.map(function (id) { return id + ':' + sheets[id].n; }).join(',') + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태'] + ':' + r['진행일'] + ':' + r['택배 옮김']; }).join('|');
   let sh = ss.getSheetByName(DASH_TAB);
   // 한눈에 탭에서 방제를 직접 고쳐 둔 게 있으면 다시 만들기 전에 진행목록에 반영
+  //  (지난번에 스크립트가 적은 값과 다를 때만 = 한눈에서 직접 고친 것. 진행목록에서 고친 걸 옛 값으로 되돌리지 않게)
+  let written = [];
+  try { written = JSON.parse(props.getProperty('DASH_TITLES') || '[]'); } catch (e) {}
   if (sh && sh.getLastRow() >= 2) {
     let changed = false;
-    sh.getRange(2, 2, Math.min(sh.getLastRow() - 1, 60), 1).getValues().forEach(function (v) {
+    sh.getRange(2, 2, Math.min(sh.getLastRow() - 1, 60), 1).getValues().forEach(function (v, i) {
       const t = String(v[0]).trim();
-      if (!t || t.charAt(0) === '■') return;
+      if (!t || t.charAt(0) === '■' || t === written[i]) return;
       const r = runs.filter(function (x) { return sameRunTitle_(x['명단 제목'], t) && bareTitle_(x['명단 제목']) !== t; })[0];
       if (r && renameRun_(r, t)) changed = true;
     });
@@ -2633,6 +2671,7 @@ function buildDashboard_(force) {
   });
   sh.setConditionalFormatRules(rules);
   props.setProperty('DASH_SIG', sig);
+  props.setProperty('DASH_TITLES', JSON.stringify(runs.map(function (r) { return bareTitle_(r['명단 제목']); })));
 }
 
 /* ---------------- 11) 최신 버전 바로 받기 ---------------- */
