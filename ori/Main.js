@@ -2434,6 +2434,7 @@ function payLayout_(sh) {
     if (!L.time && /진행시간/.test(t)) L.time = c + 1;
     if (!L.note && /특이사항/.test(t)) L.note = c + 1;
     if (!L.prev && /^전월$/.test(t)) L.prev = c + 1;
+    if (!L.left && /^남은$/.test(t)) L.left = c + 1;
   }
   // 날짜 칸: 머리글 줄과 그 위 줄에서 찾음
   [L.head - 1, L.head - 2].forEach(function (r) {
@@ -2480,8 +2481,10 @@ function updatePay_() {
     // 같은 의뢰에 과일(자정 ~ 오전 7시) 진행이 있으면 모든 날 진행시간을 그걸로, 스토어·포토는 비었으면 같은 의뢰 값
     const fruit = mine.filter(isFruit_)[0];
     const pick = function (h) { return r[h] || (mine.filter(function (x) { return x[h]; })[0] || {})[h] || ''; };
-    writePayRow_(r, nameOf(r), Math.max(total - before, 0) + prev, prev, siblings_(all, r).length > 1,
-      { store: pick('업체'), time: payTime_(fruit ? runSlot_(fruit) : runSlot_(r)), photo: pick('포토') });
+    // 총액 = 의뢰서 총 구매 건수(날마다 같음). 남은 = 총액 - 전월 - 그날 수량 - 이번 달 앞 날들 수량 (남은 칸 수식에 앞 날들 수를 빼 줌)
+    const earlier = mine.filter(function (x) { return x['진행일'] < r['진행일'] && ym(x['진행일']) === ym(r['진행일']); }).reduce(function (a, x) { return a + got(x); }, 0);
+    writePayRow_(r, nameOf(r), total, prev, siblings_(all, r).length > 1,
+      { store: pick('업체'), time: payTime_(fruit ? runSlot_(fruit) : runSlot_(r)), photo: pick('포토'), earlier: earlier });
   });
 }
 
@@ -2534,6 +2537,15 @@ function writePayRow_(r, name, remain, prevMonth, shared, ex) {
   }
   put(L.sum, remain);
   if (prevMonth) put(L.prev, prevMonth);
+  // 남은 칸 수식(=H-M-Q)에 같은 의뢰 앞 날들 수량을 빼 줌: =H8-M8-Q8-12 (그날 수량은 Q로 실시간)
+  if (L.left) {
+    const lc = sh.getRange(row, L.left), lf = lc.getFormula();
+    const m = lf.match(/^=([A-Z]+)(\d+)-([A-Z]+)(\d+)-([A-Z]+)(\d+)(?:-\d+)?$/);
+    if (m) {
+      const nf = '=' + m[1] + m[2] + '-' + m[3] + m[4] + '-' + m[5] + m[6] + (ex.earlier ? '-' + ex.earlier : '');
+      if (nf !== lf) lc.setFormula(nf);
+    }
+  }
   // 스토어, 진행시간, 특이사항은 비어 있을 때만 채움 (직접 고친 건 그대로)
   const putIfEmpty = function (col, val) { if (col && val && sh.getRange(row, col).getValue() === '' && !sh.getRange(row, col).getFormula()) sh.getRange(row, col).setValue(val); };
   // 스토어가 없으면 월급시트에서 같은 캠페인 다른 줄의 스토어를 가져옴 (직접 적어 둔 것)
