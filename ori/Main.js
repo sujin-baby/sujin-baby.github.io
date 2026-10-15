@@ -1254,6 +1254,7 @@ function checkFullInner_() {
   try { cleanListSheetsOnce_(runs); } catch (e) { note_('명단 시트 표시 정리 실패: ' + e); }
   try { fruitCheck_(runs); } catch (e) { note_('안 산 사람 확인 실패: ' + e); }
   try { takbaeCheck_(runs); } catch (e) { note_('택배시트 알림 실패: ' + e); }
+  try { fixOct16Once_(); } catch (e) { note_('10.16 정리 실패: ' + e); }
   try { refreshAssignFormulasOnce_(runs); } catch (e) { note_('배정 수식 갱신 실패: ' + e); }
   try { tidyOutbox_(); } catch (e) { note_('보낼메시지 정리 실패: ' + e); }
   const errs = {}, listed = {};
@@ -1538,11 +1539,16 @@ function toolAction_(d) {
   const list = runs.filter(function (r) { return r['진행 상태'] !== '종료' && r['폼ID'] && r['시트ID']; })
     .sort(function (a, b) { return (b['진행일'] || 0) - (a['진행일'] || 0); });
   const out = { runs: list.map(function (r) { return { title: String(r['명단 제목']), label: bareTitle_(r['명단 제목']) + '  (' + (Number(r['인원']) || 0) + '/' + (r['목표인원'] || '?') + '명)' }; }) };
-  const r = list.filter(function (x) { return String(x['명단 제목']) === String(d.title || ''); })[0] || list[0];
-  if (!r) return out;
-  if (d.act === 'assign' && String(d.text || '').trim()) out.msg = assignRun_(r, String(d.text));
+  const r = list.filter(function (x) { return String(x['명단 제목']) === String(d.title || ''); })[0];
+  if (!r) return out;   // 진행을 고르기 전에는 아무것도 안 함
+  if (d.act === 'assign' && String(d.text || '').trim()) {
+    out.msg = noticeMatches_(r, d.text) ? assignRun_(r, String(d.text)) : '⚠ 붙여넣은 공지가 이 진행(' + bareTitle_(r['명단 제목']) + ')과 다른 상품 같아요. 위에서 진행을 다시 골라 주세요. (저장 안 함)';
+  }
+  if (d.act === 'unassign') { writeAssign_(r, []); out.msg = '이 진행 배정을 비웠어요.'; }
+  if (d.act === 'remove') { out.msg = deleteRun_(r); return Object.assign(toolAction_({ act: 'info' }), { msg: out.msg }); }
   if (d.act === 'delete' && (d.times || []).length) out.msg = deleteRunTimes_(r, d.times.map(Number));
   if (d.act === 'more') out.msg = addMoreRun_(r, Number(d.n) || 0);
+  out.empty = !(Number(r['인원']) > 0);
   const me = readRuns_().filter(function (x) { return String(x['명단 제목']) === String(r['명단 제목']) || (sameRunTitle_(x['명단 제목'], r['명단 제목']) && String(x['시트ID']) === String(r['시트ID'])); })[0] || r;
   out.title = String(me['명단 제목']);
   out.count = Number(me['인원']) || 0; out.target = Number(me['목표인원']) || 0;
@@ -1551,6 +1557,72 @@ function toolAction_(d) {
   const as = assignSheet_(), last = as.getLastRow();
   out.assigned = last >= 2 && as.getRange(2, 1, last - 1, 1).getValues().some(function (x) { return String(x[0]) === out.title; });
   return out;
+}
+
+// 잘못 만든 진행 지우기 (응답이 0명일 때만): 진행목록 줄, 보낼메시지의 대기 중 공지, 배정 줄, 월급시트 그 줄의 스크립트가 넣은 칸
+function deleteRun_(r) {
+  if (Number(r['인원']) > 0) return '응답이 있는 진행은 못 지워요.';
+  const room = String(r['카톡방'] || bareTitle_(r['명단 제목'])), title = String(r['명단 제목']);
+  try {
+    const ob = outboxSheet_(), last = ob.getLastRow();
+    if (last >= 2) { const v = ob.getRange(2, 1, last - 1, 6).getValues(); for (let i = v.length - 1; i >= 0; i--) if (String(v[i][3]) === room && v[i][5] !== '보냄') ob.deleteRow(i + 2); }
+  } catch (e) {}
+  try {
+    const as = assignSheet_(), last = as.getLastRow();
+    if (last >= 2) { const v = as.getRange(2, 1, last - 1, 1).getValues(); for (let i = v.length - 1; i >= 0; i--) if (String(v[i][0]) === title) as.deleteRow(i + 2); }
+  } catch (e) {}
+  try {
+    if (CONFIG.PAY_SHEET_ID && r['진행일'] instanceof Date) {
+      const sh = payTab_(r['진행일'].getMonth() + 1), L = payLayout_(sh);
+      if (L) {
+        const last = sh.getLastRow(), names = sh.getRange(L.head + 1, L.name, Math.max(last - L.head, 1), 1).getValues();
+        const i = names.findIndex(function (x) { return String(x[0]).replace(/\s+/g, '') === bareTitle_(title).replace(/\s+/g, ''); });
+        if (i >= 0) {
+          const row = L.head + 1 + i, day = r['진행일'];
+          const dcol = L.days[(day.getMonth() + 1) + '-' + day.getDate()] || L.days[String(day.getDate())];
+          [L.name, L.qty, L.sum, L.store, L.time, L.note, L.prev, dcol].forEach(function (c) { if (c && !sh.getRange(row, c).getFormula()) sh.getRange(row, c).clearContent(); });
+        }
+      }
+    }
+  } catch (e) {}
+  ensureListSheet_().deleteRow(r.row);
+  return title + ' 진행을 지웠어요.';
+}
+
+// (10/15 한 번만) 진행 도우미에서 잘못 만든 10.17 추가 모집을 지우고, 10.16 배정에 잘못 들어간 고구마말랭이 이름을 빼고, 10.16 공지를 옵션 인원 넣고 이름 뺀 걸로 다시
+function fixOct16Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FIX_1016_V1')) return;
+  props.setProperty('FIX_1016_V1', '1');
+  let runs = readRuns_();
+  runs.filter(function (r) { return /^add-.*2026-10-17$/.test(String(r['요청ID'])) && /모두의농수산옥광밤외/.test(String(r['명단 제목'])) && !Number(r['인원']); })
+    .sort(function (a, b) { return b.row - a.row; }).forEach(function (r) { note_('정리: ' + deleteRun_(r)); });
+  const as = assignSheet_(), al = as.getLastRow();
+  if (al >= 2) { const v = as.getRange(2, 1, al - 1, 3).getValues(); for (let i = v.length - 1; i >= 0; i--) if (/^#택10\.16 모두의농수산옥광밤외/.test(String(v[i][0])) && String(v[i][2]) === '1개') as.deleteRow(i + 2); }
+  runs = readRuns_();
+  const r16 = runs.filter(function (r) { return /^add-.*2026-10-16$/.test(String(r['요청ID'])) && /모두의농수산옥광밤외/.test(String(r['명단 제목'])); })[0];
+  const r15 = runs.filter(function (r) { return dateTok_(r['명단 제목']) === '10.15' && /모두의농수산옥광밤외/.test(String(r['명단 제목'])); })[0];
+  if (!r16 || !r15) return;
+  const short = shortByOption_(runs, r15);
+  if (!Object.keys(short).length) return;
+  const form = FormApp.openById(r16['폼ID']);
+  const ob0 = outboxSheet_(), l0 = ob0.getLastRow(), room0 = String(r16['카톡방'] || bareTitle_(r16['명단 제목']));
+  const src = (l0 >= 2 ? ob0.getRange(2, 1, l0 - 1, 6).getValues() : []).filter(function (v) { return String(v[3]) === room0 && v[2] === '방 공지'; }).map(function (v) { return String(v[4]); })[0];
+  const notice = noticeForMore_(src || String(form.getDescription() || ''), short);
+  form.setDescription(notice);
+  const ob = outboxSheet_(), last = ob.getLastRow(), room = String(r16['카톡방'] || bareTitle_(r16['명단 제목']));
+  if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) { if (String(v[3]) === room && v[2] === '방 공지' && v[5] !== '보냄') ob.getRange(i + 2, 5).setValue(notice); });
+}
+
+// 붙여넣은 공지가 이 진행 공지와 같은 상품인지 (폼 링크나 판매처·상품 이름으로)
+function noticeMatches_(r, text) {
+  let desc = '';
+  try { desc = FormApp.openById(r['폼ID']).getDescription() || ''; } catch (e) { return true; }
+  const link = String(text).match(/forms\.gle\/\w+/);
+  if (link && desc.indexOf(link[0]) >= 0) return true;
+  const a = noticeProducts_(text), b = noticeProducts_(desc);
+  if (!a.length || !b.length) return !link;
+  return a.some(function (x) { return b.some(function (y) { return (x.name && x.name === y.name) || (x.shop && x.shop === y.shop); }); });
 }
 
 // 이 진행 폼 응답 중 중복(한 명단 시트에서 계정, 전화번호, 주소 중 하나가 먼저 낸 응답과 같음)
@@ -1603,6 +1675,7 @@ const TOOLS_HTML = `
 </style>
 <h1>진행 도우미</h1>
 <select id="run"></select>
+<p class="hint" id="pick" style="margin-top:6px">먼저 위에서 진행을 고르세요.</p>
 <div class="card"><h2>① 공지 붙여넣기 (누가 어떤 옵션)</h2>
   <p class="hint">카톡 공지(옵션 옆이나 아래에 이름 적은 것)를 통째로 복사해서 붙여넣으세요. 이름(취소), 이름2(2계정)도 알아서 읽어요.</p>
   <p class="hint" id="asg"></p>
@@ -1616,19 +1689,25 @@ const TOOLS_HTML = `
   <p class="hint" id="short"></p>
   <input id="n" type="number" min="1" placeholder="인원">
   <button id="b3">내일 추가 모집 만들기</button></div>
+<div class="card"><h2>④ 잘못 넣었을 때</h2>
+  <button id="b4" style="background:#fff;color:#5b2a86;border:1px solid #5b2a86">이 진행 배정 비우기</button>
+  <button id="b5" style="background:#fff;color:#a3271b;border:1px solid #a3271b">이 진행 지우기 (응답 0명일 때만)</button></div>
 <div class="msg" id="msg"></div>
 <script>
 var K = __K__, $ = function (i) { return document.getElementById(i); }, cur = '';
-function busy(on) { ['b1','b2','b3'].forEach(function (b) { $(b).disabled = on; }); }
+function busy(on) { ['b1','b2','b3','b4','b5'].forEach(function (b) { $(b).disabled = on || !$('run').value; }); }
 function call(d) {
-  busy(true); d.k = K; d.title = $('run').value || cur;
+  busy(true); d.k = K; d.title = $('run').value;
   google.script.run.withSuccessHandler(function (o) { busy(false); show(o); }).withFailureHandler(function (e) { busy(false); say('오류: ' + e.message); }).createRun(d);
 }
 function say(t) { $('msg').style.display = t ? 'block' : 'none'; $('msg').textContent = t || ''; }
 function show(o) {
-  var sel = $('run'); sel.innerHTML = '';
+  var sel = $('run'); sel.innerHTML = '<option value="">▼ 진행을 고르세요</option>';
   (o.runs || []).forEach(function (r) { var op = document.createElement('option'); op.value = r.title; op.textContent = r.label; sel.appendChild(op); });
   if (o.title) { sel.value = o.title; cur = o.title; }
+  $('pick').textContent = sel.value ? '지금 고른 진행: ' + sel.options[sel.selectedIndex].textContent : '먼저 위에서 진행을 고르세요.';
+  busy(false);
+  if (!sel.value) { $('asg').textContent = ''; $('dups').innerHTML = ''; $('short').textContent = ''; $('n').value = ''; return; }
   if (o.msg) say(o.msg);
   $('asg').innerHTML = o.assigned ? '<span class="ok">✔ 이 진행은 공지를 넣어 뒀어요. 다시 넣으면 새로 바뀌어요.</span>' : '아직 공지를 안 넣었어요.';
   var box = $('dups'); box.innerHTML = '';
@@ -1647,13 +1726,15 @@ function show(o) {
   $('n').value = sum || left || '';
 }
 $('run').onchange = function () { say(''); call({ act: 'info' }); };
-$('b1').onclick = function () { if (!$('txt').value.trim()) return say('공지를 붙여넣어 주세요.'); call({ act: 'assign', text: $('txt').value }); $('txt').value = ''; };
+$('b1').onclick = function () { if (!$('txt').value.trim()) return say('공지를 붙여넣어 주세요.'); if (!confirm('[' + $('run').options[$('run').selectedIndex].textContent + ']\n이 진행에 공지를 넣을까요?')) return; call({ act: 'assign', text: $('txt').value }); $('txt').value = ''; };
 $('b2').onclick = function () {
   var t = [].slice.call(document.querySelectorAll('#dups input:checked')).map(function (x) { return x.value; });
   if (!t.length) return say('지울 걸 체크해 주세요.');
   if (confirm(t.length + '개를 지울까요? 폼과 명단 시트에서 같이 지워져요.')) call({ act: 'delete', times: t });
 };
-$('b3').onclick = function () { var n = Number($('n').value); if (!n) return say('인원을 적어 주세요.'); if (confirm('내일 ' + n + '명 추가 모집을 만들까요?')) call({ act: 'more', n: n }); };
+$('b3').onclick = function () { var n = Number($('n').value); if (!n) return say('인원을 적어 주세요.'); if (confirm('[' + $('run').options[$('run').selectedIndex].textContent + ']\n다음 날 ' + n + '명 추가 모집을 만들까요?')) call({ act: 'more', n: n }); };
+$('b4').onclick = function () { if (confirm('이 진행 배정(공지 이름)을 비울까요?')) call({ act: 'unassign' }); };
+$('b5').onclick = function () { if (confirm('[' + $('run').options[$('run').selectedIndex].textContent + ']\n이 진행을 지울까요? (진행목록, 보낼메시지 대기 공지, 배정, 월급시트 그 줄)')) call({ act: 'remove' }); };
 call({ act: 'info' });
 </script>`;
 
@@ -1988,7 +2069,8 @@ function addMoreRun_(r, n) {
   const short = shortByOption_(readRuns_(), r);
   const sum = Object.keys(short).reduce(function (a, o) { return a + short[o]; }, 0);
   const desc = String(form.getDescription() || '');
-  const notice = sum ? noticeForMore_(desc, short) : desc.replace(/\(\s*\d*\s*명\)/g, '(  명)');
+  // 새로 모집하는 공지라 옵션 줄 뒤의 이름(어제 사람)은 지움
+  const notice = sum ? noticeForMore_(desc, short) : desc.split('\n').map(function (l) { return l.replace(/(\(\s*\d*\s*명\s*\)|\d+\s*명).*$/, '(  명)'); }).join('\n');
   if (sum && !n) n = sum;
   let res;
   locked_(function () {
@@ -2036,7 +2118,7 @@ function noticeForMore_(desc, short) {
     const lines = parts[i].split('\n'), out = [];
     for (let j = 0; j < lines.length; j++) {
       const t = lines[j];
-      const m = t.match(/^(\s*(?:\d+\)\s*)?(?:🐥\s*옵션\s*[:：]?\s*)?)(.*?)\s*\(?\s*(\d+)\s*명\s*\)?(.*)$/);
+      const m = t.match(/^(\s*(?:\d+\)\s*)?(?:🐥\s*옵션\s*[:：]?\s*)?)(.*?)\s*(?:\(\s*\d*\s*명\s*\)|\d+\s*명)(.*)$/);   // (3명), (  명), 3명
       if (!m) { out.push(t); continue; }
       const opt = m[2].trim();
       if (!opt) { header = out.length; out.push(t); continue; }   // '1) 5명' 가이드 머리
@@ -2044,7 +2126,7 @@ function noticeForMore_(desc, short) {
       const c = want[k([prod, opt].filter(Boolean).join(' '))] || want[k(opt)] || 0;
       if (!c) { if (/^\s*🐥\s*가격/.test(lines[j + 1] || '') && ((lines[j + 1].match(/\d{1,3}(?:,\d{3})+|\d{4,}/g) || []).length === 1)) j++; continue; }
       total += c;
-      out.push(m[1] + opt + (/\(\s*\d+\s*명/.test(t) ? ' (' + c + '명)' : ' ' + c + '명'));   // 원래 모양 그대로 (N명) 또는 N명
+      out.push(m[1] + opt + (/\(\s*\d*\s*명/.test(t) ? ' (' + c + '명)' : ' ' + c + '명'));   // 원래 모양 그대로 (N명) 또는 N명
     }
     if (multi && !total && i > 0) continue;
     if (multi && !total) { /* 첫 가이드는 상단 공지가 들어 있어서 옵션 줄만 빠진 채로 둠 */ }
