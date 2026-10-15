@@ -178,6 +178,21 @@ function normalizeRuns_() {
   const runs = readRuns_();
   runs.forEach(function (r) {
     if (!String(r['캠페인']).trim() && r['명단 제목']) { r['캠페인'] = campOf_(r['명단 제목']); setRun_(r.row, '캠페인', r['캠페인']); }
+    // 진행목록 '시트 링크'를 직접 바꾸면 그 시트를 씀
+    const m = String(r['시트 링크'] || '').match(/\/d\/([-\w]{25,})/);
+    if (m && m[1] !== String(r['시트ID'])) { r['시트ID'] = m[1]; setRun_(r.row, '시트ID', m[1]); }
+  });
+  // 의뢰서 하나 = 명단 시트 하나: 같은 의뢰(총건수가 있는 묶음)의 날들은 첫 날 명단 시트로 모음
+  //  (폼은 날마다 달라도 됨. 15분 확인에서 폼 응답이 이 시트로 가게 연결하고 명단 탭이 합쳐 보여 줌)
+  chainsOf_(runs).forEach(function (c) {
+    if (!c.total) return;
+    const first = c.runs.filter(function (x) { return x['시트ID']; })[0];
+    if (!first) return;
+    c.runs.forEach(function (r) {
+      if (!r['시트ID'] || String(r['시트ID']) === String(first['시트ID'])) return;
+      r['시트ID'] = first['시트ID']; setRun_(r.row, '시트ID', first['시트ID']);
+      r['시트 링크'] = first['시트 링크']; setRun_(r.row, '시트 링크', first['시트 링크']);
+    });
   });
   // 일차 바로잡기: 2일차를 1일차로 만들었어도 같은 의뢰의 순서대로 1, 2, 3...
   //  업체, 포토, 업체방이 빈 날은 같은 의뢰 다른 날 값으로 채움 (추가 모집 등)
@@ -522,6 +537,54 @@ function responseSheet_(ss) {
   return sheet;
 }
 
+// 이 폼의 응답이 들어가는 탭 (명단 시트 하나에 여러 날 폼이 연결되면 탭이 여러 개)
+function rawFor_(ss, formId) {
+  const tabs = ss.getSheets().filter(function (s) { return !!s.getFormUrl(); });
+  if (formId) {
+    for (let i = 0; i < tabs.length; i++) {
+      try { if (FormApp.openByUrl(tabs[i].getFormUrl()).getId() === String(formId)) return tabs[i]; } catch (e) {}
+    }
+  }
+  return tabs[0] || responseSheet_(ss);
+}
+
+// 폼 응답 탭의 질문 머리글 (빈칸이나 예전 도우미 칸 전까지)
+function rawHead_(raw) {
+  const all = headers_(raw);
+  let n = 0;
+  while (n < all.length && all[n] !== '' && OLD_HELPER.indexOf(all[n]) === -1) n++;
+  return all.slice(0, n);
+}
+
+// 명단 탭이 이 시트에 연결된 모든 폼 응답 탭을 합쳐 보여 주게 (의뢰서 하나 = 명단 시트 하나, 날마다 폼이 달라도 아래로 이어짐)
+//  머리글은 첫 탭 기준 + 다른 탭에만 있는 질문은 뒤에. 손으로 적는 칸(송장번호, 실배송)은 밀어서 안 겹치게
+function ensureListTab_(ss) {
+  const sh = ss.getSheetByName(LIST_TAB);
+  if (!sh) return false;
+  const tabs = ss.getSheets().filter(function (s) { return !!s.getFormUrl(); });
+  if (tabs.length < 2) return false;
+  const heads = tabs.map(rawHead_);
+  const union = heads[0].slice();
+  heads.slice(1).forEach(function (h) { h.forEach(function (x) { if (x && union.indexOf(x) === -1) union.push(x); }); });
+  const ref = function (t) { return "'" + t.getName().replace(/'/g, "''") + "'!"; };
+  const parts = tabs.map(function (t, i) {
+    const L = colLetter_(Math.max(heads[i].length, 1));
+    const cols = union.map(function (u) { const k = heads[i].indexOf(u); return k >= 0 ? 'CHOOSECOLS(d,' + (k + 1) + ')' : 'MAKEARRAY(ROWS(d),1,LAMBDA(rr,cc,""))'; });
+    return 'LET(d,' + ref(t) + 'A2:' + L + ',HSTACK(' + cols.join(',') + '))';
+  });
+  const f = '=IFERROR(LET(v,VSTACK(' + parts.join(',') + '),SORT(FILTER(v,INDEX(v,0,1)<>""),1,TRUE)),"")';
+  if (sh.getRange('A3').getFormula() === f) return false;
+  // 손으로 적는 칸이 합친 머리글과 겹치면 칸을 끼워 넣어 뒤로 밀기
+  const row2 = sh.getRange(2, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(String);
+  const manual = row2.findIndex(function (h, i) { return i >= heads[0].length && /송장번호|실배송/.test(h); }) + 1;
+  if (manual && manual <= union.length) sh.insertColumnsBefore(manual, union.length - manual + 1);
+  sh.getRange(2, 1, 1, union.length).setValues([union]);
+  sh.getRange('A3').setFormula(f);
+  sh.getRange('D1').setFormula('=COUNTA(A3:A)');
+  tabs.forEach(function (t) { try { t.hideSheet(); } catch (e) {} });
+  return true;
+}
+
 function headers_(sheet) {
   const lastCol = Math.max(sheet.getLastColumn(), 1);
   return sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
@@ -691,8 +754,8 @@ function needFormula_(row) {
 }
 
 // 명단 시트의 응답 탭 이름, 닉네임·옵션 열 글자
-function rawInfo_(sheetId) {
-  const raw = responseSheet_(SpreadsheetApp.openById(sheetId));
+function rawInfo_(sheetId, formId) {
+  const raw = rawFor_(SpreadsheetApp.openById(sheetId), formId);
   const head = headers_(raw);
   // 닉네임 질문이 없는 예전 폼은 사람별 확인은 못 하고(수취인 이름은 공지 이름과 다름) 옵션별 인원만 셈
   const n = head.findIndex(function (h) { return MATCH.nick.test(h); }) + 1;
@@ -705,7 +768,7 @@ function rawInfo_(sheetId) {
 // 이 진행의 배정 줄을 통째로 바꿈
 function writeAssign_(r, rows) {
   const runs = readRuns_();
-  const info = rawInfo_(r['시트ID']);
+  const info = rawInfo_(r['시트ID'], r['폼ID']);
   const w = windowOf_(runs, r);
   info.from = w.from; info.to = w.to;
   const sh = assignSheet_();
@@ -736,7 +799,7 @@ function assignState_(runs, r) {
   if (last < 2) return null;
   const mine = sh.getRange(2, 1, last - 1, 9).getValues().filter(function (x) { return String(x[0]) === String(r['명단 제목']) && String(x[1]).trim(); });
   if (!mine.length) return null;
-  const info = rawInfo_(r['시트ID']);
+  const info = rawInfo_(r['시트ID'], r['폼ID']);
   const w = windowOf_(runs, r);
   const lr = info.raw.getLastRow();
   const data = lr < 2 ? [] : info.raw.getRange(2, 1, lr - 1, info.head.length).getValues()
@@ -1000,21 +1063,34 @@ function checkFull() {
   try { cleanListSheetsOnce_(runs); } catch (e) { Logger.log('명단 시트 표시 정리 실패: ' + e); }
   try { fruitCheck_(runs); } catch (e) { Logger.log('안 산 사람 확인 실패: ' + e); }
   try { takbaeCheck_(runs); } catch (e) { Logger.log('택배시트 알림 실패: ' + e); }
-  const errs = {};
+  const errs = {}, listed = {};
+  try { ensureSubmitTriggers_(runs); } catch (e) { Logger.log('응답 트리거 실패: ' + e); }
   runs.forEach(function (r) {
     if (r['진행 상태'] === '종료' || !r['폼ID']) return;
     // 진행 하나에서 오류가 나도 다른 진행은 계속 (오류는 한눈에 탭 '확인 필요' 칸에 보임)
     try { checkRun_(r); } catch (e) { errs[r['명단 제목']] = String(e.message || e).slice(0, 120); Logger.log('진행 확인 실패 ' + r['명단 제목'] + ': ' + e); }
   });
+  // 폼을 다 연결한 뒤 명단 탭이 그 시트의 모든 폼 응답을 합쳐 보여 주게
+  Object.keys(listed).forEach(function (id) {
+    try { ensureListTab_(SpreadsheetApp.openById(id)); } catch (e) { Logger.log('명단 탭 합치기 실패: ' + e); }
+  });
   props.setProperty('RUN_ERRORS', JSON.stringify(errs));
   function checkRun_(r) {
     const form = FormApp.openById(r['폼ID']);
     // 폼 응답이 진행목록의 명단 시트가 아닌 다른 시트로 가면 알려 줌 (명단이 안 보이는 원인)
-    try {
-      const dest = form.getDestinationId();
-      if (r['시트ID'] && dest && dest !== String(r['시트ID'])) errs[r['명단 제목']] = '폼 응답이 진행목록의 명단 시트가 아닌 다른 시트로 들어가요';
-      else if (r['시트ID'] && !dest) errs[r['명단 제목']] = '폼에 응답 시트가 연결돼 있지 않아요';
-    } catch (e) {}
+    // 폼 응답이 진행목록의 명단 시트로 가게 연결 (다르면 그 시트에 응답 탭이 새로 생기고 지금까지 응답도 같이 들어감)
+    if (r['시트ID']) {
+      let dest = '';
+      try { dest = form.getDestinationId(); } catch (e) {}
+      if (dest !== String(r['시트ID'])) {
+        try {
+          form.setDestination(FormApp.DestinationType.SPREADSHEET, String(r['시트ID']));
+          SpreadsheetApp.flush();
+          Utilities.sleep(3000);
+        } catch (e) { errs[r['명단 제목']] = '폼 응답을 명단 시트로 연결하지 못했어요: ' + e.message; }
+      }
+      listed[r['시트ID']] = 1;
+    }
     const w = windowOf_(runs, r);
     if (Date.now() < w.from) return;   // 아직 시작 전인 다음 일차
     // 같은 폼을 쓰는 다음 일차: 진행일 0시가 되면 폼을 한 번 다시 엶 (그 뒤에 손으로 닫으면 다시 안 엶)
@@ -1303,6 +1379,7 @@ function ensureEditTab_() {
 }
 
 function onAdminEdit(e) {
+  if (e && e.response) return onRunSubmit_(e);   // 폼 제출 트리거도 이 이름으로 받음 (로더에 이미 있는 이름이라)
   if (!e || !e.range) return;
   const sh = e.range.getSheet();
   if (sh.getName() === DASH_TAB && e.range.getColumn() === 12 && e.range.getRow() >= 2) {
@@ -1373,6 +1450,43 @@ function pickDups_(sh) {
   return '빨간색 중복 ' + n + '개 골랐어요 (같은 것끼리 맨 처음 낸 것은 남김). 확인하고 E1 삭제 실행을 체크하면 지워져요.';
 }
 
+// 진행 중인 폼마다 '제출하면 바로' 트리거 (월급시트, 인원이 바로 바뀌게). 끝난 폼 트리거는 지움. 트리거는 최대 20개라 폼은 15개까지
+function ensureSubmitTriggers_(runs) {
+  const want = [];
+  runs.forEach(function (r) { if (r['진행 상태'] !== '종료' && r['폼ID'] && want.indexOf(String(r['폼ID'])) === -1) want.push(String(r['폼ID'])); });
+  const have = {};
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() !== 'onAdminEdit' || t.getEventType() !== ScriptApp.EventType.ON_FORM_SUBMIT) return;
+    const id = t.getTriggerSourceId();
+    if (want.indexOf(id) === -1 || have[id]) ScriptApp.deleteTrigger(t); else have[id] = 1;
+  });
+  want.slice(0, 15).forEach(function (id) {
+    if (have[id]) return;
+    try { ScriptApp.newTrigger('onAdminEdit').forForm(id).onFormSubmit().create(); } catch (e) { Logger.log('폼 트리거 만들기 실패 ' + id + ': ' + e); }
+  });
+}
+
+// 폼이 제출되면: 그 폼 진행들의 인원 → 월급시트, 한눈에 탭. 다 찼으면 마감 확인까지
+function onRunSubmit_(e) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return;   // 다른 작업 중이면 15분 확인이 이어서 함
+  try {
+    const formId = e.source.getId();
+    const runs = readRuns_();
+    const times = e.source.getResponses().map(function (x) { return x.getTimestamp().getTime(); });
+    let full = false;
+    runs.forEach(function (r) {
+      if (String(r['폼ID']) !== formId || r['진행 상태'] === '종료') return;
+      const n = runCount_(runs, r, times);
+      if (Number(r['인원']) !== n) setRun_(r.row, '인원', n);
+      if (r['목표인원'] && !r['마감 시각'] && n >= Number(r['목표인원'])) full = true;
+    });
+    try { updatePay_(); } catch (err) { Logger.log('월급시트 갱신 실패: ' + err); }
+    try { buildDashboard_(false); } catch (err) {}
+    if (full) { lock.releaseLock(); checkFull(); }
+  } finally { try { lock.releaseLock(); } catch (err) {} }
+}
+
 function editRun_(sh) {
   const t = String(sh.getRange('B1').getValue());
   return readRuns_().filter(function (r) { return String(r['명단 제목']) === t; }).pop();
@@ -1386,7 +1500,7 @@ function loadEditTab_(sh, msg) {
   try { ensureDupControl_(sh); } catch (e) {}
   const r = editRun_(sh);
   if (!r) { sh.getRange(3, 1, 1, sh.getMaxColumns()).clearContent(); return; }
-  const raw = responseSheet_(SpreadsheetApp.openById(r['시트ID']));
+  const raw = rawFor_(SpreadsheetApp.openById(r['시트ID']), r['폼ID']);
   const head = headers_(raw);
   sh.getRange(3, 1, 1, sh.getMaxColumns()).clearContent();
   sh.getRange(3, 1, 1, head.length + 1).setValues([['삭제'].concat(head)]).setFontWeight('bold').setBackground('#efe6f7').setWrap(true);
@@ -1426,7 +1540,7 @@ function applyAssign_(sh, text) {
   const r = editRun_(sh);
   if (!r) return '먼저 B1에서 진행을 고르세요.';
   let note = '';
-  let info = rawInfo_(r['시트ID']);
+  let info = rawInfo_(r['시트ID'], r['폼ID']);
   if (!info.nickCol && r['폼ID']) {
     if (ensureNickQuestion_(FormApp.openById(r['폼ID']))) { note = ' 폼에 닉네임 질문이 없어서 넣었어요 (이미 낸 사람은 확인 못 해요).'; SpreadsheetApp.flush(); Utilities.sleep(2000); }
   }
@@ -1619,7 +1733,7 @@ function deleteChecked_(sh) {
     if (hit) form.deleteResponse(hit.getId());
   });
   // 2) 응답 시트 행 삭제 (아래에서부터)
-  const raw = responseSheet_(SpreadsheetApp.openById(r['시트ID']));
+  const raw = rawFor_(SpreadsheetApp.openById(r['시트ID']), r['폼ID']);
   const ts = raw.getRange(2, 1, Math.max(raw.getLastRow() - 1, 1), 1).getValues();
   for (let i = ts.length - 1; i >= 0; i--) {
     if (ts[i][0] instanceof Date && picked.some(function (x) { return near(ts[i][0], x[1]); })) raw.deleteRow(i + 2);
@@ -1903,7 +2017,7 @@ function putFileChip_(sh, row, col, url) {
 // 택배시트는 바로가기만 걸고 절대 고치지 않음
 
 const DASH_TAB = '한눈에';
-const DASH_VER = '6';   // 모양을 바꾸면 올려서 다시 만들게 함
+const DASH_VER = '7';   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
   buildDashboard_(true);
@@ -1922,11 +2036,43 @@ function buildDashboard_(force) {
   const allRuns = readRuns_();
   const runs = allRuns.filter(function (r) { return r['진행 상태'] !== '종료' && r['시트ID']; })
     .sort(function (a, b) { return (b['진행일'] || 0) - (a['진행일'] || 0); });
-  const sig = DASH_VER + '|' + PropertiesService.getScriptProperties().getProperty('RUN_ERRORS') + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태'] + ':' + r['진행일'] + ':' + r['택배 옮김']; }).join('|');
   const props = PropertiesService.getScriptProperties();
   const ss = adminSs_();
+  // 명단 시트(의뢰)마다 한 덩어리. 명단 탭(여러 날 폼 응답을 합친 것)이 있으면 거기서 가져옴
+  const sheets = {}, order = [];
+  runs.forEach(function (r) {
+    const id = String(r['시트ID']);
+    if (sheets[id]) { sheets[id].runs.push(r); return; }
+    order.push(id);
+    let src = '', start = 2, cols = 12, keep = [], hd = [], count = 0;
+    try {
+      const rss = SpreadsheetApp.openById(id);
+      const lt = rss.getSheetByName(LIST_TAB);
+      if (lt && lt.getLastColumn() > 0 && String(lt.getRange('A2').getValue()) !== '') {
+        src = LIST_TAB; start = 3; cols = lt.getLastColumn();
+        hd = lt.getRange(2, 1, 1, cols).getValues()[0].map(String);
+        count = Math.max(lt.getLastRow() - 2, 0);
+      } else {
+        const rs = responseSheet_(rss); src = rs.getName(); cols = Math.max(rs.getLastColumn(), 1);
+        hd = headers_(rs);
+        count = Math.max(rs.getLastRow() - 1, 0);
+      }
+      // 계좌, 은행, 예금주 열은 빼고 보여 줌
+      hd.forEach(function (h, k) { if (h && !MATCH.account.test(h) && OLD_HELPER.indexOf(h) === -1 && k < 26) keep.push(k + 1); });
+    } catch (e) {}
+    sheets[id] = { id: id, runs: [r], keep: keep, hd: hd, count: count, start: start, ref: "'" + src.replace(/'/g, "''") + "'!", cols: Math.min(cols, 26), url: 'https://docs.google.com/spreadsheets/d/' + id + '/edit' };
+  });
+  // 덩어리 줄 수는 지금 인원 + 여유 5줄 (넘칠 것 같으면 다시 만듦). 빈칸이 너무 길지 않게
+  order.forEach(function (id) {
+    const x = sheets[id];
+    const total = x.runs.reduce(function (m, r) { return Math.max(m, Number(r['총건수']) || 0); }, 0);
+    x.n = Math.max(Math.ceil((x.count + 5) / 5) * 5, 6);   // 5줄 단위라 응답 몇 개마다만 다시 만듦
+    if (total) x.n = Math.min(x.n, Math.max(total + 2, x.count + 2));
+  });
+  const sig = DASH_VER + '|' + props.getProperty('RUN_ERRORS') + '|' + order.map(function (id) { return id + ':' + sheets[id].n; }).join(',') + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태'] + ':' + r['진행일'] + ':' + r['택배 옮김']; }).join('|');
   let sh = ss.getSheetByName(DASH_TAB);
   if (!force && sh && props.getProperty('DASH_SIG') === sig) return;
+  order.forEach(function (id) { grantImport_(ss.getId(), id); });
   if (!sh) sh = ss.insertSheet(DASH_TAB, 0);
   sh.clear();
   sh.setFrozenRows(0);
@@ -1936,28 +2082,10 @@ function buildDashboard_(force) {
   try { errs = JSON.parse(props.getProperty('RUN_ERRORS') || '{}'); } catch (e) {}
   sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold').setBackground('#efe6f7');
   const payUrl = CONFIG.PAY_SHEET_ID ? 'https://docs.google.com/spreadsheets/d/' + CONFIG.PAY_SHEET_ID + '/edit#gid=' + CONFIG.PAY_TAB_GID : '';
-  // 명단 시트(의뢰)마다 한 덩어리
-  const sheets = {}, order = [];
-  runs.forEach(function (r) {
-    const id = String(r['시트ID']);
-    if (sheets[id]) { sheets[id].runs.push(r); return; }
-    order.push(id);
-    let raw = '', cols = 12, keep = [], hd = [];
-    try {
-      const rs = responseSheet_(SpreadsheetApp.openById(id)); raw = rs.getName(); cols = Math.max(rs.getLastColumn(), 1);
-      hd = headers_(rs);
-      // 계좌, 은행, 예금주 열은 빼고 보여 줌
-      hd.forEach(function (h, k) { if (h && !MATCH.account.test(h) && OLD_HELPER.indexOf(h) === -1 && k < 26) keep.push(k + 1); });
-    } catch (e) {}
-    grantImport_(ss.getId(), id);
-    sheets[id] = { id: id, runs: [r], keep: keep, hd: hd, ref: "'" + raw.replace(/'/g, "''") + "'!", cols: Math.min(cols, 26), url: 'https://docs.google.com/spreadsheets/d/' + id + '/edit' };
-  });
   // 아래 덩어리 자리 먼저 계산 (위 표 '틀린 옵션'이 덩어리의 옵션 확인 칸을 셈)
   let row = runs.length + 4;
   order.forEach(function (id) {
     const x = sheets[id];
-    const total = x.runs.reduce(function (m, r) { return Math.max(m, Number(r['총건수']) || 0); }, 0);
-    x.n = Math.max(total, x.runs.reduce(function (a, r) { return a + (Number(r['목표인원']) || 0); }, 0), Number(x.runs[0]['목표인원']) || 0, 10) + 5;
     x.top = row;
     // 택배시트 칸 순서 그대로 (A 시간, B 이름, C 아이디, D 전화, E 주소, F 옵션, G 금액, H~J 빈칸, K 업체+상품) → 그대로 복사해서 붙여넣기
     //  그 뒤에 나머지 질문(닉네임, 주문번호 등), 맨 끝에 옵션 확인
@@ -1975,14 +2103,14 @@ function buildDashboard_(force) {
     x.prods = [];
     try { x.prods = noticeProducts_(FormApp.openById(x.runs[0]['폼ID']).getDescription()); } catch (e) {}
     x.shop = String(x.runs[0]['업체'] || (x.prods[0] || {}).shop || '').replace(/\s+/g, '');
-    row += x.n + 6;
+    row += x.n + 4;
   });
   const fmt = function (t) { return 'DATE(' + Utilities.formatDate(new Date(t), CONFIG.TIMEZONE, 'yyyy,M,d') + ')'; };
   runs.forEach(function (r, i) {
     const rr = i + 2, x = sheets[String(r['시트ID'])];
     sh.getRange(rr, 1, 1, 4).setValues([[r['진행일'], String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''), r['진행 상태'], r['목표인원']]]);
     const w = windowOf_(allRuns, r);
-    const ts = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A2:A') + ')';
+    const ts = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A' + x.start + ':A') + ')';
     // 명단 시트 하나를 여러 날이 같이 쓰면 그날 몫(진행일 0시 ~ 다음 진행 0시)만 셈
     sh.getRange(rr, 5).setFormula(w.shared
       ? '=IFERROR(LET(v,' + ts + ',SUMPRODUCT(ISNUMBER(v)*(v>=' + (w.from ? fmt(w.from) : 0) + ')*(v<' + (isFinite(w.to) ? fmt(w.to) : 99999) + '))),"허용 필요")'
@@ -2002,6 +2130,7 @@ function buildDashboard_(force) {
   });
   if (payUrl) sh.getRange(1, 15).setFormula('=HYPERLINK(' + q(payUrl) + ',"▶ 월급시트 열기")').setFontWeight('bold');
   if (runs.length) {
+    sh.getRange(2, 6, runs.length, 1).setFontColor('#d00000').setFontWeight('bold');   // 남은 = 빨간 글씨
     sh.getRange(2, 1, runs.length, 1).setNumberFormat('M/d');
     sh.getRange(2, 7, runs.length, 1).setNumberFormat('M/d HH:mm');
   }
@@ -2031,7 +2160,7 @@ function buildDashboard_(force) {
     };
     const kcol = 'MAP(' + c(x.layout[5][1] || 1) + ',' + c(x.layout[6][1] || 1) + ',LAMBDA(oo,pp,TRIM(' + q(x.shop) + '&" "&' + prodOf() + ')))';
     const parts = x.layout.map(function (t) { return t[1] === 'K' ? kcol : t[1] ? c(t[1]) : blank; });
-    const imp = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A2:' + colLetter_(x.cols) + (n + 1)) + ')';
+    const imp = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A' + x.start + ':' + colLetter_(x.cols) + (x.start + n - 1)) + ')';
     sh.getRange(top + 1, 1, 1, x.layout.length).setValues([x.layout.map(function (t) { return t[0]; })]);
     sh.getRange(top + 2, 1).setFormula('=IFERROR(LET(d,' + imp + ',IF(COUNTA(INDEX(d,0,1))=0,"",LET(e,FILTER(d,INDEX(d,0,1)<>""),HSTACK(' + parts.join(',') + ')))),"이 칸을 눌러 액세스 허용을 한 번 눌러 주세요")');
     sh.getRange(top + 1, 1, 1, Math.max(width2, 6)).setFontWeight('bold').setBackground('#faf7fd');
