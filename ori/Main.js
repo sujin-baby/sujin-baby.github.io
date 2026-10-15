@@ -53,9 +53,19 @@ function report_(name, ok) {
   globalThis.__ORI_NOTES = [];
   const done = all.filter(function (x) { return /^✓/.test(x); }), notes = all.filter(function (x) { return !/^✓/.test(x); });
   const when = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'M/d HH:mm');
-  const text = ok === false ? '⚠ ' + when + ' ' + name + ': 다른 작업 중이라 건너뜀' : (notes.length ? '⚠ ' + when + ' ' + name + ' 문제: ' + notes.join(' / ') : '✔ ' + when + ' ' + name + ' 정상') +
-    (done.length ? '  | 한 일: ' + done.map(function (x) { return x.replace(/^✓\s*/, ''); }).join(' / ') : '');
-  try { const d = adminSs_().getSheetByName(DASH_TAB); if (d) d.getRange(1, 17).setValue(text.slice(0, 500)).setFontColor(notes.length || ok === false ? '#b91c1c' : '#2f7a2f'); } catch (e) {}
+  const head = ok === false ? '⚠ ' + when + ' ' + name + ': 다른 작업 중이라 건너뜀' : (notes.length ? '⚠ ' + when + ' ' + name + ' 문제 ' + notes.length + '건' : '✔ ' + when + ' ' + name + ' 정상');
+  const lines = notes.map(function (x) { return '⚠ ' + x; }).concat(done.map(function (x) { return '· ' + x.replace(/^✓\s*/, ''); }));
+  const text = head + (lines.length ? '\n' + lines.join('\n') : '');
+  // 한눈에 Q1은 한 줄 요약, 자세한 건 Q2부터 한 줄씩 (위 표 옆이라 잘 보이게)
+  try {
+    const d = adminSs_().getSheetByName(DASH_TAB);
+    if (d) {
+      d.getRange(1, 17).setValue(head).setFontColor(notes.length || ok === false ? '#b91c1c' : '#2f7a2f').setFontWeight('bold').setWrap(false);
+      d.getRange(2, 17, 12, 1).clearContent();
+      if (lines.length) d.getRange(2, 17, Math.min(lines.length, 12), 1).setValues(lines.slice(0, 12).map(function (x) { return [x.slice(0, 120)]; }))
+        .setFontColor('#555555').setFontWeight('normal').setWrap(false).setHorizontalAlignment('left');
+    }
+  } catch (e) {}
   try { SpreadsheetApp.getUi().alert(text); } catch (e) {}   // 메뉴로 돌렸을 때만 창이 뜸
 }
 
@@ -1282,6 +1292,17 @@ function checkFullInner_() {
     // 진행 하나에서 오류가 나도 다른 진행은 계속 (오류는 한눈에 탭 '확인 필요' 칸에 보임)
     try { checkRun_(r); } catch (e) { errs[r['명단 제목']] = String(e.message || e).slice(0, 120); note_('진행 확인 실패 ' + r['명단 제목'] + ': ' + e); }
   });
+  // 지금 받는 진행이 없는 폼은 닫아 둠 (같은 폼을 쓰는 다음 진행은 그 진행일 0시에 다시 열림)
+  try {
+    const forms = {};
+    runs.forEach(function (r) { if (r['진행 상태'] !== '종료' && r['폼ID']) (forms[r['폼ID']] = forms[r['폼ID']] || []).push(r); });
+    Object.keys(forms).forEach(function (fid) {
+      const active = forms[fid].some(function (r) { const w = windowOf_(runs, r); return Date.now() >= w.from && !r['마감 시각']; });
+      if (active) return;
+      const f = FormApp.openById(fid);
+      if (f.isAcceptingResponses()) { f.setAcceptingResponses(false); note_('✓ 폼 닫음: ' + bareTitle_(forms[fid][forms[fid].length - 1]['명단 제목']) + ' (다음 진행일 0시에 열림)'); }
+    });
+  } catch (e) { note_('폼 닫기 확인 실패: ' + e); }
   // 폼을 다 연결한 뒤 명단 탭이 그 시트의 모든 폼 응답을 합쳐 보여 주게
   Object.keys(listed).forEach(function (id) {
     try {
@@ -1506,6 +1527,14 @@ function tidyOutbox_() {
   sh.setRowHeights(2, last - 1, 21);
   sh.getRange(2, 2, last - 1, 1).setNumberFormat('M/d HH:mm');
   sh.setFrozenRows(1);
+  // 보낼 것(대기) 줄은 노랑 + 상태 칸 주황, 보낸 건 회색 글씨
+  const all = sh.getRange(2, 1, Math.max(sh.getMaxRows() - 1, 1), 6);
+  sh.setConditionalFormatRules([
+    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$F2="대기"').setBackground('#fff2cc').setRanges([all]).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$F2="방 못 찾음"').setBackground('#f8c9c4').setRanges([all]).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$F2="보냄"').setFontColor('#9e9e9e').setRanges([all]).build()
+  ]);
+  sh.getRange(2, 6, last - 1, 1).setFontWeight('bold').setHorizontalAlignment('center');
 }
 
 function queueMsg_(room, msg, kind) {
@@ -2246,6 +2275,14 @@ function fixStyleOnce_() {
       const nm = noticeStyle_(stripTrailingNames_(String(m.v[4])), fruit);
       if (nm !== String(m.v[4])) { ob.getRange(m.i + 2, 5).setValue(nm); m.v[4] = nm; note_('✓ ' + room + ' 공지 고침'); }
     });
+    // 폼 옵션 질문이 '단일옵션' 하나뿐인데 공지 옵션이 여러 개면 옵션별로 나눔 (옵션 나누기 전에 만든 폼)
+    try {
+      const fo = FormApp.openById(r['폼ID']);
+      if (formChoices_(fo).length <= 1) {
+        const labs = optionLabels_(mine.length ? String(mine[0].v[4]) : (fo.getDescription() || ''));
+        if (labs.length >= 2) { setOptionChoices_(fo, labs.join('\n')); note_('✓ ' + room + ' 폼 옵션 ' + labs.length + '개로 나눔'); }
+      }
+    } catch (e) { note_(room + ' 폼 옵션 나누기 실패: ' + e.message); }
     // 폼 설명 = 그 진행 공지 (아직 시작 안 한 진행만, 같은 폼으로 오늘 받는 중이면 그대로)
     const busyToday = runs.some(function (x) { return x !== r && String(x['폼ID']) === String(r['폼ID']) && x['진행일'] instanceof Date && Utilities.formatDate(x['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd') === Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd') && !x['마감 시각']; });
     if (!busyToday) try {
@@ -2257,6 +2294,18 @@ function fixStyleOnce_() {
   });
   // 보내기 전인 다른 공지도 포토대기 줄은 바꿈
   msgs.forEach(function (v, i) { if (v[2] === '방 공지' && v[5] !== '보냄') { const nm = noticeStyle_(String(v[4]), false); if (nm !== String(v[4])) ob.getRange(i + 2, 5).setValue(nm); } });
+}
+
+// 공지에서 옵션 보기 목록 (가이드 여럿이면 상품 이름 붙임, 가격 있으면 '(17,200원)') — 옵션 줄 'X (N명)', 'X N명', 'X (  명)'
+function optionLabels_(text) {
+  // 공지 읽기(parseAssign_)를 그대로 쓰려고 옵션 줄 끝에 가짜 이름을 붙여서 읽음
+  const t = String(text || '').split('\n').map(function (l) { return /(\(\s*\d*\s*명\s*\)|\d+\s*명)/.test(l) && !/가격|★|http/.test(l) ? l + ' 가' : l; }).join('\n');
+  const out = [];
+  parseAssign_(t, []).forEach(function (x) {
+    const lab = x[1] + (x[4] ? ' (' + Number(x[4]).toLocaleString('ko-KR') + '원)' : '');
+    if (x[1] && out.indexOf(lab) === -1) out.push(lab);
+  });
+  return out;
 }
 
 // 공지 끝(가이드마다 맨 아래)에 이름만 적은 줄 지우기 (예: '정진아 이혜미2 신선영 / 이강희2 임수진') → 새로 모집하는 공지에 어제 사람이 안 들어가게
@@ -2861,6 +2910,7 @@ function buildDashboard_(force) {
     sh.getRange(2, 14, runs.length, 1).setHorizontalAlignment('left');
     sh.setRowHeight(1, 28);
     sh.getRange(2, 1, runs.length, 1).setNumberFormat('M/d');
+    sh.getRange(2, 4, runs.length, 4).setNumberFormat('0');   // 총건수, 그날 목표, 신청, 남은은 숫자로 (날짜로 보이지 않게)
     sh.getRange(2, 8, runs.length, 1).setNumberFormat('M/d HH:mm');
   }
   // 아래: 명단 내용 (중복, 금액, 옵션 확인 표시는 여기서만. 명단 시트는 업체도 봐서 깨끗하게 둠)
