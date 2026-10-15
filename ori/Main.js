@@ -1786,6 +1786,10 @@ function toolAction_(d) {
   if (d.act === 'delete' && (d.times || []).length) out.msg = deleteRunTimes_(r, d.times.map(Number));
   if (d.act === 'more') out.msg = addMoreRun_(r, Number(d.n) || 0);
   out.empty = !(Number(r['인원']) > 0);
+  // ④ 추가 모집이 만들어질 날짜 = 이 진행 다음 날 (지난 진행이면 내일)
+  const nb = r['진행일'] instanceof Date && r['진행일'] >= today_() ? new Date(r['진행일']) : today_();
+  nb.setDate(nb.getDate() + 1);
+  out.nextMd = (nb.getMonth() + 1) + '.' + nb.getDate();
   // 같은 의뢰의 다른 날 (배정을 잘못된 날에 넣었을 때 옮기기 버튼)
   out.alts = list.filter(function (x) { return x !== r && campKey_(x['캠페인'] || x['명단 제목']) === campKey_(r['캠페인'] || r['명단 제목']); })
     .map(function (x) { return { title: String(x['명단 제목']), label: bareTitle_(x['명단 제목']) }; });
@@ -2077,10 +2081,11 @@ const TOOLS_HTML = String.raw`
   <p class="hint">계정, 전화번호, 주소가 먼저 낸 사람과 같은 응답이에요. 체크된 걸 지우면 폼과 명단 시트에서 같이 지워져요.</p>
   <div id="dups"></div>
   <button id="b2">체크한 것 지우기</button></div>
-<div class="card" id="card4"><h2>④ 내일 추가 모집</h2>
+<div class="card" id="card4"><h2 id="h4">④ 다음 날 추가 모집</h2>
+  <p class="hint">위에서 고른 진행에서 취소·안 산 사람만큼 <b>그 진행 다음 날</b>에 더 받아요. 그날 진행이 이미 있으면 새로 안 만들고 그 진행 인원을 늘려요.</p>
   <p class="hint" id="short"></p>
   <input id="n" type="number" min="1" placeholder="인원">
-  <button id="b3">내일 추가 모집 만들기</button></div>
+  <button id="b3">다음 날 추가 모집 만들기</button></div>
 <div class="card" id="card5"><h2>잘못 넣었을 때</h2>
   <button id="b4" style="background:#fff;color:#5b2a86;border:1px solid #5b2a86">이 진행 배정 비우기</button>
   <button id="b5" style="background:#fff;color:#a3271b;border:1px solid #a3271b">이 진행 지우기 (응답 0명일 때만)</button></div>
@@ -2088,7 +2093,7 @@ const TOOLS_HTML = String.raw`
 // 화면에 처음부터 서버가 채운 내용(INIT)을 보여 줌 → 서버를 기다리느라 버튼이 막히는 일 없음
 //  휴대폰·웹(MODE web): 버튼을 누르면 페이지가 그대로 새로 열리며 처리 (google.script.run을 안 씀. 아이폰 사파리 등에서 응답이 안 오는 문제 피함)
 //  시트 옆 사이드바(MODE side): google.script.run
-var K = __K__, INIT = __INIT__, MODE = __MODE__, EXEC = __EXEC__, $ = function (i) { return document.getElementById(i); }, running = false, tick = null, manual = !!(INIT && INIT.manual);
+var K = __K__, INIT = __INIT__, MODE = __MODE__, EXEC = __EXEC__, $ = function (i) { return document.getElementById(i); }, running = false, tick = null, manual = !!(INIT && INIT.manual), NEXTMD = '';
 function say(t) { $('msg').style.display = t ? 'block' : 'none'; $('msg').textContent = t || ''; if (t) $('msg').scrollIntoView({ block: 'nearest' }); }
 function busy(on, label) {
   running = on;
@@ -2182,6 +2187,8 @@ function show(o) {
   $('short').textContent = sum ? '모자란 인원 (안 산 계정 + 취소): ' + ks.map(function (k) { return k + ' ' + sh[k]; }).join(', ') + ' → 합 ' + sum + '명. 공지 옵션 인원도 이대로 들어가요.'
     : '지금 ' + (o.count || 0) + '/' + (o.target || 0) + '명' + (left ? ' (' + left + '명 모자람)' : '') + '. 공지를 넣어 두면 옵션별로 계산해요.';
   $('n').value = sum || left || '';
+  NEXTMD = o.nextMd || '';
+  if (o.nextMd) { $('h4').textContent = '④ ' + o.nextMd + ' 추가 모집 (이 진행 다음 날)'; $('b3').textContent = o.nextMd + ' 추가 모집 만들기'; }
 }
 $('run').onchange = function () { say(''); manual = true; go({ act: 'info', manual: true }); };
 $('b1').onclick = function () { var t = $('txt').value.trim(); if (!t) return say('공지를 붙여넣어 주세요.'); go({ act: 'assign', text: slim(t), title: $('run').value, manual: manual && !!$('run').value }, '저장 중이에요…'); };
@@ -2190,7 +2197,7 @@ $('b2').onclick = function () {
   if (!t.length) return say('지울 걸 체크해 주세요.');
   twice($('b2'), t.length + '개 지워요', function () { go({ act: 'delete', times: t }, '지우는 중…'); });
 };
-$('b3').onclick = function () { var n = Number($('n').value); if (!n) return say('인원을 적어 주세요.'); twice($('b3'), '다음 날 ' + n + '명 만들어요', function () { go({ act: 'more', n: n }, '만드는 중…'); }); };
+$('b3').onclick = function () { var n = Number($('n').value); if (!n) return say('인원을 적어 주세요.'); twice($('b3'), (NEXTMD || '다음 날') + ' ' + n + '명 만들어요', function () { go({ act: 'more', n: n }, '만드는 중…'); }); };
 $('b4').onclick = function () { twice($('b4'), '배정 비워요', function () { go({ act: 'unassign' }, '비우는 중…'); }); };
 $('b5').onclick = function () { twice($('b5'), '이 진행 지워요', function () { go({ act: 'remove' }, '지우는 중…'); }); };
 show(INIT || {});
