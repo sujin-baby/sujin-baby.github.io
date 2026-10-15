@@ -1308,10 +1308,7 @@ function closeIdleForms_(runs) {
   Object.keys(forms).forEach(function (fid) {
     const active = forms[fid].some(function (r) {
       const w = windowOf_(runs, r);
-      if (!(now >= w.from && now < w.to) || r['마감 시각']) return false;
-      // 같은 캠페인의 더 늦은 진행이 이미 시작했으면 이 진행은 끝난 것 (명단 시트가 달라도)
-      const k = campKey_(r['캠페인'] || r['명단 제목']);
-      return !runs.some(function (x) { return x !== r && x['진행일'] instanceof Date && r['진행일'] instanceof Date && x['진행일'] > r['진행일'] && dayStart_(x['진행일']) <= now && campKey_(x['캠페인'] || x['명단 제목']) === k; });
+      return now >= w.from && !r['마감 시각'] && !runOver_(runs, r, now);
     });
     if (active) return;
     try {
@@ -1320,6 +1317,15 @@ function closeIdleForms_(runs) {
       if (f.isAcceptingResponses()) { f.setAcceptingResponses(false); note_('✓ 폼 닫음: ' + bareTitle_(forms[fid][0]['명단 제목']) + (next ? ' (' + Utilities.formatDate(next['진행일'], CONFIG.TIMEZONE, 'M/d') + ' 0시에 다시 열림)' : '')); }
     } catch (e) { note_('폼 닫기 실패 ' + bareTitle_(forms[fid][0]['명단 제목']) + ': ' + e.message); }
   });
+}
+
+// 받는 기간이 끝난 진행: 같은 명단 다음 진행일 0시가 지났거나, 같은 캠페인의 더 늦은 진행이 이미 시작함 (명단 시트가 달라도)
+function runOver_(runs, r, now) {
+  now = now || Date.now();
+  if (now >= windowOf_(runs, r).to) return true;
+  if (!(r['진행일'] instanceof Date)) return false;
+  const k = campKey_(r['캠페인'] || r['명단 제목']);
+  return runs.some(function (x) { return x !== r && x['진행일'] instanceof Date && x['진행일'] > r['진행일'] && dayStart_(x['진행일']) <= now && campKey_(x['캠페인'] || x['명단 제목']) === k; });
 }
 
 function checkFullInner_() {
@@ -1350,6 +1356,8 @@ function checkFullInner_() {
   try { ensureSubmitTriggers_(runs); } catch (e) { note_('응답 트리거 실패: ' + e); }
   runs.forEach(function (r) {
     if (r['진행 상태'] === '종료' || !r['폼ID']) return;
+    // 어제 이전에 끝난 진행은 15분마다 안 봄 (폼을 열 때마다 느리고 구글 쪽 시간 초과가 남. 인원은 매일 9시 현황 업데이트가 다시 셈)
+    if (r['진행일'] instanceof Date && r['진행일'] < today_() && runOver_(runs, r)) return;
     // 진행 하나에서 오류가 나도 다른 진행은 계속 (오류는 한눈에 탭 '확인 필요' 칸에 보임)
     try { checkRun_(r); } catch (e) { errs[r['명단 제목']] = String(e.message || e).slice(0, 120); note_('진행 확인 실패 ' + r['명단 제목'] + ': ' + e); }
   });
