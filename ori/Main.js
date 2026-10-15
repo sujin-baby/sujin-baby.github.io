@@ -1257,6 +1257,7 @@ function checkFullInner_() {
   try { fruitCheck_(runs); } catch (e) { note_('안 산 사람 확인 실패: ' + e); }
   try { takbaeCheck_(runs); } catch (e) { note_('택배시트 알림 실패: ' + e); }
   try { fixOct16Once_(); } catch (e) { note_('10.16 정리 실패: ' + e); }
+  try { fixNamesOnce_(); } catch (e) { note_('공지 이름 정리 실패: ' + e); }
   try { refreshAssignFormulasOnce_(runs); } catch (e) { note_('배정 수식 갱신 실패: ' + e); }
   try { tidyOutbox_(); } catch (e) { note_('보낼메시지 정리 실패: ' + e); }
   const errs = {}, listed = {};
@@ -1614,6 +1615,25 @@ function fixOct16Once_() {
   form.setDescription(notice);
   const ob = outboxSheet_(), last = ob.getLastRow(), room = String(r16['카톡방'] || bareTitle_(r16['명단 제목']));
   if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) { if (String(v[3]) === room && v[2] === '방 공지' && v[5] !== '보냄') ob.getRange(i + 2, 5).setValue(notice); });
+}
+
+// (한 번만) 이미 만든 추가 모집·다음 날 진행 공지에서 어제 이름 줄 지우기: 보낼메시지(보내기 전)와 폼 설명
+function fixNamesOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FIX_NAMES_V1')) return;
+  props.setProperty('FIX_NAMES_V1', '1');
+  const runs = readRuns_().filter(function (r) { return /^(add|next)-/.test(String(r['요청ID'])) && r['진행 상태'] !== '종료'; });
+  const rooms = {};
+  runs.forEach(function (r) {
+    rooms[String(r['카톡방'] || bareTitle_(r['명단 제목']))] = 1;
+    if (r['진행일'] instanceof Date && r['진행일'] > new Date()) {
+      try { const f = FormApp.openById(r['폼ID']); const d = f.getDescription() || '', nd = stripTrailingNames_(d); if (nd !== d) f.setDescription(nd); } catch (e) {}
+    }
+  });
+  const ob = outboxSheet_(), last = ob.getLastRow();
+  if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) {
+    if (v[2] === '방 공지' && v[5] !== '보냄' && rooms[String(v[3])]) { const nm = stripTrailingNames_(String(v[4])); if (nm !== String(v[4])) ob.getRange(i + 2, 5).setValue(nm); }
+  });
 }
 
 // 붙여넣은 공지가 이 진행 공지와 같은 상품인지 (폼 링크나 판매처·상품 이름으로)
@@ -2115,7 +2135,7 @@ function addMoreRun_(r, n, opt) {
   const sum = Object.keys(short).reduce(function (a, o) { return a + short[o]; }, 0);
   const desc = String(form.getDescription() || '');
   // 새로 모집하는 공지라 옵션 줄 뒤의 이름(어제 사람)은 지움
-  const notice = sum ? noticeForMore_(desc, short) : desc.split('\n').map(function (l) { return l.replace(/(\(\s*\d*\s*명\s*\)|\d+\s*명).*$/, '(  명)'); }).join('\n');
+  const notice = stripTrailingNames_(sum ? noticeForMore_(desc, short) : desc.split('\n').map(function (l) { return l.replace(/(\(\s*\d*\s*명\s*\)|\d+\s*명).*$/, '(  명)'); }).join('\n'));
   if (sum && !n) n = sum;
   let res;
   locked_(function () {
@@ -2159,6 +2179,25 @@ function addMoreRun_(r, n, opt) {
   ].join('\n'));
   const what = sum ? Object.keys(short).map(function (o) { return o + ' ' + short[o]; }).join(', ') : '옵션 인원은 공지에서 채워 주세요';
   return md + ' 추가 ' + n + '명 진행을 만들었어요: ' + room + ' (' + what + ')' + (sum && sum !== n ? ' ※ 적은 수(' + n + ')와 배정으로 센 수(' + sum + ')가 달라요' : '') + '. 공지는 보낼 메시지함과 메일에 있어요. 폼은 ' + md + ' 0시에 열려요.';
+}
+
+// 공지 끝(가이드마다 맨 아래)에 이름만 적은 줄 지우기 (예: '정진아 이혜미2 신선영 / 이강희2 임수진') → 새로 모집하는 공지에 어제 사람이 안 들어가게
+function stripTrailingNames_(text) {
+  const nameTok = /^@?[A-Za-z가-힣][^\s\d:!?~]{0,11}\d?$/;
+  const isNames = function (l) {
+    const t = l.trim();
+    if (!t || /http|🐥|★|☆|▶|※|[:!?]|\d\s*원|구매|리뷰|링크|가격|배송|검색|사업자|입금|참고|안내|폼/.test(t)) return false;
+    const toks = t.split(/[\s,]+/).filter(Boolean);
+    return toks.length <= 12 && toks.every(function (x) { return nameTok.test(x) || /^[2-9]$/.test(x) || /^[^\s]+\(\s*취소\s*\)$/.test(x); });
+  };
+  return String(text || '').split(/(\n\s*-{5,}\s*\n)/).map(function (part, i) {
+    if (i % 2) return part;
+    const lines = part.split('\n');
+    let end = lines.length;
+    while (end > 0 && (!lines[end - 1].trim() || isNames(lines[end - 1]))) end--;
+    // 지운 게 이름 줄일 때만 (빈 줄만 있으면 그대로)
+    return lines.slice(0, end).some(function () { return true; }) && lines.slice(end).some(isNames) ? lines.slice(0, end).join('\n') : part;
+  }).join('');
 }
 
 // 추가 모집 공지: 옵션 인원을 모자란 수로 바꾸고 이름은 지움. 0명인 옵션 줄(바로 아래 가격 줄도), 0명인 가이드는 뺌
