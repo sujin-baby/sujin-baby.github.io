@@ -510,6 +510,9 @@ function createRun(d) {
   if (!d || d.k !== CONFIG.KEY) throw new Error('권한이 없어요. 생성기 버튼이나 시트 메뉴로 열어 주세요.');
   // 진행 도우미 페이지의 버튼도 이 이름으로 받음 (로더에 이미 있는 이름이라 붙여넣기 없이 됨)
   //  보기·공지 저장은 진행목록 줄을 안 바꿔서 15분 확인이 돌고 있어도 바로 (기다리면 버튼이 안 눌리는 것처럼 보임)
+  // 예전에 열어 둔 진행 도우미 화면(동작이 다름)에서 누른 건 하지 않고 다시 열라고 알림
+  if (d.act && !/^(info|sent)$/.test(d.act) && String(d.pv || '') !== TOOLS_PV)
+    return Object.assign(toolAction_({ act: 'info', title: d.title }), { msg: '⚠ 진행 도우미 화면이 예전 것이에요. 저장 안 했어요.\n창을 닫고 다시 열어 주세요 (시트 옆이면 X 누르고 한눈에 체크칸 다시, 휴대폰이면 새로고침).' });
   if (d.act && /^(info|sent|assign|unassign|move)$/.test(d.act)) return toolAction_(d);
   if (d.act) return locked_(function () { return toolAction_(d); }, 30000) || { msg: '다른 작업 중이에요. 잠시 뒤 다시 눌러 주세요.' };
   return locked_(function () {
@@ -1380,6 +1383,7 @@ function checkFullInner_() {
   try { fixTaOnce_(); } catch (e) { note_('배정 (타) 정리 실패: ' + e); }
   try { fixGogumaAssignOnce_(); } catch (e) { note_('고구마말랭이 배정 옮기기 실패: ' + e); }
   try { reloadEditTabOnce_(); } catch (e) { note_('폼수정 탭 다시 불러오기 실패: ' + e); }
+  try { fixModuAssignOnce_(); } catch (e) { note_('모두의농수산 배정 옮기기 실패: ' + e); }
   try { ensureListMsgs_(runs); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   const errs = {}, listed = {};
   step_('폼 인원');
@@ -1721,9 +1725,10 @@ function showToolsSidebar_() {
 }
 
 // 진행 도우미 페이지: 서버가 내용을 채워서 보냄 (페이지가 서버 응답을 기다리지 않게)
+const TOOLS_PV = '3';   // 진행 도우미 화면 버전. 화면 동작을 바꾸면 올림 → 예전에 열어 둔 화면은 저장을 막고 다시 열라고 알림
 function toolsPage_(o, mode) {
   const j = function (x) { return JSON.stringify(x).replace(/</g, '\\u003c'); };
-  const html = TOOLS_HTML.replace('__K__', function () { return j(CONFIG.KEY); }).replace('__INIT__', function () { return j(o || {}); })
+  const html = TOOLS_HTML.replace('__K__', function () { return j(CONFIG.KEY); }).replace('__INIT__', function () { return j(o || {}); }).replace('__PV__', function () { return j(TOOLS_PV); })
     .replace('__MODE__', function () { return j(mode); }).replace('__EXEC__', function () { return j(CONFIG.WEBAPP_URL || ''); });
   return HtmlService.createHtmlOutput(html).setTitle('진행 도우미').addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
@@ -1731,7 +1736,7 @@ function toolsPage_(o, mode) {
 // 웹(휴대폰)에서 버튼을 누르면 이 주소로 다시 열림: ?p=tools&a=동작&t=진행&x=공지&n=인원&ts=시각들&nc=한 번만 표시
 function toolsRequest_(p) {
   const d = { k: CONFIG.KEY, act: String(p.a || 'info'), title: String(p.t || ''), text: String(p.x || ''), n: Number(p.n) || 0,
-    times: p.ts ? String(p.ts).split(',').filter(Boolean) : [], to: String(p.to || ''), manual: p.m === '1' };
+    times: p.ts ? String(p.ts).split(',').filter(Boolean) : [], to: String(p.to || ''), pv: String(p.pv || '') };
   if (d.act !== 'info' && p.nc) {
     // 새로고침해도 같은 버튼이 두 번 실행되지 않게 (최근 30개 기억)
     const props = PropertiesService.getScriptProperties();
@@ -1743,7 +1748,6 @@ function toolsRequest_(p) {
   try {
     let o = createRun(d);
     if (o && o.saved) o = Object.assign(toolAction_({ act: 'info', title: o.title }), { msg: o.msg });
-    if (o && d.act === 'info' && d.manual) o.manual = true;   // 직접 고른 진행 → 다음 저장은 이 진행으로
     return o;
   } catch (e) {
     let o = {};
@@ -1767,10 +1771,11 @@ function toolAction_(d) {
     const found = findRunByNotice_(list, String(d.text));
     // 직접 고른 진행이 있고 같은 의뢰면 그걸로 (자동으로 찾은 것보다 우선)
     const same = function (a, b) { return a && b && campKey_(a['캠페인'] || a['명단 제목']) === campKey_(b['캠페인'] || b['명단 제목']); };
-    if (d.manual && r && (same(r, found.run) || (!found.run && noticeMatches_(r, d.text)))) { /* 고른 진행 그대로 */ }
-    else if (found.run) r = found.run;
+    let note = '';
+    if (r && (same(r, found.run) || (!found.run && noticeMatches_(r, d.text)))) { /* 고른 진행 그대로 */ }
+    else if (found.run) { if (r) note = '⚠ 고른 진행(' + bareTitle_(r['명단 제목']) + ')과 공지 상품이 달라서 공지에 맞는 진행으로 저장했어요.\n'; r = found.run; }
     else if (!r || !noticeMatches_(r, d.text)) { out.msg = found.msg || '⚠ 이 공지가 어느 진행 건지 못 찾았어요. (저장 안 함)'; return out; }
-    out.msg = assignRun_(r, String(d.text));
+    out.msg = note + assignRun_(r, String(d.text));
     // 저장은 여기서 끝. 중복·모자란 인원은 화면이 바로 이어서 따로 불러옴 (저장 결과가 빨리 보이게)
     out.title = String(r['명단 제목']); out.saved = true;
     return out;
@@ -1839,7 +1844,10 @@ function pickRunForNotice_(list, c, text) {
   let names = [];
   try { names = parseAssign_(text, []).map(function (x) { return norm(x[0]); }).filter(Boolean); } catch (e) {}
   const day = function (x) { return x['진행일'] instanceof Date ? x['진행일'].getTime() : 0; };
-  const asc = c.slice().sort(function (a, b) { return day(a) - day(b); });
+  const all = c.slice().sort(function (a, b) { return day(a) - day(b); });
+  // 이미 끝난 날은 빼고 봄 (같은 사람이 예전 날에도 참여했으면 그날로 잘못 가지 않게). 다 끝났으면 전부에서
+  const live = all.filter(function (r) { return !runOver_(list, r); });
+  const asc = live.length ? live : all;
   if (names.length) {
     let best = null, bestN = 0;
     asc.forEach(function (r) {
@@ -1857,8 +1865,7 @@ function pickRunForNotice_(list, c, text) {
     });
     if (best) return best;
   }
-  const open = asc.filter(function (r) { return !runOver_(list, r); });
-  return open.filter(function (r) { return !r['마감 시각']; })[0] || open[0] || asc[asc.length - 1];
+  return live.filter(function (r) { return !r['마감 시각']; })[0] || live[0] || all[all.length - 1];
 }
 
 // 배정을 다른 날 진행으로 옮기기 (공지를 엉뚱한 날에 저장했을 때)
@@ -1896,6 +1903,21 @@ function fixGogumaAssignOnce_() {
   const v = last >= 2 ? sh.getRange(2, 1, last - 1, 2).getValues() : [];
   const has = function (r) { return v.some(function (x) { return String(x[0]) === String(r['명단 제목']) && String(x[1]).trim(); }); };
   if (has(r14) && !has(r16)) note_('✓ ' + moveAssign_(r14, r16));
+}
+
+// (한 번만, 10/15) 10.16 모두의농수산 공지(김민재, 김동환, 강지연)가 10.14 진행에 저장된 것을 10.16으로
+function fixModuAssignOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FIX_MODU_1016_V1')) return;
+  props.setProperty('FIX_MODU_1016_V1', '1');
+  const runs = readRuns_();
+  const r14 = runs.filter(function (r) { return dateTok_(r['명단 제목']) === '10.14' && /모두의농수산/.test(String(r['명단 제목'])); })[0];
+  const r16 = runs.filter(function (r) { return dateTok_(r['명단 제목']) === '10.16' && /모두의농수산/.test(String(r['명단 제목'])); })[0];
+  if (!r14 || !r16) return;
+  const sh = assignSheet_(), last = sh.getLastRow();
+  const v = last >= 2 ? sh.getRange(2, 1, last - 1, 2).getValues() : [];
+  const mine = v.filter(function (x) { return String(x[0]) === String(r14['명단 제목']) && String(x[1]).trim(); }).map(function (x) { return String(x[1]).trim(); });
+  if (mine.length && mine.every(function (n) { return ['김민재', '김동환', '강지연'].indexOf(n) >= 0; })) note_('✓ ' + moveAssign_(r14, r16));
 }
 
 // (한 번만) 폼수정 탭을 지금 고른 진행으로 다시 불러옴 (모든 폼 응답을 보여 주게 바뀐 뒤 B1을 안 바꿔도 보이게)
@@ -2068,21 +2090,23 @@ const TOOLS_HTML = String.raw`
 <div class="card"><h2>① 카톡에 보낼 것</h2>
   <p class="hint">[복사]를 누르면 보낸 걸로 표시돼요. 카톡 방에 붙여넣고 보내기는 직접 눌러 주세요.</p>
   <div id="ob"></div></div>
-<div class="card"><h2>② 이름 다 모이면: 카톡 공지 붙여넣기</h2>
-  <p class="hint">이름 적힌 카톡 공지를 통째로 붙여넣고 저장만 누르면 돼요. 어느 날 진행인지는 폼 링크와 신청한 닉네임으로 알아서 찾아요. 틀리면 맨 위에 옮기기 버튼이 나와요.</p>
-  <textarea id="txt" placeholder="여기에 공지 붙여넣기"></textarea>
-  <button id="b1">저장</button></div>
-<div class="card" style="background:#faf8fd"><h2>아래 ③ ④ 를 볼 진행</h2>
-<p class="hint">공지를 저장하면 그 진행으로 저절로 바뀌어요. 다른 진행의 중복·추가 모집을 보고 싶을 때만 바꾸세요.</p>
-<select id="run"></select>
-<p class="hint" id="pick" style="margin-top:6px"></p>
-<p class="hint" id="asg"></p></div>
-<div class="card" id="card3"><h2>③ 중복</h2>
+<div class="card"><h2>② 카톡 공지 저장 (누가 어떤 옵션 샀는지)</h2>
+  <p class="hint"><b>순서</b><br>
+  1. 아래 칸에서 <b>이 공지가 어느 진행인지</b> 고르세요. 카톡방 이름(방제)과 같은 걸 고르면 돼요. 예) 10.16 모두의농수산 방 공지 → "#택10.16 모두의농수산…"<br>
+  &nbsp;&nbsp;&nbsp;잘 모르겠으면 "자동으로 찾기"로 두세요 (폼 링크·날짜로 찾아요).<br>
+  2. 카톡방에서 이름까지 다 적힌 공지를 통째로 복사해서 붙여넣기<br>
+  3. 저장 → 맨 위 초록 칸에 <b>어느 진행에 누가 저장됐는지</b> 나와요. 틀렸으면 빨간 칸의 "옮기기"를 두 번 누르면 돼요.</p>
+  <select id="run"></select>
+  <p class="hint" id="asg" style="margin-top:6px"></p>
+  <textarea id="txt" placeholder="여기에 카톡 공지 붙여넣기" style="margin-top:6px"></textarea>
+  <button id="b1">이 진행에 저장</button></div>
+<p class="hint" id="pick" style="margin:0 4px"></p>
+<div class="card" id="card3"><h2>③ 중복 (②에서 고른 진행)</h2>
   <p class="hint">계정, 전화번호, 주소가 먼저 낸 사람과 같은 응답이에요. 체크된 걸 지우면 폼과 명단 시트에서 같이 지워져요.</p>
   <div id="dups"></div>
   <button id="b2">체크한 것 지우기</button></div>
 <div class="card" id="card4"><h2 id="h4">④ 다음 날 추가 모집</h2>
-  <p class="hint">위에서 고른 진행에서 취소·안 산 사람만큼 <b>그 진행 다음 날</b>에 더 받아요. 그날 진행이 이미 있으면 새로 안 만들고 그 진행 인원을 늘려요.</p>
+  <p class="hint">②에서 고른 진행에서 취소·안 산 사람만큼 <b>그 진행 다음 날</b>에 더 받아요. 그날 진행이 이미 있으면 새로 안 만들고 그 진행 인원을 늘려요. 공지를 올리는 지금 단계에서는 누를 필요 없어요.</p>
   <p class="hint" id="short"></p>
   <input id="n" type="number" min="1" placeholder="인원">
   <button id="b3">다음 날 추가 모집 만들기</button></div>
@@ -2093,7 +2117,7 @@ const TOOLS_HTML = String.raw`
 // 화면에 처음부터 서버가 채운 내용(INIT)을 보여 줌 → 서버를 기다리느라 버튼이 막히는 일 없음
 //  휴대폰·웹(MODE web): 버튼을 누르면 페이지가 그대로 새로 열리며 처리 (google.script.run을 안 씀. 아이폰 사파리 등에서 응답이 안 오는 문제 피함)
 //  시트 옆 사이드바(MODE side): google.script.run
-var K = __K__, INIT = __INIT__, MODE = __MODE__, EXEC = __EXEC__, $ = function (i) { return document.getElementById(i); }, running = false, tick = null, manual = !!(INIT && INIT.manual), NEXTMD = '';
+var K = __K__, INIT = __INIT__, MODE = __MODE__, EXEC = __EXEC__, PV = __PV__, $ = function (i) { return document.getElementById(i); }, running = false, tick = null, NEXTMD = '', JUST = false;
 function say(t) { $('msg').style.display = t ? 'block' : 'none'; $('msg').textContent = t || ''; if (t) $('msg').scrollIntoView({ block: 'nearest' }); }
 function busy(on, label) {
   running = on;
@@ -2120,14 +2144,15 @@ function go(d, label) {
     busy(true, label || '불러오는 중…');
     var f = document.createElement('form'); f.method = 'get'; f.action = EXEC; f.target = '_top';
     var add = function (k, v) { var i = document.createElement('input'); i.type = 'hidden'; i.name = k; i.value = v; f.appendChild(i); };
-    add('p', 'tools'); add('k', K); add('a', d.act); add('t', d.title || ''); add('nc', String(Date.now()));
-    if (d.text) add('x', d.text); if (d.n) add('n', d.n); if (d.times) add('ts', d.times.join(',')); if (d.to) add('to', d.to); if (d.manual) add('m', '1');
+    add('p', 'tools'); add('k', K); add('a', d.act); add('t', d.title || ''); add('nc', String(Date.now())); add('pv', PV);
+    if (d.text) add('x', d.text); if (d.n) add('n', d.n); if (d.times) add('ts', d.times.join(',')); if (d.to) add('to', d.to);
     document.body.appendChild(f); f.submit(); return;
   }
   busy(true, label || (d.act === 'info' ? '' : '처리 중이에요…'));
-  d.k = K;
-  if (d.act !== 'info') manual = false;
+  d.k = K; d.pv = PV;
+  if (d.act !== 'info') JUST = false;
   google.script.run.withSuccessHandler(function (o) {
+    if (o && o.saved) JUST = true;
     busy(false); show(o || {});
     if (!(o && o.msg) && label && /불러오는 중…$/.test(label)) say(label.replace(/\n\n중복·인원 불러오는 중…$/, ''));
     if (o && o.saved) go({ act: 'info', title: o.title }, (o.msg || '저장했어요.') + '\n\n중복·인원 불러오는 중…');
@@ -2156,7 +2181,7 @@ function outbox(list) {
 function show(o) {
   if (o.outbox) outbox(o.outbox);
   // 방금 저장·옮기기 했으면 같은 의뢰 다른 날로 옮기는 버튼
-  var alts = (o.msg && /저장했어요|옮겼어요/.test(o.msg)) ? (o.alts || []) : [];
+  var alts = ((o.msg && /저장했어요|옮겼어요/.test(o.msg)) || JUST) ? (o.alts || []) : [];
   $('altcard').style.display = alts.length ? '' : 'none';
   var ab = $('alts'); ab.innerHTML = '';
   alts.forEach(function (a) {
@@ -2165,10 +2190,10 @@ function show(o) {
     b.onclick = function () { twice(b, a.label + ' 로 옮겨요', function () { go({ act: 'move', title: o.title, to: a.title }, '옮기는 중…'); }); };
     ab.appendChild(b);
   });
-  var sel = $('run'); sel.innerHTML = '<option value="">▼ 진행을 고르세요</option>';
+  var sel = $('run'); sel.innerHTML = '<option value="">자동으로 찾기 (모르면 이대로)</option>';
   (o.runs || []).forEach(function (r) { var op = document.createElement('option'); op.value = r.title; op.textContent = r.label; sel.appendChild(op); });
   if (o.title) sel.value = o.title;
-  $('pick').textContent = sel.value ? '' : '공지를 저장하면 그 진행이 저절로 골라져요. 중복·추가 모집만 볼 땐 여기서 고르세요.';
+  $('pick').textContent = sel.value ? '' : '③ 중복, ④ 추가 모집은 ②에서 진행을 고르면 나와요.';
   if (o.msg) say(o.msg);
   ['card3','card4','card5'].forEach(function (c) { $(c).style.display = sel.value ? '' : 'none'; });
   if (!sel.value) { $('asg').textContent = ''; return; }
@@ -2190,8 +2215,8 @@ function show(o) {
   NEXTMD = o.nextMd || '';
   if (o.nextMd) { $('h4').textContent = '④ ' + o.nextMd + ' 추가 모집 (이 진행 다음 날)'; $('b3').textContent = o.nextMd + ' 추가 모집 만들기'; }
 }
-$('run').onchange = function () { say(''); manual = true; go({ act: 'info', manual: true }); };
-$('b1').onclick = function () { var t = $('txt').value.trim(); if (!t) return say('공지를 붙여넣어 주세요.'); go({ act: 'assign', text: slim(t), title: $('run').value, manual: manual && !!$('run').value }, '저장 중이에요…'); };
+$('run').onchange = function () { say(''); go({ act: 'info' }); };
+$('b1').onclick = function () { var t = $('txt').value.trim(); if (!t) return say('공지를 붙여넣어 주세요.'); go({ act: 'assign', text: slim(t), title: $('run').value }, '저장 중이에요…'); };
 $('b2').onclick = function () {
   var t = [].slice.call(document.querySelectorAll('#dups input:checked')).map(function (x) { return x.value; });
   if (!t.length) return say('지울 걸 체크해 주세요.');
