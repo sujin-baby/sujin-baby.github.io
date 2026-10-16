@@ -524,6 +524,7 @@ function doGet(e) {
   if (p.k !== CONFIG.KEY) return HtmlService.createHtmlOutput('링크가 올바르지 않아요. 체험단 가이드 생성기의 버튼으로 열어 주세요.');
   if (p.p === 'queue') return ContentService.createTextOutput(queueText_());
   if (p.p === 'sent') { markMsg_(p.id, p.st === 'fail' ? '방 못 찾음' : '보냄'); return ContentService.createTextOutput('ok'); }
+  if (p.p === 'rank') return rankPage_(p);
   if (p.p === 'tools') {
     try { ensureCheckTrigger_(); } catch (e) {}
     return toolsPage_(toolsRequest_(p), 'web');
@@ -1857,6 +1858,84 @@ function toolsRequest_(p) {
     try { o = toolAction_({ act: 'info', title: d.title }); } catch (e2) {}
     return Object.assign(o, { msg: '오류: ' + (e && e.message || e) + '\n(캡처해서 보내 주세요)' });
   }
+}
+
+/* ---------------- 네이버 쇼핑 순위 (네이버 공식 쇼핑 검색 API) ----------------
+   생성기 '네이버 위치 자동 확인' → 웹앱 ?p=rank&kw=대표|서브…&pid=상품번호&nm=상품명&st=스토어&pr=가격
+   대표 키워드 → 대표 키워드 + 가격 필터(±10%) → 서브 키워드 순서로, 키워드마다 네이버 쇼핑 정확도순 1~200위(PC 5페이지 = 40개씩)에서 찾음
+   API 순위는 광고를 뺀 순위라 실제 화면과 조금 다를 수 있음. 키(Client ID/Secret)는 처음 열 때 이 페이지에서 한 번 넣으면 스크립트 속성에 저장 */
+function naverKeys_() {
+  const p = PropertiesService.getScriptProperties();
+  return { id: p.getProperty('NAVER_ID') || CONFIG.NAVER_CLIENT_ID || '', secret: p.getProperty('NAVER_SECRET') || CONFIG.NAVER_CLIENT_SECRET || '' };
+}
+function naverShop_(q, start) {
+  const k = naverKeys_();
+  const r = UrlFetchApp.fetch('https://openapi.naver.com/v1/search/shop.json?query=' + encodeURIComponent(q) + '&display=100&start=' + start + '&sort=sim',
+    { headers: { 'X-Naver-Client-Id': k.id, 'X-Naver-Client-Secret': k.secret }, muteHttpExceptions: true });
+  const code = r.getResponseCode();
+  if (code === 401) throw new Error('네이버 API 키가 맞지 않아요 (401). 아래에서 키를 다시 넣어 주세요.');
+  if (code !== 200) throw new Error('네이버 API 오류 ' + code + ': ' + r.getContentText().slice(0, 150));
+  return JSON.parse(r.getContentText()).items || [];
+}
+function naverRank_(o) {
+  const norm = function (t) { return String(t || '').replace(/<[^>]+>/g, '').replace(/[\s\[\]\(\)\/,.·\-_+~!*'"]/g, '').toLowerCase(); };
+  const nmK = norm(o.nm).slice(0, 12), stK = norm(o.st), pr = Number(o.pr) || 0;
+  const lo = pr ? Math.floor(pr * 0.9 / 100) * 100 : 0, hi = pr ? Math.ceil(pr * 1.1 / 100) * 100 : 0;
+  // 1) 상품번호(스마트스토어 주소) 2) 상품명 앞부분 + 스토어 3) 상품명 앞부분 (가격비교 묶음 등)
+  const find = function (items) {
+    let best = null;
+    items.forEach(function (it, i) {
+      const t = norm(it.title), m = norm(it.mallName);
+      const how = o.pid && String(it.link || '').indexOf(o.pid) !== -1 ? '상품번호' : (nmK && t.indexOf(nmK) !== -1 ? (stK && m === stK ? '상품명+스토어' : '상품명') : '');
+      const rank = { '상품번호': 3, '상품명+스토어': 2, '상품명': 1 }[how] || 0;
+      if (rank && (!best || rank > best.r)) best = { i: i, r: rank, how: how };
+    });
+    return best;
+  };
+  const steps = [], log = [];
+  if (o.kws.length) steps.push([o.kws[0], false, '① 대표']);
+  if (o.kws.length && pr) steps.push([o.kws[0], true, '② 가격필터']);
+  o.kws.slice(1).forEach(function (k) { steps.push([k, false, '③ 서브']); });
+  const cache = {};
+  for (let s = 0; s < steps.length; s++) {
+    const k = steps[s][0], f = steps[s][1], lab = steps[s][2];
+    if (!cache[k]) cache[k] = naverShop_(k, 1).concat(naverShop_(k, 101));
+    const items = f ? cache[k].filter(function (it) { const v = Number(it.lprice) || 0; return v >= lo && v <= hi; }) : cache[k];
+    const b = find(items);
+    if (b) return { page: Math.floor(b.i / 40) + 1, rank: b.i + 1, kw: k, filter: f ? '가격 ' + lo.toLocaleString('ko-KR') + '~' + hi.toLocaleString('ko-KR') + '원' : '', how: b.how, step: lab, log: log };
+    log.push(lab + " '" + k + "' " + items.length + '개 중 없음');
+  }
+  return { page: 0, log: log };
+}
+function rankPage_(p) {
+  const props = PropertiesService.getScriptProperties();
+  let msg = '';
+  if (p.nid && p.nsecret) { props.setProperty('NAVER_ID', String(p.nid).trim()); props.setProperty('NAVER_SECRET', String(p.nsecret).trim()); msg = '✔ 키를 저장했어요.'; }
+  const o = { kws: String(p.kw || '').split('|').map(function (x) { return x.trim(); }).filter(Boolean), pid: String(p.pid || '').replace(/\D/g, ''), nm: String(p.nm || ''), st: String(p.st || ''), pr: String(p.pr || '') };
+  const keys = naverKeys_();
+  let out = '', err = '', r = null;
+  if (keys.id && keys.secret && o.kws.length) {
+    try { r = naverRank_(o); } catch (e) { err = String(e.message || e); }
+    if (r && r.page) out = ['찾은 페이지 : ' + r.page + '페이지', '찾은 기기 : PC', '찾은 키워드 : ' + r.kw, r.filter ? '필터 : ' + r.filter : '',
+      '확인 : 네이버 쇼핑 API ' + r.rank + '위 (' + r.step + ', ' + r.how + '로 찾음, 광고 뺀 순위)'].filter(Boolean).join('\n');
+    else if (r) out = ['찾은 페이지 : 못 찾음', '찾은 기기 : PC', '확인한 것 : ' + r.log.join(' / ')].join('\n');
+  }
+  const esc = function (t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); };
+  const hidden = ['k', 'kw', 'pid', 'nm', 'st', 'pr'].map(function (n) { return '<input type="hidden" name="' + n + '" value="' + esc(p[n] || '') + '">'; }).join('') + '<input type="hidden" name="p" value="rank">';
+  const keyForm = '<form method="get" action="' + esc(CONFIG.WEBAPP_URL || '') + '" target="_top">' + hidden +
+    '<p class="h">네이버 API 키 넣기 (처음 한 번만)</p><ol class="s"><li><a href="https://developers.naver.com/apps/#/register" target="_blank">네이버 개발자 센터 → 애플리케이션 등록</a> (네이버 로그인)</li>' +
+    '<li>이름: 체험단 순위 / 사용 API: <b>검색</b> / 환경 추가: <b>WEB 설정</b>, 웹 서비스 URL: https://script.google.com → 등록</li><li>나온 <b>Client ID</b>, <b>Client Secret</b>을 아래에 붙여넣고 저장</li></ol>' +
+    '<input name="nid" placeholder="Client ID"><input name="nsecret" placeholder="Client Secret"><button>저장하고 위치 확인</button></form>';
+  const body = '<h1>네이버 위치 확인</h1>' + (msg ? '<p class="ok">' + msg + '</p>' : '') +
+    (o.kws.length ? '<p class="s">키워드: ' + esc(o.kws.join(' → ')) + (o.pr ? ' / 가격 필터 기준 ' + esc(o.pr) + '원' : '') + (o.nm ? '<br>상품: ' + esc(o.nm) + (o.st ? ' (' + esc(o.st) + ')' : '') : '') + '</p>' : '<p class="err">키워드가 없어요. 생성기의 버튼으로 열어 주세요.</p>') +
+    (err ? '<p class="err">' + esc(err) + '</p>' : '') +
+    (out ? '<p class="h">결과 — 복사해서 생성기 \'쿠팡 정보\' 칸에 붙여넣기</p><textarea id="o" readonly>' + esc(out) + '</textarea><button onclick="c()">복사</button>' : '') +
+    (!(keys.id && keys.secret) || /401|키/.test(err) ? keyForm : '');
+  const html = '<style>body{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;margin:0;padding:16px;background:#f4f4f8;color:#1d1a24}h1{font-size:20px;margin:0 0 10px}' +
+    '.h{font-weight:700;margin:14px 0 6px}.s{color:#555;font-size:13px}.ok{color:#2f7a2f}.err{color:#a3271b;white-space:pre-wrap}textarea,input{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #cfc9db;border-radius:8px;margin:4px 0;background:#fff}' +
+    'textarea{height:130px}button{width:100%;padding:12px;border:0;border-radius:8px;background:#03c75a;color:#fff;font:inherit;font-weight:700;margin-top:6px}</style>' + body +
+    '<script>function c(){var t=document.getElementById("o");t.select();try{navigator.clipboard.writeText(t.value).then(function(){document.querySelector("button").textContent="복사됨"},function(){document.execCommand("copy")})}catch(e){document.execCommand("copy")}}</' + 'script>';
+  return HtmlService.createHtmlOutput(html).setTitle('네이버 위치 확인').addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 function toolsUrl_() { return (CONFIG.WEBAPP_URL || '') + '?p=tools&k=' + CONFIG.KEY; }
