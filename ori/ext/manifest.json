@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "상품 위치 찾기 (체험단)",
-  "version": "1.0.1",
-  "description": "쿠팡·네이버 상품 페이지에서 한 번 누르면 상품 정보, PC·모바일 위치, 썸네일 저장까지",
+  "version": "1.0.2",
+  "description": "쿠팡: 한 번 누르면 PC·모바일 위치 자동. 네이버: 검색 화면에서 상품을 찾아 표시(한 화면씩). 썸네일 저장, 결과 복사",
   "action": {
     "default_title": "상품 위치 찾기",
     "default_icon": {
@@ -29,7 +29,8 @@
     "debugger",
     "offscreen",
     "declarativeNetRequestWithHostAccess",
-    "clipboardWrite"
+    "clipboardWrite",
+    "storage"
   ],
   "host_permissions": [
     "*://*.coupang.com/*",

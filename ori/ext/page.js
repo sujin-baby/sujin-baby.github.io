@@ -4,8 +4,42 @@
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const norm = t => String(t || "").replace(/[\s\[\]\(\)\/,.·\-_+~!*'"]/g, "").toLowerCase();
   const isNaver = /naver\.com$/.test(location.hostname);
+  const numOf = s => Number(String(s || "").replace(/[^0-9]/g, "")) || 0;
+
+  /* 고른 옵션: '색상 × 수량' 같은 이름표를 찾아 바로 옆 값 (콜론은 화면 꾸밈이라 글에 없을 때가 있음) */
+  const OPT_LAB = /^(색상|옵션|사이즈|수량|구성|선택|용량|맛|종류|컬러|타입)(\s*[×x\/·,]\s*(색상|옵션|사이즈|수량|구성|선택|용량|맛|종류|컬러|타입))*\s*[:：]?$/;
+  function readOption() {
+    const labs = [...document.querySelectorAll("span,div,dt,th,td,strong,b,label,p,em")].filter(e => e.children.length <= 2 && OPT_LAB.test((e.innerText || "").trim()));
+    for (const lab of labs) {
+      let v = "";
+      if (lab.nextElementSibling) v = lab.nextElementSibling.innerText || "";
+      if (!v.trim() && lab.parentElement) v = (lab.parentElement.innerText || "").replace(lab.innerText, "");
+      v = v.replace(/^\s*[:：]\s*/, "").replace(/\s+/g, " ").trim();
+      if (v && v.length <= 60 && !/선택하세요|선택해\s*주세요|^\d+$/.test(v)) return v;
+    }
+    const om = document.body.innerText.match(/(?:색상|옵션|구성|사이즈|수량|선택)[^\n]{0,12}[:：]\s*([^\n]{1,40})/);
+    return om ? om[1].trim() : "";
+  }
+  /* 상품명: 화면에 보이는 제목(h1). og:title은 쿠팡이 ' - 일반거치대' 같은 분류를 붙여서 마지막에 */
+  function visibleTitle() {
+    const h = [...document.querySelectorAll("h1, h2, h3")].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).find(t => t.length >= 6 && t.length <= 200 && !/쿠팡|coupang|네이버|장바구니|카테고리/i.test(t));
+    return h || "";
+  }
 
   /* ---------- 상품 페이지: 상품명, 판매처, 상품번호, 옵션, 가격, 썸네일 ---------- */
+  /* 제목 바로 뒤에 처음 나오는 가격 (할인·쿠폰·적립·배송 금액은 건너뜀) */
+  function priceAfter(txt, name) {
+    const i0 = name ? txt.indexOf(name.slice(0, 12)) : -1;
+    const t = i0 >= 0 ? txt.slice(i0, i0 + 2500) : txt.slice(0, 4000);
+    const re = /(\d{1,3}(?:,\d{3})+)\s*원/g;
+    let m;
+    while ((m = re.exec(t))) {
+      const before = t.slice(Math.max(0, m.index - 12), m.index), after = t.slice(m.index, m.index + m[0].length + 6);
+      if (/할인|쿠폰|적립|캐시|배송|최대|이상/.test(before) || /할인|이상/.test(after)) continue;
+      const v = numOf(m[1]); if (v >= 100) return v;
+    }
+    return 0;
+  }
   function readProduct() {
     const L = location;
     const og = n => { const m = document.querySelector('meta[property="og:' + n + '"]'); return m ? (m.content || "") : ""; };
@@ -19,21 +53,18 @@
       const qs = new URLSearchParams(L.search);
       let item = qs.get("itemId") || qs.get("itemid") || "";
       if (!item) { const m = html.match(/["']?itemId["']?\s*[:=]\s*["']?(\d{8,})/); if (m) item = m[1]; }
-      const h1 = document.querySelector("h1");
-      let name = og("title") || (h1 && h1.innerText.trim()) || document.title;
-      name = name.replace(/\s*[-|]\s*쿠팡!?\s*$/, "").trim();
+      let name = visibleTitle();
+      if (!name) name = (og("title") || document.title).replace(/\s*[-|]\s*쿠팡!?\s*$/, "").replace(/\s+-\s+[^-]{1,20}$/, "").trim();
       let seller = "";
-      const sm = txt.match(/판매자\s*[:：]\s*([^\n]{1,40})/);
-      if (sm) seller = sm[1].trim();
-      if (!seller || /가입|보러가기|평가|정보/.test(seller)) { const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/); seller = s2 ? s2[1].trim() : ""; }
-      let opt = "";
-      const oe = document.querySelector('.prod-option__selected .value, .prod-option__selected-container .value, [class*="option"][class*="selected"] [class*="value"], [class*="selected-option"], [class*="SelectedOption"]');
-      if (oe) opt = oe.textContent.replace(/\s+/g, " ").trim().slice(0, 60);
-      if (!opt) { const om = txt.match(/(?:색상|옵션|구성|사이즈|수량|선택)\s*[:：]\s*([^\n]{1,40})/); if (om) opt = om[1].trim(); }
+      const sm = txt.match(/판매자\s*[:：]?\s*([^\n]{1,60})/);
+      if (sm) seller = sm[1].replace(/\s*(판매자\s*)?(상품\s*)?보러\s*가기.*$/, "").replace(/\s*판매자\s*평가.*$/, "").trim();
+      if (!seller || seller.length > 30 || /가입|보러가기|평가|정보/.test(seller)) { const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/); seller = s2 ? s2[1].trim() : ""; }
+      let opt = readOption();
+      if (!opt) { const oe = document.querySelector('.prod-option__selected .value, .prod-option__selected-container .value'); if (oe) opt = oe.textContent.replace(/\s+/g, " ").trim().slice(0, 60); }
       let price = 0;
       const pe = document.querySelector('.prod-sale-price .total-price strong, .total-price strong, [class*="final-price"] [class*="amount"], .price-amount.final-price-amount, [class*="finalPrice"]');
       if (pe) price = num(pe.textContent);
-      if (!price) { const p = firstPrices(txt, 3); if (p.length) price = Math.min.apply(null, p); }
+      if (!price) price = priceAfter(txt, name);
       return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, opt: opt, price: price, img: img };
     }
     const pm = L.pathname.match(/products\/(\d+)/);
@@ -47,9 +78,7 @@
     if (dm) price = Number(dm[1]);
     if (!price) { const sm2 = html.match(/"salePrice"\s*:\s*(\d{3,})/); if (sm2) price = Number(sm2[1]); }
     if (!price) { const i = name ? txt.indexOf(name.slice(0, 10)) : -1; const p = firstPrices(i >= 0 ? txt.slice(i, i + 1500) : txt, 2); if (p.length) price = Math.min.apply(null, p); }
-    let opt = "";
-    const oe = document.querySelector('[class*="selected"] [class*="option"], [class*="SelectedOption"], [class*="selectedOption"]');
-    if (oe) opt = oe.textContent.replace(/\s+/g, " ").trim().slice(0, 60);
+    const opt = readOption();
     return { site: "naver", mob: /^m\./.test(L.hostname), pid: pm[1], item: "", name: name, seller: seller, opt: opt, price: price, img: img };
   }
 
@@ -189,6 +218,10 @@
       const cp = mk(s.copied ? "복사됨" : "복사", true, () => { ta.select(); try { document.execCommand("copy"); cp.textContent = "복사됨"; } catch (e) {} if (navigator.clipboard) navigator.clipboard.writeText(ta.value).then(() => { cp.textContent = "복사됨"; }, () => {}); });
       mk("닫기", false, () => bx.remove());
     }
+    if (s.actions && s.actions.length) {
+      const row2 = add("div", "display:flex;flex-direction:column;gap:6px;margin-top:8px");
+      s.actions.forEach(a => { const b = document.createElement("button"); b.textContent = a.label; b.style.cssText = "padding:9px;border:0;border-radius:6px;cursor:pointer;font:bold 13px sans-serif;background:" + (a.color || "#03c75a") + ";color:#fff"; b.onclick = () => { b.disabled = true; b.textContent = "잠깐만요…"; try { chrome.runtime.sendMessage({ type: "act", act: a.act }); } catch (e) {} }; row2.appendChild(b); });
+    }
     (s.notes || []).forEach(n => add("div", "color:" + (n.warn ? "#a35a00" : "#555") + ";font-size:12px;margin-top:6px;white-space:pre-wrap", n.t));
     if (s.img) { const im = add("img", "display:block;max-width:100%;max-height:150px;width:auto;height:auto;margin-top:8px;border-radius:6px;border:1px solid #ddd"); im.src = s.img; im.alt = "대표 썸네일"; }
     return true;
@@ -204,6 +237,28 @@
     return ok;
   }
 
+  /* 찾은 상품 칸 표시 */
+  function mark(i) {
+    const c = cardList()[i]; if (!c) return false;
+    c.el.style.outline = "4px solid #e5397a"; c.el.style.outlineOffset = "2px";
+    c.el.scrollIntoView({ block: "center" });
+    return true;
+  }
+  /* 지금 화면의 검색어, 가격 필터, 페이지 */
+  function here() {
+    const qp = new URL(location.href).searchParams;
+    let query = qp.get("query") || "";
+    if (!query) { const inp = document.querySelector('input[type="search"], input[name="query"], header input[type="text"]'); if (inp) query = inp.value || ""; }
+    let lo = numOf(qp.get("minPrice")), hi = numOf(qp.get("maxPrice"));
+    const m = document.body.innerText.slice(0, 8000).match(/(\d{1,3}(?:,\d{3})+)\s*원?\s*~\s*(\d{1,3}(?:,\d{3})+)\s*원/);
+    if (m) { lo = numOf(m[1]); hi = numOf(m[2]); }
+    let page = numOf(qp.get("pagingIndex"));
+    if (!page) {
+      const cur = [...document.querySelectorAll("a,button,strong,span,em")].find(e => /^\d{1,2}$/.test((e.innerText || "").trim()) && (e.getAttribute("aria-current") === "page" || e.getAttribute("aria-selected") === "true" || /active|current|selected|(^|[\s_-])on($|[\s_-])/i.test(String(e.className || ""))));
+      page = cur ? Number(cur.innerText.trim()) : 1;
+    }
+    return { query: query.trim(), lo: lo, hi: hi, page: page, mob: /^m/.test(location.hostname) };
+  }
   const state = () => ({ blocked: blockedText(), n: cardList().length, url: location.href });
   /* 찾는 창 위쪽 안내 줄 */
   function banner(t) {
@@ -211,5 +266,5 @@
     if (!b) { b = document.createElement("div"); b.id = "__pl_banner"; b.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:2147483647;background:#5b2a86;color:#fff;font:bold 15px/1.5 sans-serif;padding:10px 14px;text-align:center"; document.documentElement.appendChild(b); }
     b.textContent = t; return true;
   }
-  window.__PL = { state: state, banner: banner, readProduct: readProduct, scan: scan, priceUI: priceUI, clickPage: clickPage, box: box, copy: copy };
+  window.__PL = { mark: mark, here: here, state: state, banner: banner, readProduct: readProduct, scan: scan, priceUI: priceUI, clickPage: clickPage, box: box, copy: copy };
 })();

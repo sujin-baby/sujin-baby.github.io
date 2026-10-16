@@ -1,20 +1,28 @@
 /* 상품 위치 찾기 (크롬 확장 프로그램)
-   쿠팡·네이버 상품 페이지에서 아이콘을 한 번 누르면:
-   상품 정보 읽기 → 썸네일 저장(다운로드 폴더/체험단_썸네일) → 작은 창을 띄워 PC 검색 → 같은 조건으로 모바일 검색 → 결과 복사
-   검색 순서: 대표 → 대표 + 가격 → 서브 → 서브 + 가격 … (키워드마다 1~5페이지) */
+   쿠팡 상품 페이지에서 아이콘 한 번: 상품 정보 → 썸네일 저장 → 작은 창에서 PC 검색 → 같은 조건으로 모바일 검색 → 결과 복사
+     검색 순서: 대표 → 대표 + 가격 → 서브 → 서브 + 가격 … (키워드마다 1~5페이지)
+   네이버는 자동으로 여러 페이지를 넘기면 '쇼핑 서비스 접속이 일시적으로 제한' 화면으로 막아서(10/16 실제로 막힘) 자동 넘기기를 안 함:
+     상품 페이지에서 아이콘 → 상품 정보·썸네일 + 대표 키워드 검색 탭을 엶 → 그 화면만 읽어서 상품을 찾아 표시
+     없으면 [다음 페이지] [가격 넣고 검색] [다음 키워드] 단추 (사람이 한 번 누를 때 한 화면만) */
 const VERSION = chrome.runtime.getManifest().version;
 const VER_URL = "https://raw.githubusercontent.com/sujin-baby/sujin-baby.github.io/refs/heads/claude/tasting-group-notice-automation-1x1kur/ori/ext/manifest.json";
 const MUA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
 const MAXP = 5;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-let busy = false, work = null;
+let busy = false, busySince = 0, cancel = false, work = null;
 
 chrome.action.onClicked.addListener(tab => { start(tab); });
+/* 결과 상자의 단추 */
+chrome.runtime.onMessage.addListener((m, sender) => {
+  if (!m || m.type !== "act" || !sender.tab) return;
+  if (m.act === "cancel") { cancel = true; closeWork(); ui(sender.tab.id, { title: "멈췄어요", msg: "다시 하려면 아이콘을 누르세요." }); return; }
+  naverAct(sender.tab, m.act).catch(e => ui(sender.tab.id, { title: "멈췄어요", msg: "오류: " + ((e && e.message) || e) }));
+});
 self.__test = async () => { const [t] = await chrome.tabs.query({ active: true, lastFocusedWindow: true }); return start(t); };
 
 async function start(tab) {
-  if (busy) { await ui(tab.id, { title: "이미 찾는 중이에요", msg: "끝나면 결과가 원래 상품 페이지에 떠요." }); return; }
-  busy = true;
+  if (busy && Date.now() - busySince < 12 * 60000) { await ui(tab.id, { title: "이미 찾는 중이에요", msg: "끝나면 결과가 원래 상품 페이지에 떠요. 멈추고 새로 하려면 아래 단추.", actions: [{ label: "멈추기", act: "cancel", color: "#a33" }] }); return; }
+  busy = true; busySince = Date.now(); cancel = false;
   const ka = setInterval(() => chrome.runtime.getPlatformInfo(() => {}), 20000);   /* 오래 걸려도 확장 프로그램이 잠들지 않게 */
   try { return await run(tab); }
   catch (e) {
@@ -104,6 +112,8 @@ async function openWork() {
   work = { winId: w.id, tabId: w.tabs[0].id, dbg: false, dnr: false };
 }
 async function nav(url) {
+  if (cancel) throw new Error("멈춤");
+  if (/coupang\.com/.test(url)) await sleep(700 + Math.random() * 1300);
   /* 네이버는 너무 빨리 넘기면 보안 확인을 띄워서 사람처럼 1~2.5초 쉬고 */
   if (/naver\.com/.test(url)) await sleep(1000 + Math.random() * 1500);
   work.lastUrl = url;
@@ -152,7 +162,9 @@ async function scanW(o) {
   }
   return s;
 }
+const HARD_BLOCK = /일시적으로\s*제한|접속이\s*(제한|불가)|Access Denied/i;
 async function waitHuman() {
+  if (HARD_BLOCK.test(work.blockSnip || "")) return false;   /* 접속 제한은 풀 수 있는 확인 화면이 아님 → 바로 멈춤 */
   try { await chrome.windows.update(work.winId, { focused: true, state: "normal" }); } catch (e) {}
   const msg = "쇼핑몰이 보안 확인을 띄웠어요. 이 창에서 확인을 풀어 주세요. 풀면 자동으로 이어서 찾아요 (창은 닫지 마세요)";
   await call(work.tabId, "banner", [msg]).catch(() => {});
@@ -252,7 +264,7 @@ async function searchDev(ctx, dev, steps) {
     const [k, f] = st;
     const r = await look(ctx, dev, k, f);
     const lab = f ? "'" + k + "' + 가격" : "'" + k + "'";
-    if (r.blocked) { log.push("쇼핑몰 보안 확인을 5분 안에 못 풀어서 멈춤 (화면: " + (work.blockSnip || "") + ")"); return { log: log, blocked: true }; }
+    if (r.blocked) { log.push((HARD_BLOCK.test(work.blockSnip || "") ? "쇼핑몰이 접속을 일시적으로 막음 (자동 검색이 많다고 봄). 잠시 뒤 다시" : "쇼핑몰 보안 확인을 5분 안에 못 풀어서 멈춤") + " (화면: " + (work.blockSnip || "") + ")"); return { log: log, blocked: true }; }
     if (r.err) { log.push(lab + " " + r.err); continue; }
     if (r.nofilter) { log.push(lab + " 가격 필터가 안 들어가서 건너뜀"); continue; }
     if (r.page > 0 || r.pos > 0) return { found: Object.assign({ k: k, f: f }, r), log: log };
@@ -300,10 +312,12 @@ const cmpVer = (a, b) => { const x = a.split(".").map(Number), y = b.split(".").
 /* ---------- 전체 ---------- */
 async function run(tab) {
   const tid = tab.id;
+  if (/^https:\/\/(m?search)\.shopping\.naver\.com\//.test(tab.url || "")) return naverHere(tab);
   const info = await call(tid, "readProduct").catch(() => null);
   if (!info) { await ui(tid, { title: "상품 위치 찾기", msg: "이 화면은 읽을 수 없어요. 쿠팡·네이버 상품 페이지에서 눌러 주세요." }); return; }
   if (info.err) { await ui(tid, { title: "상품 위치 찾기", msg: info.err }); return; }
   const site = info.site;
+  if (site === "naver") return naverProduct(tab, info);
   const h = (tab.url || "").split("#")[1] || "";
   const hk = (h.match(/(?:^|&)kw=([^&]+)/) || [])[1], hp = Number((h.match(/(?:^|&)pr=(\d+)/) || [])[1] || 0);
   const kws = (hk ? decodeURIComponent(hk).split("|") : suggest(info.name)).map(x => x.trim()).filter(Boolean).slice(0, 4);
@@ -352,4 +366,85 @@ async function run(tab) {
   const big = "PC " + (pc.found ? posText(pc.found) : "못 찾음") + "\n모바일 " + (mo.found ? posText(mo.found) : "못 찾음");
   await ui(tid, { title: copied ? "복사됐어요. 생성기 '상품 정보 붙여넣기' 칸에 Ctrl+V" : "복사를 눌러서 생성기 '상품 정보 붙여넣기' 칸에 붙여넣으세요", big: big, out: out, copied: copied, notes: notes, img: info.img });
   return out;
+}
+
+/* ================= 네이버 (자동 넘기기 없이, 지금 화면만 읽기) ================= */
+const mask2 = s => s && s.length > 8 ? s.slice(0, 6) + "***" + s.slice(-2) : s;
+const infoLines = t => ["상품명 : " + t.name, "판매처 : " + t.seller, "상품번호 : " + t.pid + (t.item ? " - " + mask2(t.item) : ""), t.opt ? "옵션 : " + t.opt : "", t.price ? "가격 : " + t.price.toLocaleString("ko-KR") + "원" : "", t.img ? "썸네일 : " + t.img : ""].filter(Boolean);
+const nvSearchUrl = (k, mob) => (mob ? "https://msearch.shopping.naver.com" : "https://search.shopping.naver.com") + "/search/all?query=" + encodeURIComponent(k);
+const won = n => Number(n).toLocaleString("ko-KR");
+
+async function naverProduct(tab, info) {
+  const h = (tab.url || "").split("#")[1] || "";
+  const hk = (h.match(/(?:^|&)kw=([^&]+)/) || [])[1], hp = Number((h.match(/(?:^|&)pr=(\d+)/) || [])[1] || 0);
+  const kws = (hk ? decodeURIComponent(hk).split("|") : suggest(info.name)).map(x => x.trim()).filter(Boolean).slice(0, 4);
+  const price = hp || info.price || 0;
+  const t = Object.assign({}, info, { kws: kws, price: price, at: Date.now() });
+  await chrome.storage.local.set({ nvTarget: t });
+  const thumb = await saveThumb(info);
+  const out = infoLines(t).join("\n");
+  const copied = await copyText(out, tab.id);
+  await ui(tab.id, { title: "상품 정보 " + (copied ? "복사됨" : "") + " · 네이버 검색 탭을 열었어요", out: out, copied: copied, img: info.img,
+    msg: "네이버는 자동으로 여러 페이지를 넘기면 접속을 막아서, 검색 화면은 한 화면씩 확인해요.\n새 탭의 검색 화면에서 상품을 찾아 표시해 드려요.\n순서: " + kws.map(k => "'" + k + "'" + (price ? " → '" + k + "' + 가격 " + won(price) + "원" : "")).join(" → "),
+    notes: [thumb] });
+  const nt = await chrome.tabs.create({ url: nvSearchUrl(kws[0], false), index: tab.index + 1, active: true });
+  await waitComplete(nt.id, 25000);
+  await sleep(2000);
+  return naverHere(nt);
+}
+
+/* 지금 보고 있는 네이버 검색 화면에서 찾기 */
+async function naverHere(tab) {
+  const tid = tab.id;
+  const { nvTarget: t } = await chrome.storage.local.get("nvTarget");
+  if (!t) { await ui(tid, { title: "상품 위치 찾기", msg: "먼저 네이버 상품 페이지(스마트스토어)에서 아이콘을 눌러 주세요. 그 상품을 이 화면에서 찾아요." }); return; }
+  await ui(tid, { title: "이 화면에서 찾는 중…", msg: "아래로 내리면서 '" + t.name.slice(0, 30) + "'를 찾고 있어요." });
+  const mob = /msearch|^https:\/\/m\./.test(tab.url || "");
+  const s = await call(tid, "scan", [{ pid: t.pid, nm: t.name, st: t.seller, scroll: mob, max: 200 }]);
+  if (!s || s.error) { await ui(tid, { title: "화면을 못 읽었어요", msg: (s && s.error) || "" , notes: [{ t: "화면: " + ((s && s.snip) || ""), warn: true }] }); return; }
+  if (s.blocked) {
+    await ui(tid, { title: "네이버가 접속을 막아 둔 상태예요", msg: "자동 검색이 많았다고 보고 잠깐 막은 거예요. 시간이 지나면 풀려요(보통 몇 시간 안).\n그동안은 자동으로 넘기지 말고, 풀린 뒤에 이 화면에서 아이콘을 다시 눌러 주세요.\n계속 안 풀리면 화면의 '원클릭 진단'을 눌러 보세요." });
+    return;
+  }
+  const h = await call(tid, "here");
+  const plan = [];
+  t.kws.forEach(k => { plan.push([k, false]); if (t.price) plan.push([k, true]); });
+  const filtered = !!(h.lo && h.hi);
+  if (s.hit >= 0) {
+    await call(tid, "mark", [s.hit]);
+    const pos = mob ? "위에서 " + (s.hit + 1) + "번째" : h.page + "페이지 (위에서 " + (s.hit + 1) + "번째)";
+    const out = infoLines(t).concat([h.query ? "찾은 키워드 : " + h.query : "", filtered ? "필터 : 가격 " + won(h.lo) + "~" + won(h.hi) + "원" : "", (mob ? "모바일 위치 : " : "PC 위치 : ") + pos]).filter(Boolean).join("\n");
+    const copied = await copyText(out, tid);
+    await ui(tid, { title: copied ? "찾았어요! 복사됐어요. 생성기 '상품 정보 붙여넣기' 칸에 Ctrl+V" : "찾았어요! 복사를 눌러 생성기에 붙여넣으세요", big: (mob ? "모바일 " : "PC ") + pos + (filtered ? "\n가격 " + won(h.lo) + "~" + won(h.hi) + "원" : ""), out: out, copied: copied,
+      notes: [{ t: "분홍 테두리가 찾은 상품이에요." + (s.how === "상품명" ? " (상품명으로 찾음, 스토어 이름은 화면에 없었음)" : "") }, mob ? null : { t: "모바일 위치는 휴대폰에서 북마크로 확인해 주세요." }].filter(Boolean) });
+    return;
+  }
+  /* 없으면 다음 할 일 단추 */
+  const idx = plan.findIndex(p => p[0] === h.query && p[1] === filtered);
+  const nextStep = plan[(idx >= 0 ? idx : -1) + 1];
+  const actions = [];
+  if (!mob && h.page < MAXP) actions.push({ label: "다음 페이지 (" + (h.page + 1) + "페이지) 보고 다시 찾기", act: "next" });
+  if (nextStep) actions.push(nextStep[1] ? { label: "가격 " + won(t.price) + "~" + won(t.price) + "원 넣고 다시 찾기", act: "price" } : { label: "'" + nextStep[0] + "' 검색하고 다시 찾기", act: "kw:" + nextStep[0], color: "#5b2a86" });
+  await ui(tid, { title: "이 화면" + (mob ? "" : "(" + h.page + "페이지)") + "에는 없어요", msg: "검색어 '" + (h.query || "?") + "'" + (filtered ? ", 가격 " + won(h.lo) + "~" + won(h.hi) + "원" : "") + ", 상품 " + s.n + "개 확인" + (s.adHit >= 0 ? " (광고 자리에만 있어요)" : "") + (s.n === 0 ? "\n화면: " + (s.snip || "") : ""),
+    actions: actions, notes: [{ t: "단추를 누르면 한 화면만 넘기고 다시 찾아요. 너무 빨리 여러 번 누르지 마세요(네이버가 막아요)." }] });
+}
+
+async function naverAct(tab, act) {
+  const tid = tab.id;
+  const { nvTarget: t } = await chrome.storage.local.get("nvTarget");
+  const h = await call(tid, "here");
+  const mob = h && h.mob;
+  await ui(tid, { title: "넘기는 중…", msg: "" });
+  if (act === "next") {
+    const ok = await call(tid, "clickPage", [h.page + 1]);
+    if (!ok) { const u = new URL(tab.url); u.searchParams.set("pagingIndex", h.page + 1); const p = waitComplete(tid, 25000); await chrome.tabs.update(tid, { url: u.href }); await p; }
+  } else if (act === "price") {
+    const ok = await call(tid, "priceUI", [t.price, t.price]);
+    if (!ok) { const u = new URL(tab.url); u.searchParams.set("minPrice", t.price); u.searchParams.set("maxPrice", t.price); u.searchParams.delete("pagingIndex"); const p = waitComplete(tid, 25000); await chrome.tabs.update(tid, { url: u.href }); await p; }
+  } else if (act.indexOf("kw:") === 0) {
+    const p = waitComplete(tid, 25000); await chrome.tabs.update(tid, { url: nvSearchUrl(act.slice(3), mob) }); await p;
+  }
+  await sleep(3500);
+  const [cur] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  return naverHere(cur && cur.id === tid ? cur : await chrome.tabs.get(tid));
 }
