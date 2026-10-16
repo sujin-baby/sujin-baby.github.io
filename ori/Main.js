@@ -1929,7 +1929,7 @@ function rankPage_(p) {
   const body = '<h1>네이버 위치 확인</h1>' + (msg ? '<p class="ok">' + msg + '</p>' : '') +
     (o.kws.length ? '<p class="s">키워드: ' + esc(o.kws.join(' → ')) + (o.pr ? ' / 가격 필터 기준 ' + esc(o.pr) + '원' : '') + (o.nm ? '<br>상품: ' + esc(o.nm) + (o.st ? ' (' + esc(o.st) + ')' : '') : '') + '</p>' : '<p class="err">키워드가 없어요. 생성기의 버튼으로 열어 주세요.</p>') +
     (err ? '<p class="err">' + esc(err) + '</p>' : '') +
-    (out ? '<p class="h">결과 — 복사해서 생성기 \'쿠팡 정보\' 칸에 붙여넣기</p><textarea id="o" readonly>' + esc(out) + '</textarea><button onclick="c()">복사</button>' : '') +
+    (out ? '<p class="h">결과 — 복사해서 생성기 \'상품 정보\' 칸에 붙여넣기</p><textarea id="o" readonly>' + esc(out) + '</textarea><button onclick="c()">복사</button>' : '') +
     (!(keys.id && keys.secret) || /401|키/.test(err) ? keyForm : '');
   const html = '<style>body{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;margin:0;padding:16px;background:#f4f4f8;color:#1d1a24}h1{font-size:20px;margin:0 0 10px}' +
     '.h{font-weight:700;margin:14px 0 6px}.s{color:#555;font-size:13px}.ok{color:#2f7a2f}.err{color:#a3271b;white-space:pre-wrap}textarea,input{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #cfc9db;border-radius:8px;margin:4px 0;background:#fff}' +
