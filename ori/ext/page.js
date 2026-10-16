@@ -65,7 +65,7 @@
       const pe = document.querySelector('.prod-sale-price .total-price strong, .total-price strong, [class*="final-price"] [class*="amount"], .price-amount.final-price-amount, [class*="finalPrice"]');
       if (pe) price = num(pe.textContent);
       if (!price) price = priceAfter(txt, name);
-      return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, opt: opt, price: price, img: img };
+      return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, opt: opt || "단일옵션", price: price, img: img };
     }
     const pm = L.pathname.match(/products\/(\d+)/);
     if (!pm) return { err: "네이버는 스마트스토어(또는 브랜드스토어) 상품 페이지에서 눌러 주세요." };
@@ -79,7 +79,7 @@
     if (!price) { const sm2 = html.match(/"salePrice"\s*:\s*(\d{3,})/); if (sm2) price = Number(sm2[1]); }
     if (!price) { const i = name ? txt.indexOf(name.slice(0, 10)) : -1; const p = firstPrices(i >= 0 ? txt.slice(i, i + 1500) : txt, 2); if (p.length) price = Math.min.apply(null, p); }
     const opt = readOption();
-    return { site: "naver", mob: /^m\./.test(L.hostname), pid: pm[1], item: "", name: name, seller: seller, opt: opt, price: price, img: img };
+    return { site: "naver", mob: /^m\./.test(L.hostname), pid: pm[1], item: "", name: name, seller: seller, opt: opt || "단일옵션", price: price, img: img };
   }
 
   /* ---------- 검색 화면: 상품 칸을 위에서부터 순서대로 ---------- */
@@ -114,7 +114,8 @@
     list.sort((a, b) => a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
     return list;
   }
-  const AD_TXT = /(^|[\s·|])(광고|AD)([\s·|]|$)/;
+  /* 광고 표시: '광고', '광고ⓘ', 'AD' (상품명 속 '광고용' 같은 건 아님) */
+  const AD_TXT = /(^|[\s·|])(광고|AD)(?![가-힣A-Za-z])/;
   const isAd = el => AD_TXT.test(el.innerText || "") || !!el.querySelector('a[href*="adcr"], [class*="ad-badge"], [class*="adBadge"], [class*="ad_label"], [class*="AdMark"], img[alt="광고"], img[alt="AD"]');
   function matchOf(el, o) {
     const pidRe = new RegExp((isNaver ? "(^|\\D)" : "products/") + o.pid + "(?!\\d)");
@@ -166,7 +167,9 @@
     list.forEach((c, i) => { const h = matchOf(c.el, o); if (!h) return; if (isAd(c.el)) { if (adHit < 0) adHit = i; return; } if (hit < 0 || (how === "상품명" && h !== "상품명")) { hit = i; how = h; } });
     const body = document.body.innerText;
     window.scrollTo(0, 0);
-    return { n: list.length, hit: hit, how: how, adHit: adHit, keys: list.slice(0, 6).map(c => c.k), url: location.href, len: body.length, snip: list.length ? "" : snippet(),
+    /* 광고 칸은 빼고 몇 번째 상품인지 */
+    const org = hit >= 0 ? list.slice(0, hit).filter(c => !isAd(c.el)).length + 1 : 0;
+    return { n: list.length, hit: hit, org: org, how: how, adHit: adHit, keys: list.slice(0, 6).map(c => c.k), url: location.href, len: body.length, snip: list.length ? "" : snippet(),
       noResult: /검색\s*결과가\s*없|검색결과가\s*없|상품이\s*없습니다/.test(body) && list.length === 0,
       priceChip: o.lo ? new RegExp(o.lo.toLocaleString("ko-KR") + "\\s*원?\\s*~\\s*" + o.hi.toLocaleString("ko-KR")).test(body) : false };
   }

@@ -135,7 +135,11 @@ async function mobile(on) {
     try {
       await chrome.debugger.attach(t, "1.3");
       work.dbg = true;
-      await chrome.debugger.sendCommand(t, "Emulation.setUserAgentOverride", { userAgent: MUA, platform: "iPhone" });
+      /* 안드로이드 크롬 휴대폰으로 (브라우저 정보끼리 서로 맞게: 안 맞으면 쇼핑몰이 이상한 접속으로 봄) */
+      const cv = ((navigator.userAgent.match(/Chrome\/([\d.]+)/) || [])[1] || "141.0.0.0"), major = cv.split(".")[0];
+      const brands = [{ brand: "Chromium", version: major }, { brand: "Google Chrome", version: major }, { brand: "Not?A_Brand", version: "99" }];
+      await chrome.debugger.sendCommand(t, "Emulation.setUserAgentOverride", { userAgent: "Mozilla/5.0 (Linux; Android 14; SM-S921N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + major + ".0.0.0 Mobile Safari/537.36", platform: "Linux armv8l",
+        userAgentMetadata: { brands: brands, fullVersionList: brands.map(b => ({ brand: b.brand, version: b.brand === "Not?A_Brand" ? "99.0.0.0" : cv })), fullVersion: cv, platform: "Android", platformVersion: "14.0.0", architecture: "", model: "SM-S921N", mobile: true } });
       await chrome.debugger.sendCommand(t, "Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 3, mobile: true });
       await chrome.debugger.sendCommand(t, "Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
     } catch (e) {
@@ -154,6 +158,8 @@ async function mobile(on) {
 let curProg = async () => {};
 async function scanW(o) {
   let s = await call(work.tabId, "scan", [o]).catch(e => ({ error: String((e && e.message) || e), n: 0, keys: [] }));
+  if (!s || s.error) { await sleep(2500); s = await call(work.tabId, "scan", [o]).catch(e => ({ error: String((e && e.message) || e), n: 0, keys: [] })); }   /* 화면이 아직 바뀌는 중이었으면 한 번 더 */
+  if (!s) { const tb = await chrome.tabs.get(work.tabId).catch(() => null); s = { error: "빈 결과", snip: tb ? (tb.title || "") + " " + tb.url : "", n: 0, keys: [] }; }
   if (s && s.blocked) {
     work.blockSnip = s.snip || "";
     if (!(await waitHuman())) return s;
@@ -212,7 +218,7 @@ async function look(ctx, dev, k, f) {
   if (s.n === 0) return { page: 0, seen: 0, empty: true, snip: s.noResult ? "" : s.snip };
   const base = s.url;
   if (dev === "mo") {
-    if (s.hit >= 0) return { pos: s.hit + 1, how: s.how, scroll: true };
+    if (s.hit >= 0) return { pos: s.hit + 1, org: s.org, how: s.how, scroll: true };
     /* 계속 내려가지 않고 페이지로 나뉘는 화면이면 다음 페이지 */
     let seen = s.n, prev = s.keys;
     for (let p = 2; p <= MAXP && s.n <= 60; p++) {
@@ -220,7 +226,7 @@ async function look(ctx, dev, k, f) {
       await nav(pageOf(base, site, dev, p));
       s = await scanW(o);
       if (!s || s.blocked || s.n === 0 || sameKeys(s.keys, prev)) break;
-      if (s.hit >= 0) return { page: p, pos: s.hit + 1, how: s.how };
+      if (s.hit >= 0) return { page: p, pos: s.hit + 1, org: s.org, how: s.how, scroll: false };
       seen += s.n; prev = s.keys;
     }
     return { page: 0, seen: seen, adOnly: s && s.adHit >= 0 };
@@ -228,7 +234,7 @@ async function look(ctx, dev, k, f) {
   let seen = 0, mode = "url";
   for (let p = 1; p <= MAXP; p++) {
     await prog(lab + " " + p + "/" + MAXP + "페이지 확인 중… (상품 " + (seen + s.n) + "개째)");
-    if (s.hit >= 0) return { page: p, pos: s.hit + 1, how: s.how };
+    if (s.hit >= 0) return { page: p, pos: s.hit + 1, org: s.org, how: s.how };
     seen += s.n;
     if (p === MAXP) break;
     const prev = s.keys;
@@ -272,7 +278,11 @@ async function searchDev(ctx, dev, steps) {
   }
   return { log: log };
 }
-const posText = r => !r ? "" : r.scroll ? "위에서 " + r.pos + "번째" : r.page + "페이지" + (r.pos ? " (위에서 " + r.pos + "번째)" : "");
+/* 위치는 'N페이지'만 (사용자 요청). 계속 내려가는 모바일 화면은 광고 뺀 순서로 페이지를 셈 (쿠팡 36개, 네이버 40개씩) */
+let PER = 36;
+const posText = r => !r ? "" : r.scroll ? Math.max(1, Math.ceil((r.org || r.pos) / PER)) + "페이지" : r.page + "페이지";
+/* 가격 필터는 '가검40000' (가검 = 가격검색) */
+const gageom = (lo, hi) => "가검" + (lo === hi ? lo : lo + "~" + hi);
 
 /* ---------- 썸네일 저장 ---------- */
 async function saveThumb(info) {
@@ -318,6 +328,7 @@ async function run(tab) {
   if (info.err) { await ui(tid, { title: "상품 위치 찾기", msg: info.err }); return; }
   const site = info.site;
   if (site === "naver") return naverProduct(tab, info);
+  PER = 36;
   const h = (tab.url || "").split("#")[1] || "";
   const hk = (h.match(/(?:^|&)kw=([^&]+)/) || [])[1], hp = Number((h.match(/(?:^|&)pr=(\d+)/) || [])[1] || 0);
   const kws = (hk ? decodeURIComponent(hk).split("|") : suggest(info.name)).map(x => x.trim()).filter(Boolean).slice(0, 4);
@@ -341,7 +352,7 @@ async function run(tab) {
   await closeWork();
   const F = pc.found || mo.found;
   const mask = s => s && s.length > 8 ? s.slice(0, 6) + "***" + s.slice(-2) : s;
-  const filt = F && F.f ? "가격 " + P.lo.toLocaleString("ko-KR") + "~" + P.hi.toLocaleString("ko-KR") + "원" : "";
+  const filt = F && F.f ? gageom(P.lo, P.hi) : "";
   const out = [
     "상품명 : " + info.name,
     "판매처 : " + info.seller,
@@ -363,7 +374,7 @@ async function run(tab) {
   if (nv) notes.push({ t: "새 버전(" + nv + ")이 있어요. 생성기에서 확장 프로그램을 다시 받아 바꿔 주세요.", warn: true });
   try { await chrome.windows.update(tab.windowId, { focused: true }); await chrome.tabs.update(tid, { active: true }); } catch (e) {}
   const copied = await copyText(out, tid);
-  const big = "PC " + (pc.found ? posText(pc.found) : "못 찾음") + "\n모바일 " + (mo.found ? posText(mo.found) : "못 찾음");
+  const big = (F ? "키워드 : " + F.k + "\n" : "") + "PC " + (filt && pc.found ? filt + " " : "") + (pc.found ? posText(pc.found) : "못 찾음") + "\n모바일 " + (filt && mo.found ? filt + " " : "") + (mo.found ? posText(mo.found) : "못 찾음");
   await ui(tid, { title: copied ? "복사됐어요. 생성기 '상품 정보 붙여넣기' 칸에 Ctrl+V" : "복사를 눌러서 생성기 '상품 정보 붙여넣기' 칸에 붙여넣으세요", big: big, out: out, copied: copied, notes: notes, img: info.img });
   return out;
 }
@@ -412,10 +423,10 @@ async function naverHere(tab) {
   const filtered = !!(h.lo && h.hi);
   if (s.hit >= 0) {
     await call(tid, "mark", [s.hit]);
-    const pos = mob ? "위에서 " + (s.hit + 1) + "번째" : h.page + "페이지 (위에서 " + (s.hit + 1) + "번째)";
-    const out = infoLines(t).concat([h.query ? "찾은 키워드 : " + h.query : "", filtered ? "필터 : 가격 " + won(h.lo) + "~" + won(h.hi) + "원" : "", (mob ? "모바일 위치 : " : "PC 위치 : ") + pos]).filter(Boolean).join("\n");
+    const pos = mob ? Math.max(1, Math.ceil(s.org / 40)) + "페이지" : h.page + "페이지";
+    const out = infoLines(t).concat([h.query ? "찾은 키워드 : " + h.query : "", filtered ? "필터 : " + gageom(h.lo, h.hi) : "", (mob ? "모바일 위치 : " : "PC 위치 : ") + pos]).filter(Boolean).join("\n");
     const copied = await copyText(out, tid);
-    await ui(tid, { title: copied ? "찾았어요! 복사됐어요. 생성기 '상품 정보 붙여넣기' 칸에 Ctrl+V" : "찾았어요! 복사를 눌러 생성기에 붙여넣으세요", big: (mob ? "모바일 " : "PC ") + pos + (filtered ? "\n가격 " + won(h.lo) + "~" + won(h.hi) + "원" : ""), out: out, copied: copied,
+    await ui(tid, { title: copied ? "찾았어요! 복사됐어요. 생성기 '상품 정보 붙여넣기' 칸에 Ctrl+V" : "찾았어요! 복사를 눌러 생성기에 붙여넣으세요", big: "키워드 : " + h.query + "\n위치 : " + (filtered ? gageom(h.lo, h.hi) + " " : "") + pos, out: out, copied: copied,
       notes: [{ t: "분홍 테두리가 찾은 상품이에요." + (s.how === "상품명" ? " (상품명으로 찾음, 스토어 이름은 화면에 없었음)" : "") }, mob ? null : { t: "모바일 위치는 휴대폰에서 북마크로 확인해 주세요." }].filter(Boolean) });
     return;
   }
