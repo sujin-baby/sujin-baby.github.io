@@ -104,6 +104,9 @@ async function openWork() {
   work = { winId: w.id, tabId: w.tabs[0].id, dbg: false, dnr: false };
 }
 async function nav(url) {
+  /* 네이버는 너무 빨리 넘기면 보안 확인을 띄워서 사람처럼 1~2.5초 쉬고 */
+  if (/naver\.com/.test(url)) await sleep(1000 + Math.random() * 1500);
+  work.lastUrl = url;
   const p = waitComplete(work.tabId, 25000);
   await chrome.tabs.update(work.tabId, { url: url });
   await p;
@@ -137,6 +140,32 @@ async function mobile(on) {
   }
 }
 
+/* ---------- 화면 읽기 (보안 확인이 뜨면 사람이 풀 때까지 기다렸다가 이어서) ---------- */
+let curProg = async () => {};
+async function scanW(o) {
+  let s = await call(work.tabId, "scan", [o]).catch(e => ({ error: String((e && e.message) || e), n: 0, keys: [] }));
+  if (s && s.blocked) {
+    work.blockSnip = s.snip || "";
+    if (!(await waitHuman())) return s;
+    await nav(work.lastUrl);
+    s = await call(work.tabId, "scan", [o]).catch(e => ({ error: String((e && e.message) || e), n: 0, keys: [] }));
+  }
+  return s;
+}
+async function waitHuman() {
+  try { await chrome.windows.update(work.winId, { focused: true, state: "normal" }); } catch (e) {}
+  const msg = "쇼핑몰이 보안 확인을 띄웠어요. 이 창에서 확인을 풀어 주세요. 풀면 자동으로 이어서 찾아요 (창은 닫지 마세요)";
+  await call(work.tabId, "banner", [msg]).catch(() => {});
+  await curProg("⚠ 쇼핑몰이 보안 확인을 띄웠어요.\n앞에 뜬 작은 창에서 확인을 풀어 주시면 자동으로 이어서 찾아요. (5분까지 기다려요)");
+  for (let i = 0; i < 150; i++) {
+    await sleep(2000);
+    const st = await call(work.tabId, "state").catch(() => null);
+    if (st && !st.blocked) { await sleep(1500); return true; }
+    if (i % 5 === 4) await call(work.tabId, "banner", [msg]).catch(() => {});
+  }
+  return false;
+}
+
 /* ---------- 한 키워드(+가격) 단계 찾기 ---------- */
 async function look(ctx, dev, k, f) {
   const { site, info, P, prog } = ctx;
@@ -147,27 +176,28 @@ async function look(ctx, dev, k, f) {
     /* 가격 필터가 들어갔는지 보려고 필터 없는 첫 화면을 먼저 봐 둠 */
     await prog(lab + " 준비 중…");
     await nav(urlFor(site, dev, k, false, 1, P));
-    const s0 = await call(work.tabId, "scan", [{ pid: info.pid, nm: info.name, st: info.seller, quick: true }]);
+    const s0 = await scanW({ pid: info.pid, nm: info.name, st: info.seller, quick: true });
     if (s0 && s0.keys) ctx.plain[plainKey] = s0.keys;
   }
   await prog(lab + " 1페이지 확인 중…");
   await nav(urlFor(site, dev, k, f, 1, P));
-  let s = await call(work.tabId, "scan", [o]);
+  let s = await scanW(o);
   if (!s) return { err: "화면을 못 읽음" };
   if (s.blocked) return { blocked: true };
+  if (s.error) return { err: "화면 읽기 오류(" + s.error + ") 화면: " + (s.snip || "") };
   if (f) {
     const plain = ctx.plain[plainKey];
     let applied = s.priceChip || (plain && !sameKeys(plain, s.keys));
     if (!applied && site === "naver" && dev === "pc") {
       /* 주소로 가격이 안 들어가면 화면의 가격 칸에 직접 넣고 검색 */
       await nav(urlFor(site, dev, k, false, 1, P));
-      await call(work.tabId, "scan", [{ pid: info.pid, nm: info.name, st: info.seller }]);
+      await scanW({ pid: info.pid, nm: info.name, st: info.seller });
       const ok = await call(work.tabId, "priceUI", [P.lo, P.hi]);
-      if (ok) { await sleep(3000); s = await call(work.tabId, "scan", [o]); applied = s && (s.priceChip || (plain && !sameKeys(plain, s.keys))); }
+      if (ok) { await sleep(3000); s = await scanW(o); applied = s && (s.priceChip || (plain && !sameKeys(plain, s.keys))); }
     }
     if (!applied) return { nofilter: true };
   } else ctx.plain[plainKey] = s.keys;
-  if (s.n === 0) return { page: 0, seen: 0, empty: true };
+  if (s.n === 0) return { page: 0, seen: 0, empty: true, snip: s.noResult ? "" : s.snip };
   const base = s.url;
   if (dev === "mo") {
     if (s.hit >= 0) return { pos: s.hit + 1, how: s.how, scroll: true };
@@ -176,7 +206,7 @@ async function look(ctx, dev, k, f) {
     for (let p = 2; p <= MAXP && s.n <= 60; p++) {
       await prog(lab + " " + p + "페이지 확인 중…");
       await nav(pageOf(base, site, dev, p));
-      s = await call(work.tabId, "scan", [o]);
+      s = await scanW(o);
       if (!s || s.blocked || s.n === 0 || sameKeys(s.keys, prev)) break;
       if (s.hit >= 0) return { page: p, pos: s.hit + 1, how: s.how };
       seen += s.n; prev = s.keys;
@@ -193,22 +223,22 @@ async function look(ctx, dev, k, f) {
     let s2 = null;
     if (mode === "url") {
       await nav(pageOf(base, site, dev, p + 1));
-      s2 = await call(work.tabId, "scan", [o]);
+      s2 = await scanW(o);
       if (!s2 || s2.n === 0 || sameKeys(s2.keys, prev)) {
         /* 주소로 다음 페이지가 안 열리는 화면 → 페이지 번호 단추로 */
         mode = "click";
         await nav(base);
-        s2 = await call(work.tabId, "scan", [o]);
+        s2 = await scanW(o);
         for (let q = 2; q <= p + 1 && s2; q++) {
           const before = s2.keys;
           if (!(await call(work.tabId, "clickPage", [q]))) { s2 = null; break; }
           await sleep(2500);
-          s2 = await call(work.tabId, "scan", [o]);
+          s2 = await scanW(o);
           if (s2 && sameKeys(s2.keys, before)) { s2 = null; break; }
         }
       }
     } else {
-      if (await call(work.tabId, "clickPage", [p + 1])) { await sleep(2500); s2 = await call(work.tabId, "scan", [o]); }
+      if (await call(work.tabId, "clickPage", [p + 1])) { await sleep(2500); s2 = await scanW(o); }
     }
     if (!s2 || s2.blocked || s2.n === 0 || sameKeys(s2.keys, prev)) return { page: 0, seen: seen, stuck: p };
     s = s2;
@@ -222,11 +252,11 @@ async function searchDev(ctx, dev, steps) {
     const [k, f] = st;
     const r = await look(ctx, dev, k, f);
     const lab = f ? "'" + k + "' + 가격" : "'" + k + "'";
-    if (r.blocked) { log.push("쇼핑몰이 보안 확인 화면을 띄움 (찾는 창에서 직접 확인 필요)"); return { log: log, blocked: true }; }
+    if (r.blocked) { log.push("쇼핑몰 보안 확인을 5분 안에 못 풀어서 멈춤 (화면: " + (work.blockSnip || "") + ")"); return { log: log, blocked: true }; }
     if (r.err) { log.push(lab + " " + r.err); continue; }
     if (r.nofilter) { log.push(lab + " 가격 필터가 안 들어가서 건너뜀"); continue; }
     if (r.page > 0 || r.pos > 0) return { found: Object.assign({ k: k, f: f }, r), log: log };
-    log.push(lab + (r.empty ? " 검색 결과 없음" : r.stuck ? " " + r.stuck + "페이지까지(다음 페이지로 못 넘어감) 상품 " + r.seen + "개" : " 상품 " + r.seen + "개") + (r.adOnly ? " (광고 자리에만 있음)" : ""));
+    log.push(lab + (r.empty ? (r.snip ? " 상품 칸을 못 읽음 (화면: " + r.snip + ")" : " 검색 결과 없음") : r.stuck ? " " + r.stuck + "페이지까지(다음 페이지로 못 넘어감) 상품 " + r.seen + "개" : " 상품 " + r.seen + "개") + (r.adOnly ? " (광고 자리에만 있음)" : ""));
   }
   return { log: log };
 }
@@ -283,7 +313,7 @@ async function run(tab) {
   const steps = [];
   kws.forEach(k => { steps.push([k, false]); if (price) steps.push([k, true]); });
   const head = "키워드: " + kws.join(" → ") + (price ? "\n가격: " + price.toLocaleString("ko-KR") + "원" : "\n가격을 못 읽어서 가격 필터는 빼고 찾아요");
-  const prog = t => ui(tid, { title: "상품 위치 찾는 중… (창을 닫지 마세요)", msg: head + "\n\n" + t });
+  const prog = curProg = t => ui(tid, { title: "상품 위치 찾는 중… (창을 닫지 마세요)", msg: head + "\n\n" + t });
   if (!kws.length) { await ui(tid, { title: "상품 위치 찾기", msg: "상품명을 못 읽어서 키워드를 못 만들었어요." }); return; }
   await prog("시작");
   const thumbP = saveThumb(info);

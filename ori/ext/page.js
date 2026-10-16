@@ -95,7 +95,10 @@
     if (nk.length >= 6 && t.indexOf(nk) !== -1) return o.st && t.indexOf(norm(o.st)) !== -1 ? "상품명+스토어" : "상품명";
     return "";
   }
-  const blockedText = () => /자동입력\s*방지|보안\s*확인|비정상적인\s*(접근|요청)|Access Denied|captcha|일시적으로 제한/i.test(document.body ? document.body.innerText.slice(0, 3000) : "");
+  /* 쇼핑몰이 띄운 보안 확인(캡차) 화면인지: 상품 칸이 하나도 없고 보안 확인 문구가 있을 때만 */
+  const BLOCK_RE = /자동\s*입력\s*방지|보안\s*확인|영수증|비정상적인|일시적으로\s*제한|접속이\s*(제한|불가)|로봇이\s*아닙|Access Denied|captcha|unusual traffic/i;
+  const blockedText = () => !!document.body && BLOCK_RE.test(document.body.innerText.slice(0, 4000)) && cardList().length === 0;
+  const snippet = () => ((document.title || "") + " | " + (document.body ? document.body.innerText : "")).replace(/\s+/g, " ").trim().slice(0, 90);
   async function waitReady() {
     let last = -1, same = 0;
     for (let i = 0; i < 50; i++) {
@@ -120,8 +123,11 @@
   }
   /* o: {pid, nm, st, scroll: 모바일처럼 계속 내려가는 화면이면 true, max} */
   async function scan(o) {
+    try { return await scan0(o); } catch (e) { return { error: String((e && e.message) || e), snip: snippet(), n: 0, keys: [] }; }
+  }
+  async function scan0(o) {
     await waitReady();
-    if (blockedText()) return { blocked: true, url: location.href };
+    if (blockedText()) return { blocked: true, url: location.href, snip: snippet() };
     const found = () => cardList().some(c => matchOf(c.el, o) && !isAd(c.el));
     if (o.quick) {}
     else if (o.scroll) await loadAll(80, () => found() || cardList().length >= (o.max || 200));
@@ -131,7 +137,7 @@
     list.forEach((c, i) => { const h = matchOf(c.el, o); if (!h) return; if (isAd(c.el)) { if (adHit < 0) adHit = i; return; } if (hit < 0 || (how === "상품명" && h !== "상품명")) { hit = i; how = h; } });
     const body = document.body.innerText;
     window.scrollTo(0, 0);
-    return { n: list.length, hit: hit, how: how, adHit: adHit, keys: list.slice(0, 6).map(c => c.k), url: location.href, len: body.length,
+    return { n: list.length, hit: hit, how: how, adHit: adHit, keys: list.slice(0, 6).map(c => c.k), url: location.href, len: body.length, snip: list.length ? "" : snippet(),
       noResult: /검색\s*결과가\s*없|검색결과가\s*없|상품이\s*없습니다/.test(body) && list.length === 0,
       priceChip: o.lo ? new RegExp(o.lo.toLocaleString("ko-KR") + "\\s*원?\\s*~\\s*" + o.hi.toLocaleString("ko-KR")).test(body) : false };
   }
@@ -198,5 +204,12 @@
     return ok;
   }
 
-  window.__PL = { readProduct: readProduct, scan: scan, priceUI: priceUI, clickPage: clickPage, box: box, copy: copy };
+  const state = () => ({ blocked: blockedText(), n: cardList().length, url: location.href });
+  /* 찾는 창 위쪽 안내 줄 */
+  function banner(t) {
+    let b = document.getElementById("__pl_banner");
+    if (!b) { b = document.createElement("div"); b.id = "__pl_banner"; b.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:2147483647;background:#5b2a86;color:#fff;font:bold 15px/1.5 sans-serif;padding:10px 14px;text-align:center"; document.documentElement.appendChild(b); }
+    b.textContent = t; return true;
+  }
+  window.__PL = { state: state, banner: banner, readProduct: readProduct, scan: scan, priceUI: priceUI, clickPage: clickPage, box: box, copy: copy };
 })();
