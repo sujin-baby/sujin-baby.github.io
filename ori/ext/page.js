@@ -1,0 +1,202 @@
+/* 상품 위치 찾기: 쇼핑몰 화면 안에서 도는 부분 (상품 정보 읽기, 검색 화면 읽기, 결과 상자) */
+(() => {
+  if (window.__PL) return;
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const norm = t => String(t || "").replace(/[\s\[\]\(\)\/,.·\-_+~!*'"]/g, "").toLowerCase();
+  const isNaver = /naver\.com$/.test(location.hostname);
+
+  /* ---------- 상품 페이지: 상품명, 판매처, 상품번호, 옵션, 가격, 썸네일 ---------- */
+  function readProduct() {
+    const L = location;
+    const og = n => { const m = document.querySelector('meta[property="og:' + n + '"]'); return m ? (m.content || "") : ""; };
+    const html = document.documentElement.innerHTML, txt = document.body.innerText;
+    let img = og("image"); if (img.indexOf("//") === 0) img = "https:" + img;
+    const num = s => Number(String(s || "").replace(/[^0-9]/g, "")) || 0;
+    const firstPrices = (t, n) => (t.match(/\d{1,3}(?:,\d{3})+\s*원/g) || []).slice(0, n).map(num).filter(x => x >= 100);
+    if (!isNaver) {
+      const pm = L.pathname.match(/\/v[pm]\/products\/(\d+)/);
+      if (!pm) return { err: "쿠팡 상품 상세 페이지에서 눌러 주세요." };
+      const qs = new URLSearchParams(L.search);
+      let item = qs.get("itemId") || qs.get("itemid") || "";
+      if (!item) { const m = html.match(/["']?itemId["']?\s*[:=]\s*["']?(\d{8,})/); if (m) item = m[1]; }
+      const h1 = document.querySelector("h1");
+      let name = og("title") || (h1 && h1.innerText.trim()) || document.title;
+      name = name.replace(/\s*[-|]\s*쿠팡!?\s*$/, "").trim();
+      let seller = "";
+      const sm = txt.match(/판매자\s*[:：]\s*([^\n]{1,40})/);
+      if (sm) seller = sm[1].trim();
+      if (!seller || /가입|보러가기|평가|정보/.test(seller)) { const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/); seller = s2 ? s2[1].trim() : ""; }
+      let opt = "";
+      const oe = document.querySelector('.prod-option__selected .value, .prod-option__selected-container .value, [class*="option"][class*="selected"] [class*="value"], [class*="selected-option"], [class*="SelectedOption"]');
+      if (oe) opt = oe.textContent.replace(/\s+/g, " ").trim().slice(0, 60);
+      if (!opt) { const om = txt.match(/(?:색상|옵션|구성|사이즈|수량|선택)\s*[:：]\s*([^\n]{1,40})/); if (om) opt = om[1].trim(); }
+      let price = 0;
+      const pe = document.querySelector('.prod-sale-price .total-price strong, .total-price strong, [class*="final-price"] [class*="amount"], .price-amount.final-price-amount, [class*="finalPrice"]');
+      if (pe) price = num(pe.textContent);
+      if (!price) { const p = firstPrices(txt, 3); if (p.length) price = Math.min.apply(null, p); }
+      return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, opt: opt, price: price, img: img };
+    }
+    const pm = L.pathname.match(/products\/(\d+)/);
+    if (!pm) return { err: "네이버는 스마트스토어(또는 브랜드스토어) 상품 페이지에서 눌러 주세요." };
+    const parts = document.title.split(/\s+:\s+/);
+    const name = (og("title") || parts[0] || "").split(/\s+:\s+/)[0].trim();
+    const seller = (parts.length > 1 ? parts[parts.length - 1] : og("site_name")).replace(/\s*[-|]?\s*네이버.*$/, "").trim();
+    /* 가격: 페이지 안 상품 데이터(할인가 → 판매가) → 화면에서 상품명 바로 뒤 가격 중 낮은 것(정가 줄 그은 것 말고 할인가) */
+    let price = 0;
+    const dm = html.match(/"discountedSalePrice"\s*:\s*(\d{3,})/) || html.match(/"mobileDiscountedSalePrice"\s*:\s*(\d{3,})/);
+    if (dm) price = Number(dm[1]);
+    if (!price) { const sm2 = html.match(/"salePrice"\s*:\s*(\d{3,})/); if (sm2) price = Number(sm2[1]); }
+    if (!price) { const i = name ? txt.indexOf(name.slice(0, 10)) : -1; const p = firstPrices(i >= 0 ? txt.slice(i, i + 1500) : txt, 2); if (p.length) price = Math.min.apply(null, p); }
+    let opt = "";
+    const oe = document.querySelector('[class*="selected"] [class*="option"], [class*="SelectedOption"], [class*="selectedOption"]');
+    if (oe) opt = oe.textContent.replace(/\s+/g, " ").trim().slice(0, 60);
+    return { site: "naver", mob: /^m\./.test(L.hostname), pid: pm[1], item: "", name: name, seller: seller, opt: opt, price: price, img: img };
+  }
+
+  /* ---------- 검색 화면: 상품 칸을 위에서부터 순서대로 ---------- */
+  const NAVER_PROD = /smartstore\.naver\.com|brand\.naver\.com|shopping\.naver\.com|adcr|nv_?mid|nvmid|catalog|bridge|\/products\//i;
+  const NOT_TITLE = /^(\d[\d,]*\s*원?|가격비교.*|리뷰.*|찜.*|구매.*|등록일.*|정보|신고.*|광고|AD|더보기|판매처.*|\d+)$/;
+  function cardList() {
+    let anchors, keyOf;
+    if (!isNaver) {
+      anchors = [...document.querySelectorAll('a[href*="/products/"]')].filter(a => /\/v[pm]\/products\/\d+/.test(a.getAttribute("href") || ""));
+      keyOf = a => (a.getAttribute("href").match(/products\/(\d+)/) || [])[1];
+    } else {
+      /* 네이버: 상품 이름이 적힌 링크 하나 = 상품 칸 하나 */
+      anchors = [...document.querySelectorAll("a[href]")].filter(a => {
+        const t = (a.innerText || "").trim();
+        return t.length >= 8 && !NOT_TITLE.test(t) && /[가-힣a-z]/i.test(t) && NAVER_PROD.test(a.href);
+      });
+      keyOf = a => norm(a.innerText).slice(0, 40);
+    }
+    const keyed = anchors.map(a => ({ a: a, k: keyOf(a) })).filter(x => x.k);
+    const keysIn = el => { const s = new Set(); keyed.forEach(x => { if (el.contains(x.a)) s.add(x.k); }); return s; };
+    const seen = new Set(), cards = [];
+    keyed.forEach(x => {
+      let el = x.a;
+      while (el.parentElement && el.parentElement !== document.body && keysIn(el.parentElement).size <= 1) el = el.parentElement;
+      if (seen.has(el)) return;
+      seen.add(el); cards.push({ el: el, k: x.k });
+    });
+    /* 같은 목록(같은 부모)에 3개 이상 있는 칸만: 배너, 추천 한두 개는 빼기 */
+    const byParent = new Map();
+    cards.forEach(c => byParent.set(c.el.parentElement, (byParent.get(c.el.parentElement) || 0) + 1));
+    const list = cards.filter(c => byParent.get(c.el.parentElement) >= 3);
+    list.sort((a, b) => a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+    return list;
+  }
+  const AD_TXT = /(^|[\s·|])(광고|AD)([\s·|]|$)/;
+  const isAd = el => AD_TXT.test(el.innerText || "") || !!el.querySelector('a[href*="adcr"], [class*="ad-badge"], [class*="adBadge"], [class*="ad_label"], [class*="AdMark"], img[alt="광고"], img[alt="AD"]');
+  function matchOf(el, o) {
+    const pidRe = new RegExp((isNaver ? "(^|\\D)" : "products/") + o.pid + "(?!\\d)");
+    if (!isNaver) return pidRe.test(el.innerHTML) ? "상품번호" : "";
+    if (o.pid && o.pid.length >= 8 && pidRe.test(el.innerHTML)) return "상품번호";
+    const t = norm(el.innerText), nk = norm(o.nm).slice(0, 25);
+    if (nk.length >= 6 && t.indexOf(nk) !== -1) return o.st && t.indexOf(norm(o.st)) !== -1 ? "상품명+스토어" : "상품명";
+    return "";
+  }
+  const blockedText = () => /자동입력\s*방지|보안\s*확인|비정상적인\s*(접근|요청)|Access Denied|captcha|일시적으로 제한/i.test(document.body ? document.body.innerText.slice(0, 3000) : "");
+  async function waitReady() {
+    let last = -1, same = 0;
+    for (let i = 0; i < 50; i++) {
+      await sleep(300);
+      if (!document.body) continue;
+      const n = document.body.innerText.length + cardList().length * 1000;
+      if (n > 300 && n === last) { if (++same >= 2) return; } else same = 0;
+      last = n;
+    }
+  }
+  /* 아래로 끝까지 내려서 그 화면 상품을 다 그리게 함. o.until(카드 목록)이 참이면 멈춤 */
+  async function loadAll(maxSteps, until) {
+    let last = -1, same = 0;
+    for (let i = 0; i < maxSteps; i++) {
+      if (until && until()) break;
+      window.scrollBy(0, Math.max(800, window.innerHeight * 0.9));
+      await sleep(400);
+      const n = document.documentElement.scrollHeight + cardList().length * 1000;
+      if (n === last && window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 5) { if (++same >= 3) break; } else same = 0;
+      last = n;
+    }
+  }
+  /* o: {pid, nm, st, scroll: 모바일처럼 계속 내려가는 화면이면 true, max} */
+  async function scan(o) {
+    await waitReady();
+    if (blockedText()) return { blocked: true, url: location.href };
+    const found = () => cardList().some(c => matchOf(c.el, o) && !isAd(c.el));
+    if (o.quick) {}
+    else if (o.scroll) await loadAll(80, () => found() || cardList().length >= (o.max || 200));
+    else await loadAll(40);
+    const list = cardList();
+    let hit = -1, how = "", adHit = -1;
+    list.forEach((c, i) => { const h = matchOf(c.el, o); if (!h) return; if (isAd(c.el)) { if (adHit < 0) adHit = i; return; } if (hit < 0 || (how === "상품명" && h !== "상품명")) { hit = i; how = h; } });
+    const body = document.body.innerText;
+    window.scrollTo(0, 0);
+    return { n: list.length, hit: hit, how: how, adHit: adHit, keys: list.slice(0, 6).map(c => c.k), url: location.href, len: body.length,
+      noResult: /검색\s*결과가\s*없|검색결과가\s*없|상품이\s*없습니다/.test(body) && list.length === 0,
+      priceChip: o.lo ? new RegExp(o.lo.toLocaleString("ko-KR") + "\\s*원?\\s*~\\s*" + o.hi.toLocaleString("ko-KR")).test(body) : false };
+  }
+  /* 가격 직접입력 칸에 넣고 검색 단추 (주소로 가격 필터가 안 먹을 때) */
+  function setVal(inp, v) {
+    const d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+    inp.focus(); d.set.call(inp, String(v));
+    inp.dispatchEvent(new Event("input", { bubbles: true })); inp.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  async function priceUI(lo, hi) {
+    const ins = [...document.querySelectorAll("input")].filter(i => i.type !== "hidden" && i.type !== "checkbox" && i.type !== "radio" &&
+      /원|가격|price|최소|최대|min|max/i.test([i.placeholder, i.getAttribute("aria-label"), i.name, i.id, i.className, i.title].join(" ")));
+    if (ins.length < 2) return false;
+    setVal(ins[0], lo); setVal(ins[1], hi);
+    let box = ins[0].parentElement; while (box && !box.contains(ins[1])) box = box.parentElement;
+    let btn = null;
+    for (let el = box, i = 0; el && i < 3 && !btn; el = el.parentElement, i++) btn = [...el.querySelectorAll("button, a[role=button], input[type=submit]")].find(b => { const t = (b.innerText || b.value || b.getAttribute("aria-label") || "").trim(); return !/^\d+$/.test(t); });
+    ins[1].dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
+    await sleep(300);
+    if (btn) btn.click();
+    return true;
+  }
+  /* 페이지 번호 단추 누르기 (주소로 다음 페이지가 안 열릴 때) */
+  function clickPage(n) {
+    const els = [...document.querySelectorAll("a,button")].filter(e => (e.innerText || "").trim() === String(n));
+    const btn = els.find(e => e.parentElement && /\b(1|2|3)\b/.test(e.parentElement.innerText.replace(String(n), ""))) || els.pop();
+    if (!btn) return false;
+    btn.click(); return true;
+  }
+
+  /* ---------- 결과 상자 (원래 상품 페이지 오른쪽 아래) ---------- */
+  function box(s) {
+    let bx = document.getElementById("__pl_box");
+    if (!bx) {
+      bx = document.createElement("div"); bx.id = "__pl_box";
+      bx.style.cssText = "position:fixed;right:8px;bottom:8px;z-index:2147483647;width:360px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow-y:auto;overflow-x:hidden;box-sizing:border-box;background:#fff;color:#1d1a24;border:2px solid #5b2a86;border-radius:10px;padding:14px;font:13px/1.5 sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.2);text-align:left";
+      document.body.appendChild(bx);
+    }
+    bx.textContent = "";
+    const add = (tag, css, text) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (text != null) e.textContent = text; bx.appendChild(e); return e; };
+    add("b", "display:block;margin-bottom:4px", s.title || "상품 위치 찾기");
+    if (s.big) add("div", "font-size:16px;font-weight:700;color:#5b2a86;margin:4px 0;white-space:pre-wrap", s.big);
+    if (s.msg) add("div", "white-space:pre-wrap", s.msg);
+    if (s.out != null) {
+      const ta = add("textarea", "width:100%;height:215px;margin:6px 0;font:12px/1.5 monospace;box-sizing:border-box");
+      ta.value = s.out;
+      const row = add("div", "display:flex;gap:8px");
+      const mk = (t, solid, f) => { const b = document.createElement("button"); b.textContent = t; b.style.cssText = "flex:1;padding:8px;border:1px solid #5b2a86;border-radius:6px;cursor:pointer;font:13px sans-serif;" + (solid ? "background:#5b2a86;color:#fff" : "background:#fff;color:#5b2a86"); b.onclick = f; row.appendChild(b); return b; };
+      const cp = mk(s.copied ? "복사됨" : "복사", true, () => { ta.select(); try { document.execCommand("copy"); cp.textContent = "복사됨"; } catch (e) {} if (navigator.clipboard) navigator.clipboard.writeText(ta.value).then(() => { cp.textContent = "복사됨"; }, () => {}); });
+      mk("닫기", false, () => bx.remove());
+    }
+    (s.notes || []).forEach(n => add("div", "color:" + (n.warn ? "#a35a00" : "#555") + ";font-size:12px;margin-top:6px;white-space:pre-wrap", n.t));
+    if (s.img) { const im = add("img", "display:block;max-width:100%;max-height:150px;width:auto;height:auto;margin-top:8px;border-radius:6px;border:1px solid #ddd"); im.src = s.img; im.alt = "대표 썸네일"; }
+    return true;
+  }
+
+  /* 결과 복사 (확장 프로그램 권한으로 누르지 않아도 복사됨) */
+  function copy(text) {
+    const t = document.createElement("textarea");
+    t.value = text; t.style.cssText = "position:fixed;left:-9999px;top:0";
+    document.body.appendChild(t); t.select();
+    let ok = false; try { ok = document.execCommand("copy"); } catch (e) {}
+    t.remove();
+    return ok;
+  }
+
+  window.__PL = { readProduct: readProduct, scan: scan, priceUI: priceUI, clickPage: clickPage, box: box, copy: copy };
+})();

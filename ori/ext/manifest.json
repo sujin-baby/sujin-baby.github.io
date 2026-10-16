@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "상품 위치 찾기 (체험단)",
+  "version": "1.0.0",
+  "description": "쿠팡·네이버 상품 페이지에서 한 번 누르면 상품 정보, PC·모바일 위치, 썸네일 저장까지",
+  "action": {
+    "default_title": "상품 위치 찾기",
+    "default_icon": {
+      "16": "icon16.png",
+      "32": "icon32.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "32": "icon32.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "background": {
+    "service_worker": "bg.js"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "tabs",
+    "downloads",
+    "debugger",
+    "offscreen",
+    "declarativeNetRequestWithHostAccess",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "*://*.coupang.com/*",
+    "*://*.naver.com/*",
+    "*://*.coupangcdn.com/*",
+    "*://*.pstatic.net/*",
+    "https://raw.githubusercontent.com/*"
+  ],
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+F",
+        "mac": "Alt+Shift+F"
+      },
+      "description": "상품 위치 찾기"
+    }
+  }
+}
