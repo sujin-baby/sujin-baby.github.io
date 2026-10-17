@@ -492,7 +492,7 @@ function cp(id){var t=document.getElementById(id||'notice');t.select();
 function go(){
   var d={daily:document.getElementById('daily').value.trim(),title:document.getElementById('title').value.trim(),type:document.getElementById('type').value,
     takdae:document.getElementById('takdae').checked,realship:document.getElementById('realship').checked,
-    platform:document.getElementById('platform').value,desc:document.getElementById('desc').value,fname:window.__FNAME||'',k:window.__K||'',n:window.__N||'',opts:window.__OPTS||'',shop:window.__SHOP||'',slot:window.__SLOT||'',photo:window.__PHOTO||'',date:window.__DATE||'',plan:window.__PLAN||'',slot2:window.__SLOT2||'',day:window.__DAY||'',total:window.__TOTAL||'',room:window.__ROOM||'',croom:window.__CROOM||''};
+    platform:document.getElementById('platform').value,desc:document.getElementById('desc').value,fname:window.__FNAME||'',k:window.__K||'',n:window.__N||'',opts:window.__OPTS||'',shop:window.__SHOP||'',slot:window.__SLOT||'',photo:window.__PHOTO||'',date:window.__DATE||'',plan:window.__PLAN||'',slot2:window.__SLOT2||'',day:window.__DAY||'',total:window.__TOTAL||'',room:window.__ROOM||'',croom:window.__CROOM||'',rv:window.__RV||''};
   if(!d.title){document.getElementById('msg').textContent='명단 제목을 넣어 주세요.';return;}
   document.getElementById('go').disabled=true;
   document.getElementById('msg').textContent='만드는 중이에요… (10~20초)';
@@ -525,6 +525,7 @@ function doGet(e) {
   if (p.p === 'queue') return ContentService.createTextOutput(queueText_());
   if (p.p === 'sent') { markMsg_(p.id, p.st === 'fail' ? '방 못 찾음' : '보냄'); return ContentService.createTextOutput('ok'); }
   if (p.p === 'rank') return rankPage_(p);
+  if (p.p === 'review') return reviewPage_(p);
   if (p.p === 'tools') {
     try { ensureCheckTrigger_(); } catch (e) {}
     return toolsPage_(toolsRequest_(p), 'web');
@@ -539,7 +540,7 @@ function doGet(e) {
     delete p.d64;
   }
   // 생성기 버튼으로 열면(auto=1) 값이 다 채워진 채로 바로 만들기 실행. 같은 요청ID는 한 번만 만들어짐
-  const pre = '<script>window.__N=' + JSON.stringify(p.n || '') + ';window.__ROOM=' + JSON.stringify(p.room || '') + ';window.__DATE=' + JSON.stringify(p.date || '') + ';window.__SHOP=' + JSON.stringify(p.shop || '') + ';window.__OPTS=' + JSON.stringify(p.opts || '') + ';window.__SLOT=' + JSON.stringify(p.slot || '') + ';window.__PHOTO=' + JSON.stringify(p.photo || '') + ';window.__PLAN=' + JSON.stringify(p.plan || '') + ';window.__SLOT2=' + JSON.stringify(p.slot2 || '') + ';window.__DAY=' + JSON.stringify(p.day || '') + ';window.__TOTAL=' + JSON.stringify(p.total || '') + ';window.__CROOM=' + JSON.stringify(p.croom || '') + ';window.__AUTO=' + (p.auto === '1' && p.title ? 'true' : 'false') + ';</' + 'script>';
+  const pre = '<script>window.__N=' + JSON.stringify(p.n || '') + ';window.__ROOM=' + JSON.stringify(p.room || '') + ';window.__DATE=' + JSON.stringify(p.date || '') + ';window.__SHOP=' + JSON.stringify(p.shop || '') + ';window.__OPTS=' + JSON.stringify(p.opts || '') + ';window.__SLOT=' + JSON.stringify(p.slot || '') + ';window.__PHOTO=' + JSON.stringify(p.photo || '') + ';window.__PLAN=' + JSON.stringify(p.plan || '') + ';window.__SLOT2=' + JSON.stringify(p.slot2 || '') + ';window.__DAY=' + JSON.stringify(p.day || '') + ';window.__TOTAL=' + JSON.stringify(p.total || '') + ';window.__CROOM=' + JSON.stringify(p.croom || '') + ';window.__RV=' + JSON.stringify(p.rv || '') + ';window.__AUTO=' + (p.auto === '1' && p.title ? 'true' : 'false') + ';</' + 'script>';
   const fill = pre + '<script>window.__K=' + JSON.stringify(CONFIG.KEY) + ';window.__FNAME=' + JSON.stringify(p.fname || '') + ';(function(){var p=' + JSON.stringify(p).replace(/</g, '\\u003c') + ';var $=function(i){return document.getElementById(i)};if(p.title)$("title").value=p.title;if(p.daily)$("daily").value=p.daily;if(p.desc)$("desc").value=p.desc;if(p.type)$("type").value=p.type;if(p.platform)$("platform").value=p.platform;$("takdae").checked=p.takdae==="1";$("realship").checked=p.realship==="1";autoGo();})();</' + 'script>';
   return HtmlService.createHtmlOutput(DIALOG_HTML + fill).setTitle('새 진행 만들기').addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
@@ -663,6 +664,8 @@ function createRunInner_(d) {
   if (d.takdae) list.getRange(r, lc_('택배 옮김')).insertCheckboxes();
   sortList_();
 
+  // 생성기가 넘긴 리뷰 정보(상품별 리뷰 종류·개수, 리뷰 안내, 공지 종류)를 의뢰(명단 시트)마다 저장 → 리뷰 배정 페이지가 씀
+  if (d.rv) { try { const pk = 'RV_' + ss.getId(), pr = PropertiesService.getScriptProperties(); if (!pr.getProperty(pk)) pr.setProperty(pk, String(d.rv).slice(0, 8000)); } catch (e) {} }
   return { notice: notice, formUrl: formUrl, sheetUrl: ss.getUrl(), folderUrl: folder.getUrl() };
 }
 
@@ -1938,6 +1941,212 @@ function rankPage_(p) {
   return HtmlService.createHtmlOutput(html).setTitle('네이버 위치 확인').addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
+/* ---------------- 리뷰 배정 (구매·폼이 다 끝난 뒤 카톡방에 새로 보내는 리뷰 공지) ----------------
+   ?p=review : 의뢰(명단 시트 하나 = 의뢰서 하나)를 고르면 모든 일차 응답에서 수취인 이름과 산 상품을 읽어서
+   상품별 리뷰 종류·개수(예: 옥광밤 별점 4, 텍스트리뷰 6)를 날마다 고르게 사람(수취인 이름 기준)에게 나눔 → 일차(카톡방)마다 공지
+   공지 종류: 나눠 배정 / 전체 텍스트리뷰 / 포토대기 / 구확건 / 직접 찍은 사진 포토리뷰(0/N) */
+const RV_KINDS = { mix: '리뷰 종류 나눠 배정', text: '전체 텍스트리뷰', photo: '포토대기 (업체가 사진 줌)', self: '직접 찍은 사진 포토리뷰', confirm: '구확건 (구매확정만)' };
+const RECIP_RE = /수취인|받는\s*(분|사람)|받으시는/;
+
+// '옥광밤 : 별점 4, 텍스트리뷰 6 / 황금향 : 별점 5, 텍스트리뷰 9' → [{name, mix:[{label,n}]}]  (상품 하나면 '별점 2, 텍스트리뷰 3'만 써도 됨)
+function parseRvMix_(text) {
+  const TYPE = /^(별점|텍스트|글씨|포토|사진|리뷰|한\s*줄|1줄|일반)/;
+  return String(text || '').split(/\s*(?:\/|\n)\s*/).map(function (seg) {
+    let m = seg.match(/^\s*([^:：]+?)\s*[:：]\s*(.*)$/), name = '', body = seg;
+    if (m) { name = m[1].trim(); body = m[2]; }
+    else { m = seg.match(/^\s*(\S+)\s+(.*\d.*)$/); if (m && !TYPE.test(m[1])) { name = m[1]; body = m[2]; } }
+    const mix = [];
+    // '별점 4, 텍스트리뷰 6' / '별점4 텍스트리뷰6' / '포토리뷰(1줄리뷰) 5'
+    const re = /([^,\s\d][^,]*?)\s*(\d+)\s*(?:개|건|명)?\s*(?=,|$|\s+[^\d\s,])/g;
+    let x;
+    while ((x = re.exec(body))) { const l = x[1].replace(/^[,\s]+|[,\s]+$/g, '').replace(/\s+/g, ''); if (l) mix.push({ label: l, n: Number(x[2]) }); }
+    return { name: name, mix: mix };
+  }).filter(function (p) { return p.mix.length; });
+}
+
+// 이 의뢰의 모든 일차 응답: [{day, run, t, name(수취인), nick, opt, price, prod}]
+function reviewRows_(runs, chain, prods) {
+  const k = function (x) { return String(x || '').toLowerCase().replace(/\s+/g, ''); };
+  const num = function (x) { return Number(String(x).replace(/[^0-9]/g, '')) || 0; };
+  const rows = [];
+  chain.runs.forEach(function (r, di) {
+    if (!r['시트ID']) return;
+    const info = rawInfo_(r['시트ID'], r['폼ID']);
+    const w = windowOf_(runs, r);
+    const src = info.src || info.raw, st = info.start || 2, lr = src.getLastRow();
+    let rc = info.head.findIndex(function (h) { return RECIP_RE.test(h); }) + 1;
+    if (!rc) rc = info.head.findIndex(function (h) { return MATCH.name.test(h) && !MATCH.nick.test(h) && !/예금주/.test(h); }) + 1;
+    const data = lr < st ? [] : src.getRange(st, 1, lr - st + 1, info.head.length).getValues()
+      .filter(function (x) { return x[0] instanceof Date && x[0].getTime() >= w.from && x[0].getTime() < w.to; });
+    // 상품 알아내기: 폼 옵션 글에 상품 이름 → 결제 금액이 그 상품 가격 → 배정 탭(닉네임 → 공지 옵션) → 상품이 하나면 그것
+    let desc = '';
+    try { desc = FormApp.openById(r['폼ID']).getDescription() || ''; } catch (e) {}
+    const np = noticeProducts_(desc);
+    const asg = {};
+    try { const as = assignSheet_(), last = as.getLastRow(); if (last >= 2) as.getRange(2, 1, last - 1, 3).getValues().forEach(function (v) { if (String(v[0]) === String(r['명단 제목'])) asg[k(v[1])] = String(v[2]); }); } catch (e) {}
+    const prodOf = function (opt, price, nick) {
+      if (prods.length === 1) return prods[0].name;
+      const hit = function (t) { const tt = k(t); return prods.filter(function (p) { return p.name && tt.indexOf(k(p.name)) !== -1; })[0]; };
+      let p = hit(opt) || (asg[k(nick)] ? hit(asg[k(nick)]) : null);
+      if (!p && price) { const g = np.filter(function (x) { return x.prices.indexOf(price) !== -1; }); if (g.length === 1) p = hit(g[0].name); }
+      return p ? p.name : '';
+    };
+    data.forEach(function (x) {
+      const nick = info.nickCol ? String(x[info.nickCol - 1]).trim() : '', opt = info.optCol ? String(x[info.optCol - 1]).trim() : '', price = info.priceCol ? num(x[info.priceCol - 1]) : 0;
+      rows.push({ day: di, run: r, t: x[0].getTime(), name: rc ? String(x[rc - 1]).trim() : '', nick: nick, opt: opt, price: price, prod: prodOf(opt, price, nick) });
+    });
+  });
+  return rows;
+}
+
+// 개수를 n에 맞게 (남는 건 소수점 큰 쪽부터)
+function rvScale_(mix, n) {
+  const sum = mix.reduce(function (a, o) { return a + o.n; }, 0);
+  if (!sum || sum === n) return mix.map(function (o) { return o.n; });
+  const ex = mix.map(function (o) { return o.n * n / sum; }), res = ex.map(Math.floor);
+  let rest = n - res.reduce(function (a, x) { return a + x; }, 0);
+  ex.map(function (x, i) { return [x - Math.floor(x), i]; }).sort(function (a, b) { return b[0] - a[0]; }).forEach(function (q) { if (rest > 0) { res[q[1]]++; rest--; } });
+  return res;
+}
+// 상품 하나의 구매들에 리뷰 종류 배정: 날마다 고르게(남은 개수 비율대로), 그날 안에서는 옵션이 섞이게 번갈아
+function rvAssign_(items, mix, nDays) {
+  const left = rvScale_(mix, items.length);
+  for (let d = 0; d < nDays; d++) {
+    const day = items.filter(function (it) { return it.day === d; }).sort(function (a, b) { return a.opt < b.opt ? -1 : a.opt > b.opt ? 1 : a.t - b.t; });
+    if (!day.length) continue;
+    const L = left.reduce(function (a, x) { return a + x; }, 0);
+    const take = rvScale_(left.map(function (x) { return { n: x }; }), Math.min(day.length, L));
+    const room = take.slice();
+    // 한 사람(수취인 이름)이 여러 개 샀으면 되도록 같은 리뷰 종류로 (사람이 많이 산 순서로, 남은 자리가 큰 종류에)
+    const groups = {}, order = [];
+    day.forEach(function (it) { const key = it.name || it.nick || String(it.t); if (!groups[key]) { groups[key] = []; order.push(key); } groups[key].push(it); });
+    order.sort(function (a, b) { return groups[b].length - groups[a].length; }).forEach(function (key) {
+      groups[key].forEach(function (it) {
+        let bi = -1;
+        const fit = room.map(function (x, i) { return [x, i]; }).filter(function (q) { return q[0] >= groups[key].length; });
+        const pickFrom = fit.length ? fit : room.map(function (x, i) { return [x, i]; }).filter(function (q) { return q[0] > 0; });
+        if (pickFrom.length) bi = pickFrom.sort(function (a, b) { return b[0] - a[0] || a[1] - b[1]; })[0][1];
+        if (it.__rvKey === key && it.__rvI !== undefined && room[it.__rvI] > 0) bi = it.__rvI;
+        if (bi < 0) { it.rv = ''; return; }
+        room[bi]--; it.rv = mix[bi].label;
+        groups[key].forEach(function (o) { o.__rvKey = key; o.__rvI = bi; });
+      });
+    });
+    take.forEach(function (tn, i) { left[i] -= tn - room[i]; });
+  }
+}
+// 일차(카톡방)마다 리뷰 공지 글
+function rvNotice_(kind, guide, items, prods) {
+  const gl = guide ? '리뷰내용 가이드 : ' + guide : '';
+  if (kind === 'text') return ['★★★전체 텍스트리뷰★★★', gl].filter(Boolean).join('\n');
+  if (kind === 'photo') return ['★★★포토대기★★★', gl].filter(Boolean).join('\n');
+  if (kind === 'confirm') return '★★★구확건★★★';
+  if (kind === 'self') return ['0/' + items.length + ' 사진 5장 이상 사용샷 포토리뷰', '너무 성의 없는 리뷰는 수정 요청 올 수 있어요', gl].filter(Boolean).join('\n');
+  // 같은 방에서 한 사람이 리뷰 종류가 두 개로 나뉘면 어느 주문인지 옵션을 붙임
+  const nm = function (it) { return it.name || (it.nick ? it.nick + '(닉네임)' : '이름 없음'); };
+  const kinds = {};
+  items.forEach(function (it) { (kinds[nm(it)] = kinds[nm(it)] || {})[it.rv || ''] = 1; });
+  const optShort = function (o) { return String(o || '').replace(/\s*\([\d,\s]+원\)\s*$/, '').replace(new RegExp('^(' + prods.map(function (p) { return p.name; }).filter(Boolean).join('|') + ')\\s*'), '').trim(); };
+  const who = function (list) {
+    const c = {}, order = [];
+    list.forEach(function (it) {
+      const n = nm(it) + (Object.keys(kinds[nm(it)]).length > 1 && optShort(it.opt) ? '(' + optShort(it.opt) + ')' : '');
+      if (!c[n]) { c[n] = 0; order.push(n); } c[n]++;
+    });
+    return order.map(function (n) { return c[n] > 1 ? n + ' ' + c[n] : n; }).join(', ');
+  };
+  const out = ['★★★리뷰 안내★★★', gl, '수취인 이름으로 본인 리뷰 종류 확인해 주세요!'].filter(Boolean);
+  const names = prods.map(function (p) { return p.name; }).concat(items.some(function (it) { return !it.prod; }) ? [''] : []);
+  names.forEach(function (pn) {
+    const mine = items.filter(function (it) { return it.prod === pn; });
+    if (!mine.length) return;
+    out.push('');
+    if (prods.length > 1) out.push('[' + (pn || '상품 모름 — 직접 확인') + ']');
+    const p = prods.filter(function (x) { return x.name === pn; })[0];
+    (p ? p.mix.map(function (o) { return o.label; }) : []).concat(['']).forEach(function (lab) {
+      const l = mine.filter(function (it) { return (it.rv || '') === lab; });
+      if (l.length) out.push((lab || '종류 미정') + ' (' + l.length + '명) : ' + who(l));
+    });
+  });
+  return out.join('\n');
+}
+// 의뢰 하나 계산: 일차마다 {room, title, items, notice}
+function reviewPlan_(runs, chain, o) {
+  const prods = parseRvMix_(o.mix);
+  if (!prods.length && o.kind === 'mix') return { err: '리뷰 종류와 개수를 넣어 주세요 (예: 옥광밤 : 별점 4, 텍스트리뷰 6 / 황금향 : 별점 5, 텍스트리뷰 9)' };
+  if (prods.length === 1 && !prods[0].name) prods[0].name = '상품';
+  const rows = reviewRows_(runs, chain, prods.length ? prods : [{ name: '상품', mix: [] }]);
+  if (o.kind === 'mix') prods.forEach(function (p) { rvAssign_(rows.filter(function (it) { return it.prod === p.name; }), p.mix, chain.runs.length); });
+  const days = chain.runs.map(function (r, di) {
+    const items = rows.filter(function (it) { return it.day === di; });
+    return { room: String(r['카톡방'] || bareTitle_(r['명단 제목'])), title: String(r['명단 제목']), items: items, notice: items.length ? rvNotice_(o.kind, o.guide, items, prods) : '' };
+  });
+  const sum = prods.map(function (p) {
+    const mine = rows.filter(function (it) { return it.prod === p.name; });
+    return p.name + ' ' + mine.length + '명: ' + p.mix.map(function (x) { return x.label + ' ' + mine.filter(function (it) { return it.rv === x.label; }).length; }).join(', ') + (p.mix.reduce(function (a, x) { return a + x.n; }, 0) !== mine.length ? ' (의뢰서 ' + p.mix.map(function (x) { return x.label + ' ' + x.n; }).join(', ') + ' → 실제 인원에 맞춰 나눔)' : '');
+  });
+  const unknown = rows.filter(function (it) { return !it.prod; }).length;
+  return { days: days, sum: sum, unknown: unknown, total: rows.length };
+}
+
+function reviewPage_(p) {
+  const esc = function (t) { return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); };
+  const url = function (q) { return esc((CONFIG.WEBAPP_URL || '') + '?p=review&k=' + encodeURIComponent(CONFIG.KEY) + Object.keys(q).map(function (x) { return '&' + x + '=' + encodeURIComponent(q[x]); }).join('')); };
+  const runs = readRuns_();
+  const chains = chainsOf_(runs).filter(function (c) { return c.runs.length && c.runs[0]['시트ID']; });
+  const now = Date.now();
+  let body = '<h1>리뷰 배정</h1><p class="s">구매·폼 작성이 다 끝난 뒤 카톡방에 새로 보내는 리뷰 공지예요. 사람은 <b>수취인 이름</b> 기준.</p>';
+  const sid = String(p.s || '');
+  const chain = chains.filter(function (c) { return String(c.runs[0]['시트ID']) === sid; })[0];
+  if (!chain) {
+    const recent = chains.filter(function (c) { const last = c.runs[c.runs.length - 1]['진행일']; return last instanceof Date && now - last.getTime() < 21 * 86400000; })
+      .sort(function (a, b) { return b.runs[b.runs.length - 1]['진행일'] - a.runs[a.runs.length - 1]['진행일']; });
+    body += '<p class="h">어느 의뢰예요?</p>' + (recent.length ? recent.map(function (c) {
+      const f = c.runs[0], l = c.runs[c.runs.length - 1];
+      const md = function (d) { return (d.getMonth() + 1) + '.' + d.getDate(); };
+      return '<a class="pick" href="' + url({ s: String(f['시트ID']) }) + '" target="_top">' + esc(campOf_(f['명단 제목'])) + '<span class="s"> ' + md(f['진행일']) + (c.runs.length > 1 ? '~' + md(l['진행일']) : '') + ' · ' + c.runs.length + '일 · ' +
+        c.runs.reduce(function (a, r) { return a + (Number(r['인원']) || 0); }, 0) + '명</span></a>';
+    }).join('') : '<p class="s">최근 3주 진행이 없어요.</p>');
+  } else {
+    const pr = PropertiesService.getScriptProperties();
+    let saved = {};
+    try { saved = JSON.parse(pr.getProperty('RV_' + sid) || '{}'); } catch (e) {}
+    let desc = '';
+    try { desc = FormApp.openById(chain.runs[0]['폼ID']).getDescription() || ''; } catch (e) {}
+    const o = { kind: String(p.kind || saved.kind || (/^\s*유/.test(String(chain.runs[0]['포토'] || '')) ? 'photo' : 'mix')), mix: p.mix != null ? String(p.mix) : String(saved.mix || noticeProducts_(desc).map(function (x) { return x.name + ' : '; }).join(' / ')), guide: p.guide != null ? String(p.guide) : String(saved.guide || '') };
+    // 고친 값은 다음에 열 때도 그대로
+    if (p.mix != null || p.kind || p.guide != null) { try { pr.setProperty('RV_' + sid, JSON.stringify(o)); } catch (e) {} }
+    const plan = reviewPlan_(runs, chain, o);
+    let msg = '';
+    if (p.q != null && plan.days && plan.days[Number(p.q)] && plan.days[Number(p.q)].notice) { const d = plan.days[Number(p.q)]; queueMsg_(d.room, d.notice, '리뷰'); msg = '✔ 보낼 메시지함에 넣었어요: ' + d.room; }
+    const hidden = '<input type="hidden" name="p" value="review"><input type="hidden" name="k" value="' + esc(CONFIG.KEY) + '"><input type="hidden" name="s" value="' + esc(sid) + '">';
+    body += '<p class="h">' + esc(campOf_(chain.runs[0]['명단 제목'])) + ' <a class="s" href="' + url({}) + '" target="_top">(다른 의뢰)</a></p>' + (msg ? '<p class="ok">' + esc(msg) + '</p>' : '') +
+      '<form method="get" action="' + esc(CONFIG.WEBAPP_URL || '') + '" target="_top">' + hidden +
+      '<label>공지 종류<select name="kind">' + Object.keys(RV_KINDS).map(function (x) { return '<option value="' + x + '"' + (x === o.kind ? ' selected' : '') + '>' + RV_KINDS[x] + '</option>'; }).join('') + '</select></label>' +
+      '<label>리뷰 종류와 개수 (의뢰서 전체 기준. 상품마다 / 로 나눔)<textarea name="mix" placeholder="옥광밤 : 별점 4, 텍스트리뷰 6 / 황금향 : 별점 5, 텍스트리뷰 9">' + esc(o.mix) + '</textarea></label>' +
+      '<label>리뷰내용 가이드<input name="guide" value="' + esc(o.guide) + '" placeholder="예: 너무 길지 않게 간단하게 부탁드려요"></label><button>이대로 나누기</button></form>';
+    if (plan.err) body += '<p class="err">' + esc(plan.err) + '</p>';
+    else {
+      body += '<p class="s">' + esc(plan.total + '명 · ' + plan.sum.join(' / ')) + (plan.unknown ? '<br><b class="err">' + plan.unknown + '명은 어느 상품을 샀는지 몰라요 (아래 공지에 따로 표시)</b>' : '') + '</p>';
+      plan.days.forEach(function (d, i) {
+        body += '<div class="day"><p class="h">' + (i + 1) + '일차 · ' + esc(d.room) + ' (' + d.items.length + '명)</p>';
+        if (!d.items.length) { body += '<p class="s">응답이 없어요.</p></div>'; return; }
+        body += '<textarea id="t' + i + '" readonly>' + esc(d.notice) + '</textarea><div class="row"><button type="button" onclick="c(' + i + ',this)">복사</button><a class="btn" href="' + url({ s: sid, q: String(i) }) + '" target="_top">보낼 메시지함에 넣기</a></div>' +
+          '<details><summary>누가 뭘 샀는지 보기</summary><table><tr><th>수취인</th><th>닉네임</th><th>산 것</th><th>리뷰</th></tr>' +
+          d.items.map(function (it) { return '<tr><td>' + esc(it.name) + '</td><td>' + esc(it.nick) + '</td><td>' + esc(it.opt ? (it.prod && it.opt.indexOf(it.prod) === -1 ? it.prod + ' · ' : '') + it.opt.replace(/\s*\([\d,\s]+원\)\s*$/, '') : (it.prod || '?')) + '</td><td>' + esc(it.rv || '') + '</td></tr>'; }).join('') + '</table></details></div>';
+      });
+    }
+  }
+  const html = '<style>body{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;margin:0;padding:16px;background:#f4f4f8;color:#1d1a24;max-width:720px}h1{font-size:20px;margin:0 0 6px}' +
+    '.h{font-weight:700;margin:14px 0 6px}.s{color:#666;font-size:13px;font-weight:400}.ok{color:#2f7a2f}.err{color:#a3271b;white-space:pre-wrap}label{display:block;margin:8px 0;font-size:13px;color:#444}' +
+    'textarea,input,select{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #cfc9db;border-radius:8px;margin:4px 0;background:#fff}textarea{height:90px}.day textarea{height:220px;font-size:14px}' +
+    'button,.btn{display:block;width:100%;box-sizing:border-box;text-align:center;padding:12px;border:0;border-radius:8px;background:#5b2a86;color:#fff;font:inherit;font-weight:700;margin-top:6px;text-decoration:none}.row{display:flex;gap:8px}.row>*{flex:1}' +
+    '.pick{display:block;padding:12px;margin:6px 0;background:#fff;border:1px solid #ddd;border-radius:8px;color:#1d1a24;text-decoration:none;font-weight:700}.day{background:#fff;border-radius:10px;padding:10px 12px;margin:12px 0}' +
+    'table{border-collapse:collapse;width:100%;font-size:13px}td,th{border-bottom:1px solid #eee;padding:4px;text-align:left;white-space:nowrap}details{overflow-x:auto}</style>' + body +
+    '<script>function c(i,b){var t=document.getElementById("t"+i);t.select();try{navigator.clipboard.writeText(t.value).then(function(){b.textContent="복사됨"},function(){document.execCommand("copy");b.textContent="복사됨"})}catch(e){document.execCommand("copy");b.textContent="복사됨"}}</' + 'script>';
+  return HtmlService.createHtmlOutput(html).setTitle('리뷰 배정').addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
 function toolsUrl_() { return (CONFIG.WEBAPP_URL || '') + '?p=tools&k=' + CONFIG.KEY; }
 
 function toolAction_(d) {
@@ -2291,6 +2500,9 @@ const TOOLS_HTML = String.raw`
 <div class="card"><h2>① 카톡에 보낼 것</h2>
   <p class="hint">[복사]를 누르면 보낸 걸로 표시돼요. 카톡 방에 붙여넣고 보내기는 직접 눌러 주세요.</p>
   <div id="ob"></div></div>
+<div class="card"><h2>리뷰 공지 (구매·폼이 다 끝난 뒤)</h2>
+  <p class="hint">의뢰를 고르면 모든 날 명단의 <b>수취인 이름</b>과 산 상품을 보고 리뷰 종류(별점·텍스트·포토)를 날마다 고르게 나눠서, 카톡방마다 보낼 리뷰 공지를 만들어요.</p>
+  <a id="rvlink" href="#" target="_top" style="display:block;text-align:center;padding:12px;border-radius:8px;background:#5b2a86;color:#fff;font-weight:700;text-decoration:none">리뷰 배정 열기</a></div>
 <div class="card"><h2>② 카톡 공지 저장 (누가 어떤 옵션 샀는지)</h2>
   <p class="hint"><b>순서</b><br>
   1. 아래 칸에서 <b>이 공지가 어느 진행인지</b> 고르세요. 카톡방 이름(방제)과 같은 걸 고르면 돼요. 예) 10.16 모두의농수산 방 공지 → "#택10.16 모두의농수산…"<br>
@@ -2320,6 +2532,7 @@ const TOOLS_HTML = String.raw`
 //  휴대폰·웹(MODE web): 버튼을 누르면 페이지가 그대로 새로 열리며 처리 (google.script.run을 안 씀. 아이폰 사파리 등에서 응답이 안 오는 문제 피함)
 //  시트 옆 사이드바(MODE side): google.script.run
 var K = __K__, INIT = __INIT__, MODE = __MODE__, EXEC = __EXEC__, PV = __PV__, $ = function (i) { return document.getElementById(i); }, running = false, tick = null, NEXTMD = '', JUST = false;
+try { $('rvlink').href = EXEC + '?p=review&k=' + encodeURIComponent(K); if (MODE !== 'web') $('rvlink').target = '_blank'; } catch (e) {}
 function say(t) { $('msg').style.display = t ? 'block' : 'none'; $('msg').textContent = t || ''; if (t) $('msg').scrollIntoView({ block: 'nearest' }); }
 function busy(on, label) {
   running = on;
