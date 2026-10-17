@@ -1982,8 +1982,21 @@ function reviewRows_(runs, chain, prods) {
     let desc = '';
     try { desc = FormApp.openById(r['폼ID']).getDescription() || ''; } catch (e) {}
     const np = noticeProducts_(desc);
-    const asg = {};
-    try { const as = assignSheet_(), last = as.getLastRow(); if (last >= 2) as.getRange(2, 1, last - 1, 3).getValues().forEach(function (v) { if (String(v[0]) === String(r['명단 제목'])) asg[k(v[1])] = String(v[2]); }); } catch (e) {}
+    const asg = {}, optNicks = [];
+    try {
+      const as = assignSheet_(), last = as.getLastRow();
+      if (last >= 2) as.getRange(2, 1, last - 1, 9).getValues().forEach(function (v) {
+        if (String(v[0]) !== String(r['명단 제목'])) return;
+        asg[k(v[1])] = String(v[2]);
+        if (!(v[3] !== '' && Number(v[3]) === 0)) optNicks.push({ nick: String(v[1]).trim(), choice: k(v[7]), price: num(v[8]) });   // 취소(0)는 빼고
+      });
+    } catch (e) {}
+    // 닉네임 질문이 없던 예전 폼: 저장한 공지(배정 탭)에서 그 옵션을 산 사람이 한 명뿐이면 그 사람 주문으로 봄
+    const nickByOpt = function (opt, price) {
+      const ns = optNicks.filter(function (o) { return (o.choice && o.choice === k(opt)) || (!o.choice && o.price && o.price === price); }).map(function (o) { return o.nick; });
+      const u = ns.filter(function (x, i) { return ns.indexOf(x) === i; });
+      return u.length === 1 ? u[0] : '';
+    };
     const prodOf = function (opt, price, nick) {
       if (prods.length === 1) return prods[0].name;
       const hit = function (t) { const tt = k(t); return prods.filter(function (p) { return p.name && tt.indexOf(k(p.name)) !== -1; })[0]; };
@@ -1992,7 +2005,8 @@ function reviewRows_(runs, chain, prods) {
       return p ? p.name : '';
     };
     data.forEach(function (x) {
-      const nick = info.nickCol ? String(x[info.nickCol - 1]).trim() : '', opt = info.optCol ? String(x[info.optCol - 1]).trim() : '', price = info.priceCol ? num(x[info.priceCol - 1]) : 0;
+      const opt = info.optCol ? String(x[info.optCol - 1]).trim() : '', price = info.priceCol ? num(x[info.priceCol - 1]) : 0;
+      const nick = info.nickCol ? String(x[info.nickCol - 1]).trim() : nickByOpt(opt, price);
       rows.push({ day: di, run: r, t: x[0].getTime(), name: rc ? String(x[rc - 1]).trim() : '', nick: nick, opt: opt, price: price, prod: prodOf(opt, price, nick) });
     });
   });
@@ -2017,9 +2031,10 @@ function rvAssign_(items, mix, nDays) {
     const L = left.reduce(function (a, x) { return a + x; }, 0);
     const take = rvScale_(left.map(function (x) { return { n: x }; }), Math.min(day.length, L));
     const room = take.slice();
-    // 한 사람(수취인 이름)이 여러 개 샀으면 되도록 같은 리뷰 종류로 (사람이 많이 산 순서로, 남은 자리가 큰 종류에)
+    // 한 사람(카톡 닉네임)이 여러 계정·수취인으로 샀으면 되도록 같은 리뷰 종류로 (많이 산 사람부터, 남은 자리가 큰 종류에)
+    //  공지에는 주문마다 수취인 이름이 따로 나감 (박미영 → 송석민, 박장환, 황귀순, 박미영)
     const groups = {}, order = [];
-    day.forEach(function (it) { const key = it.name || it.nick || String(it.t); if (!groups[key]) { groups[key] = []; order.push(key); } groups[key].push(it); });
+    day.forEach(function (it) { const key = it.nick ? 'n:' + it.nick : (it.name ? 'r:' + it.name : 't:' + it.t); if (!groups[key]) { groups[key] = []; order.push(key); } groups[key].push(it); });
     order.sort(function (a, b) { return groups[b].length - groups[a].length; }).forEach(function (key) {
       groups[key].forEach(function (it) {
         let bi = -1;
