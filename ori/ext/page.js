@@ -169,7 +169,11 @@
     window.scrollTo(0, 0);
     /* 광고 칸은 빼고 몇 번째 상품인지 */
     const org = hit >= 0 ? list.slice(0, hit).filter(c => !isAd(c.el)).length + 1 : 0;
-    return { n: list.length, hit: hit, org: org, how: how, adHit: adHit, keys: list.slice(0, 6).map(c => c.k), url: location.href, len: body.length, snip: list.length ? "" : snippet(),
+    /* 비슷한 상품이 많은지: 가격비교·카탈로그로 묶인 칸이거나, 같은 상품명이 광고 아닌 칸에 2개 이상 */
+    const nk15 = norm(o.nm).slice(0, 15);
+    const sameN = nk15.length >= 8 ? list.filter(c => !isAd(c.el) && norm(c.el.innerText).indexOf(nk15) !== -1).length : 0;
+    const similar = hit >= 0 && (/판매처\s*\d+|쇼핑몰별\s*최저가|최저\s*[\d,]+\s*원|가격\s*비교/.test(list[hit].el.innerText || "") || sameN >= 2);
+    return { n: list.length, hit: hit, org: org, similar: similar, how: how, adHit: adHit, keys: list.slice(0, 6).map(c => c.k), url: location.href, len: body.length, snip: list.length ? "" : snippet(),
       noResult: /검색\s*결과가\s*없|검색결과가\s*없|상품이\s*없습니다/.test(body) && list.length === 0,
       priceChip: o.lo ? new RegExp(o.lo.toLocaleString("ko-KR") + "\\s*원?\\s*~\\s*" + o.hi.toLocaleString("ko-KR")).test(body) : false };
   }

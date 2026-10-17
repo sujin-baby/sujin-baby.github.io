@@ -424,9 +424,9 @@ async function naverHere(tab) {
   if (s.hit >= 0) {
     await call(tid, "mark", [s.hit]);
     const pos = mob ? Math.max(1, Math.ceil(s.org / 40)) + "페이지" : h.page + "페이지";
-    const out = infoLines(t).concat([h.query ? "찾은 키워드 : " + h.query : "", filtered ? "필터 : " + gageom(h.lo, h.hi) : "", (mob ? "모바일 위치 : " : "PC 위치 : ") + pos]).filter(Boolean).join("\n");
+    const out = infoLines(t).concat([h.query ? "찾은 키워드 : " + h.query : "", filtered ? "필터 : " + gageom(h.lo, h.hi) : "", s.similar ? "주의 : 비슷한 상품 많음" : "", (mob ? "모바일 위치 : " : "PC 위치 : ") + pos]).filter(Boolean).join("\n");
     const copied = await copyText(out, tid);
-    await ui(tid, { title: copied ? "찾았어요! 복사됐어요. 생성기 '상품 정보 붙여넣기' 칸에 Ctrl+V" : "찾았어요! 복사를 눌러 생성기에 붙여넣으세요", big: "키워드 : " + h.query + "\n위치 : " + (filtered ? gageom(h.lo, h.hi) + " " : "") + pos, out: out, copied: copied,
+    await ui(tid, { title: copied ? "찾았어요! 복사됐어요. 생성기 '상품 정보 붙여넣기' 칸에 Ctrl+V" : "찾았어요! 복사를 눌러 생성기에 붙여넣으세요", big: "키워드 : " + h.query + "\n위치 : " + (filtered ? gageom(h.lo, h.hi) + " " : "") + pos + (s.similar ? "\n(비슷한 상품 많음 → 공지에 '판매처, 가격 보고 구매' 안내가 붙어요)" : ""), out: out, copied: copied,
       notes: [{ t: "분홍 테두리가 찾은 상품이에요." + (s.how === "상품명" ? " (상품명으로 찾음, 스토어 이름은 화면에 없었음)" : "") }, mob ? null : { t: "모바일 위치는 휴대폰에서 북마크로 확인해 주세요." }].filter(Boolean) });
     return;
   }
