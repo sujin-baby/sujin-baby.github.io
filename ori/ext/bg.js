@@ -18,6 +18,26 @@ chrome.runtime.onMessage.addListener((m, sender) => {
   if (m.act === "cancel") { cancel = true; closeWork(); ui(sender.tab.id, { title: "멈췄어요", msg: "다시 하려면 아이콘을 누르세요." }); return; }
   naverAct(sender.tab, m.act).catch(e => ui(sender.tab.id, { title: "멈췄어요", msg: "오류: " + ((e && e.message) || e) }));
 });
+/* 생성기 [상품 페이지 열기]로 연 탭: 주소 뒤 #kw=…&pr=… (의뢰서 키워드)를 탭마다 기억해 둠.
+   쿠팡 단축 링크(link.coupang.com)가 상품 페이지로 넘어가면서 # 뒤를 버려서 (10/18 '런치버스 미니 텀블러' 대신 추천 키워드로 찾음) */
+const hashOf = u => { const h = String(u || "").split("#")[1] || ""; return /(?:^|&)kw=/.test(h) ? h : ""; };
+const pidOf = u => (String(u || "").match(/\/(?:vp|vm)\/products\/(\d+)|\/products\/(\d+)/) || []).slice(1).find(Boolean) || "";
+async function keepHash(id, u) {
+  const k = "hash_" + id, h = hashOf(u);
+  if (h) { await chrome.storage.session.set({ [k]: { h: h, pid: pidOf(u) } }); return; }
+  const o = (await chrome.storage.session.get(k))[k]; if (!o) return;
+  const pid = pidOf(u); if (!pid) return;
+  if (!o.pid) { o.pid = pid; await chrome.storage.session.set({ [k]: o }); }
+  else if (o.pid !== pid) await chrome.storage.session.remove(k);   /* 다른 상품으로 옮겨 가면 잊음 */
+}
+chrome.tabs.onCreated.addListener(t => { keepHash(t.id, t.pendingUrl || t.url).catch(() => {}); });
+chrome.tabs.onUpdated.addListener((id, ch) => { if (ch.url) keepHash(id, ch.url).catch(() => {}); });
+chrome.tabs.onRemoved.addListener(id => { chrome.storage.session.remove("hash_" + id).catch(() => {}); });
+async function tabHash(tab) {
+  const h = hashOf(tab.url); if (h) return h;
+  const k = "hash_" + tab.id, o = (await chrome.storage.session.get(k).catch(() => ({})))[k];
+  return o && (!o.pid || o.pid === pidOf(tab.url)) ? o.h : "";
+}
 self.__test = async () => { const [t] = await chrome.tabs.query({ active: true, lastFocusedWindow: true }); return start(t); };
 
 async function start(tab) {
@@ -329,7 +349,7 @@ async function run(tab) {
   const site = info.site;
   if (site === "naver") return naverProduct(tab, info);
   PER = 36;
-  const h = (tab.url || "").split("#")[1] || "";
+  const h = await tabHash(tab);
   const hk = (h.match(/(?:^|&)kw=([^&]+)/) || [])[1], hp = Number((h.match(/(?:^|&)pr=(\d+)/) || [])[1] || 0);
   const kws = (hk ? decodeURIComponent(hk).split("|") : suggest(info.name)).map(x => x.trim()).filter(Boolean).slice(0, 4);
   const price = hp || info.price || 0;
@@ -337,7 +357,7 @@ async function run(tab) {
   const P = site === "naver" ? { lo: price, hi: price } : { lo: Math.floor(price * 0.9 / 100) * 100, hi: Math.ceil(price * 1.1 / 100) * 100 };
   const steps = [];
   kws.forEach(k => { steps.push([k, false]); if (price) steps.push([k, true]); });
-  const head = "키워드: " + kws.join(" → ") + (price ? "\n가격: " + price.toLocaleString("ko-KR") + "원" : "\n가격을 못 읽어서 가격 필터는 빼고 찾아요");
+  const head = "키워드: " + kws.join(" → ") + (hk ? "" : "\n(자동 추천 키워드예요. 의뢰서 키워드로 찾으려면 생성기의 [상품 페이지 열기]로 연 페이지에서 누르세요)") + (price ? "\n가격: " + price.toLocaleString("ko-KR") + "원" : "\n가격을 못 읽어서 가격 필터는 빼고 찾아요");
   const prog = curProg = t => ui(tid, { title: "상품 위치 찾는 중… (창을 닫지 마세요)", msg: head + "\n\n" + t });
   if (!kws.length) { await ui(tid, { title: "상품 위치 찾기", msg: "상품명을 못 읽어서 키워드를 못 만들었어요." }); return; }
   await prog("시작");
@@ -386,7 +406,7 @@ const nvSearchUrl = (k, mob) => (mob ? "https://msearch.shopping.naver.com" : "h
 const won = n => Number(n).toLocaleString("ko-KR");
 
 async function naverProduct(tab, info) {
-  const h = (tab.url || "").split("#")[1] || "";
+  const h = await tabHash(tab);
   const hk = (h.match(/(?:^|&)kw=([^&]+)/) || [])[1], hp = Number((h.match(/(?:^|&)pr=(\d+)/) || [])[1] || 0);
   const kws = (hk ? decodeURIComponent(hk).split("|") : suggest(info.name)).map(x => x.trim()).filter(Boolean).slice(0, 4);
   const price = hp || info.price || 0;

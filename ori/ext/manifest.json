@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "상품 위치 찾기 (체험단)",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "쿠팡: 한 번 누르면 PC·모바일 위치 자동. 네이버: 검색 화면에서 상품을 찾아 표시(한 화면씩). 썸네일 저장, 결과 복사",
   "action": {
     "default_title": "상품 위치 찾기",
