@@ -386,7 +386,7 @@ function fixListRef_(ss, r) {
   if (sh) {
     const f = sh.getRange('A2').getFormula() + sh.getRange('A3').getFormula();
     // 폼 탭이 둘 이상이면 ensureListTab_가 새 수식으로 바꿈. 하나면 예전 수식('A2:L', 밀려서 'A4:M' 등)일 때 다시 만듦
-    if (tabs.length > 1 || (/DROP\(/.test(f) && tabs.some(function (t) { return f.indexOf("'" + t.getName().replace(/'/g, "''") + "'!") !== -1; }))) return false;
+    if (tabs.length > 1 || (/ROW\(/.test(f) && tabs.some(function (t) { return f.indexOf("'" + t.getName().replace(/'/g, "''") + "'!") !== -1; }))) return false;
   }
   formatResponseSheet_(ss, { type: r['유형'], takdae: r['택대'] === 'Y', realship: r['실배송'] === 'Y', platform: r['플랫폼'], target: Number(r['총건수']) || r['목표인원'], prices: r['가격'] });
   PropertiesService.getScriptProperties().deleteProperty('DAYCOL1_' + ss.getId());   // 날짜 색 다시 칠하게
@@ -1021,7 +1021,8 @@ function ensureListTab_(ss) {
     const L = colLetter_(Math.max(heads[i].length, 1));
     const cols = union.map(function (u) { const k = heads[i].indexOf(u); return k >= 0 ? 'CHOOSECOLS(d,' + (k + 1) + ')' : 'MAKEARRAY(ROWS(d),1,LAMBDA(rr,cc,""))'; });
     // 열 전체(A:L)에서 머리글 줄만 뺌: 'A2:L'처럼 줄 번호를 쓰면 구글폼이 응답 줄을 끼워 넣을 때마다 A3, A4…로 밀려서 응답이 안 보임 (10/19)
-    return 'LET(d,DROP(' + ref(t) + 'A:' + L + ',1),HSTACK(' + cols.join(',') + '))';
+    //  (DROP은 구글 시트에 없어서 10/19 아침에 명단이 통째로 비었음 → ROW()>1로 거름)
+    return 'LET(d,FILTER(' + ref(t) + 'A:' + L + ',ROW(' + ref(t) + 'A:A)>1),HSTACK(' + cols.join(',') + '))';
   });
   const f = '=IFERROR(LET(v,VSTACK(' + parts.join(',') + '),SORT(FILTER(v,INDEX(v,0,1)<>""),1,TRUE)),"")';
   if (sh.getRange('A3').getFormula() === f) {
@@ -1126,7 +1127,8 @@ function formatResponseSheet_(ss, opts) {
   // 2행 머리글, 3행부터 응답
   sh.getRange('A2').setFormula('={' + ref + 'A1:' + L + '1}');
   // 줄 번호 없이 열 전체에서 머리글 줄만 뺌 (A2:L로 쓰면 구글폼이 응답 줄을 끼워 넣을 때마다 A3, A4…로 밀려 명단이 비어 보임)
-  sh.getRange('A3').setFormula('=IFERROR(FILTER(DROP(' + ref + 'A:' + L + ',1), DROP(' + ref + 'A:A,1)<>""), "")');
+  //  (DROP은 구글 시트에 없음 → ROW()>1로 머리글 줄을 뺌)
+  sh.getRange('A3').setFormula('=IFERROR(FILTER(' + ref + 'A:' + L + ', ROW(' + ref + 'A:A)>1, ' + ref + 'A:A<>""), "")');
   // 손으로 적는 칸(택대 송장번호, 실배송)은 안 만듦 (사용자 요청 10/18)
   const extra = n;
   // 명단 시트는 업체도 보는 곳이라 중복, 옵션, 금액 확인 표시는 넣지 않음 (관리 시트 한눈에, 폼수정 탭에서만 보임)
