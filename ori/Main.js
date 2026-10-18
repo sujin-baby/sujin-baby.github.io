@@ -999,6 +999,22 @@ function dayColors_(ss) {
 //  칸은 1행 머리글 글자로 찾아서 넣음(열을 지우거나 옮겨도 됨, 지운 칸은 안 채움). 폼에 새 질문이 생기면 체크칸 왼쪽에 칸을 더함
 //  폼에서 지운 응답은 그 줄에 메모 + 회색 글자만
 const RVT_TAB = '리뷰체크', RVT_CHECK = '리뷰 확인';
+// (10/19 한 번만) 명단 시트마다 만들어 둔 '리뷰체크' 탭 지우기 (사용자: "리뷰체크 탭 없애")
+function dropReviewTabsOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('DROP_RVT_V1')) return;
+  props.setProperty('DROP_RVT_V1', '1');
+  const ids = [];
+  runs.forEach(function (r) { const sid = String(r['시트ID'] || ''); if (sid && ids.indexOf(sid) === -1) ids.push(sid); });
+  let n = 0;
+  ids.forEach(function (sid) {
+    if (!props.getProperty('RVTK_' + sid) && !props.getProperty('RVT_AT_' + sid)) return;   // 스크립트가 만든 적 없는 시트는 안 엶
+    try { const ss = SpreadsheetApp.openById(sid), sh = ss.getSheetByName(RVT_TAB); if (sh) { ss.deleteSheet(sh); n++; } } catch (e) {}
+    ['RVTK_', 'RVTH_', 'RVT_AT_'].forEach(function (k) { props.deleteProperty(k + sid); });
+  });
+  if (n) note_('✓ 리뷰체크 탭 ' + n + '개 지움');
+}
+// (안 씀) 예전 리뷰체크 탭 만들기
 function reviewTabs_(runs) {
   const cut = Date.now() - 30 * 86400000, ids = [];
   runs.forEach(function (r) { const sid = String(r['시트ID'] || ''); if (sid && ids.indexOf(sid) === -1 && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut) ids.push(sid); });
@@ -1848,8 +1864,8 @@ function checkFullInner_() {
     } catch (e) { note_('명단 탭 합치기 실패: ' + e); }
   });
   props.setProperty('RUN_ERRORS', JSON.stringify(errs));
-  step_('리뷰체크 탭');
-  try { reviewTabs_(runs); } catch (e) { note_('리뷰체크 탭 실패: ' + e); }
+  // 리뷰체크 탭은 사용자 요청으로 없앰(10/19). 만들어 둔 탭은 한 번 지움
+  try { dropReviewTabsOnce_(runs); } catch (e) { note_('리뷰체크 탭 지우기 실패: ' + e); }
   try { refreshEditTab_(); } catch (e) { note_('폼수정 탭 새로고침 실패: ' + e); }
   function checkRun_(r) {
     let form;
