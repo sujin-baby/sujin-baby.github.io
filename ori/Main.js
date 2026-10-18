@@ -118,7 +118,8 @@ function campOf_(title) {
 }
 
 // 같은 캠페인인지 비교할 때 쓰는 키 (#택, 날짜, 끝 건수, 띄어쓰기 뺌)
-function campKey_(s) { return campOf_(s).replace(/\s+/g, ''); }
+// 실배송 표시 '실'은 위치가 바뀌어도(10/19: 끝 → 날짜 오른쪽) 같은 캠페인으로 보게 뺌
+function campKey_(s) { return campOf_(s).replace(/(^|\s)실(?=\s|$)/g, ' ').replace(/\s+/g, '').replace(/^실|실$/g, ''); }
 
 // 같은 캠페인 진행들을 날짜순으로 묶어서 '한 의뢰'씩 나눔: 총건수를 다 채우면 다음 진행은 새 의뢰
 function chainsOf_(runs) {
@@ -389,6 +390,7 @@ function fixListRef_(ss, r) {
 //  인원 세기·한눈에 탭·배정 '산 수'가 여기를 봄. 사람은 안 보고 안 고침
 //  수식은 줄 번호 없이 열 전체(A:M)로 쓰고 머리글은 ROW()>1로 뺌: 'A2:M'처럼 쓰면 구글폼이 응답 줄을 끼워 넣을 때마다 A3, A4…로 밀림(10/19). DROP은 구글 시트에 없음
 const MERGE_TAB = '응답합본';
+const REAL_YELLOW = '#fff2a8';
 function buildMergeTab_(ss) {
   const tabs = ss.getSheets().filter(function (t) { return !!t.getFormUrl(); });
   if (!tabs.length) return null;
@@ -431,7 +433,7 @@ function convertListToValues_(ss) {
   if (mr >= 3) sh.getRange(3, 1, mr - 2, mc).setBackground(null);
   sh.setConditionalFormatRules([]);   // 날짜 색 규칙은 값으로 칠함
   const tabs = ss.getSheets().filter(function (t) { return !!t.getFormUrl(); }), heads = [];
-  tabs.forEach(function (t) { rawHead_(t).forEach(function (x) { if (x && heads.indexOf(x) === -1) heads.push(x); }); });
+  tabs.forEach(function (t) { rawHead_(t).forEach(function (x) { if (x && heads.indexOf(x) === -1 && !MATCH.nick.test(x)) heads.push(x); }); });
   if (heads.length) sh.getRange(2, 1, 1, heads.length).setValues([heads]);
   props.setProperty('LISTV_' + id, '1');
   props.deleteProperty('LISTK_' + id); props.deleteProperty('LISTH_' + id);
@@ -452,7 +454,7 @@ function syncList_(ss) {
   const heads = [], rows = [];
   tabs.forEach(function (t) {
     const lr = t.getLastRow(), h = rawHead_(t);
-    h.forEach(function (x) { if (x && heads.indexOf(x) === -1) heads.push(x); });
+    h.forEach(function (x) { if (x && heads.indexOf(x) === -1 && !MATCH.nick.test(x)) heads.push(x); });
     if (lr < 2 || !h.length) return;
     t.getRange(2, 1, lr - 1, h.length).getValues().forEach(function (x) {
       if (!(x[0] instanceof Date)) return;
@@ -461,6 +463,18 @@ function syncList_(ss) {
     });
   });
   rows.sort(function (a, b) { return a.t - b.t; });
+  // (10/19 한 번) 이미 값으로 바뀐 명단 탭에서 카톡 닉네임 칸 지우기 (한눈에 탭에서만 보이게)
+  if (!props.getProperty('LISTNONICK_' + id)) {
+    props.setProperty('LISTNONICK_' + id, '1');
+    const h0 = sh.getRange(2, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0];
+    for (let c = h0.length - 1; c >= 0; c--) if (MATCH.nick.test(String(h0[c]))) sh.deleteColumn(c + 1);
+  }
+  const real = !!props.getProperty('LISTREAL_' + id);
+  // (10/19 한 번) 실배송이면 응답 줄 전부 노란색 (날짜별 색 대신)
+  if (real && !props.getProperty('LISTYEL_' + id)) {
+    props.setProperty('LISTYEL_' + id, '1');
+    if (sh.getLastRow() >= 3) sh.getRange(3, 1, sh.getLastRow() - 2, Math.max(sh.getLastColumn(), 1)).setBackground(REAL_YELLOW);
+  }
   let lc = Math.max(sh.getLastColumn(), 1), hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(function (x) { return String(x).trim(); });
   let known = []; try { known = JSON.parse(props.getProperty('LISTH_' + id) || '[]'); } catch (e) {}
   if (!known.length) known = hdr.filter(Boolean);
@@ -488,9 +502,10 @@ function syncList_(ss) {
       const above = sh.getRange(start - 1, 1, 1, lc).getValues()[0];
       above.forEach(function (v, j) { if (typeof v === 'boolean' && heads.indexOf(hdr[j]) === -1) sh.getRange(start, j + 1, n, 1).insertCheckboxes(); });
     }
+    // 날짜별 연한 색. 실배송이면 전부 노란색 (사용자 요청 10/19)
     sh.getRange(start, 1, n, lc).setBackgrounds(add.map(function (x) {
       const day = Math.floor((x.t + 9 * 3600000) / 86400000) + 25569;
-      return Array(lc).fill(DAY_COLORS[day % 7]);
+      return Array(lc).fill(real ? REAL_YELLOW : DAY_COLORS[day % 7]);
     }));
     done = done.concat(add.map(function (x) { return String(x.t); }));
   }
@@ -517,6 +532,7 @@ function listTabsRecent_(runs, skip) {
   ids.forEach(function (sid) {
     if (late_(270)) return;
     const k = 'LISTAT_' + sid;
+    if (runs.some(function (x) { return String(x['시트ID']) === sid && x['실배송'] === 'Y'; })) props.setProperty('LISTREAL_' + sid, '1');
     if (Date.now() - Number(props.getProperty(k) || 0) < 25 * 60000) return;
     props.setProperty(k, String(Date.now()));
     try {
@@ -580,6 +596,33 @@ function adoptOrphanForms_(runs) {
         '카톡방에 옛 공지(옛 폼 링크)가 나가 있었던 것 같아요.\n옛 폼 \'' + form.getTitle() + '\'에 들어온 응답 ' + cnt + '개를 ' + bareTitle_(hit.r['명단 제목']) + ' 명단 시트로 연결했어요. 앞으로 옛 링크로 들어오는 응답도 이 명단 시트에 들어가고, 명단이 다 차면 같이 닫혀요.\n카톡방 공지는 새 공지(새 폼 링크)로 바꿔 두는 게 좋아요.');
     }
   }
+}
+
+// (10/19 한 번만) 진행 중인 실배송 진행의 이름을 새 모양으로: '#10.19 런치버스 텀블러 실 7' → '#10.19 실 런치버스 텀블러 7'
+//  진행목록 명단 제목·카톡방, 배정 탭, 보낼메시지(대기) 방 이름, 일정 탭(대기), 명단 시트·폼·폴더 이름. 이미 만든 카톡방 이름은 사용자가 바꿈
+function fixSilOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('SILPOS_V1')) return;
+  props.setProperty('SILPOS_V1', '1');
+  const old = /\s실\s+\d+\s*$/, done = {}, log = [];
+  runs.filter(function (r) { return r['진행 상태'] !== '종료' && old.test(bareTitle_(r['명단 제목'])); }).forEach(function (r) {
+    const nt = withSil_(bareTitle_(r['명단 제목']));
+    try { if (renameRun_(r, nt)) log.push(nt); } catch (e) { note_('실 위치 바꾸기 실패 ' + r['명단 제목'] + ': ' + e); }
+    const nm = sheetName_(nt);
+    const ren = function (get, set) { try { if (String(get()) !== nm) set(nm); } catch (e) {} };
+    const sid = String(r['시트ID'] || ''), fid = String(r['폼ID'] || ''), fo = (String(r['폴더 링크'] || '').match(/[-\w]{25,}/) || [])[0];
+    if (sid && !done[sid]) { done[sid] = 1; const f = DriveApp.getFileById(sid); ren(function () { return f.getName(); }, function (n) { f.setName(n); }); }
+    if (fid && !done[fid]) { done[fid] = 1; const fm = FormApp.openById(fid), ff = DriveApp.getFileById(fid); ren(function () { return fm.getTitle(); }, function (n) { fm.setTitle(n); }); ren(function () { return ff.getName(); }, function (n) { ff.setName(n); }); }
+    if (fo && !done[fo]) { done[fo] = 1; const d = DriveApp.getFolderById(fo); ren(function () { return d.getName(); }, function (n) { d.setName(n); }); }
+  });
+  try {
+    const ps = planSheet_(), pl = ps.getLastRow();
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, 9).getValues().forEach(function (v, i) {
+      if (v[8] !== '대기') return;
+      [4, 5].forEach(function (c) { const t = String(v[c]); const b = bareTitle_(t); if (old.test(b)) ps.getRange(i + 2, c + 1).setValue(withSil_(b) + t.slice(b.length)); });
+    });
+  } catch (e) {}
+  if (log.length) note_('✓ 실 위치 바꿈: ' + log.join(', '));
 }
 
 function fixNoCountNamesOnce_(runs) {
@@ -1352,8 +1395,12 @@ function formatResponseSheet_(ss, opts) {
 
   // 2행 머리글, 3행부터 응답: 수식이 아니라 값 (사용자 요청 10/19: 리뷰 체크할 때 명단 탭에서 열을 지우고 체크칸을 넣어도 유지되게)
   //  새 응답은 15분 확인이 아래에 값으로 붙임(syncList_). 스크립트가 세는 건 숨은 '응답합본' 탭(수식)으로
-  sh.getRange(2, 1, 1, head.length).setValues([head]);
+  //  '방에 참여한 카카오톡 닉네임'은 명단 시트(업체도 봄)에서 뺌 → 한눈에 탭(관리 시트)에서만 보임 (사용자 요청 10/19)
+  const head2 = head.filter(function (h) { return !MATCH.nick.test(h); });
+  sh.getRange(2, 1, 1, Math.max(head.length, 1)).clearContent();
+  sh.getRange(2, 1, 1, head2.length).setValues([head2]);
   vprops.setProperty('LISTV_' + ss.getId(), '1');
+  if (opts.realship) vprops.setProperty('LISTREAL_' + ss.getId(), '1');
   vprops.deleteProperty('LISTK_' + ss.getId()); vprops.deleteProperty('LISTH_' + ss.getId());
   buildMergeTab_(ss);
   // 손으로 적는 칸(택대 송장번호, 실배송)은 안 만듦 (사용자 요청 10/18)
@@ -1943,8 +1990,10 @@ function checkFullInner_() {
   try { fixModuAssignOnce_(); } catch (e) { note_('모두의농수산 배정 옮기기 실패: ' + e); }
   try { fixTemplateOnce_(); } catch (e) { note_('템플릿 폼 질문 고치기 실패: ' + e); }
   try { fixNoCountNamesOnce_(runs); } catch (e) { note_('이름 인원 수 빼기 실패: ' + e); }
+  try { fixSilOnce_(runs); } catch (e) { note_('실 위치 바꾸기 실패: ' + e); }
   try { dropManualColsOnce_(runs); } catch (e) { note_('송장번호·실배송 칸 지우기 실패: ' + e); }
   try { ensureListMsgs_(runs); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
+  try { ensureReviewGuideMsgs_(runs); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
   try { adoptOrphanForms_(runs); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
   const errs = {}, listed = {};
   step_('폼 인원');
@@ -1961,6 +2010,7 @@ function checkFullInner_() {
   Object.keys(listed).forEach(function (id) {
     try {
       const lss = SpreadsheetApp.openById(id);
+      if (runs.some(function (x) { return String(x['시트ID']) === id && x['실배송'] === 'Y'; })) props.setProperty('LISTREAL_' + id, '1');
       try { if (fixListRef_(lss)) note_('✓ 명단 탭을 값으로 바꿈 (열을 지워도 유지): ' + lss.getName()); else { const na = syncList_(lss); if (na) note_('✓ 명단 탭에 새 응답 ' + na + '줄: ' + lss.getName()); } } catch (e) { note_('명단 탭 갱신 실패: ' + e); }
       // 총건수 = 이 명단 시트를 쓰는 의뢰의 총건수 (없으면 날마다 목표인원 합)
       const mine = runs.filter(function (x) { return String(x['시트ID']) === id; });
@@ -2091,6 +2141,81 @@ function ensureListMsgs_(runs) {
       if (x[5] === '대기' && String(x[4]) !== want) ob.getRange(i + 2, 5).setValue(want);
     });
     if (!found) { queueListMsgs_(r, true); note_('✓ 명단 전달 메시지 넣음: ' + bareTitle_(r['명단 제목'])); }
+  });
+}
+
+// 그날 명단이 다 차면(마감) 그 카톡방에 보낼 '리뷰내용 가이드'를 보낼메시지(방 공지)에 넣음 (사용자 요청 10/19, 안 까먹게)
+//  ⭐️리뷰내용 가이드⭐️ / 포토+한줄리뷰(1명) : 이름 / 별점(6명) : 이름 … / ⭐️⭐️⭐️⭐️⭐️(의뢰서 리뷰내용 가이드) !!!!!⭐️⭐️⭐️⭐️⭐️
+//  리뷰 종류·개수와 가이드는 생성기가 넘긴 RV_<명단시트ID>(의뢰서 전체). 그날 몫은 남은 개수 비율대로. 이름은 배정 탭(공지 이름) 순서, 없으면 폼 카톡 닉네임
+//  가이드나 리뷰 종류가 의뢰서에 없으면 메시지에 표시 + '사장님께 물어보기' 할 일도 넣음. 포토대기(업체 사진)·구확건 의뢰는 리뷰 배정 페이지로
+function reviewGuideMsg_(rv, ppl, counts, k) {
+  const totals = [];
+  parseRvMix_(rv.mix || '').forEach(function (p) { p.mix.forEach(function (m) { const t = totals.filter(function (x) { return x.label === m.label; })[0]; if (t) t.n += m.n; else totals.push({ label: m.label, n: m.n }); }); });
+  const left = totals.map(function (t) { return t.n; });
+  let today = totals.map(function () { return 0; });
+  for (let d = 0; d <= k; d++) {
+    let n = counts[d] || 0;
+    today = totals.map(function () { return 0; });
+    while (n > 0 && left.some(function (x) { return x > 0; })) {
+      let bi = -1, bv = -1;
+      left.forEach(function (x, i) { const q = x / (totals[i].n || 1); if (x > 0 && q > bv) { bv = q; bi = i; } });
+      today[bi]++; left[bi]--; n--;
+    }
+  }
+  const pretty = function (l) { return String(l).replace(/포토\s*리뷰\s*\(\s*(1|한)\s*줄\s*리뷰\s*\)/, '포토+한줄리뷰').replace(/별점만/, '별점').replace(/글씨리뷰/, '텍스트리뷰'); };
+  const nm = function (p) { return p.n > 1 ? p.nm + p.n : p.nm; };
+  const lines = [], queue = ppl.slice();
+  totals.forEach(function (t, i) {
+    let need = today[i]; const who = [];
+    while (need > 0 && queue.length) { const p = queue.shift(); who.push(nm(p)); need -= p.n; }
+    if (today[i] > 0) lines.push(pretty(t.label) + '(' + today[i] + '명) : ' + who.join(' '));
+  });
+  const ask = [];
+  if (queue.length || !totals.length) { lines.push('리뷰 종류 확인 필요(' + queue.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + queue.map(nm).join(' ')); ask.push('리뷰 종류·개수'); }
+  const g = String(rv.guide || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean)[0] || '';
+  if (!g) ask.push('리뷰내용 가이드');
+  const msg = ['⭐️리뷰내용 가이드⭐️'].concat(lines, ['', g ? '⭐️⭐️⭐️⭐️⭐️' + g.replace(/[.。!\s]+$/, '') + ' !!!!!⭐️⭐️⭐️⭐️⭐️' : '⭐️⭐️⭐️⭐️⭐️(리뷰 가이드: 사장님께 물어보고 채우기)⭐️⭐️⭐️⭐️⭐️']).join('\n');
+  return { msg: msg, ask: ask };
+}
+function ensureReviewGuideMsgs_(runs) {
+  const props = PropertiesService.getScriptProperties(), now = Date.now();
+  let assign = null;
+  const namesOf = function (x) {
+    if (!assign) { assign = []; try { const as = assignSheet_(), al = as.getLastRow(); if (al >= 2) assign = as.getRange(2, 1, al - 1, 4).getValues(); } catch (e) {} }
+    const out = [];
+    assign.forEach(function (v) { if (String(v[0]) === String(x['명단 제목']) && Number(v[3]) > 0) out.push({ nm: String(v[1]).replace(/\s+/g, ''), n: Number(v[3]) || 1 }); });
+    return out;
+  };
+  chainsOf_(runs).forEach(function (c) {
+    c.runs.forEach(function (r, k) {
+      if (r['진행 상태'] === '종료' || !(r['마감 시각'] instanceof Date) || now - r['마감 시각'].getTime() > 2 * 86400000) return;
+      const key = 'RVMSG_' + String(r['명단 제목']).replace(/\s+/g, '');
+      if (props.getProperty(key)) return;
+      const first = c.runs.filter(function (x) { return x['시트ID']; })[0] || r;
+      let rv = null; try { rv = JSON.parse(props.getProperty('RV_' + first['시트ID']) || 'null'); } catch (e) {}
+      if (!rv || rv.kind === 'photo' || rv.kind === 'confirm') return;
+      props.setProperty(key, '1');
+      let ppl = namesOf(r);
+      if (!ppl.length) {
+        try {
+          const info = rawInfo_(r['시트ID'], r['폼ID']), w = windowOf_(runs, r), src = info.src || info.raw, st = info.start || 2, lr = src.getLastRow();
+          if (info.nickCol && lr >= st) src.getRange(st, 1, lr - st + 1, info.head.length).getValues().forEach(function (x) {
+            if (!(x[0] instanceof Date) || x[0].getTime() < w.from || x[0].getTime() >= w.to) return;
+            const nm = String(x[info.nickCol - 1]).replace(/\s+/g, ''); if (!nm) return;
+            const hit = ppl.filter(function (p) { return p.nm === nm; })[0]; if (hit) hit.n++; else ppl.push({ nm: nm, n: 1 });
+          });
+        } catch (e) {}
+      }
+      const counts = c.runs.slice(0, k + 1).map(function (x, d) {
+        const p = d === k ? ppl : namesOf(x);
+        return p.length ? p.reduce(function (a, y) { return a + y.n; }, 0) : (Number(x['인원']) || Number(x['목표인원']) || 0);
+      });
+      const res = reviewGuideMsg_(rv, ppl, counts, k);
+      const room = String(r['카톡방'] || bareTitle_(r['명단 제목']));
+      queueMsg_(room, res.msg, '방 공지');
+      if (res.ask.length) queueMsg_('사장님', '[' + room + '] 의뢰서에 ' + res.ask.join(', ') + '이(가) 없어요. 사장님께 물어보고 리뷰 가이드 공지를 고쳐서 보내기', '할 일');
+      note_('✓ 리뷰 가이드 메시지 넣음: ' + room + (res.ask.length ? ' (사장님께 물어볼 것: ' + res.ask.join(', ') + ')' : ''));
+    });
   });
 }
 
@@ -2229,7 +2354,7 @@ function outboxSheet_() {
 function tidyOutbox_() {
   const sh = outboxSheet_(), last = sh.getLastRow();
   if (last < 2) return;
-  if (last >= 3) sh.getRange(2, 1, last - 1, 6).sort({ column: 2, ascending: false });
+  sortOutbox_(sh);
   sh.getRange(1, 1, last, 6).setVerticalAlignment('top').setWrap(false);
   sh.getRange(2, 5, last - 1, 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
   sh.setRowHeights(2, last - 1, 21);
@@ -2245,6 +2370,23 @@ function tidyOutbox_() {
   sh.getRange(2, 6, last - 1, 1).setFontWeight('bold').setHorizontalAlignment('center');
 }
 
+// 보낼메시지 순서 (사용자 요청 10/19): 대기(·방 못 찾음)가 맨 위, 그중 먼저 보낼 것(방 날짜가 이른 것: 20일 → 21일 → 22일)이 위. 보낸 건 아래에 최신순
+function sortOutbox_(sh) {
+  sh = sh || outboxSheet_();
+  const last = sh.getLastRow();
+  if (last < 3) return;
+  const rg = sh.getRange(2, 1, last - 1, 6), v = rg.getValues();
+  const dk = function (x) { const t = dateTok_(x[3]) || dateTok_(String(x[4]).slice(0, 300)); if (!t) return 9999; const p = t.split('.'); return Number(p[0]) * 100 + Number(p[1]); };
+  const tm = function (x) { return x[1] instanceof Date ? x[1].getTime() : 0; };
+  const wait = function (x) { return x[5] === '대기' || x[5] === '방 못 찾음'; };
+  const sorted = v.slice().sort(function (a, b) {
+    if (wait(a) !== wait(b)) return wait(a) ? -1 : 1;
+    if (wait(a)) return (dk(a) - dk(b)) || (tm(a) - tm(b));
+    return tm(b) - tm(a);
+  });
+  if (sorted.some(function (x, i) { return x[0] !== v[i][0]; })) rg.setValues(sorted);
+}
+
 function queueMsg_(room, msg, kind) {
   if (!msg) return;
   try {
@@ -2256,6 +2398,7 @@ function queueMsg_(room, msg, kind) {
     ob.getRange(2, 1, 1, 6).setWrap(false).setVerticalAlignment('middle').setFontWeight('normal').setBackground(null);
     ob.getRange(2, 5).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
     ob.setRowHeight(2, 21);
+    sortOutbox_(ob);
   } catch (e) { note_('메시지함 기록 실패: ' + e); }
 }
 
@@ -3670,11 +3813,13 @@ function fixFormQuestions_(form) {
   return n;
 }
 
-// 실배송이면 방제·명단 제목·명단 시트 이름에 '실' (예: #10.19 런치버스미니텀블러 실 7 (뽀짝오리))
+// 실배송이면 방제·명단 제목·명단 시트·폼 이름에 '실'을 날짜 바로 오른쪽에 (사용자 지정 10/19): #10.19 실 런치버스 텀블러 7 (뽀짝오리)
+//  예전 모양(#10.19 런치버스 텀블러 실 7)이 오면 새 모양으로 바꿈
 function withSil_(t) {
   t = String(t || '');
-  if (/(^|\s)실(배송)?(\s|\d|$)/.test(bareTitle_(t))) return t;
-  return t.replace(/\s*(\d+)(\s*\([^)]*\))?\s*$/, ' 실 $1$2');
+  t = t.replace(/\s+실(\s+\d+(?:\s*\([^)]*\))?\s*)$/, '$1');   // 끝 쪽 '실 7' → '7'
+  if (/^[#업택\s]*\d{1,2}\.\d{1,2}\s+실(\s|$)/.test(t)) return t;
+  return /^[#업택\s]*\d{1,2}\.\d{1,2}/.test(t) ? t.replace(/^([#업택\s]*\d{1,2}\.\d{1,2})\s*/, '$1 실 ') : t;
 }
 
 // 공지 모양 맞추기: '🐥포토 : 포토대기' → '🐥리뷰 : ★★★포토대기★★★', 과일은 구매 시간 줄을 '★★★자정 ~ 오전 7시까지 구매★★★'
