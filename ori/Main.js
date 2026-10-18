@@ -3595,6 +3595,7 @@ function payLayout_(sh) {
     if (!L.prev && /^전월$/.test(t)) L.prev = c + 1;
     if (!L.left && /^남은$/.test(t)) L.left = c + 1;
     if (!L.status && /^상태$/.test(t)) L.status = c + 1;
+    if (!L.report && /완료보고/.test(t)) L.report = c + 1;
   }
   // 날짜 칸: 머리글 줄과 그 위 줄에서 찾음
   [L.head - 1, L.head - 2].forEach(function (r) {
@@ -3760,6 +3761,22 @@ function writePayRow_(r, name, remain, prevMonth, shared, ex) {
 function payStatusLink_(rows) {
   if (!rows.length) return;
   const last = rows[rows.length - 1];
+  // 의뢰가 다 끝나면(마지막 날 남은 = 0) 그 의뢰 모든 날 '완료보고' 체크 → 진행비(=완료보고 × 수량)가 들어감
+  //  줄마다 한 번만 체크 (사람이 체크를 풀면 다시 안 건드림)
+  try {
+    if (last.L.left && last.L.report && last.sh.getRange(last.row, last.L.left).getValue() === 0) {
+      const props = PropertiesService.getScriptProperties();
+      rows.forEach(function (x) {
+        if (!x.L.report || x.sh.getSheetId() !== last.sh.getSheetId()) return;
+        const nm = String(x.sh.getRange(x.row, x.L.name).getValue()).replace(/\s+/g, '');
+        const key = 'PAYREP_' + x.sh.getSheetId() + '_' + nm;
+        if (!nm || props.getProperty(key)) return;
+        const c = x.sh.getRange(x.row, x.L.report);
+        if (c.getValue() !== true) c.setValue(true);
+        props.setProperty(key, '1');
+      });
+    }
+  } catch (e) { note_('완료보고 체크 실패: ' + e); }
   rows.forEach(function (x) {
     if (!x.L.status || x.sh.getSheetId() !== last.sh.getSheetId()) return;
     const c = x.sh.getRange(x.row, x.L.status), f = c.getFormula();
