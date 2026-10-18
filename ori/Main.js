@@ -2384,7 +2384,7 @@ function outboxSheet_() {
   }
   if (!sh) {
     sh = ss.insertSheet(OUTBOX_SHEET, 1);
-    sh.appendRow(['ID', '시각', '종류', '카톡방', '메시지', '상태']);
+    sh.appendRow(['ID', '보낼 날짜', '종류', '카톡방', '메시지', '상태']);
     sh.getRange(1, 1, 1, 6).setFontWeight('bold').setBackground('#efe6f7');
     sh.setFrozenRows(1);
     sh.setColumnWidth(5, 420);
@@ -2396,11 +2396,20 @@ function outboxSheet_() {
 function tidyOutbox_() {
   const sh = outboxSheet_(), last = sh.getLastRow();
   if (last < 2) return;
+  // (10/19 한 번) A열 ID는 숨기고, B열을 '보낼 날짜'로 (예전 줄도 방 날짜로 바꿈)
+  const op = PropertiesService.getScriptProperties();
+  if (!op.getProperty('OUTBOX_V3')) {
+    op.setProperty('OUTBOX_V3', '1');
+    sh.getRange('B1').setValue('보낼 날짜');
+    try { sh.hideColumns(1); } catch (e) {}
+    const v = sh.getRange(2, 1, last - 1, 6).getValues();
+    sh.getRange(2, 2, last - 1, 1).setValues(v.map(function (x) { return [sendDate_(x[3], x[4], x[2])]; }));
+  }
   sortOutbox_(sh);
   sh.getRange(1, 1, last, 6).setVerticalAlignment('top').setWrap(false);
   sh.getRange(2, 5, last - 1, 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
   sh.setRowHeights(2, last - 1, 21);
-  sh.getRange(2, 2, last - 1, 1).setNumberFormat('M/d HH:mm');
+  sh.getRange(2, 2, last - 1, 1).setNumberFormat('M/d (ddd)');
   sh.setFrozenRows(1);
   // 보낼 것(대기) 줄은 노랑 + 상태 칸 주황, 보낸 건 회색 글씨
   const all = sh.getRange(2, 1, Math.max(sh.getMaxRows() - 1, 1), 6);
@@ -2410,6 +2419,23 @@ function tidyOutbox_() {
     SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$F2="보냄"').setFontColor('#9e9e9e').setRanges([all]).build()
   ]);
   sh.getRange(2, 6, last - 1, 1).setFontWeight('bold').setHorizontalAlignment('center');
+}
+
+// 보낼메시지 B열 = 보낼 날짜 (사용자 요청 10/19: 만든 시각은 헷갈림). 방 이름(없으면 메시지 앞부분)의 날짜, 없으면 오늘
+//  카톡방 첫 공지(구글폼 링크가 든 방 공지)는 진행일 0시 전에 올려야 해서 그 전 진행일(월요일 진행이면 금요일). 오늘보다 앞이면 오늘
+//  리뷰내용 가이드, 명단 전달, 할 일은 그 날짜
+function sendDate_(room, msg, kind) {
+  const t = dateTok_(room) || dateTok_(String(msg || '').slice(0, 300));
+  const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (!t) return today;
+  const p = t.split('.'), m = Number(p[0]), d = Number(p[1]), cur = now.getMonth() + 1;
+  let day = new Date(now.getFullYear() + (m < cur - 6 ? 1 : m > cur + 6 ? -1 : 0), m - 1, d);
+  if (kind === '방 공지' && /forms\.gle\/|docs\.google\.com\/forms\//.test(String(msg || '')) && !/리뷰내용 가이드/.test(String(msg || '').slice(0, 40))) {
+    let x = new Date(day.getTime() - 86400000);
+    for (let i = 0; i < 10 && !isWorkday_(x); i++) x = new Date(x.getTime() - 86400000);
+    day = x < today ? today : x;
+  }
+  return day;
 }
 
 // 보낼메시지 순서 (사용자 요청 10/19): 대기(·방 못 찾음)가 맨 위, 그중 먼저 보낼 것(방 날짜가 이른 것: 20일 → 21일 → 22일)이 위. 보낸 건 아래에 최신순
@@ -2423,7 +2449,7 @@ function sortOutbox_(sh) {
   const wait = function (x) { return x[5] === '대기' || x[5] === '방 못 찾음'; };
   const sorted = v.slice().sort(function (a, b) {
     if (wait(a) !== wait(b)) return wait(a) ? -1 : 1;
-    if (wait(a)) return (dk(a) - dk(b)) || (tm(a) - tm(b));
+    if (wait(a)) return (tm(a) - tm(b)) || (dk(a) - dk(b));   // 보낼 날짜(B) 이른 것 먼저
     return tm(b) - tm(a);
   });
   if (sorted.some(function (x, i) { return x[0] !== v[i][0]; })) rg.setValues(sorted);
@@ -2435,7 +2461,7 @@ function queueMsg_(room, msg, kind) {
     // 최신 메시지가 맨 위
     const ob = outboxSheet_();
     ob.insertRowBefore(2);
-    ob.getRange(2, 1, 1, 6).setValues([[Utilities.getUuid().replace(/-/g, '').slice(0, 10), new Date(), kind || '', String(room || ''), String(msg), '대기']]);
+    ob.getRange(2, 1, 1, 6).setValues([[Utilities.getUuid().replace(/-/g, '').slice(0, 10), sendDate_(room, msg, kind), kind || '', String(room || ''), String(msg), '대기']]);
     ob.getRange(2, 6).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['대기', '보냄', '방 못 찾음'], true).build());
     ob.getRange(2, 1, 1, 6).setWrap(false).setVerticalAlignment('middle').setFontWeight('normal').setBackground(null);
     ob.getRange(2, 5).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
