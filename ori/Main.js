@@ -3712,10 +3712,117 @@ function makeDueDays_() {
 //  날짜 칸(예: '10월 15' 아래 '수량') = 그날 신청 인원
 // 머리글 글자로 칸을 찾고, 값만 넣음 (서식, 수식 칸은 안 건드림)
 
-function payTab_(month) {
+function payTab_(month, noCreate) {
   const ss = SpreadsheetApp.openById(CONFIG.PAY_SHEET_ID);
-  const byName = ss.getSheets().filter(function (s) { return new RegExp('(^|\\D)' + month + '월').test(s.getName()); })[0];
+  // 같은 달 이름 탭이 여럿이면(작년 1월 탭 등) 날짜 칸의 연도가 맞는 탭
+  const want = payYear_(month);
+  const byName = ss.getSheets().filter(function (s) { if (!new RegExp('(^|\\D)' + month + '월').test(s.getName())) return false; const y = tabYear_(s); return y === null || y === want; })[0];
+  if (byName) return byName;
+  // 이번 달·다음 달 탭이 없으면 지난달 탭을 복사해서 새로 만듦 (사용자 요청 10/18). 다른 달 진행이 엉뚱한 탭에 들어가지 않게
+  const cur = new Date().getMonth() + 1;
+  if (!noCreate && (month === cur || month === cur % 12 + 1)) {
+    try { const t = newMonthTab_(ss, month); if (t) return t; } catch (e) { note_('월급시트 ' + month + '월 탭 만들기 실패: ' + e); }
+  }
   return byName || ss.getSheets().filter(function (s) { return s.getSheetId() === CONFIG.PAY_TAB_GID; })[0] || ss.getSheets()[0];
+}
+
+// 탭 달의 연도: 지금보다 6달 넘게 앞 달이면 내년 (12월에 만드는 1월 탭)
+//  (1월에 보는 12월 탭은 작년)
+function payYear_(month) { const now = new Date(), cur = now.getMonth() + 1; return now.getFullYear() + (month < cur - 6 ? 1 : month > cur + 6 ? -1 : 0); }
+// 탭의 연도: 머리글 위쪽 날짜 칸에서 처음 나오는 날짜의 연도 (없으면 null)
+function tabYear_(sh) {
+  const memo = globalThis.__TABYEAR = globalThis.__TABYEAR || {};
+  if (memo[sh.getSheetId()] !== undefined) return memo[sh.getSheetId()];
+  let y = null;
+  try {
+    const v = sh.getRange(1, 1, Math.min(Math.max(sh.getLastRow(), 1), 5), Math.min(Math.max(sh.getLastColumn(), 1), 120)).getValues();
+    v.some(function (row) { return row.some(function (x) { if (x instanceof Date) { y = x.getFullYear(); return true; } return false; }); });
+  } catch (e) {}
+  return (memo[sh.getSheetId()] = y);
+}
+
+// 새 달 탭: 지난달 탭 복사 → 이름의 달 바꾸기 → 줄 내용 비우기(수식은 두고, 남은·상태 수식은 원래 모양으로, 완료보고 체크 해제) → 날짜 칸을 새 달 1일부터
+function newMonthTab_(ss, month) {
+  const prevM = (month + 10) % 12 + 1;
+  const src = payTab_(prevM, true);
+  if (!src || !new RegExp('(^|\\D)' + prevM + '월').test(src.getName())) return null;
+  const year = payYear_(month);
+  let name = src.getName().replace(new RegExp('(^|\\D)' + prevM + '월'), function (m, a) { return a + month + '월'; });
+  if (month === 1) name = name.replace(/20\d{2}/, function (y) { return String(Number(y) + 1); });
+  // 같은 이름 탭(작년 것)이 있으면 연도를 앞에 붙임: 2027년 1월
+  if (ss.getSheets().some(function (x) { return x.getName() === name; })) name = year + '년 ' + name;
+  const sh = src.copyTo(ss).setName(name);
+  ss.setActiveSheet(sh); ss.moveActiveSheet(src.getIndex() + 1);
+  const L = payLayout_(sh);
+  if (!L) return sh;
+  const last = sh.getLastRow(), lc = sh.getLastColumn();
+  if (last > L.head) {
+    const rg = sh.getRange(L.head + 1, 1, last - L.head, lc), fs = rg.getFormulas(), vs = rg.getValues();
+    rg.setValues(fs.map(function (row, i) {
+      return row.map(function (f, c) {
+        if (!f) return typeof vs[i][c] === 'boolean' ? false : '';
+        if (c + 1 === L.left) return f.replace(/^(=[A-Z]+\d+-[A-Z]+\d+-[A-Z]+\d+)-\d+$/, '$1');
+        if (c + 1 === L.status) return f.replace(/IF\(\s*OR\(\s*([A-Z]+\d+)\s*=\s*0\s*,\s*[A-Z]+\d+\s*=\s*0\s*\)/, 'IF($1=0');
+        return f;
+      });
+    }));
+  }
+  // 날짜 칸: 왼쪽부터 1일, 2일 … (수식으로 이어진 칸은 그대로 두면 따라 바뀜). 그 달에 없는 날(11월 31일)은 비움
+  const dim = new Date(year, month, 0).getDate(), p2 = function (n, w) { return w === 2 ? ('0' + n).slice(-2) : String(n); };
+  const cols = Object.keys(L.days).map(function (k) { return L.days[k]; }).filter(function (c, i, a) { return a.indexOf(c) === i; }).sort(function (a, b) { return a - b; });
+  cols.forEach(function (c, i) {
+    const d = i + 1;
+    [L.head - 1, L.head - 2].forEach(function (r) {
+      if (r < 1) return;
+      const cell = sh.getRange(r, c);
+      if (cell.getFormula()) return;
+      const v = cell.getValue();
+      if (v instanceof Date) cell.setValue(d <= dim ? new Date(year, month - 1, d) : '');
+      else if (/^\s*\d{1,2}\s*[\/.\-월]\s*\d{1,2}/.test(String(v))) cell.setValue(d <= dim ? String(v).replace(/^(\s*)(\d{1,2})(\s*[\/.\-월]\s*)(\d{1,2})/, function (m, s0, a, sep, b) { return s0 + p2(month, a.length) + sep + p2(d, b.length); }) : '');
+    });
+  });
+  globalThis.__TABYEAR = {};
+  // 이 탭은 스크립트가 만든 탭이라 지난달 안 끝난 캠페인 '이월' 줄을 넣어도 됨 (손으로 만든 탭에는 안 넣음)
+  PropertiesService.getScriptProperties().setProperty('PAYCARRY_' + sh.getSheetId(), '1');
+  note_('✓ 월급시트 ' + name + ' 탭을 만들었어요 (' + src.getName() + ' 복사)');
+  return sh;
+}
+
+// 지난달에 시작해서 아직 안 끝난 캠페인: 이번 달에 진행이 아직 없으면 '이월' 줄로 (총액 = 총건수, 전월 = 지난달까지 한 수량 → 남은 = 남은 캠페인 수량)
+//  이번 달 첫 진행이 생기면 그 진행 줄이 이 이월 줄을 그대로 씀(writePayRow_)
+function payCarry_(all, month) {
+  const sh = payTab_(month, true);
+  if (!sh || !new RegExp('(^|\\D)' + month + '월').test(sh.getName())) return;
+  if (!PropertiesService.getScriptProperties().getProperty('PAYCARRY_' + sh.getSheetId())) return;
+  const L = payLayout_(sh);
+  if (!L || !L.note) return;
+  const year = payYear_(month), start = new Date(year, month - 1, 1), end = new Date(year, month, 1), prevStart = new Date(year, month - 2, 1);
+  const got = function (x) { return x['인원'] === '' || x['인원'] === null ? (Number(x['목표인원']) || 0) : Number(x['인원']) || 0; };
+  const read = function () { const last = Math.max(sh.getLastRow(), L.head + 1); return { names: sh.getRange(L.head + 1, L.name, last - L.head, 1).getValues().map(function (x) { return String(x[0]); }), notes: sh.getRange(L.head + 1, L.note, last - L.head, 1).getValues().map(function (x) { return String(x[0]); }) }; };
+  let t = read();
+  chainsOf_(all).forEach(function (c) {
+    if (!c.total) return;
+    const before = c.runs.filter(function (r) { return r['진행일'] < start; });
+    if (!before.length || c.runs.some(function (r) { return r['진행일'] >= start && r['진행일'] < end; })) return;
+    const lastRun = before[before.length - 1];
+    if (lastRun['진행일'] < prevStart) return;   // 지난달에 진행이 있던 것만 (오래 멈춘 캠페인은 안 넘김)
+    const done = before.reduce(function (a, x) { return a + got(x); }, 0);
+    if (done >= c.total) return;
+    let i = t.names.findIndex(function (nm, k) { return nm && /이월/.test(t.notes[k]) && campKey_(nm) === c.key; });
+    if (i === -1) i = t.names.findIndex(function (nm) { return !nm.trim(); });
+    const row = i === -1 ? Math.max(sh.getLastRow(), L.head) + 1 : L.head + 1 + i;
+    const set = function (col, val) { if (col && !sh.getRange(row, col).getFormula() && sh.getRange(row, col).getValue() !== val) sh.getRange(row, col).setValue(val); };
+    set(L.name, campOf_(lastRun['캠페인'] || lastRun['명단 제목']) || campOf_(lastRun['명단 제목']));
+    set(L.note, '이월 (' + Utilities.formatDate(lastRun['진행일'], CONFIG.TIMEZONE, 'M/d') + '까지 ' + done + '건)');
+    set(L.store, String(lastRun['업체'] || '').replace(/\s+/g, ''));
+    set(L.sum, c.total);
+    set(L.prev, done);
+    if (L.qty && lastRun['시트ID'] && !sh.getRange(row, L.qty).getValue()) {
+      const url = 'https://docs.google.com/spreadsheets/d/' + lastRun['시트ID'] + '/edit';
+      if (!putFileChip_(sh, row, L.qty, url)) sh.getRange(row, L.qty).setRichTextValue(SpreadsheetApp.newRichTextValue().setText(url).setLinkUrl(url).build());
+    }
+    t = read();
+  });
 }
 
 function payLayout_(sh) {
@@ -3793,6 +3900,8 @@ function updatePay_() {
   });
   try { payStatusAll_(all); } catch (e) { note_('월급시트 상태 잇기 실패: ' + e); }
   try { payRate_(); } catch (e) { note_('월급시트 진행비 500원 바꾸기 실패: ' + e); }
+  // 이번 달 탭(없으면 만듦)과 이미 있는 다음 달 탭에 안 끝난 캠페인 이월 줄
+  try { const m0 = new Date().getMonth() + 1; payTab_(m0); payCarry_(all, m0); payCarry_(all, m0 % 12 + 1); } catch (e) { note_('월급시트 이월 실패: ' + e); }
 }
 
 // 진행비 = 1건(1명)당 500원, 리뷰비 없음 (사용자 요청 10/18). 이번 달·다음 달 탭만 (지난달 이전은 그대로)
@@ -3803,7 +3912,7 @@ const PAY_RATE = 500;
 function payRate_() {
   const now = new Date(), seen = {};
   [now.getMonth() + 1, (now.getMonth() + 1) % 12 + 1].forEach(function (mo) {
-    const sh = payTab_(mo);
+    const sh = payTab_(mo, mo !== now.getMonth() + 1);
     if (!sh || seen[sh.getSheetId()]) return;
     seen[sh.getSheetId()] = 1;
     if (mo !== now.getMonth() + 1 && !new RegExp('(^|\\D)' + mo + '월').test(sh.getName())) return;   // 다음 달 탭이 아직 없으면 건너뜀
@@ -3868,6 +3977,23 @@ function payRate_() {
       });
       props.setProperty(hk2, '1');
     }
+    // 날짜 위 줄(예: T2)에 '금일 진행비'와 그날 진행비 합계 (사용자 요청 10/18). 예전 '금일 리뷰비'(두 칸 합친 글자 + 숨긴 리뷰비 열 값) 자리
+    const hk3 = 'PAYHDR_V2_' + sh.getSheetId();
+    if (!props.getProperty(hk3) && L.head > 2) {
+      const r2 = L.head - 2;
+      dayCols.filter(function (c, i, a) { return a.indexOf(c) === i; }).forEach(function (c) {
+        const jc = [c, c + 1, c + 2].filter(function (x) { return head[x - 1] === '진행비'; })[0];
+        if (!jc) return;
+        const t = String(sh.getRange(r2, c).getValue()).replace(/\s/g, '');
+        if (t && t !== '금일리뷰비' && t !== '금일진행비') return;
+        try { sh.getRange(r2, c, 1, 2).breakApart(); } catch (e) {}
+        sh.getRange(r2, c).setValue('금일 진행비');
+        sh.getRange(r2, c + 1).setFormula('=SUM(' + colLetter_(jc) + (L.head + 1) + ':' + colLetter_(jc) + ')').setNumberFormat('#,##0');
+        if (head[c + 1] === '리뷰비') sh.getRange(r2, c + 2).clearContent();
+        changed++;
+      });
+      props.setProperty(hk3, '1');
+    }
     if (changed) note_('✓ 월급시트 ' + sh.getName() + ': 진행비 1건 ' + PAY_RATE + '원(그날그날), 리뷰비 비움 (' + changed + '곳)');
     if (odd && props.getProperty('PAYODD_' + sh.getSheetId()) !== odd) { note_('월급시트 ' + sh.getName() + ' 진행비 칸에 모르는 수식이 있어 안 바꿈: ' + odd); props.setProperty('PAYODD_' + sh.getSheetId(), odd); }
   });
@@ -3929,6 +4055,12 @@ function writePayRow_(r, name, remain, prevMonth, shared, ex) {
   let row = shared && byName !== -1 ? byName : links.findIndex(function (u, i) { return u && u.indexOf(sid) !== -1 && (!shared || !names[i]); });
   const hasLink = row !== -1 && !!links[row];
   if (row === -1) row = byName;
+  // 이달 첫 진행: 같은 캠페인 '이월' 줄이 있으면 그 줄을 씀 (특이사항 '이월'은 지우고 이 진행 값으로)
+  if (row === -1 && L.note) {
+    const notes = sh.getRange(L.head + 1, L.note, Math.max(last - L.head, 1), 1).getValues(), ck = campKey_(name);
+    row = names.findIndex(function (nm, i) { return nm && /이월/.test(String(notes[i][0])) && campKey_(nm) === ck; });
+    if (row !== -1) { sh.getRange(L.head + 1 + row, L.name).setValue(name); sh.getRange(L.head + 1 + row, L.note).setValue(''); }
+  }
   if (renamed && row === byName && !sh.getRange(L.head + 1 + row, L.name).getFormula()) sh.getRange(L.head + 1 + row, L.name).setValue(name);
   if (row === -1) row = names.indexOf('');
   row = row === -1 ? last + 1 : L.head + 1 + row;
