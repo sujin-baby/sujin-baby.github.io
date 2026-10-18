@@ -3594,6 +3594,7 @@ function payLayout_(sh) {
     if (!L.note && /특이사항/.test(t)) L.note = c + 1;
     if (!L.prev && /^전월$/.test(t)) L.prev = c + 1;
     if (!L.left && /^남은$/.test(t)) L.left = c + 1;
+    if (!L.status && /^상태$/.test(t)) L.status = c + 1;
   }
   // 날짜 칸: 머리글 줄과 그 위 줄에서 찾음
   [L.head - 1, L.head - 2].forEach(function (r) {
@@ -3644,6 +3645,35 @@ function updatePay_() {
     const earlier = mine.filter(function (x) { return x['진행일'] < r['진행일'] && ym(x['진행일']) === ym(r['진행일']); }).reduce(function (a, x) { return a + got(x); }, 0);
     writePayRow_(r, nameOf(r), total, prev, siblings_(all, r).length > 1,
       { store: pick('업체'), time: fruit ? '자정 ~ 오전 7시' : payTime_(runSlot_(r)), photo: pick('포토'), earlier: earlier });
+  });
+  try { payStatusAll_(all); } catch (e) { note_('월급시트 상태 잇기 실패: ' + e); }
+}
+
+// 의뢰(같은 명단 시트 묶음)마다 월급시트 줄을 찾아 상태 칸을 마지막 날 줄에 잇기 (끝난 진행 줄도)
+function payStatusAll_(all) {
+  const tabs = {};
+  const tabOf = function (d) {
+    const k = d.getFullYear() + '-' + (d.getMonth() + 1);
+    if (!tabs[k]) {
+      const sh = payTab_(d.getMonth() + 1), L = payLayout_(sh);
+      const last = L ? Math.max(sh.getLastRow(), L.head) : 0;
+      tabs[k] = L ? { sh: sh, L: L, names: sh.getRange(L.head + 1, L.name, Math.max(last - L.head, 1), 1).getValues().map(function (x) { return String(x[0]).replace(/\s+/g, ''); }) } : null;
+    }
+    return tabs[k];
+  };
+  chainsOf_(all).forEach(function (c) {
+    if (c.runs.length < 2) return;
+    const rows = [];
+    c.runs.forEach(function (r) {
+      const t = tabOf(r['진행일']);
+      if (!t) return;
+      const nm = String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, '').replace(/\s+/g, '');
+      let i = t.names.indexOf(nm);
+      if (i === -1) i = t.names.findIndex(function (x) { return x && sameRunTitle_(x, nm); });
+      if (i !== -1) rows.push({ sh: t.sh, L: t.L, row: t.L.head + 1 + i, d: r['진행일'] });
+    });
+    rows.sort(function (a, b) { return a.d - b.d || a.row - b.row; });
+    payStatusLink_(rows);
   });
 }
 
@@ -3722,6 +3752,24 @@ function writePayRow_(r, name, remain, prevMonth, shared, ex) {
   putIfEmpty(L.note, [r['택대'] === 'Y' ? '택대' : '', r['실배송'] === 'Y' ? '실배송' : '', Number(r['일차']) ? r['일차'] + '일차' : '', /유/.test(String(ex.photo || '')) ? '포토' : ''].filter(Boolean).join(' / '));
   const col = L.days[(day.getMonth() + 1) + '-' + day.getDate()] || L.days[String(day.getDate())];
   put(col, Number(r['인원']) || 0);
+  return { sh: sh, row: row, L: L };
+}
+
+// 상태 칸: 의뢰가 다 끝나면(마지막 날 줄의 남은 = 0) 앞 날 줄도 '완료' (사용자 요청 10/18)
+//  사용자 수식 =IF(H5=0,"시작전",IF(N5=0,"완료",…))의 완료 조건만 IF(OR(N5=0,N마지막=0),"완료",…)로 바꿈. 마지막 날 줄은 원래 모양
+function payStatusLink_(rows) {
+  if (!rows.length) return;
+  const last = rows[rows.length - 1];
+  rows.forEach(function (x) {
+    if (!x.L.status || x.sh.getSheetId() !== last.sh.getSheetId()) return;
+    const c = x.sh.getRange(x.row, x.L.status), f = c.getFormula();
+    const re = /IF\(\s*(?:OR\(\s*)?([A-Z]+)(\d+)\s*=\s*0\s*(?:,\s*[A-Z]+\d+\s*=\s*0\s*\))?\s*,\s*"완료"/;
+    const m = f.match(re);
+    if (!m || Number(m[2]) !== x.row) return;
+    const want = x.row === last.row ? 'IF(' + m[1] + m[2] + '=0,"완료"' : 'IF(OR(' + m[1] + m[2] + '=0,' + m[1] + last.row + '=0),"완료"';
+    const nf = f.replace(re, want);
+    if (nf !== f) c.setFormula(nf);
+  });
 }
 
 function putFileChip_(sh, row, col, url) {
