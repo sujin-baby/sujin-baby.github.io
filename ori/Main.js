@@ -993,6 +993,83 @@ function dayColors_(ss) {
   props.setProperty(key, String(width));
 }
 
+// 명단 시트 맨 오른쪽 '리뷰체크' 탭: 사장님이 리뷰를 체크하고 고치는 곳 (사용자 요청 10/19)
+//  수식이 아니라 값으로 넣어서 체크·수정·줄 삭제·열 삭제를 해도 안 사라짐. 새 응답만 아래에 붙이고, 이미 넣은 줄은 절대 안 건드림
+//  어느 응답을 넣었는지는 스크립트 속성 RVTK_<시트ID>(응답 시각)로 기억 → 사장님이 지운 줄도 다시 안 생김
+//  칸은 1행 머리글 글자로 찾아서 넣음(열을 지우거나 옮겨도 됨, 지운 칸은 안 채움). 폼에서 지운 응답은 그 줄에 메모 + 회색 글자만
+const RVT_TAB = '리뷰체크', RVT_HEAD = ['리뷰 확인', '타임스탬프', '옵션', '성함'];
+function reviewTabs_(runs) {
+  const cut = Date.now() - 30 * 86400000, ids = [];
+  runs.forEach(function (r) { const sid = String(r['시트ID'] || ''); if (sid && ids.indexOf(sid) === -1 && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut) ids.push(sid); });
+  const props = PropertiesService.getScriptProperties();
+  ids.forEach(function (sid) {
+    if (late_(270)) return;
+    const k = 'RVT_AT_' + sid;
+    if (Date.now() - Number(props.getProperty(k) || 0) < 25 * 60000) return;
+    props.setProperty(k, String(Date.now()));
+    try { const n = reviewTab_(SpreadsheetApp.openById(sid)); if (n) note_('✓ 리뷰체크 탭에 ' + n + '줄 추가'); } catch (e) { note_('리뷰체크 탭 실패 ' + sid + ': ' + e); }
+  });
+}
+function reviewTab_(ss) {
+  const tabs = ss.getSheets().filter(function (t) { return !!t.getFormUrl(); });
+  if (!tabs.length) return 0;
+  const rows = [];
+  tabs.forEach(function (t) {
+    const lr = t.getLastRow(), lc = t.getLastColumn();
+    if (lr < 2 || lc < 1) return;
+    const v = t.getRange(1, 1, lr, lc).getValues(), h = v[0].map(function (x) { return String(x); });
+    const oc = h.findIndex(function (x) { return MATCH.opt.test(x); });
+    let nc = h.findIndex(function (x) { return /성함|수취인|받는\s*(분|사람)/.test(x); });
+    if (nc < 0) nc = h.findIndex(function (x) { return MATCH.name.test(x) && !MATCH.account.test(x) && !MATCH.nick.test(x); });
+    v.slice(1).forEach(function (x) { if (x[0] instanceof Date) rows.push({ t: x[0].getTime(), d: x[0], o: oc >= 0 ? x[oc] : '', n: nc >= 0 ? x[nc] : '' }); });
+  });
+  rows.sort(function (a, b) { return a.t - b.t; });
+  const props = PropertiesService.getScriptProperties(), key = 'RVTK_' + ss.getId();
+  let sh = ss.getSheetByName(RVT_TAB), done = String(props.getProperty(key) || '').split(',').filter(Boolean);
+  if (!sh) {
+    sh = ss.insertSheet(RVT_TAB, ss.getSheets().length);   // 맨 오른쪽
+    sh.getRange(1, 1, 1, RVT_HEAD.length).setValues([RVT_HEAD]).setFontWeight('bold').setBackground('#efe6f7');
+    sh.setFrozenRows(1);
+    sh.setColumnWidth(1, 70); sh.setColumnWidth(2, 180); sh.setColumnWidth(3, 160); sh.setColumnWidth(4, 100);
+    done = [];
+  }
+  const lc = Math.max(sh.getLastColumn(), 1), hdr = sh.getRange(1, 1, 1, lc).getValues()[0].map(function (x) { return String(x).trim(); });
+  const col = function (name) { return hdr.indexOf(name) + 1; };
+  const cT = col('타임스탬프'), cO = col('옵션'), cN = col('성함'), cC = col('리뷰 확인');
+  // 기억이 없는데 탭에 줄이 있으면(속성이 지워진 경우) 탭의 타임스탬프로 다시 기억 → 중복으로 안 넣음
+  if (!done.length && cT && sh.getLastRow() >= 2) done = sh.getRange(2, cT, sh.getLastRow() - 1, 1).getValues().map(function (x) { return x[0] instanceof Date ? String(x[0].getTime()) : ''; }).filter(Boolean);
+  const add = rows.filter(function (x) { return done.indexOf(String(x.t)) === -1; });
+  if (add.length) {
+    const start = Math.max(sh.getLastRow(), 1) + 1, n = add.length;
+    if (sh.getMaxRows() < start + n) sh.insertRowsAfter(sh.getMaxRows(), start + n - sh.getMaxRows());
+    if (cC) sh.getRange(start, cC, n, 1).insertCheckboxes();
+    if (cT) sh.getRange(start, cT, n, 1).setValues(add.map(function (x) { return [x.d]; })).setNumberFormat('yyyy. M. d am/pm h:mm:ss');
+    if (cO) sh.getRange(start, cO, n, 1).setValues(add.map(function (x) { return [x.o]; }));
+    if (cN) sh.getRange(start, cN, n, 1).setValues(add.map(function (x) { return [x.n]; }));
+    // 날짜별 연한 색 (명단 탭과 같은 색)
+    const cols = [cC, cT, cO, cN].filter(Boolean), c0 = Math.min.apply(null, cols), w = Math.max.apply(null, cols) - c0 + 1;
+    sh.getRange(start, c0, n, w).setBackgrounds(add.map(function (x) {
+      const day = Math.floor((x.t + 9 * 3600000) / 86400000) + 25569;
+      return Array(w).fill(DAY_COLORS[day % 7]);
+    }));
+    done = done.concat(add.map(function (x) { return String(x.t); }));
+  }
+  // 폼에서 지운 응답: 줄은 그대로 두고 타임스탬프 칸에 메모 + 회색 글자
+  if (cT && sh.getLastRow() >= 2) {
+    const live = {}; rows.forEach(function (x) { live[x.t] = 1; });
+    const rg = sh.getRange(2, cT, sh.getLastRow() - 1, 1), tv = rg.getValues(), nt = rg.getNotes();
+    tv.forEach(function (x, i) {
+      if (!(x[0] instanceof Date) || live[x[0].getTime()] || nt[i][0]) return;
+      sh.getRange(i + 2, cT).setNote('폼에서 지운 응답이에요 (취소 등). 줄은 그대로 둬요.');
+      sh.getRange(i + 2, 1, 1, Math.max(sh.getLastColumn(), 1)).setFontColor('#999999');
+    });
+  }
+  let save = done.join(',');
+  while (save.length > 8500) { done.shift(); save = done.join(','); }
+  props.setProperty(key, save);
+  return add.length;
+}
+
 function listSummary_(ss, total) {
   const sh = ss.getSheetByName(LIST_TAB);
   if (!sh || String(sh.getRange('A1').getValue()) !== '총건수') return;
@@ -1745,6 +1822,8 @@ function checkFullInner_() {
     } catch (e) { note_('명단 탭 합치기 실패: ' + e); }
   });
   props.setProperty('RUN_ERRORS', JSON.stringify(errs));
+  step_('리뷰체크 탭');
+  try { reviewTabs_(runs); } catch (e) { note_('리뷰체크 탭 실패: ' + e); }
   try { refreshEditTab_(); } catch (e) { note_('폼수정 탭 새로고침 실패: ' + e); }
   function checkRun_(r) {
     let form;
