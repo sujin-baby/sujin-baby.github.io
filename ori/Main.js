@@ -316,6 +316,34 @@ function noCount_(t) {
 }
 
 // (한 번만) 진행 중인 폼·명단 시트·폴더 이름에서 끝 인원 수 빼기
+// (10/18 한 번만) 진행 중인 명단 시트의 '명단' 탭에서 손으로 적는 칸(송장번호, 실배송) 지우기. 칸에 뭐가 적혀 있으면 지우지 않고 알림
+function dropManualColsOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('DROPMANUAL_V1')) return;
+  props.setProperty('DROPMANUAL_V1', '1');
+  const seen = {}, kept = [];
+  let n = 0;
+  runs.forEach(function (r) {
+    const id = String(r['시트ID'] || '');
+    if (!id || seen[id] || r['진행 상태'] === '종료') return;
+    seen[id] = 1;
+    try {
+      const sh = SpreadsheetApp.openById(id).getSheetByName(LIST_TAB);
+      if (!sh) return;
+      const lc = Math.max(sh.getLastColumn(), 1), head = sh.getRange(2, 1, 1, lc).getValues()[0].map(String);
+      for (let c = head.length - 1; c >= 0; c--) {
+        if (!/^(송장번호|실배송)$/.test(head[c].trim()) || sh.getRange(2, c + 1).getFormula()) continue;
+        const last = sh.getLastRow();
+        const filled = last >= 3 && sh.getRange(3, c + 1, last - 2, 1).getValues().some(function (x) { return String(x[0]).trim() !== ''; });
+        if (filled) { kept.push(bareTitle_(r['명단 제목']) + ' ' + head[c]); continue; }
+        sh.deleteColumn(c + 1); n++;
+      }
+    } catch (e) {}
+  });
+  if (n) note_('✓ 명단 시트 송장번호·실배송 칸 ' + n + '개 지움');
+  if (kept.length) note_('적힌 내용이 있어서 안 지운 칸: ' + kept.join(', '));
+}
+
 function fixNoCountNamesOnce_(runs) {
   const props = PropertiesService.getScriptProperties();
   if (props.getProperty('NOCOUNT_V1')) return;
@@ -589,32 +617,33 @@ function createRun(d) {
   if (d.act && /^(info|sent|assign|unassign|move)$/.test(d.act)) return toolAction_(d);
   if (d.act) return locked_(function () { return toolAction_(d); }, 30000) || { msg: '다른 작업 중이에요. 잠시 뒤 다시 눌러 주세요.' };
   return locked_(function () {
-    const prev = d.n ? findRunByRequest_(d.n) : null;
-    // 이미 만든 진행에서 공지에 살 사람 이름을 넣고 다시 누르면 배정만 저장
-    if (prev) {
-      prev.assign = autoAssign_(d.n, d.desc);
-      if (prev.assign) { try { prev.notice = refreshNotice_(d) || prev.notice; } catch (e) { note_('공지 다시 넣기 실패: ' + e); } }
+    // 이미 만든 진행(같은 요청ID, 또는 생성기를 다시 열어 같은 방제로 누름)이면 새로 안 만들고
+    //  공지에 살 사람 이름이 있으면 배정 저장 + 폼 설명·안 보낸 방 공지를 이름 넣은 공지로
+    const run = (d.n && runByRequest_(d.n)) || runByTitle_(d);
+    if (run) {
+      const prev = againResult_(run);
+      prev.assign = autoAssign_(run, d.desc);
+      if (prev.assign) { try { prev.notice = refreshNotice_(run, d) || prev.notice; } catch (e) { note_('공지 다시 넣기 실패: ' + e); } }
       return prev;
     }
     const res = createRunInner_(d);
-    res.assign = autoAssign_(d.n, d.desc);
+    const made = d.n ? runByRequest_(d.n) : null;
+    res.assign = made ? autoAssign_(made, d.desc) : '';
     return res;
   }, 60000);
 }
 
 // 생성기 공지에 옵션 줄 뒤 살 사람 이름이 있으면(화이트 (2명) 김민희 선우승) 관리 시트 '배정' 탭에 바로 저장
 //  (폼수정 탭에 공지를 붙여넣는 것과 같음). 이름이 없으면 아무것도 안 함
-function autoAssign_(n, text) {
+function autoAssign_(r, text) {
   try {
-    if (!n || !parseAssign_(String(text || ''), []).length) return '';
-    const r = readRuns_().filter(function (x) { return String(x['요청ID']) === String(n); })[0];
-    return r ? assignRun_(r, String(text)) : '';
+    if (!r || !parseAssign_(String(text || ''), []).length) return '';
+    return assignRun_(r, String(text));
   } catch (e) { note_('공지 이름 배정 실패: ' + e); return '배정 저장 실패: ' + e.message; }
 }
 
 // 이름을 넣은 공지로 폼 설명과 아직 안 보낸 방 공지도 바꿈 (이미 보낸 공지는 그대로)
-function refreshNotice_(d) {
-  const r = readRuns_().filter(function (x) { return String(x['요청ID']) === String(d.n); })[0];
+function refreshNotice_(r, d) {
   if (!r || !r['폼ID'] || !String(d.desc || '').trim()) return '';
   const notice = withSlotLine_(String(d.desc).split('(구글폼 링크)').join(r['폼 링크']), d.slot, d.fruit || chainFruit_(r));
   FormApp.openById(r['폼ID']).setDescription(formDesc_(notice));
@@ -623,9 +652,21 @@ function refreshNotice_(d) {
   return notice;
 }
 
-function findRunByRequest_(n) {
-  const r = readRuns_().filter(function (x) { return String(x['요청ID']) === String(n); })[0];
-  if (!r) return null;
+function runByRequest_(n) {
+  return readRuns_().filter(function (x) { return String(x['요청ID']) === String(n); })[0] || null;
+}
+// 생성기 페이지를 다시 열면 요청ID가 새로 생겨서, 방제(끝 인원 수 빼고, #택·실 포함)와 진행일이 같은 1일차 진행을 같은 진행으로 봄
+function runByTitle_(d) {
+  const key = function (t) { return bareTitle_(t).replace(/\s+/g, '').replace(/\d+$/, ''); };
+  const want = key(d.realship ? withSil_(d.title) : d.title);
+  if (!want || !dateTok_(want)) return null;
+  return readRuns_().filter(function (x) {
+    return x['진행 상태'] !== '종료' && !/^(next|add)-/.test(String(x['요청ID'])) && key(x['명단 제목']) === want &&
+      (!/^\d{4}-\d{2}-\d{2}$/.test(String(d.date || '')) || !(x['진행일'] instanceof Date) || Utilities.formatDate(x['진행일'], CONFIG.TIMEZONE, 'yyyy-MM-dd') === d.date);
+  })[0] || null;
+}
+function findRunByRequest_(n) { const r = runByRequest_(n); return r ? againResult_(r) : null; }
+function againResult_(r) {
   let notice = '';
   try { notice = FormApp.openById(r['폼ID']).getDescription(); } catch (e) {}
   return { again: true, notice: notice, formUrl: r['폼 링크'], sheetUrl: r['시트 링크'], folderUrl: r['폴더 링크'] };
@@ -980,11 +1021,8 @@ function formatResponseSheet_(ss, opts) {
   // 2행 머리글, 3행부터 응답
   sh.getRange('A2').setFormula('={' + ref + 'A1:' + L + '1}');
   sh.getRange('A3').setFormula('=IFERROR(FILTER(' + ref + 'A2:' + L + ', ' + ref + 'A2:A<>""), "")');
-  // 손으로 적는 칸 (택대 송장번호, 실배송)
-  let extra = n;
-  const manual = {};
-  if (opts.takdae) { extra++; manual['송장번호'] = extra; sh.getRange(2, extra).setValue('송장번호').setNote('한진택배, 오후 3~5시 도착. 가끔 익일.'); }
-  if (opts.realship) { extra++; manual['실배송'] = extra; sh.getRange(2, extra).setValue('실배송'); }
+  // 손으로 적는 칸(택대 송장번호, 실배송)은 안 만듦 (사용자 요청 10/18)
+  const extra = n;
   // 명단 시트는 업체도 보는 곳이라 중복, 옵션, 금액 확인 표시는 넣지 않음 (관리 시트 한눈에, 폼수정 탭에서만 보임)
   try { moveOldAssign_(ss); } catch (e) { note_('예전 배정 탭 옮기기 실패: ' + e); }
 
@@ -1007,10 +1045,7 @@ function formatResponseSheet_(ss, opts) {
   });
   groupColumns_(sh, hide);
 
-  if (opts.realship) {
-    sh.setTabColor('#f4d03f');
-    sh.getRange(2, manual['실배송'], maxRows - 1, 1).setBackground('#fff2a8');
-  }
+  if (opts.realship) sh.setTabColor('#f4d03f');
 
   // 원래 폼 응답 탭은 숨김 (응답은 계속 여기로 들어오고, 명단 탭이 따라 보여 줌)
   try { raw.hideSheet(); } catch (e) {}
@@ -1268,7 +1303,9 @@ function noticeProducts_(text) {
 //  옵션 줄 바로 아래 줄에 이름만 있어도 읽음
 // 돌려주는 줄: [닉네임, 공지 옵션(가이드 여럿이면 상품명 붙임), 계정수, 폼 보기(맞는 게 없으면 빈칸), 가격]
 function parseAssign_(text, choices) {
-  const k = function (x) { return String(x || '').toLowerCase().replace(/\s+/g, ''); };
+  // 띄어쓰기 있는 닉네임은 대괄호로 묶어 한 사람: [시묘 심효진] (U+2060으로 잠깐 붙였다가 이름에서 다시 띄어 씀)
+  text = String(text || '').replace(/\[([^\]\n]{1,20})\]/g, function (m, g) { return g.trim().replace(/\s+/g, '\u2060'); });
+  const k = function (x) { return String(x || '').toLowerCase().replace(/[\s\u2060]+/g, ''); };
   const bare = function (c) { return k(String(c).replace(/\s*\([\d,\s]+원\)\s*$/, '')); };
   const blocks = String(text || '').split(/\n-{5,}\s*\n?/);
   const multi = noticeProducts_(text).length > 1 || blocks.length > 1;
@@ -1296,7 +1333,7 @@ function parseAssign_(text, choices) {
       if (cancel) n = 0;
       const key = k(tok) + '|' + label;
       if (at[key] !== undefined) { rows[at[key]][2] += n; lastKey = key; return; }
-      at[key] = rows.length; rows.push([tok, label, n, choice, 0]); lastKey = key;
+      at[key] = rows.length; rows.push([tok.replace(/\u2060/g, ' '), label, n, choice, 0]); lastKey = key;
     });
   };
   // 옵션 줄에 'N명'이 없는 공지(옵션 하나): 공지 아래쪽에 이름만 적은 줄을 그 옵션으로 읽음
@@ -1565,6 +1602,7 @@ function checkFullInner_() {
   try { fixModuAssignOnce_(); } catch (e) { note_('모두의농수산 배정 옮기기 실패: ' + e); }
   try { fixTemplateOnce_(); } catch (e) { note_('템플릿 폼 질문 고치기 실패: ' + e); }
   try { fixNoCountNamesOnce_(runs); } catch (e) { note_('이름 인원 수 빼기 실패: ' + e); }
+  try { dropManualColsOnce_(runs); } catch (e) { note_('송장번호·실배송 칸 지우기 실패: ' + e); }
   try { ensureListMsgs_(runs); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   const errs = {}, listed = {};
   step_('폼 인원');
@@ -3083,11 +3121,31 @@ function assignRun_(r, text) {
   const rows = parseAssign_(text, choices);
   if (!rows.length) return '이름을 못 찾았어요. 옵션 줄 뒤나 아래 줄에 이름을 띄어쓰기로 적어 주세요.';
   writeAssign_(r, rows);
+  const warn = assignWarn_(text, rows);
   const by = {};
   let canc = [];
   rows.forEach(function (x) { if (!x[2]) { canc.push(x[0]); return; } const o = String(x[1]) || '옵션 모름'; by[o] = (by[o] || 0) + x[2]; });
   // 한눈에 탭은 배정 탭을 수식으로 보고 있어서 다시 만들 필요 없음 (다시 만들면 30초 넘게 걸림)
-  return '✔ [' + bareTitle_(r['명단 제목']) + '] 에 저장했어요.\n' + assignSummary_(rows) + note;
+  return '✔ [' + bareTitle_(r['명단 제목']) + '] 에 저장했어요.\n' + assignSummary_(rows) + note + warn;
+}
+
+// 옵션 인원(그린 (2명))보다 이름이 많으면 알림: 띄어쓰기 있는 닉네임이 둘로 나뉘었을 수 있음
+function assignWarn_(text, rows) {
+  const want = [];
+  String(text || '').split('\n').forEach(function (l) {
+    const m = l.replace(/^\s*\d+\)\s*/, '').replace(/^.*?옵션\s*[:：]\s*/, '').match(/^(.+?)\s*\(\s*(\d+)\s*명\s*\)/);
+    if (m) want.push({ o: m[1].replace(/\s+/g, ''), n: Number(m[2]) });
+  });
+  const out = [];
+  const labels = rows.map(function (x) { return x[1]; }).filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+  labels.forEach(function (lab) {
+    const lk = String(lab).replace(/\s+/g, '');
+    const w = want.filter(function (x) { return lk === x.o || lk.slice(-x.o.length) === x.o; })[0];
+    const got = rows.filter(function (x) { return x[1] === lab && x[2] > 0; });
+    const cnt = got.reduce(function (a, x) { return a + x[2]; }, 0);
+    if (w && w.n && cnt > w.n) out.push(lab + ' (' + w.n + '명)인데 이름이 ' + cnt + '명: ' + got.map(function (x) { return x[0]; }).join(', '));
+  });
+  return out.length ? '\n⚠ ' + out.join('\n⚠ ') + '\n  띄어쓰기 있는 닉네임이면 공지에 [시묘 심효진]처럼 대괄호로 묶거나 시묘심효진처럼 붙여 쓰고 다시 눌러 주세요.' : '';
 }
 
 // 이 진행이 속한 의뢰의 첫 명단 시트(첫 진행). 예전에 날마다 시트를 따로 만든 의뢰도 첫 시트로 모음
