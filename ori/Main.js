@@ -1489,6 +1489,8 @@ function countResponses_(sheetId) {
 function checkFull() {
   let ran = false;
   globalThis.__ORI_T0 = Date.now();
+  // 0시대에는 폼 열기를 잠금 없이 먼저 (15분 확인이 마침 돌고 있어 잠금을 못 잡아도 0시에 바로 열리게)
+  try { if (Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'H') === '0') openStartingForms_(readRuns_(), outboxRows_()); } catch (e) { note_('0시 폼 열기 실패: ' + e); }
   locked_(function () { ran = true; try { checkFullInner_(); } catch (e) { note_('멈춤: ' + (e && e.message || e)); } }, 120000);
   report_('자동 확인', ran);
 }
@@ -1524,10 +1526,12 @@ function openStartingForms_(runs, msgs) {
     if (w.first || now < w.from || runOver_(runs, r, now) || pastEnd_(r)) return;
     const key = 'OPEN_' + r['폼ID'] + '_' + Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd');
     if (props.getProperty(key)) return;
+    let ok = true;
     runFormIds_(r, runs, msgs).forEach(function (fid) {
-      try { const f = FormApp.openById(fid); if (!f.isAcceptingResponses()) { f.setAcceptingResponses(true); note_('✓ 폼 엶: ' + bareTitle_(r['명단 제목'])); } } catch (e) { note_('폼 열기 실패 ' + bareTitle_(r['명단 제목']) + ': ' + e.message); }
+      try { const f = FormApp.openById(fid); if (!f.isAcceptingResponses()) { f.setAcceptingResponses(true); note_('✓ 폼 엶: ' + bareTitle_(r['명단 제목'])); } } catch (e) { ok = false; note_('폼 열기 실패 ' + bareTitle_(r['명단 제목']) + ': ' + e.message); }
     });
-    props.setProperty(key, '1');
+    // 열기에 실패하면 표시를 안 남겨서 다음 확인(15분 뒤)에 다시 엶
+    if (ok) props.setProperty(key, '1');
   });
 }
 
@@ -1535,9 +1539,11 @@ function openStartingForms_(runs, msgs) {
 function ensureMidnightTrigger_() {
   const props = PropertiesService.getScriptProperties();
   const id = props.getProperty('MID_TRIG_ID'), at = Number(props.getProperty('MID_TRIG_AT') || 0);
-  if (id && at > Date.now()) return;
+  // 예약이 한국 시간 0시가 아니면(예전에 스크립트 시간대로 잡은 것) 다시 잡음
+  if (id && at > Date.now() && Utilities.formatDate(new Date(at), CONFIG.TIMEZONE || 'Asia/Seoul', 'H') === '0') return;
   if (id) ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getUniqueId() === id) ScriptApp.deleteTrigger(t); });
-  const next = new Date(); next.setHours(24, 0, 20, 0);
+  // 한국 시간 다음 날 0시 0분 20초 (스크립트 시간대 설정과 상관없이)
+  const next = new Date(Utilities.formatDate(new Date(Date.now() + 86400000), CONFIG.TIMEZONE || 'Asia/Seoul', 'yyyy-MM-dd') + 'T00:00:20+09:00');
   const t = ScriptApp.newTrigger('checkFull').timeBased().at(next).create();
   props.setProperty('MID_TRIG_ID', t.getUniqueId()); props.setProperty('MID_TRIG_AT', String(next.getTime()));
 }
