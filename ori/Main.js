@@ -2439,8 +2439,17 @@ function deleteRun_(r) {
       }
     }
   } catch (e) {}
+  // 1일차를 지우면 '일정' 탭의 다음 일차 계획(대기)도 지움 (안 지우면 옛 방제로 다음 날 폼이 자동으로 생김)
+  let plans = 0;
+  try {
+    const id = String(r['요청ID'] || '');
+    if (id && !/^(next|add)-/.test(id)) {
+      const ps = planSheet_(), pl = ps.getLastRow();
+      if (pl >= 2) { const v = ps.getRange(2, 1, pl - 1, 9).getValues(); for (let i = v.length - 1; i >= 0; i--) if (String(v[i][0]).indexOf(id + '-') === 0 && String(v[i][8]) === '대기') { ps.deleteRow(i + 2); plans++; } }
+    }
+  } catch (e) {}
   ensureListSheet_().deleteRow(r.row);
-  return title + ' 진행을 지웠어요.';
+  return title + ' 진행을 지웠어요.' + (plans ? ' (다음 일차 계획 ' + plans + '개도)' : '');
 }
 
 // (10/15 한 번만) 진행 도우미에서 잘못 만든 10.17 추가 모집을 지우고, 10.16 배정에 잘못 들어간 고구마말랭이 이름을 빼고, 10.16 공지를 옵션 인원 넣고 이름 뺀 걸로 다시
