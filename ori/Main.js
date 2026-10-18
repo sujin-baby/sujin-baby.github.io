@@ -3702,7 +3702,8 @@ function updatePay_() {
 }
 
 // 진행비 = 1건(1명)당 500원, 리뷰비 없음 (사용자 요청 10/18). 이번 달·다음 달 탭만 (지난달 이전은 그대로)
-//  날짜 칸의 진행비 수식 =$G5*BG5(완료보고 × 수량) → =$G5*BG5*500. 날짜 칸 리뷰비는 비우고, 리뷰비 열은 한 번 숨김
+//  날짜 칸의 진행비는 그날그날 정산: =$G5*BG5(완료보고 × 수량) → =BG5*500 (완료보고와 상관없이 그날 수량 × 500원)
+//  날짜 칸 리뷰비는 비우고, 리뷰비 열은 한 번 숨김. 위쪽 '리뷰비 총액', '금일 리뷰비' 글자와 값도 지우고 '진행비 총액' 값 열은 보이게
 //  15분마다 돌아도 이미 바꾼 칸은 그대로라 새로 생긴 줄만 바뀜
 const PAY_RATE = 500;
 function payRate_() {
@@ -3721,6 +3722,7 @@ function payRate_() {
     const head = sh.getRange(L.head, 1, 1, lastCol).getValues()[0].map(function (x) { return String(x).replace(/\s/g, ''); });
     const n = lastRow - L.head, w = lastCol - start + 1;
     const rng = sh.getRange(L.head + 1, start, n, w), fs = rng.getFormulas(), vs = rng.getValues();
+    const rep = L.report ? colLetter_(L.report) : 'G';
     let changed = 0, odd = '';
     for (let c = 0; c < w; c++) {
       const h = head[start - 1 + c];
@@ -3729,6 +3731,9 @@ function payRate_() {
         const col = fs.map(function (r, i) {
           const f = r[c];
           if (!f) return [vs[i][c]];
+          // =$G5*BG5 또는 =$G5*BG5*500 (완료보고 × 수량) → =BG5*500
+          const m = f.match(/^=\$?([A-Z]+)\$?\d+\s*\*\s*(\$?[A-Z]+\$?\d+)(?:\s*\*\s*\d+)?$/);
+          if (m && m[1] === rep) { dirty = true; changed++; return ['=' + m[2] + '*' + PAY_RATE]; }
           if (/^=\$?[A-Z]+\$?\d+\s*\*\s*\$?[A-Z]+\$?\d+$/.test(f)) { dirty = true; changed++; return [f + '*' + PAY_RATE]; }
           if (!odd && !/\*\s*\d{3,}/.test(f)) odd = f;
           return [f];
@@ -3744,7 +3749,32 @@ function payRate_() {
       head.forEach(function (h, i) { if (h === '리뷰비') sh.hideColumns(i + 1); });
       props.setProperty(hk, '1');
     }
-    if (changed) note_('✓ 월급시트 ' + sh.getName() + ': 진행비 1건 ' + PAY_RATE + '원, 리뷰비 비움 (' + changed + '곳)');
+    // 머리글 위쪽(1~3행): '리뷰비 총액', '금일 리뷰비' 글자와 그 오른쪽 값(리뷰비 열) 지우기, '진행비 총액' 값 열 보이기 (탭마다 한 번)
+    const hk2 = 'PAYHDR_V1_' + sh.getSheetId();
+    if (!props.getProperty(hk2) && L.head > 1) {
+      const top = sh.getRange(1, 1, L.head - 1, lastCol), tv = top.getValues(), tf = top.getFormulas();
+      const isRev = function (c) { return head[c] === '리뷰비'; };
+      tv.forEach(function (row, r) {
+        row.forEach(function (x, c) {
+          const t = String(x).replace(/\s/g, '');
+          if (t !== '리뷰비총액' && t !== '금일리뷰비' && t !== '진행비총액') return;
+          let v = c + 1;
+          while (v < row.length && row[v] === '' && !tf[r][v]) v++;
+          if (t === '진행비총액') {
+            // 값 칸(예: S1)이 리뷰비 열이라 같이 숨겨졌음 → 열을 다시 보이게, 그 열의 리뷰비 머리글·줄 수식은 지움
+            if (v < row.length) {
+              sh.showColumns(v + 1);
+              if (isRev(v) && v + 1 < start) { sh.getRange(L.head, v + 1, n + 1, 1).clearContent(); changed++; }
+            }
+            return;
+          }
+          sh.getRange(r + 1, c + 1).clearContent(); changed++;
+          if (v < row.length && isRev(v)) { sh.getRange(r + 1, v + 1).clearContent(); changed++; }
+        });
+      });
+      props.setProperty(hk2, '1');
+    }
+    if (changed) note_('✓ 월급시트 ' + sh.getName() + ': 진행비 1건 ' + PAY_RATE + '원(그날그날), 리뷰비 비움 (' + changed + '곳)');
     if (odd && props.getProperty('PAYODD_' + sh.getSheetId()) !== odd) { note_('월급시트 ' + sh.getName() + ' 진행비 칸에 모르는 수식이 있어 안 바꿈: ' + odd); props.setProperty('PAYODD_' + sh.getSheetId(), odd); }
   });
 }
