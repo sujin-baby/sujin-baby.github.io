@@ -379,18 +379,152 @@ function relinkIfMissing_(r, form) {
 // 명단 탭이 폼 응답 탭을 보고 있는지: 새 진행을 만들 때 폼 응답 탭이 늦게 생기면(15초 넘게) 명단 탭이 빈 기본 탭을 보게 되고,
 //  그 빈 탭이 지워지면 명단·한눈에 탭에 응답이 하나도 안 보임 → 명단 탭을 다시 만듦
 function fixListRef_(ss, r) {
-  if (!r) return false;
+  // (10/19) 명단 탭은 값, 스크립트가 세는 수식은 숨은 '응답합본' 탭. 합본 수식을 맞추고, 명단 탭이 아직 수식이면 값으로 한 번 바꿈
+  buildMergeTab_(ss);
+  if (!PropertiesService.getScriptProperties().getProperty('LISTV_' + ss.getId())) { convertListToValues_(ss); return true; }
+  return false;
+}
+
+// 숨은 '응답합본' 탭: 이 시트에 연결된 폼 응답 탭(들)을 수식으로 합쳐 둠 (2행 머리글, 3행부터 응답, 시각 순)
+//  인원 세기·한눈에 탭·배정 '산 수'가 여기를 봄. 사람은 안 보고 안 고침
+//  수식은 줄 번호 없이 열 전체(A:M)로 쓰고 머리글은 ROW()>1로 뺌: 'A2:M'처럼 쓰면 구글폼이 응답 줄을 끼워 넣을 때마다 A3, A4…로 밀림(10/19). DROP은 구글 시트에 없음
+const MERGE_TAB = '응답합본';
+function buildMergeTab_(ss) {
   const tabs = ss.getSheets().filter(function (t) { return !!t.getFormUrl(); });
-  if (!tabs.length) return false;
-  const sh = ss.getSheetByName(LIST_TAB);
-  if (sh) {
-    const f = sh.getRange('A2').getFormula() + sh.getRange('A3').getFormula();
-    // 폼 탭이 둘 이상이면 ensureListTab_가 새 수식으로 바꿈. 하나면 예전 수식('A2:L', 밀려서 'A4:M' 등)일 때 다시 만듦
-    if (tabs.length > 1 || (/ROW\(/.test(f) && tabs.some(function (t) { return f.indexOf("'" + t.getName().replace(/'/g, "''") + "'!") !== -1; }))) return false;
+  if (!tabs.length) return null;
+  let mt = ss.getSheetByName(MERGE_TAB);
+  if (!mt) mt = ss.insertSheet(MERGE_TAB, ss.getSheets().length);
+  try { if (!mt.isSheetHidden()) mt.hideSheet(); } catch (e) {}
+  const ref = function (t) { return "'" + t.getName().replace(/'/g, "''") + "'!"; };
+  let f2 = '', v2 = null, f3;
+  if (tabs.length === 1) {
+    const L = colLetter_(Math.max(tabs[0].getLastColumn(), rawHead_(tabs[0]).length, 1));
+    f2 = '={' + ref(tabs[0]) + 'A1:' + L + '1}';
+    f3 = '=IFERROR(FILTER(' + ref(tabs[0]) + 'A:' + L + ', ROW(' + ref(tabs[0]) + 'A:A)>1, ' + ref(tabs[0]) + 'A:A<>""), "")';
+  } else {
+    const heads = tabs.map(rawHead_), union = heads[0].slice();
+    heads.slice(1).forEach(function (h) { h.forEach(function (x) { if (x && union.indexOf(x) === -1) union.push(x); }); });
+    const parts = tabs.map(function (t, i) {
+      const L = colLetter_(Math.max(heads[i].length, 1));
+      const cols = union.map(function (u) { const k = heads[i].indexOf(u); return k >= 0 ? 'CHOOSECOLS(d,' + (k + 1) + ')' : 'MAKEARRAY(ROWS(d),1,LAMBDA(rr,cc,""))'; });
+      return 'LET(d,FILTER(' + ref(t) + 'A:' + L + ',ROW(' + ref(t) + 'A:A)>1),HSTACK(' + cols.join(',') + '))';
+    });
+    v2 = union;
+    f3 = '=IFERROR(LET(v,VSTACK(' + parts.join(',') + '),SORT(FILTER(v,INDEX(v,0,1)<>""),1,TRUE)),"")';
   }
-  formatResponseSheet_(ss, { type: r['유형'], takdae: r['택대'] === 'Y', realship: r['실배송'] === 'Y', platform: r['플랫폼'], target: Number(r['총건수']) || r['목표인원'], prices: r['가격'] });
-  PropertiesService.getScriptProperties().deleteProperty('DAYCOL1_' + ss.getId());   // 날짜 색 다시 칠하게
-  return true;
+  if (f2 ? mt.getRange('A2').getFormula() !== f2 : String(mt.getRange(2, 1, 1, v2.length).getValues()[0].join('|')) !== v2.join('|')) {
+    mt.getRange(2, 1, 1, Math.max(mt.getMaxColumns(), 1)).clearContent();
+    if (f2) mt.getRange('A2').setFormula(f2); else mt.getRange(2, 1, 1, v2.length).setValues([v2]);
+  }
+  if (mt.getRange('A3').getFormula() !== f3) mt.getRange('A3').setFormula(f3);
+  tabs.forEach(function (t) { try { t.hideSheet(); } catch (e) {} });
+  return mt;
+}
+
+// 명단 탭을 수식 → 값으로 한 번 바꿈 (1행 요약은 그대로, 2행 머리글과 응답을 값으로 다시 씀)
+function convertListToValues_(ss) {
+  const sh = ss.getSheetByName(LIST_TAB);
+  const props = PropertiesService.getScriptProperties(), id = ss.getId();
+  if (!sh) return;
+  const mr = sh.getMaxRows(), mc = sh.getMaxColumns();
+  if (mr >= 2) sh.getRange(2, 1, mr - 1, mc).clearContent();
+  if (mr >= 3) sh.getRange(3, 1, mr - 2, mc).setBackground(null);
+  sh.setConditionalFormatRules([]);   // 날짜 색 규칙은 값으로 칠함
+  const tabs = ss.getSheets().filter(function (t) { return !!t.getFormUrl(); }), heads = [];
+  tabs.forEach(function (t) { rawHead_(t).forEach(function (x) { if (x && heads.indexOf(x) === -1) heads.push(x); }); });
+  if (heads.length) sh.getRange(2, 1, 1, heads.length).setValues([heads]);
+  props.setProperty('LISTV_' + id, '1');
+  props.deleteProperty('LISTK_' + id); props.deleteProperty('LISTH_' + id);
+  syncList_(ss);
+}
+
+// 명단 탭(값)에 새 응답만 아래에 붙임. 이미 넣은 줄은 절대 안 건드림 → 사장님·사용자가 체크칸을 넣고, 열·줄을 지우고, 고쳐도 유지
+//  어느 응답을 넣었는지는 스크립트 속성 LISTK_<시트ID>(응답 시각)로 기억 → 지운 줄도 다시 안 생김
+//  칸은 2행 머리글 글자로 찾아서 넣음(지운 칸은 안 채움, 다시 안 만듦). 폼에 새로 생긴 질문만 오른쪽 끝에 칸을 더함(LISTH_)
+//  폼에서 지운 응답(취소 등)은 줄을 남기고 타임스탬프 칸 메모 + 회색 글자
+function syncList_(ss) {
+  const sh = ss.getSheetByName(LIST_TAB);
+  if (!sh) return 0;
+  const props = PropertiesService.getScriptProperties(), id = ss.getId();
+  if (!props.getProperty('LISTV_' + id)) return 0;
+  const tabs = ss.getSheets().filter(function (t) { return !!t.getFormUrl(); });
+  if (!tabs.length) return 0;
+  const heads = [], rows = [];
+  tabs.forEach(function (t) {
+    const lr = t.getLastRow(), h = rawHead_(t);
+    h.forEach(function (x) { if (x && heads.indexOf(x) === -1) heads.push(x); });
+    if (lr < 2 || !h.length) return;
+    t.getRange(2, 1, lr - 1, h.length).getValues().forEach(function (x) {
+      if (!(x[0] instanceof Date)) return;
+      const o = {}; h.forEach(function (name, j) { o[name] = x[j]; });
+      rows.push({ t: x[0].getTime(), o: o });
+    });
+  });
+  rows.sort(function (a, b) { return a.t - b.t; });
+  let lc = Math.max(sh.getLastColumn(), 1), hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(function (x) { return String(x).trim(); });
+  let known = []; try { known = JSON.parse(props.getProperty('LISTH_' + id) || '[]'); } catch (e) {}
+  if (!known.length) known = hdr.filter(Boolean);
+  heads.filter(function (h) { return hdr.indexOf(h) === -1 && known.indexOf(h) === -1; }).forEach(function (h) {
+    known.push(h);
+    sh.getRange(2, Math.max(sh.getLastColumn(), 1) + 1).setValue(h);
+    lc = Math.max(sh.getLastColumn(), 1); hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(function (x) { return String(x).trim(); });
+  });
+  props.setProperty('LISTH_' + id, JSON.stringify(known));
+  const cT = hdr.indexOf('타임스탬프') + 1;
+  let done = String(props.getProperty('LISTK_' + id) || '').split(',').filter(Boolean);
+  if (!done.length && cT && sh.getLastRow() >= 3) done = sh.getRange(3, cT, sh.getLastRow() - 2, 1).getValues().map(function (x) { return x[0] instanceof Date ? String(x[0].getTime()) : ''; }).filter(Boolean);
+  const add = rows.filter(function (x) { return done.indexOf(String(x.t)) === -1; });
+  if (add.length) {
+    const start = Math.max(sh.getLastRow(), 2) + 1, n = add.length;
+    if (sh.getMaxRows() < start + n) sh.insertRowsAfter(sh.getMaxRows(), start + n - sh.getMaxRows());
+    // 머리글이 있는 칸에만 값 (사용자가 넣은 체크칸 등 머리글이 다른 칸은 비워 둠)
+    hdr.forEach(function (h, j) {
+      if (!h || !add.some(function (x) { return Object.prototype.hasOwnProperty.call(x.o, h); })) return;
+      sh.getRange(start, j + 1, n, 1).setValues(add.map(function (x) { return [Object.prototype.hasOwnProperty.call(x.o, h) ? x.o[h] : '']; }));
+    });
+    if (cT) sh.getRange(start, cT, n, 1).setNumberFormat('yyyy. M. d am/pm h:mm:ss');
+    // 사용자가 만든 체크칸(바로 위 줄이 체크칸인 칸)은 새 줄에도 체크칸
+    if (start > 3) {
+      const above = sh.getRange(start - 1, 1, 1, lc).getValues()[0];
+      above.forEach(function (v, j) { if (typeof v === 'boolean' && heads.indexOf(hdr[j]) === -1) sh.getRange(start, j + 1, n, 1).insertCheckboxes(); });
+    }
+    sh.getRange(start, 1, n, lc).setBackgrounds(add.map(function (x) {
+      const day = Math.floor((x.t + 9 * 3600000) / 86400000) + 25569;
+      return Array(lc).fill(DAY_COLORS[day % 7]);
+    }));
+    done = done.concat(add.map(function (x) { return String(x.t); }));
+  }
+  if (cT && sh.getLastRow() >= 3) {
+    const live = {}; rows.forEach(function (x) { live[x.t] = 1; });
+    const rg = sh.getRange(3, cT, sh.getLastRow() - 2, 1), tv = rg.getValues(), nt = rg.getNotes();
+    tv.forEach(function (x, i) {
+      if (!(x[0] instanceof Date) || live[x[0].getTime()] || nt[i][0]) return;
+      sh.getRange(i + 3, cT).setNote('폼에서 지운 응답이에요 (취소 등). 줄은 그대로 둬요.');
+      sh.getRange(i + 3, 1, 1, lc).setFontColor('#999999');
+    });
+  }
+  let save = done.join(',');
+  while (save.length > 8500) { done.shift(); save = done.join(','); }
+  props.setProperty('LISTK_' + id, save);
+  return add.length;
+}
+
+// 최근 30일 의뢰의 명단 시트도 값 명단으로 바꾸고 새 응답 붙이기 (15분 확인에서 안 보는 끝난 진행용, 시트마다 25분에 한 번)
+function listTabsRecent_(runs, skip) {
+  const cut = Date.now() - 30 * 86400000, ids = [];
+  runs.forEach(function (r) { const sid = String(r['시트ID'] || ''); if (sid && !skip[sid] && ids.indexOf(sid) === -1 && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut) ids.push(sid); });
+  const props = PropertiesService.getScriptProperties();
+  ids.forEach(function (sid) {
+    if (late_(270)) return;
+    const k = 'LISTAT_' + sid;
+    if (Date.now() - Number(props.getProperty(k) || 0) < 25 * 60000) return;
+    props.setProperty(k, String(Date.now()));
+    try {
+      const lss = SpreadsheetApp.openById(sid);
+      if (fixListRef_(lss)) note_('✓ 명단 탭을 값으로 바꿈: ' + lss.getName());
+      else syncList_(lss);
+    } catch (e) { note_('명단 탭 값으로 바꾸기 실패 ' + sid + ': ' + e); }
+  });
 }
 
 // 진행목록에 없는 폼(지운 진행의 폼 등)에 응답이 들어오면: 같은 상품(공지의 상품번호나 상품명)으로 진행 중인 진행이 있으면
@@ -1124,39 +1258,9 @@ function listSummary_(ss, total) {
 // 명단 탭이 이 시트에 연결된 모든 폼 응답 탭을 합쳐 보여 주게 (의뢰서 하나 = 명단 시트 하나, 날마다 폼이 달라도 아래로 이어짐)
 //  머리글은 첫 탭 기준 + 다른 탭에만 있는 질문은 뒤에. 손으로 적는 칸(송장번호, 실배송)은 밀어서 안 겹치게
 function ensureListTab_(ss) {
-  const sh = ss.getSheetByName(LIST_TAB);
-  if (!sh) return false;
-  const tabs = ss.getSheets().filter(function (s) { return !!s.getFormUrl(); });
-  if (tabs.length < 2) {
-    // 폼이 하나여도 손으로 붙여넣은 줄 때문에 명단이 막혔으면(#REF!) 치움
-    if (tabs.length && /^#/.test(sh.getRange('A3').getDisplayValue())) clearPasted_(sh, rawHead_(tabs[0]).length);
-    return false;
-  }
-  const heads = tabs.map(rawHead_);
-  const union = heads[0].slice();
-  heads.slice(1).forEach(function (h) { h.forEach(function (x) { if (x && union.indexOf(x) === -1) union.push(x); }); });
-  const ref = function (t) { return "'" + t.getName().replace(/'/g, "''") + "'!"; };
-  const parts = tabs.map(function (t, i) {
-    const L = colLetter_(Math.max(heads[i].length, 1));
-    const cols = union.map(function (u) { const k = heads[i].indexOf(u); return k >= 0 ? 'CHOOSECOLS(d,' + (k + 1) + ')' : 'MAKEARRAY(ROWS(d),1,LAMBDA(rr,cc,""))'; });
-    // 열 전체(A:L)에서 머리글 줄만 뺌: 'A2:L'처럼 줄 번호를 쓰면 구글폼이 응답 줄을 끼워 넣을 때마다 A3, A4…로 밀려서 응답이 안 보임 (10/19)
-    //  (DROP은 구글 시트에 없어서 10/19 아침에 명단이 통째로 비었음 → ROW()>1로 거름)
-    return 'LET(d,FILTER(' + ref(t) + 'A:' + L + ',ROW(' + ref(t) + 'A:A)>1),HSTACK(' + cols.join(',') + '))';
-  });
-  const f = '=IFERROR(LET(v,VSTACK(' + parts.join(',') + '),SORT(FILTER(v,INDEX(v,0,1)<>""),1,TRUE)),"")';
-  if (sh.getRange('A3').getFormula() === f) {
-    if (/^#/.test(sh.getRange('A3').getDisplayValue())) clearPasted_(sh, union.length);
-    return false;
-  }
-  // 손으로 적는 칸이 합친 머리글과 겹치면 칸을 끼워 넣어 뒤로 밀기
-  const row2 = sh.getRange(2, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(String);
-  const manual = row2.findIndex(function (h, i) { return i >= heads[0].length && /송장번호|실배송/.test(h); }) + 1;
-  if (manual && manual <= union.length) sh.insertColumnsBefore(manual, union.length - manual + 1);
-  sh.getRange(2, 1, 1, union.length).setValues([union]);
-  sh.getRange('A3').setFormula(f);
-  clearPasted_(sh, union.length);
-  tabs.forEach(function (t) { try { t.hideSheet(); } catch (e) {} });
-  return true;
+  // (10/19) 합치는 수식은 숨은 '응답합본' 탭에만. 명단 탭은 값(syncList_)
+  buildMergeTab_(ss);
+  return false;
 }
 
 // 명단 탭에 손으로 붙여넣은 응답 줄(A열이 날짜 값) 지우기. 같은 응답은 폼에서 자동으로 들어오고, 남아 있으면 명단 수식이 막힘(#REF!)
@@ -1219,6 +1323,9 @@ function formatResponseSheet_(ss, opts) {
   const ref = "'" + raw.getName().replace(/'/g, "''") + "'!";
 
   let sh = ss.getSheetByName(LIST_TAB);
+  // 값으로 바뀐 명단 탭(사장님·사용자가 열을 지우고 체크칸을 넣는 곳)은 절대 안 비움. 숨은 합본 탭만 다시
+  const vprops = PropertiesService.getScriptProperties();
+  if (sh && vprops.getProperty('LISTV_' + ss.getId())) { buildMergeTab_(ss); try { raw.hideSheet(); } catch (e) {} return sh; }
   if (!sh) sh = ss.insertSheet(LIST_TAB, 0);
   ss.setActiveSheet(sh);
   ss.moveActiveSheet(1);
@@ -1243,11 +1350,12 @@ function formatResponseSheet_(ss, opts) {
   sh.getRange('E1').setBackground('#f9cb9c');
   sh.setRowHeight(1, 26);
 
-  // 2행 머리글, 3행부터 응답
-  sh.getRange('A2').setFormula('={' + ref + 'A1:' + L + '1}');
-  // 줄 번호 없이 열 전체에서 머리글 줄만 뺌 (A2:L로 쓰면 구글폼이 응답 줄을 끼워 넣을 때마다 A3, A4…로 밀려 명단이 비어 보임)
-  //  (DROP은 구글 시트에 없음 → ROW()>1로 머리글 줄을 뺌)
-  sh.getRange('A3').setFormula('=IFERROR(FILTER(' + ref + 'A:' + L + ', ROW(' + ref + 'A:A)>1, ' + ref + 'A:A<>""), "")');
+  // 2행 머리글, 3행부터 응답: 수식이 아니라 값 (사용자 요청 10/19: 리뷰 체크할 때 명단 탭에서 열을 지우고 체크칸을 넣어도 유지되게)
+  //  새 응답은 15분 확인이 아래에 값으로 붙임(syncList_). 스크립트가 세는 건 숨은 '응답합본' 탭(수식)으로
+  sh.getRange(2, 1, 1, head.length).setValues([head]);
+  vprops.setProperty('LISTV_' + ss.getId(), '1');
+  vprops.deleteProperty('LISTK_' + ss.getId()); vprops.deleteProperty('LISTH_' + ss.getId());
+  buildMergeTab_(ss);
   // 손으로 적는 칸(택대 송장번호, 실배송)은 안 만듦 (사용자 요청 10/18)
   const extra = n;
   // 명단 시트는 업체도 보는 곳이라 중복, 옵션, 금액 확인 표시는 넣지 않음 (관리 시트 한눈에, 폼수정 탭에서만 보임)
@@ -1356,7 +1464,7 @@ function rawInfo0_(sheetId, formId) {
   const raw = rawFor_(ss, formId);
   // 한 의뢰를 폼 여러 개로 받았으면(예: 10.15에 14일 폼으로 낸 사람) 모든 응답을 합친 명단 탭에서 셈
   let src = raw, start = 2, head = headers_(raw);
-  const lt = ss.getSheetByName(LIST_TAB);
+  const lt = ss.getSheetByName(MERGE_TAB);
   if (lt && /VSTACK/.test(String(lt.getRange('A3').getFormula()))) {
     src = lt; start = 3; head = lt.getRange(2, 1, 1, Math.max(lt.getLastColumn(), 1)).getValues()[0].map(String);
   }
@@ -1853,19 +1961,20 @@ function checkFullInner_() {
   Object.keys(listed).forEach(function (id) {
     try {
       const lss = SpreadsheetApp.openById(id);
-      try { if (fixListRef_(lss, runs.filter(function (x) { return String(x['시트ID']) === id; })[0])) note_('✓ 명단 탭 수식을 새로 (응답이 안 보이던 것): ' + lss.getName()); } catch (e) { note_('명단 탭 다시 연결 실패: ' + e); }
-      ensureListTab_(lss);
+      try { if (fixListRef_(lss)) note_('✓ 명단 탭을 값으로 바꿈 (열을 지워도 유지): ' + lss.getName()); else { const na = syncList_(lss); if (na) note_('✓ 명단 탭에 새 응답 ' + na + '줄: ' + lss.getName()); } } catch (e) { note_('명단 탭 갱신 실패: ' + e); }
       // 총건수 = 이 명단 시트를 쓰는 의뢰의 총건수 (없으면 날마다 목표인원 합)
       const mine = runs.filter(function (x) { return String(x['시트ID']) === id; });
       const total = mine.reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0) ||
         mine.reduce(function (a, x) { return a + (Number(x['목표인원']) || 0); }, 0);
       listSummary_(lss, total);
-      try { dayColors_(lss); } catch (e) { note_('명단 날짜 색 실패: ' + e); }
+      if (!props.getProperty('LISTV_' + id)) { try { dayColors_(lss); } catch (e) { note_('명단 날짜 색 실패: ' + e); } }
     } catch (e) { note_('명단 탭 합치기 실패: ' + e); }
   });
   props.setProperty('RUN_ERRORS', JSON.stringify(errs));
   // 리뷰체크 탭은 사용자 요청으로 없앰(10/19). 만들어 둔 탭은 한 번 지움
   try { dropReviewTabsOnce_(runs); } catch (e) { note_('리뷰체크 탭 지우기 실패: ' + e); }
+  step_('명단 탭(지난 의뢰)');
+  try { listTabsRecent_(runs, listed); } catch (e) { note_('지난 명단 탭 실패: ' + e); }
   try { refreshEditTab_(); } catch (e) { note_('폼수정 탭 새로고침 실패: ' + e); }
   function checkRun_(r) {
     let form;
@@ -1917,9 +2026,9 @@ function checkFullInner_() {
       try {
         const inW = function (t) { return t >= w.from && t < w.to; };
         const sheetN = allRespTimes_(r['시트ID']).filter(inW).length;
-        const lt = SpreadsheetApp.openById(r['시트ID']).getSheetByName(LIST_TAB);
+        const lt = SpreadsheetApp.openById(r['시트ID']).getSheetByName(MERGE_TAB);
         const listN = lt && lt.getLastRow() >= 3 ? lt.getRange(3, 1, lt.getLastRow() - 2, 1).getValues().filter(function (x) { return x[0] instanceof Date && inW(x[0].getTime()); }).length : 0;
-        if (sheetN !== n || listN !== n) errs[r['명단 제목']] = '응답 수가 안 맞아요: 폼 ' + n + ' / 응답 탭 ' + sheetN + ' / 명단 탭 ' + listN + (lt ? ' (명단 탭 A3: ' + String(lt.getRange('A3').getFormula()).slice(0, 60) + ')' : ' (명단 탭 없음)');
+        if (sheetN !== n || listN !== n) errs[r['명단 제목']] = '응답 수가 안 맞아요: 폼 ' + n + ' / 응답 탭 ' + sheetN + ' / 합본 ' + listN + (lt ? ' (합본 A3: ' + String(lt.getRange('A3').getFormula()).slice(0, 60) + ')' : ' (합본 탭 없음)');
       } catch (e) { errs[r['명단 제목']] = '응답 수 확인 실패: ' + e.message; }
     }
     if (!r['목표인원'] || r['마감 시각'] || n < Number(r['목표인원'])) return;
@@ -3821,6 +3930,19 @@ function deleteRunTimes_(r, dates) {
     }
     rows.reverse().forEach(function (row) { raw.deleteRow(row); });
   });
+  // 값 명단 탭에서도 그 응답 줄을 지움 (진행 도우미·폼수정에서 일부러 지운 것이라)
+  try {
+    const lt = lss.getSheetByName(LIST_TAB);
+    if (lt && PropertiesService.getScriptProperties().getProperty('LISTV_' + lss.getId()) && lt.getLastRow() >= 3) {
+      const hd = lt.getRange(2, 1, 1, Math.max(lt.getLastColumn(), 1)).getValues()[0].map(function (x) { return String(x).trim(); });
+      const cT = hd.indexOf('타임스탬프') + 1;
+      if (cT) {
+        const tv = lt.getRange(3, cT, lt.getLastRow() - 2, 1).getValues(), del = [];
+        tv.forEach(function (v, i) { if (v[0] instanceof Date && picked.some(function (x) { return near(v[0], x[1]); })) del.push(i + 3); });
+        del.reverse().forEach(function (row) { lt.deleteRow(row); });
+      }
+    }
+  } catch (e) { note_('명단 탭 줄 지우기 실패: ' + e); }
   // 3) 인원 갱신, 모자라면 폼 다시 열기 (그 일차의 마지막 진행이고 구매 시간이 안 지났을 때만)
   const runs = readRuns_();
   const me = runs.filter(function (x) { return x.row === r.row; })[0] || r;
@@ -4408,7 +4530,7 @@ function putFileChip_(sh, row, col, url) {
 // 택배시트는 바로가기만 걸고 절대 고치지 않음
 
 const DASH_TAB = '한눈에';
-const DASH_VER = '14';   // 모양을 바꾸면 올려서 다시 만들게 함
+const DASH_VER = '15';   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
   buildDashboard_(true);
@@ -4442,9 +4564,10 @@ function buildDashboard_(force) {
     let src = '', start = 2, cols = 12, keep = [], hd = [], count = 0;
     try {
       const rss = SpreadsheetApp.openById(id);
-      const lt = rss.getSheetByName(LIST_TAB);
+      // 숨은 '응답합본' 탭(수식, 모든 폼 응답)에서 가져옴. 명단 탭은 사람이 열을 지우고 고치는 값이라 안 씀
+      const lt = rss.getSheetByName(MERGE_TAB);
       if (lt && lt.getLastColumn() > 0 && String(lt.getRange('A2').getValue()) !== '') {
-        src = LIST_TAB; start = 3; cols = lt.getLastColumn();
+        src = MERGE_TAB; start = 3; cols = lt.getLastColumn();
         hd = lt.getRange(2, 1, 1, cols).getValues()[0].map(String);
         count = Math.max(lt.getLastRow() - 2, 0);
       } else {
