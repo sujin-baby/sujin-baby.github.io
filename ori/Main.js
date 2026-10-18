@@ -765,6 +765,11 @@ function formatList_(sh) {
   sh.getRange(1, 1, n + 1, LIST_HEADER.length).setHorizontalAlignment('center').setVerticalAlignment('middle');
   ['명단 제목', '캠페인', '카톡방', '업체방', '폼 링크', '시트 링크', '폴더 링크'].forEach(function (h) { sh.getRange(2, lc_(h), n, 1).setHorizontalAlignment('left'); });
   sh.getRange(2, lc_('진행 상태'), n, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['진행예정', '진행중', '종료'], true).build());
+  // 실배송 줄은 노란색: 줄 순서가 바뀌거나 자동으로 만든 다음 일차 줄도 빠짐없이 (조건부 서식)
+  const f = '=$' + colLetter_(lc_('실배송')) + '2="Y"';
+  const keep = (sh.getConditionalFormatRules() || []).filter(function (r) { const c = r.getBooleanCondition(); return !(c && String((c.getCriteriaValues() || [])[0]) === f); });
+  keep.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(f).setBackground('#fff2a8').setRanges([sh.getRange(2, 1, n, LIST_HEADER.length)]).build());
+  sh.setConditionalFormatRules(keep);
 }
 
 /* ---------------- 메뉴 ---------------- */
@@ -2076,10 +2081,12 @@ function checkFullInner_() {
       try {
         const inW = function (t) { return t >= w.from && t < w.to; };
         const sheetN = allRespTimes_(r['시트ID']).filter(inW).length;
-        const lt = SpreadsheetApp.openById(r['시트ID']).getSheetByName(MERGE_TAB);
+        const lss0 = SpreadsheetApp.openById(r['시트ID']);
+        const lt = lss0.getSheetByName(MERGE_TAB);
+        if (!lt) { buildMergeTab_(lss0); throw { quiet: 1 }; }   // 합본 탭을 이제 만들었으면 이번엔 안 비교 (다음 확인부터)
         const listN = lt && lt.getLastRow() >= 3 ? lt.getRange(3, 1, lt.getLastRow() - 2, 1).getValues().filter(function (x) { return x[0] instanceof Date && inW(x[0].getTime()); }).length : 0;
         if (sheetN !== n || listN !== n) errs[r['명단 제목']] = '응답 수가 안 맞아요: 폼 ' + n + ' / 응답 탭 ' + sheetN + ' / 합본 ' + listN + (lt ? ' (합본 A3: ' + String(lt.getRange('A3').getFormula()).slice(0, 60) + ')' : ' (합본 탭 없음)');
-      } catch (e) { errs[r['명단 제목']] = '응답 수 확인 실패: ' + e.message; }
+      } catch (e) { if (!e || !e.quiet) errs[r['명단 제목']] = '응답 수 확인 실패: ' + (e && e.message); }
     }
     if (!r['목표인원'] || r['마감 시각'] || n < Number(r['목표인원'])) return;
     form.setAcceptingResponses(false);
@@ -4675,7 +4682,7 @@ function putFileChip_(sh, row, col, url) {
 // 택배시트는 바로가기만 걸고 절대 고치지 않음
 
 const DASH_TAB = '한눈에';
-const DASH_VER = '15';   // 모양을 바꾸면 올려서 다시 만들게 함
+const DASH_VER = '16';   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
   buildDashboard_(true);
@@ -4697,7 +4704,12 @@ function grantImport_(destId, srcId) {
 function buildDashboard_(force) {
   const allRuns = readRuns_();
   const runs = allRuns.filter(function (r) { return r['진행 상태'] !== '종료' && r['시트ID']; })
-    .sort(function (a, b) { return (b['진행일'] || 0) - (a['진행일'] || 0); });
+    // 오늘 할 것 맨 위 → 내일, 모레… (가까운 날부터) → 지난 진행(최근 것부터) (사용자 요청 10/19, 보낼메시지와 같게)
+    .sort(function (a, b) {
+      const t0 = dayStart_(new Date()), key = function (r) { const d = r['진행일'] instanceof Date ? Math.round((dayStart_(r['진행일']) - t0) / 86400000) : -9999; return d >= 0 ? [d === 0 ? 0 : 1, d] : [2, -d]; };
+      const ka = key(a), kb = key(b);
+      return (ka[0] - kb[0]) || (ka[1] - kb[1]) || ((a.row || 0) - (b.row || 0));
+    });
   const props = PropertiesService.getScriptProperties();
   const ss = adminSs_();
   // 명단 시트(의뢰)마다 한 덩어리. 명단 탭(여러 날 폼 응답을 합친 것)이 있으면 거기서 가져옴
