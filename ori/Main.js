@@ -433,11 +433,44 @@ function convertListToValues_(ss) {
   if (mr >= 3) sh.getRange(3, 1, mr - 2, mc).setBackground(null);
   sh.setConditionalFormatRules([]);   // 날짜 색 규칙은 값으로 칠함
   const tabs = ss.getSheets().filter(function (t) { return !!t.getFormUrl(); }), heads = [];
-  tabs.forEach(function (t) { rawHead_(t).forEach(function (x) { if (x && heads.indexOf(x) === -1 && !MATCH.nick.test(x)) heads.push(x); }); });
+  tabs.forEach(function (t) { rawHead_(t).map(hk_).forEach(function (x) { if (x && heads.indexOf(x) === -1 && !MATCH.nick.test(x)) heads.push(x); }); });
   if (heads.length) sh.getRange(2, 1, 1, heads.length).setValues([heads]);
   props.setProperty('LISTV_' + id, '1');
   props.deleteProperty('LISTK_' + id); props.deleteProperty('LISTH_' + id);
   syncList_(ss);
+}
+
+// 머리글 비교용: 끝 띄어쓰기·줄바꿈 무시 (폼 질문 제목 끝에 공백이 있으면 '전화번호 '와 '전화번호'가 달라서 값이 빈칸으로 들어갔음, 10/19)
+function hk_(h) { return String(h == null ? '' : h).replace(/\s+/g, ' ').trim(); }
+
+// (한 번) 값 명단 탭 고치기: ① 같은 머리글이 또 생긴 빈 칸 지우기 ② 이미 넣은 줄의 빈칸을 응답 값으로 채우기(있는 값은 안 건드림)
+//  ③ 예전 수식 명단 때 걸어 둔 열 숨김(계좌 칸 묶음)이 엉뚱한 칸을 숨기고 있어서 풀고 다 보이게
+function repairList_(sh, rows) {
+  try { for (let c = 1; c <= sh.getMaxColumns(); c++) while (sh.getColumnGroupDepth(c) > 0) sh.getRange(1, c).getEntireColumn().shiftColumnGroupDepth(-1); } catch (e) {}
+  sh.showColumns(1, sh.getMaxColumns());
+  const lr = sh.getLastRow();
+  let lc = Math.max(sh.getLastColumn(), 1), hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_);
+  for (let j = hdr.length - 1; j >= 0; j--) {
+    if (!hdr[j] || hdr.indexOf(hdr[j]) === j) continue;
+    const empty = lr < 3 || sh.getRange(3, j + 1, lr - 2, 1).getValues().every(function (x) { return x[0] === '' || x[0] === null; });
+    if (empty) sh.deleteColumn(j + 1);
+  }
+  lc = Math.max(sh.getLastColumn(), 1); hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_);
+  sh.getRange(2, 1, 1, lc).setValues([hdr]);
+  const cT = hdr.indexOf('타임스탬프') + 1;
+  if (!cT || lr < 3) return;
+  const by = {}; rows.forEach(function (x) { by[x.t] = x.o; });
+  const v = sh.getRange(3, 1, lr - 2, lc).getValues();
+  hdr.forEach(function (h, j) {
+    if (!h || j + 1 === cT) return;
+    let changed = false;
+    const col = v.map(function (row) {
+      const ts = row[cT - 1], o = ts instanceof Date ? by[ts.getTime()] : null;
+      if (o && (row[j] === '' || row[j] === null) && Object.prototype.hasOwnProperty.call(o, h) && o[h] !== '') { changed = true; return [o[h]]; }
+      return [row[j]];
+    });
+    if (changed) sh.getRange(3, j + 1, col.length, 1).setValues(col);
+  });
 }
 
 // 명단 탭(값)에 새 응답만 아래에 붙임. 이미 넣은 줄은 절대 안 건드림 → 사장님·사용자가 체크칸을 넣고, 열·줄을 지우고, 고쳐도 유지
@@ -453,7 +486,7 @@ function syncList_(ss) {
   if (!tabs.length) return 0;
   const heads = [], rows = [];
   tabs.forEach(function (t) {
-    const lr = t.getLastRow(), h = rawHead_(t);
+    const lr = t.getLastRow(), h = rawHead_(t).map(hk_);
     h.forEach(function (x) { if (x && heads.indexOf(x) === -1 && !MATCH.nick.test(x)) heads.push(x); });
     if (lr < 2 || !h.length) return;
     t.getRange(2, 1, lr - 1, h.length).getValues().forEach(function (x) {
@@ -470,18 +503,20 @@ function syncList_(ss) {
     for (let c = h0.length - 1; c >= 0; c--) if (MATCH.nick.test(String(h0[c]))) sh.deleteColumn(c + 1);
   }
   const real = !!props.getProperty('LISTREAL_' + id);
+  // (10/19 한 번) 머리글 끝 띄어쓰기·줄바꿈 때문에 전화번호·옵션·결제금액·계좌번호 등이 빈칸으로 들어가고 오른쪽에 같은 이름 칸이 또 생긴 것 고치기
+  if (!props.getProperty('LISTFIX1_' + id)) { props.setProperty('LISTFIX1_' + id, '1'); try { repairList_(sh, rows); } catch (e) { note_('명단 탭 고치기 실패: ' + e); } }
   // (10/19 한 번) 실배송이면 응답 줄 전부 노란색 (날짜별 색 대신)
   if (real && !props.getProperty('LISTYEL_' + id)) {
     props.setProperty('LISTYEL_' + id, '1');
     if (sh.getLastRow() >= 3) sh.getRange(3, 1, sh.getLastRow() - 2, Math.max(sh.getLastColumn(), 1)).setBackground(REAL_YELLOW);
   }
-  let lc = Math.max(sh.getLastColumn(), 1), hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(function (x) { return String(x).trim(); });
-  let known = []; try { known = JSON.parse(props.getProperty('LISTH_' + id) || '[]'); } catch (e) {}
+  let lc = Math.max(sh.getLastColumn(), 1), hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_);
+  let known = []; try { known = JSON.parse(props.getProperty('LISTH_' + id) || '[]').map(hk_); } catch (e) {}
   if (!known.length) known = hdr.filter(Boolean);
   heads.filter(function (h) { return hdr.indexOf(h) === -1 && known.indexOf(h) === -1; }).forEach(function (h) {
     known.push(h);
     sh.getRange(2, Math.max(sh.getLastColumn(), 1) + 1).setValue(h);
-    lc = Math.max(sh.getLastColumn(), 1); hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(function (x) { return String(x).trim(); });
+    lc = Math.max(sh.getLastColumn(), 1); hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_);
   });
   props.setProperty('LISTH_' + id, JSON.stringify(known));
   const cT = hdr.indexOf('타임스탬프') + 1;
