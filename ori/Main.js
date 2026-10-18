@@ -302,9 +302,41 @@ function isFruit_(r) {
   return words.some(function (w) { return FRUIT_RE.test(String(w)) || w === '배' || w === '감'; });
 }
 
-// 명단 시트·폼·폴더 이름: 방제에서 날짜를 뺀 것 (#택10.14 모두의농수산옥광밤외12 → #택 모두의농수산옥광밤외12)
+// 명단 시트·폼·폴더 이름: 방제에서 날짜와 끝 인원 수를 뺀 것 (#택10.14 모두의농수산옥광밤외12 → #택 모두의농수산옥광밤외, #택10.19 휴대폰거치대 10 → #택 휴대폰거치대)
+//  인원 수는 취소·미구매로 다음 날 밀리면 날마다 바뀌어서 카톡 방제·명단방 문구에만 씀 (사용자 지시 10/18)
 function sheetName_(s) {
-  return String(s || '').replace(/\s*\([^)]*\)\s*$/, '').replace(/^([#업택\s]*?)\s*\d{1,2}\.\d{1,2}\s*/, '$1 ').replace(/\s+/g, ' ').trim();
+  return noCount_(String(s || '').replace(/\s*\([^)]*\)\s*$/, '').replace(/^([#업택\s]*?)\s*\d{1,2}\.\d{1,2}\s*/, '$1 ').replace(/\s+/g, ' ').trim());
+}
+function noCount_(t) {
+  t = String(t || '').trim();
+  const tail = (t.match(/\s*\(응답\)$/) || [''])[0];
+  t = t.slice(0, t.length - tail.length);
+  t = /\s\d+$/.test(t) ? t.replace(/\s+\d+$/, '') : t.replace(/(외|실)\d+$/, '$1');
+  return t + tail;
+}
+
+// (한 번만) 진행 중인 폼·명단 시트·폴더 이름에서 끝 인원 수 빼기
+function fixNoCountNamesOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('NOCOUNT_V1')) return;
+  const done = {}, log = [];
+  runs.filter(function (r) { return r['진행 상태'] !== '종료'; }).forEach(function (r) {
+    const ren = function (kind, get, set) {
+      try { const cur = String(get()); const nw = noCount_(cur); if (nw && nw !== cur) { set(nw); log.push(kind + ': ' + cur + ' → ' + nw); } } catch (e) {}
+    };
+    const sid = String(r['시트ID'] || ''), fid = String(r['폼ID'] || '');
+    if (sid && !done[sid]) { done[sid] = 1; const f = DriveApp.getFileById(sid); ren('명단 시트', function () { return f.getName(); }, function (n) { f.setName(n); }); }
+    if (fid && !done[fid]) {
+      done[fid] = 1;
+      const fm = FormApp.openById(fid), ff = DriveApp.getFileById(fid);
+      ren('폼 제목', function () { return fm.getTitle(); }, function (n) { fm.setTitle(n); });
+      ren('폼 파일', function () { return ff.getName(); }, function (n) { ff.setName(n); });
+    }
+    const fo = (String(r['폴더 링크'] || '').match(/[-\w]{25,}/) || [])[0];
+    if (fo && !done[fo]) { done[fo] = 1; const d = DriveApp.getFolderById(fo); ren('폴더', function () { return d.getName(); }, function (n) { d.setName(n); }); }
+  });
+  props.setProperty('NOCOUNT_V1', '1');
+  if (log.length) note_('✓ 이름에서 인원 수 뺌 ' + log.length + '개');
 }
 
 // 공지(폼 설명)의 '🐥가격' 줄에서 가격만 뽑기
@@ -1498,6 +1530,7 @@ function checkFullInner_() {
   try { reloadEditTabOnce_(); } catch (e) { note_('폼수정 탭 다시 불러오기 실패: ' + e); }
   try { fixModuAssignOnce_(); } catch (e) { note_('모두의농수산 배정 옮기기 실패: ' + e); }
   try { fixTemplateOnce_(); } catch (e) { note_('템플릿 폼 질문 고치기 실패: ' + e); }
+  try { fixNoCountNamesOnce_(runs); } catch (e) { note_('이름 인원 수 빼기 실패: ' + e); }
   try { ensureListMsgs_(runs); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   const errs = {}, listed = {};
   step_('폼 인원');
