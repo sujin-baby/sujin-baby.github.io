@@ -344,6 +344,76 @@ function dropManualColsOnce_(runs) {
   if (kept.length) note_('적힌 내용이 있어서 안 지운 칸: ' + kept.join(', '));
 }
 
+// 명단 탭이 폼 응답 탭을 보고 있는지: 새 진행을 만들 때 폼 응답 탭이 늦게 생기면(15초 넘게) 명단 탭이 빈 기본 탭을 보게 되고,
+//  그 빈 탭이 지워지면 명단·한눈에 탭에 응답이 하나도 안 보임 → 명단 탭을 다시 만듦
+function fixListRef_(ss, r) {
+  if (!r) return false;
+  const tabs = ss.getSheets().filter(function (t) { return !!t.getFormUrl(); });
+  if (!tabs.length) return false;
+  const sh = ss.getSheetByName(LIST_TAB);
+  if (sh) {
+    const f = sh.getRange('A2').getFormula() + sh.getRange('A3').getFormula();
+    if (tabs.some(function (t) { return f.indexOf("'" + t.getName().replace(/'/g, "''") + "'!") !== -1; })) return false;
+  }
+  formatResponseSheet_(ss, { type: r['유형'], takdae: r['택대'] === 'Y', realship: r['실배송'] === 'Y', platform: r['플랫폼'], target: Number(r['총건수']) || r['목표인원'], prices: r['가격'] });
+  return true;
+}
+
+// 진행목록에 없는 폼(지운 진행의 폼 등)에 응답이 들어오면: 같은 상품(공지의 상품번호나 상품명)으로 진행 중인 진행이 있으면
+//  그 폼 응답을 그 진행의 명단 시트로 연결(지금까지 응답도 같이 들어감, 명단·한눈에·인원에 바로 보임), 없으면 메일로 알림
+//  예) 진행을 지우고 다시 만들었는데 카톡방에는 옛 공지(옛 폼 링크)가 나가 있을 때. 30분마다
+function adoptOrphanForms_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (Date.now() - Number(props.getProperty('ORPHAN_AT') || 0) < 30 * 60000) return;
+  props.setProperty('ORPHAN_AT', String(Date.now()));
+  const known = {};
+  runs.forEach(function (r) { if (r['폼ID']) known[String(r['폼ID'])] = 1; });
+  const pnos = function (d) { const out = []; String(d || '').split('\n').forEach(function (l) { if (/상품\s*번호/.test(l)) (l.match(/\d{8,}/g) || []).forEach(function (x) { out.push(x); }); }); return out; };
+  const names = function (d) { return noticeProducts_(d).map(function (p) { return String(p.name || '').replace(/\s+/g, ''); }).filter(Boolean); };
+  const live = runs.filter(function (r) { return r['진행 상태'] !== '종료' && r['폼ID'] && r['시트ID'] && r['진행일'] instanceof Date; }).map(function (r) {
+    let d = ''; try { d = FormApp.openById(r['폼ID']).getDescription(); } catch (e) {}
+    return { r: r, nums: pnos(d), names: names(d) };
+  });
+  if (!live.length) return;
+  const since = Date.now() - 10 * 86400000, me = Session.getEffectiveUser().getEmail();
+  const it = rootFolder_().getFolders();
+  while (it.hasNext()) {
+    const fo = it.next();
+    if (fo.getLastUpdated().getTime() < since) continue;
+    const fi = fo.getFilesByType(MimeType.GOOGLE_FORMS);
+    while (fi.hasNext()) {
+      const file = fi.next(), fid = file.getId();
+      if (known[fid] || file.isTrashed()) continue;
+      let form, cnt = 0;
+      try { form = FormApp.openById(fid); cnt = form.getResponses().length; } catch (e) { continue; }
+      if (!cnt) continue;
+      const d = form.getDescription(), nums = pnos(d), nms = names(d), made = file.getDateCreated().getTime();
+      const hit = live.filter(function (x) {
+        return nums.some(function (n) { return x.nums.indexOf(n) !== -1; }) || (!nums.length && nms.some(function (n) { return x.names.indexOf(n) !== -1; }));
+      }).sort(function (a, b) { return Math.abs(a.r['진행일'].getTime() - made) - Math.abs(b.r['진행일'].getTime() - made); })[0];
+      if (!hit) {
+        if (!props.getProperty('ORPHANMAIL_' + fid)) {
+          props.setProperty('ORPHANMAIL_' + fid, '1');
+          MailApp.sendEmail(me, '[체험단] 진행목록에 없는 폼에 응답이 들어왔어요: ' + form.getTitle(), '폼 \'' + form.getTitle() + '\'에 응답 ' + cnt + '개가 있어요. 진행목록에는 없는 폼이라 명단·한눈에 탭에 안 보여요.\n카톡방 공지에 옛 폼 링크가 나가 있는지 확인해 주세요.\n폼: ' + file.getUrl());
+          note_('진행목록에 없는 폼에 응답 ' + cnt + '개: ' + form.getTitle());
+        }
+        continue;
+      }
+      const sid = String(hit.r['시트ID']);
+      let dest = ''; try { dest = form.getDestinationId(); } catch (e) {}
+      if (dest === sid) continue;
+      form.setDestination(FormApp.DestinationType.SPREADSHEET, sid);
+      SpreadsheetApp.flush();
+      const ok = 'ORPHANS_' + sid, list = String(props.getProperty(ok) || '').split(',').filter(Boolean);
+      if (list.indexOf(fid) === -1) { list.push(fid); props.setProperty(ok, list.join(',')); }
+      try { if (hit.r['마감 시각']) form.setAcceptingResponses(false); } catch (e) {}
+      note_('✓ 옛 폼 \'' + form.getTitle() + '\' 응답 ' + cnt + '개를 ' + bareTitle_(hit.r['명단 제목']) + ' 명단 시트로 가져옴');
+      MailApp.sendEmail(me, '[체험단] 옛 폼 응답을 새 명단 시트로 가져왔어요: ' + bareTitle_(hit.r['명단 제목']),
+        '카톡방에 옛 공지(옛 폼 링크)가 나가 있었던 것 같아요.\n옛 폼 \'' + form.getTitle() + '\'에 들어온 응답 ' + cnt + '개를 ' + bareTitle_(hit.r['명단 제목']) + ' 명단 시트로 연결했어요. 앞으로 옛 링크로 들어오는 응답도 이 명단 시트에 들어가고, 명단이 다 차면 같이 닫혀요.\n카톡방 공지는 새 공지(새 폼 링크)로 바꿔 두는 게 좋아요.');
+    }
+  }
+}
+
 function fixNoCountNamesOnce_(runs) {
   const props = PropertiesService.getScriptProperties();
   if (props.getProperty('NOCOUNT_V1')) return;
@@ -1610,6 +1680,7 @@ function checkFullInner_() {
   try { fixNoCountNamesOnce_(runs); } catch (e) { note_('이름 인원 수 빼기 실패: ' + e); }
   try { dropManualColsOnce_(runs); } catch (e) { note_('송장번호·실배송 칸 지우기 실패: ' + e); }
   try { ensureListMsgs_(runs); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
+  try { adoptOrphanForms_(runs); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
   const errs = {}, listed = {};
   step_('폼 인원');
   try { ensureSubmitTriggers_(runs); } catch (e) { note_('응답 트리거 실패: ' + e); }
@@ -1625,6 +1696,7 @@ function checkFullInner_() {
   Object.keys(listed).forEach(function (id) {
     try {
       const lss = SpreadsheetApp.openById(id);
+      try { if (fixListRef_(lss, runs.filter(function (x) { return String(x['시트ID']) === id; })[0])) note_('✓ 명단 탭이 응답 탭을 못 보고 있어서 다시 연결: ' + lss.getName()); } catch (e) { note_('명단 탭 다시 연결 실패: ' + e); }
       ensureListTab_(lss);
       // 총건수 = 이 명단 시트를 쓰는 의뢰의 총건수 (없으면 날마다 목표인원 합)
       const mine = runs.filter(function (x) { return String(x['시트ID']) === id; });
@@ -1681,6 +1753,8 @@ function checkFullInner_() {
     if (Number(r['인원']) !== n) setRun_(r.row, '인원', n);
     if (!r['목표인원'] || r['마감 시각'] || n < Number(r['목표인원'])) return;
     form.setAcceptingResponses(false);
+    // 옛 공지 링크로 받던 폼(가져온 폼)도 같이 닫음
+    String(props.getProperty('ORPHANS_' + r['시트ID']) || '').split(',').filter(Boolean).forEach(function (fid) { try { FormApp.openById(fid).setAcceptingResponses(false); } catch (e) {} });
     setRun_(r.row, '마감 시각', new Date());
     changed = true;
     const listMsg = queueListMsgs_(r);
