@@ -534,7 +534,7 @@ function go(){
     if(r.notice){document.getElementById('notice').value=r.notice;}
     document.getElementById('listmsg').value=r.sheetUrl+'\\n\\n'+d.title;
     document.getElementById('done').style.display='block';
-    document.getElementById('msg').textContent='\\n폼 응답자 링크:\\n'+r.formUrl+'\\n\\n시트: '+r.sheetUrl+'\\n폴더: '+r.folderUrl+'\\n\\n진행목록에도 기록했어요.';
+    document.getElementById('msg').textContent=(r.assign?r.assign+'\\n':'')+'\\n폼 응답자 링크:\\n'+r.formUrl+'\\n\\n시트: '+r.sheetUrl+'\\n폴더: '+r.folderUrl+'\\n\\n진행목록에도 기록했어요.';
   }).withFailureHandler(function(e){
     document.getElementById('fields').style.display='block';
     document.getElementById('go').disabled=false;
@@ -590,9 +590,37 @@ function createRun(d) {
   if (d.act) return locked_(function () { return toolAction_(d); }, 30000) || { msg: '다른 작업 중이에요. 잠시 뒤 다시 눌러 주세요.' };
   return locked_(function () {
     const prev = d.n ? findRunByRequest_(d.n) : null;
-    if (prev) return prev;
-    return createRunInner_(d);
+    // 이미 만든 진행에서 공지에 살 사람 이름을 넣고 다시 누르면 배정만 저장
+    if (prev) {
+      prev.assign = autoAssign_(d.n, d.desc);
+      if (prev.assign) { try { prev.notice = refreshNotice_(d) || prev.notice; } catch (e) { note_('공지 다시 넣기 실패: ' + e); } }
+      return prev;
+    }
+    const res = createRunInner_(d);
+    res.assign = autoAssign_(d.n, d.desc);
+    return res;
   }, 60000);
+}
+
+// 생성기 공지에 옵션 줄 뒤 살 사람 이름이 있으면(화이트 (2명) 김민희 선우승) 관리 시트 '배정' 탭에 바로 저장
+//  (폼수정 탭에 공지를 붙여넣는 것과 같음). 이름이 없으면 아무것도 안 함
+function autoAssign_(n, text) {
+  try {
+    if (!n || !parseAssign_(String(text || ''), []).length) return '';
+    const r = readRuns_().filter(function (x) { return String(x['요청ID']) === String(n); })[0];
+    return r ? assignRun_(r, String(text)) : '';
+  } catch (e) { note_('공지 이름 배정 실패: ' + e); return '배정 저장 실패: ' + e.message; }
+}
+
+// 이름을 넣은 공지로 폼 설명과 아직 안 보낸 방 공지도 바꿈 (이미 보낸 공지는 그대로)
+function refreshNotice_(d) {
+  const r = readRuns_().filter(function (x) { return String(x['요청ID']) === String(d.n); })[0];
+  if (!r || !r['폼ID'] || !String(d.desc || '').trim()) return '';
+  const notice = withSlotLine_(String(d.desc).split('(구글폼 링크)').join(r['폼 링크']), d.slot, d.fruit || chainFruit_(r));
+  FormApp.openById(r['폼ID']).setDescription(formDesc_(notice));
+  const room = String(r['카톡방'] || bareTitle_(r['명단 제목'])), ob = outboxSheet_(), last = ob.getLastRow();
+  if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) { if (String(v[3]) === room && v[2] === '방 공지' && v[5] !== '보냄') ob.getRange(i + 2, 5).setValue(notice); });
+  return notice;
 }
 
 function findRunByRequest_(n) {
@@ -3527,8 +3555,10 @@ function savePlan_(d) {
   const plan = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(d.plan)).getDataAsString('UTF-8'));
   if (!plan.length) return;
   const camp = campOf_(d.title);
+  // 다음 일차 공지 틀에는 오늘 살 사람 이름을 빼고 저장 (화이트 (2명) 김민희 → 화이트 (2명))
+  const tpl = stripTrailingNames_(String(d.desc || '').split('\n').map(function (l) { return l.replace(/(\(\s*\d*\s*명\s*\)).*$/, '$1'); }).join('\n'));
   const cfg = JSON.stringify({ type: d.type, takdae: !!d.takdae, realship: !!d.realship, platform: d.platform, prices: d.prices,
-    croom: d.croom, shop: d.shop, photo: d.photo, opts: d.opts, desc: String(d.desc || ''), slot2: d.slot2 || '자정 ~ 오전 8시 20분 구매', total: d.total, camp: camp, base: d.n });
+    croom: d.croom, shop: d.shop, photo: d.photo, opts: d.opts, desc: tpl, slot2: d.slot2 || '자정 ~ 오전 8시 20분 구매', total: d.total, camp: camp, base: d.n });
   const sh = planSheet_();
   plan.forEach(function (x) {
     sh.appendRow([String(d.n || camp) + '-' + x.k, camp, x.k, new Date(x.date + 'T00:00:00'), x.room, x.title, x.n, JSON.stringify(x.c), '대기', cfg]);
