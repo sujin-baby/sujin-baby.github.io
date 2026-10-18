@@ -1295,13 +1295,17 @@ function parseAssign_(text, choices) {
     const prod = multi ? (noticeProducts_(b)[0] || {}).name || '' : '';
     const lines = b.split(/\r?\n/);
     // 옵션 가격: '🐥옵션 : X (N명)' 다음 '🐥가격 : 20500', 또는 '1kg*1 : 17200원 / 1kg*2개 : 29200' 같은 줄
+    //  생성기 공지처럼 가격 칸이 여러 줄이면('🐥가격 : 1kg*1 17,200' 다음 줄 '1kg*2개 29,800') 이어진 줄도 가격 줄로 봄
+    const priceLines = [];
+    lines.forEach(function (l, i) {
+      if (!/가격|결제\s*[:：]/.test(l)) return;
+      priceLines.push(l);
+      for (let j = i + 1; j < lines.length && lines[j].trim() && !/🐥|http|★/.test(lines[j]) && /\d{1,3},\d{3}|\d{4,}/.test(lines[j]); j++) priceLines.push(lines[j]);
+    });
     const priceOf = function (opt, idx) {
-      const next = lines[idx + 1] || '';
-      if (/^\s*🐥\s*가격/.test(next)) { const m = next.match(/\d{1,3}(?:,\d{3})+|\d{4,}/); if (m) return Number(m[0].replace(/,/g, '')); }
       const o = k(opt);
-      for (let i = 0; i < lines.length; i++) {
-        if (!/가격|결제\s*[:：]/.test(lines[i])) continue;
-        const segs = lines[i].split('/');
+      for (let i = 0; i < priceLines.length; i++) {
+        const segs = priceLines[i].split('/');
         for (let j = 0; j < segs.length; j++) {
           const sg = segs[j].replace(/🐥[^:：]*[:：]/g, ' ');
           const pos = k(sg).indexOf(o);
@@ -1310,7 +1314,9 @@ function parseAssign_(text, choices) {
           if (m) return Number(m[0].replace(/,/g, ''));
         }
       }
-      // 옵션마다 가격이 따로 없고 가이드에 가격이 하나뿐이면 그 가격 (예: 🐥결제 : 108500)
+      const next = lines[idx + 1] || '';
+      if (/^\s*🐥\s*가격/.test(next)) { const m = next.match(/\d{1,3}(?:,\d{3})+|\d{4,}/); if (m) return Number(m[0].replace(/,/g, '')); }
+      // 옵션마다 가격이 따로 없고 가이드에 가격이 하나뿐이면 그 가격 (예: 🐥결제 : 108500, 🐥가격 : 12,900)
       const all = (noticeProducts_(b)[0] || {}).prices || [];
       return all.length === 1 ? all[0] : 0;
     };
@@ -3277,14 +3283,16 @@ function fixStyleOnce_() {
   msgs.forEach(function (v, i) { if (v[2] === '방 공지' && v[5] !== '보냄') { const nm = noticeStyle_(String(v[4]), false); if (nm !== String(v[4])) ob.getRange(i + 2, 5).setValue(nm); } });
 }
 
-// 공지에서 옵션 보기 목록 (가이드 여럿이면 상품 이름 붙임, 가격 있으면 '(17,200원)') — 옵션 줄 'X (N명)', 'X N명', 'X (  명)'
+// 공지에서 옵션 보기 목록 (가이드 여럿이면 상품 이름 붙임, 옵션마다 가격이 다르면 '(17,200원)') — 옵션 줄 'X (N명)', 'X N명', 'X (  명)'
 function optionLabels_(text) {
   // 공지 읽기(parseAssign_)를 그대로 쓰려고 옵션 줄 끝에 가짜 이름을 붙여서 읽음
   const t = String(text || '').split('\n').map(function (l) { return /(\(\s*\d*\s*명\s*\)|\d+\s*명)/.test(l) && !/가격|★|http/.test(l) ? l + ' 가' : l; }).join('\n');
-  const out = [];
-  parseAssign_(t, []).forEach(function (x) {
-    const lab = x[1] + (x[4] ? ' (' + Number(x[4]).toLocaleString('ko-KR') + '원)' : '');
-    if (x[1] && out.indexOf(lab) === -1) out.push(lab);
+  const out = [], xs = parseAssign_(t, []).filter(function (x) { return x[1]; });
+  // 옵션 가격이 다 같으면 가격은 빼고 옵션(색상 등)만 (사용자 요청 10/18)
+  const same = xs.every(function (x) { return x[4] === xs[0][4]; });
+  xs.forEach(function (x) {
+    const lab = x[1] + (x[4] && !same ? ' (' + Number(x[4]).toLocaleString('ko-KR') + '원)' : '');
+    if (out.indexOf(lab) === -1) out.push(lab);
   });
   return out;
 }
@@ -3681,6 +3689,55 @@ function updatePay_() {
       { store: pick('업체'), time: fruit ? '자정 ~ 오전 7시' : payTime_(runSlot_(r)), photo: pick('포토'), earlier: earlier });
   });
   try { payStatusAll_(all); } catch (e) { note_('월급시트 상태 잇기 실패: ' + e); }
+  try { payRate_(); } catch (e) { note_('월급시트 진행비 500원 바꾸기 실패: ' + e); }
+}
+
+// 진행비 = 1건(1명)당 500원, 리뷰비 없음 (사용자 요청 10/18). 이번 달·다음 달 탭만 (지난달 이전은 그대로)
+//  날짜 칸의 진행비 수식 =$G5*BG5(완료보고 × 수량) → =$G5*BG5*500. 날짜 칸 리뷰비는 비우고, 리뷰비 열은 한 번 숨김
+//  15분마다 돌아도 이미 바꾼 칸은 그대로라 새로 생긴 줄만 바뀜
+const PAY_RATE = 500;
+function payRate_() {
+  const now = new Date(), seen = {};
+  [now.getMonth() + 1, (now.getMonth() + 1) % 12 + 1].forEach(function (mo) {
+    const sh = payTab_(mo);
+    if (!sh || seen[sh.getSheetId()]) return;
+    seen[sh.getSheetId()] = 1;
+    if (mo !== now.getMonth() + 1 && !new RegExp('(^|\\D)' + mo + '월').test(sh.getName())) return;   // 다음 달 탭이 아직 없으면 건너뜀
+    const L = payLayout_(sh);
+    if (!L) return;
+    const dayCols = Object.keys(L.days).map(function (k) { return L.days[k]; });
+    if (!dayCols.length) return;
+    const start = Math.min.apply(null, dayCols), lastCol = sh.getLastColumn(), lastRow = sh.getLastRow();
+    if (lastRow <= L.head || lastCol < start) return;
+    const head = sh.getRange(L.head, 1, 1, lastCol).getValues()[0].map(function (x) { return String(x).replace(/\s/g, ''); });
+    const n = lastRow - L.head, w = lastCol - start + 1;
+    const rng = sh.getRange(L.head + 1, start, n, w), fs = rng.getFormulas(), vs = rng.getValues();
+    let changed = 0, odd = '';
+    for (let c = 0; c < w; c++) {
+      const h = head[start - 1 + c];
+      if (h === '진행비') {
+        let dirty = false;
+        const col = fs.map(function (r, i) {
+          const f = r[c];
+          if (!f) return [vs[i][c]];
+          if (/^=\$?[A-Z]+\$?\d+\s*\*\s*\$?[A-Z]+\$?\d+$/.test(f)) { dirty = true; changed++; return [f + '*' + PAY_RATE]; }
+          if (!odd && !/\*\s*\d{3,}/.test(f)) odd = f;
+          return [f];
+        });
+        if (dirty) sh.getRange(L.head + 1, start + c, n, 1).setValues(col);
+      } else if (h === '리뷰비') {
+        if (fs.some(function (r, i) { return r[c] || vs[i][c] !== ''; })) { sh.getRange(L.head + 1, start + c, n, 1).clearContent(); changed++; }
+      }
+    }
+    // 리뷰비 열(합계 열 포함) 숨기기: 탭마다 한 번만 (직접 다시 펴면 그대로 둠)
+    const props = PropertiesService.getScriptProperties(), hk = 'PAYNOREV_' + sh.getSheetId();
+    if (!props.getProperty(hk)) {
+      head.forEach(function (h, i) { if (h === '리뷰비') sh.hideColumns(i + 1); });
+      props.setProperty(hk, '1');
+    }
+    if (changed) note_('✓ 월급시트 ' + sh.getName() + ': 진행비 1건 ' + PAY_RATE + '원, 리뷰비 비움 (' + changed + '곳)');
+    if (odd && props.getProperty('PAYODD_' + sh.getSheetId()) !== odd) { note_('월급시트 ' + sh.getName() + ' 진행비 칸에 모르는 수식이 있어 안 바꿈: ' + odd); props.setProperty('PAYODD_' + sh.getSheetId(), odd); }
+  });
 }
 
 // 의뢰(같은 명단 시트 묶음)마다 월급시트 줄을 찾아 상태 칸을 마지막 날 줄에 잇기 (끝난 진행 줄도)
