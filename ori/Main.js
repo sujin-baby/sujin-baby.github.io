@@ -1490,6 +1490,7 @@ function checkFullInner_() {
   step_('알림');
   try { fruitCheck_(runs); } catch (e) { note_('안 산 사람 확인 실패: ' + e); }
   try { takbaeCheck_(runs); } catch (e) { note_('택배시트 알림 실패: ' + e); }
+  try { photoWaitCheck_(runs); } catch (e) { note_('포토대기 알림 실패: ' + e); }
   try { fixOct16Once_(); } catch (e) { note_('10.16 정리 실패: ' + e); }
   try { fixNamesOnce_(); } catch (e) { note_('공지 이름 정리 실패: ' + e); }
   try { fixTaOnce_(); } catch (e) { note_('배정 (타) 정리 실패: ' + e); }
@@ -2051,10 +2052,25 @@ function rvAssign_(items, mix, nDays) {
   }
 }
 // 일차(카톡방)마다 리뷰 공지 글
+// 리뷰 공지 맨 밑 (사용자 문구 그대로)
+const RV_END = '배송완료 후 7일이내로 작성해주시되\n몰리지 않게 리뷰 부탁드려요!\n감사합니다 🫶🏻';
 function rvNotice_(kind, guide, items, prods) {
+  const t = rvNotice0_(kind, guide, items, prods);
+  // 구확건, 사진 오기 전 포토대기는 아직 리뷰 쓰는 게 아니라 맺음말 없음
+  return kind === 'confirm' || /^★★★포토대기★★★/.test(t) ? t : t + '\n\n' + RV_END;
+}
+function rvNotice0_(kind, guide, items, prods) {
   const gl = guide ? '리뷰내용 가이드 : ' + guide : '';
   if (kind === 'text') return ['★★★전체 텍스트리뷰★★★', gl].filter(Boolean).join('\n');
-  if (kind === 'photo') return ['★★★포토대기★★★', gl].filter(Boolean).join('\n');
+  if (kind === 'photo') {
+    // 업체 사진이 오기 전: 포토대기. 사진 세트를 나눴으면 사람마다 세트 번호 (같은 배경 사진은 한 사람에게)
+    if (!items.some(function (it) { return it.set; })) return ['★★★포토대기★★★', gl].filter(Boolean).join('\n');
+    const nm = function (it) { return it.name || (it.nick ? it.nick + '(닉네임)' : '이름 없음'); };
+    const none = items.filter(function (it) { return !it.set; });
+    return ['★★★리뷰 안내★★★', gl, '수취인 이름으로 본인 사진 세트 확인해 주세요! (사진은 따로 보내드려요)', '']
+      .concat(items.filter(function (it) { return it.set; }).map(function (it) { return '세트' + it.set + ' : ' + nm(it); }))
+      .concat(none.length ? ['', '사진 준비 중 : ' + none.map(nm).join(', ') + ' (사진 오면 따로 안내드려요)'] : []).filter(function (x, i) { return x !== '' || i > 0; }).join('\n');
+  }
   if (kind === 'confirm') return '★★★구확건★★★';
   if (kind === 'self') return ['0/' + items.length + ' 사진 5장 이상 사용샷 포토리뷰', '너무 성의 없는 리뷰는 수정 요청 올 수 있어요', gl].filter(Boolean).join('\n');
   // 같은 방에서 한 사람이 리뷰 종류가 두 개로 나뉘면 어느 주문인지 옵션을 붙임
@@ -2092,15 +2108,19 @@ function reviewPlan_(runs, chain, o) {
   if (prods.length === 1 && !prods[0].name) prods[0].name = '상품';
   const rows = reviewRows_(runs, chain, prods.length ? prods : [{ name: '상품', mix: [] }]);
   if (o.kind === 'mix') prods.forEach(function (p) { rvAssign_(rows.filter(function (it) { return it.prod === p.name; }), p.mix, chain.runs.length); });
+  // 포토: 업체 사진 세트 수만큼 앞사람부터 세트 번호 (일차 순, 응답 순)
+  const nSets = Number(o.sets) || 0;
+  if (o.kind === 'photo' && nSets) rows.slice().sort(function (a, b) { return a.day - b.day || a.t - b.t; }).forEach(function (it, i) { if (i < nSets) it.set = i + 1; });
   const days = chain.runs.map(function (r, di) {
     const items = rows.filter(function (it) { return it.day === di; });
     return { room: String(r['카톡방'] || bareTitle_(r['명단 제목'])), title: String(r['명단 제목']), items: items, notice: items.length ? rvNotice_(o.kind, o.guide, items, prods) : '' };
   });
-  const sum = prods.map(function (p) {
+  let sum = prods.map(function (p) {
     const mine = rows.filter(function (it) { return it.prod === p.name; });
     return p.name + ' ' + mine.length + '명: ' + p.mix.map(function (x) { return x.label + ' ' + mine.filter(function (it) { return it.rv === x.label; }).length; }).join(', ') + (p.mix.reduce(function (a, x) { return a + x.n; }, 0) !== mine.length ? ' (의뢰서 ' + p.mix.map(function (x) { return x.label + ' ' + x.n; }).join(', ') + ' → 실제 인원에 맞춰 나눔)' : '');
   });
   const unknown = rows.filter(function (it) { return !it.prod; }).length;
+  if (o.kind === 'photo' && nSets) sum = ['사진 세트 ' + nSets + '개 / ' + rows.length + '명' + (nSets < rows.length ? ' → ' + (rows.length - nSets) + '명 사진 모자람: 업체에 인원별 사진 더 요청하세요' : (nSets > rows.length ? ' (세트 ' + (nSets - rows.length) + '개 남음)' : ''))];
   return { days: days, sum: sum, unknown: unknown, total: rows.length };
 }
 
@@ -2128,18 +2148,20 @@ function reviewPage_(p) {
     try { saved = JSON.parse(pr.getProperty('RV_' + sid) || '{}'); } catch (e) {}
     let desc = '';
     try { desc = FormApp.openById(chain.runs[0]['폼ID']).getDescription() || ''; } catch (e) {}
-    const o = { kind: String(p.kind || saved.kind || (/^\s*유/.test(String(chain.runs[0]['포토'] || '')) ? 'photo' : 'mix')), mix: p.mix != null ? String(p.mix) : String(saved.mix || noticeProducts_(desc).map(function (x) { return x.name + ' : '; }).join(' / ')), guide: p.guide != null ? String(p.guide) : String(saved.guide || '') };
+    const o = { kind: String(p.kind || saved.kind || (/^\s*유/.test(String(chain.runs[0]['포토'] || '')) ? 'photo' : 'mix')), mix: p.mix != null ? String(p.mix) : String(saved.mix || noticeProducts_(desc).map(function (x) { return x.name + ' : '; }).join(' / ')), guide: p.guide != null ? String(p.guide) : String(saved.guide || ''),
+      sets: p.sets != null ? String(p.sets).replace(/\D/g, '') : String(saved.sets || '') };
     // 고친 값은 다음에 열 때도 그대로
-    if (p.mix != null || p.kind || p.guide != null) { try { pr.setProperty('RV_' + sid, JSON.stringify(o)); } catch (e) {} }
+    if (p.mix != null || p.kind || p.guide != null || p.sets != null) { try { pr.setProperty('RV_' + sid, JSON.stringify(o)); } catch (e) {} }
     const plan = reviewPlan_(runs, chain, o);
     let msg = '';
-    if (p.q != null && plan.days && plan.days[Number(p.q)] && plan.days[Number(p.q)].notice) { const d = plan.days[Number(p.q)]; queueMsg_(d.room, d.notice, '리뷰'); msg = '✔ 보낼 메시지함에 넣었어요: ' + d.room; }
+    if (p.q != null && plan.days && plan.days[Number(p.q)] && plan.days[Number(p.q)].notice) { const d = plan.days[Number(p.q)]; queueMsg_(d.room, d.notice, '리뷰'); msg = '✔ 보낼 메시지함에 넣었어요: ' + d.room; if (!(o.kind === 'photo' && !Number(o.sets))) pr.setProperty('RVSENT_' + campKey_(d.title) + '_' + dateTok_(d.title), '1'); }
     const hidden = '<input type="hidden" name="p" value="review"><input type="hidden" name="k" value="' + esc(CONFIG.KEY) + '"><input type="hidden" name="s" value="' + esc(sid) + '">';
     body += '<p class="h">' + esc(campOf_(chain.runs[0]['명단 제목'])) + ' <a class="s" href="' + url({}) + '" target="_top">(다른 의뢰)</a></p>' + (msg ? '<p class="ok">' + esc(msg) + '</p>' : '') +
       '<form method="get" action="' + esc(CONFIG.WEBAPP_URL || '') + '" target="_top">' + hidden +
       '<label>공지 종류<select name="kind">' + Object.keys(RV_KINDS).map(function (x) { return '<option value="' + x + '"' + (x === o.kind ? ' selected' : '') + '>' + RV_KINDS[x] + '</option>'; }).join('') + '</select></label>' +
       '<label>리뷰 종류와 개수 (의뢰서 전체 기준. 상품마다 / 로 나눔)<textarea name="mix" placeholder="옥광밤 : 별점 4, 텍스트리뷰 6 / 황금향 : 별점 5, 텍스트리뷰 9">' + esc(o.mix) + '</textarea></label>' +
-      '<label>리뷰내용 가이드<input name="guide" value="' + esc(o.guide) + '" placeholder="예: 너무 길지 않게 간단하게 부탁드려요"></label><button>이대로 나누기</button></form>';
+      '<label>리뷰내용 가이드<input name="guide" value="' + esc(o.guide) + '" placeholder="예: 너무 길지 않게 간단하게 부탁드려요"></label>' +
+      '<label>포토대기일 때: 업체에서 받은 사진 세트 수 (같은 배경 사진끼리 한 세트, 비우면 \'포토대기\' 공지)<input name="sets" inputmode="numeric" value="' + esc(o.sets) + '" placeholder="예: 16"></label><button>이대로 나누기</button></form>';
     if (plan.err) body += '<p class="err">' + esc(plan.err) + '</p>';
     else {
       body += '<p class="s">' + esc(plan.total + '명 · ' + plan.sum.join(' / ')) + (plan.unknown ? '<br><b class="err">' + plan.unknown + '명은 어느 상품을 샀는지 몰라요 (아래 공지에 따로 표시)</b>' : '') + '</p>';
@@ -3316,6 +3338,26 @@ function fruitCheck_(runs) {
 }
 
 // 택배시트는 2시 전까지: 오늘 택대 진행 중 '택배 옮김' 체크가 안 된 것을 12시 30분, 1시 30분에 메일로 알림
+// 포토대기 진행: 리뷰 기한(배송완료 후 7일)이 있어서 사진을 오래 기다리면 리뷰가 몰림 → 진행 2일 뒤부터 매일 한 번 '업체 사진 왔는지 사장님께 물어보세요' 메일
+function photoWaitCheck_(runs) {
+  const hm = Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'HHmm'));
+  if (hm < 1000) return;
+  const today = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('PHOTOWAIT_' + today)) return;
+  props.setProperty('PHOTOWAIT_' + today, '1');
+  const now = today_().getTime();
+  const wait = runs.filter(function (r) {
+    if (!/^\s*유/.test(String(r['포토'] || '')) || !(r['진행일'] instanceof Date) || !(Number(r['인원']) > 0)) return false;
+    const days = Math.round((now - dayStart_(r['진행일'])) / 86400000);
+    return days >= 2 && days <= 9 && !props.getProperty('RVSENT_' + campKey_(r['명단 제목']) + '_' + dateTok_(r['명단 제목']));
+  });
+  if (!wait.length) return;
+  MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[체험단] 포토대기 ' + wait.length + '개: 업체 사진 왔는지 사장님께 확인하세요',
+    wait.map(function (r) { return '- ' + bareTitle_(r['명단 제목']) + ' (진행 ' + Math.round((now - dayStart_(r['진행일'])) / 86400000) + '일 지남, ' + (r['인원'] || 0) + '명)'; }).join('\n') +
+    '\n\n리뷰는 배송완료 후 7일 안에 써야 해서 사진을 오래 기다리면 리뷰가 한꺼번에 몰려요.\n사진이 오면: 같은 배경 사진끼리 세트로 나눠서 진행 도우미 → 리뷰 배정 → 공지 종류 \'포토대기\' + 세트 수 넣기.\n사진이 사람 수만큼 세트로 안 나뉘어 있으면 업체에 다시 요청하세요.');
+}
+
 function takbaeCheck_(runs) {
   const hm = Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'HHmm'));
   const step = hm >= 1330 && hm < 1400 ? 2 : hm >= 1230 && hm < 1400 ? 1 : 0;
