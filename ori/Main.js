@@ -994,10 +994,11 @@ function dayColors_(ss) {
 }
 
 // 명단 시트 맨 오른쪽 '리뷰체크' 탭: 사장님이 리뷰를 체크하고 고치는 곳 (사용자 요청 10/19)
-//  수식이 아니라 값으로 넣어서 체크·수정·줄 삭제·열 삭제를 해도 안 사라짐. 새 응답만 아래에 붙이고, 이미 넣은 줄은 절대 안 건드림
-//  어느 응답을 넣었는지는 스크립트 속성 RVTK_<시트ID>(응답 시각)로 기억 → 사장님이 지운 줄도 다시 안 생김
-//  칸은 1행 머리글 글자로 찾아서 넣음(열을 지우거나 옮겨도 됨, 지운 칸은 안 채움). 폼에서 지운 응답은 그 줄에 메모 + 회색 글자만
-const RVT_TAB = '리뷰체크', RVT_HEAD = ['리뷰 확인', '타임스탬프', '옵션', '성함'];
+//  폼 응답의 모든 칸(계좌 등 하나도 안 뺌) + 맨 오른쪽 '리뷰 확인' 체크칸. 수식이 아니라 값으로 넣어서 체크·수정·줄 삭제·열 삭제를 해도 안 사라짐
+//  새 응답만 아래에 붙이고, 이미 넣은 줄은 절대 안 건드림. 어느 응답을 넣었는지는 스크립트 속성 RVTK_<시트ID>(응답 시각)로 기억 → 사장님이 지운 줄도 다시 안 생김
+//  칸은 1행 머리글 글자로 찾아서 넣음(열을 지우거나 옮겨도 됨, 지운 칸은 안 채움). 폼에 새 질문이 생기면 체크칸 왼쪽에 칸을 더함
+//  폼에서 지운 응답은 그 줄에 메모 + 회색 글자만
+const RVT_TAB = '리뷰체크', RVT_CHECK = '리뷰 확인';
 function reviewTabs_(runs) {
   const cut = Date.now() - 30 * 86400000, ids = [];
   runs.forEach(function (r) { const sid = String(r['시트ID'] || ''); if (sid && ids.indexOf(sid) === -1 && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut) ids.push(sid); });
@@ -1013,44 +1014,69 @@ function reviewTabs_(runs) {
 function reviewTab_(ss) {
   const tabs = ss.getSheets().filter(function (t) { return !!t.getFormUrl(); });
   if (!tabs.length) return 0;
-  const rows = [];
+  const heads = [], rows = [];
   tabs.forEach(function (t) {
     const lr = t.getLastRow(), lc = t.getLastColumn();
-    if (lr < 2 || lc < 1) return;
-    const v = t.getRange(1, 1, lr, lc).getValues(), h = v[0].map(function (x) { return String(x); });
-    const oc = h.findIndex(function (x) { return MATCH.opt.test(x); });
-    let nc = h.findIndex(function (x) { return /성함|수취인|받는\s*(분|사람)/.test(x); });
-    if (nc < 0) nc = h.findIndex(function (x) { return MATCH.name.test(x) && !MATCH.account.test(x) && !MATCH.nick.test(x); });
-    v.slice(1).forEach(function (x) { if (x[0] instanceof Date) rows.push({ t: x[0].getTime(), d: x[0], o: oc >= 0 ? x[oc] : '', n: nc >= 0 ? x[nc] : '' }); });
+    if (lc < 1) return;
+    const h = rawHead_(t);
+    h.forEach(function (x) { if (x && heads.indexOf(x) === -1) heads.push(x); });
+    if (lr < 2) return;
+    t.getRange(2, 1, lr - 1, h.length).getValues().forEach(function (x) {
+      if (!(x[0] instanceof Date)) return;
+      const o = {}; h.forEach(function (name, j) { o[name] = x[j]; });
+      rows.push({ t: x[0].getTime(), o: o });
+    });
   });
+  if (!heads.length) return 0;
   rows.sort(function (a, b) { return a.t - b.t; });
   const props = PropertiesService.getScriptProperties(), key = 'RVTK_' + ss.getId();
   let sh = ss.getSheetByName(RVT_TAB), done = String(props.getProperty(key) || '').split(',').filter(Boolean);
-  if (!sh) {
-    sh = ss.insertSheet(RVT_TAB, ss.getSheets().length);   // 맨 오른쪽
-    sh.getRange(1, 1, 1, RVT_HEAD.length).setValues([RVT_HEAD]).setFontWeight('bold').setBackground('#efe6f7');
-    sh.setFrozenRows(1);
-    sh.setColumnWidth(1, 70); sh.setColumnWidth(2, 180); sh.setColumnWidth(3, 160); sh.setColumnWidth(4, 100);
-    done = [];
+  // 10/19 아침에 잠깐 만든 4칸짜리(리뷰 확인/타임스탬프/옵션/성함) 탭: 아직 체크한 게 없으면 새 모양으로 다시 만듦
+  if (sh) {
+    const h0 = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(function (x) { return String(x).trim(); }).filter(Boolean).join('|');
+    if (h0 === '리뷰 확인|타임스탬프|옵션|성함') {
+      const checked = sh.getLastRow() >= 2 && sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().some(function (x) { return x[0] === true; });
+      if (!checked) { ss.deleteSheet(sh); sh = null; }
+    }
   }
-  const lc = Math.max(sh.getLastColumn(), 1), hdr = sh.getRange(1, 1, 1, lc).getValues()[0].map(function (x) { return String(x).trim(); });
-  const col = function (name) { return hdr.indexOf(name) + 1; };
-  const cT = col('타임스탬프'), cO = col('옵션'), cN = col('성함'), cC = col('리뷰 확인');
+  if (!sh) {
+    sh = ss.insertSheet(RVT_TAB, ss.getSheets().length);   // 맨 오른쪽 탭
+    const hd = heads.concat([RVT_CHECK]);
+    sh.getRange(1, 1, 1, hd.length).setValues([hd]).setFontWeight('bold').setBackground('#efe6f7').setWrap(true).setVerticalAlignment('bottom');
+    sh.setFrozenRows(1);
+    sh.setColumnWidths(1, hd.length, 140);
+    done = [];
+    props.setProperty('RVTH_' + ss.getId(), JSON.stringify(heads));
+  }
+  let lc = Math.max(sh.getLastColumn(), 1), hdr = sh.getRange(1, 1, 1, lc).getValues()[0].map(function (x) { return String(x).trim(); });
+  // 폼에 새로 생긴 질문은 체크칸 왼쪽(없으면 맨 끝)에 칸 추가. 사장님이 지운 칸(예전에 넣었던 머리글)은 다시 안 만듦
+  let known = []; try { known = JSON.parse(props.getProperty('RVTH_' + ss.getId()) || '[]'); } catch (e) {}
+  if (!known.length) known = hdr.slice();
+  heads.filter(function (h) { return hdr.indexOf(h) === -1 && known.indexOf(h) === -1; }).forEach(function (h) {
+    known.push(h);
+    const cc = hdr.indexOf(RVT_CHECK) + 1;
+    if (cc) { sh.insertColumnBefore(cc); sh.getRange(1, cc).setValue(h).setFontWeight('bold').setBackground('#efe6f7'); }
+    else sh.getRange(1, lc + 1).setValue(h).setFontWeight('bold').setBackground('#efe6f7');
+    lc = Math.max(sh.getLastColumn(), 1); hdr = sh.getRange(1, 1, 1, lc).getValues()[0].map(function (x) { return String(x).trim(); });
+  });
+  props.setProperty('RVTH_' + ss.getId(), JSON.stringify(known));
+  const cT = hdr.indexOf('타임스탬프') + 1, cC = hdr.indexOf(RVT_CHECK) + 1;
   // 기억이 없는데 탭에 줄이 있으면(속성이 지워진 경우) 탭의 타임스탬프로 다시 기억 → 중복으로 안 넣음
   if (!done.length && cT && sh.getLastRow() >= 2) done = sh.getRange(2, cT, sh.getLastRow() - 1, 1).getValues().map(function (x) { return x[0] instanceof Date ? String(x[0].getTime()) : ''; }).filter(Boolean);
   const add = rows.filter(function (x) { return done.indexOf(String(x.t)) === -1; });
   if (add.length) {
     const start = Math.max(sh.getLastRow(), 1) + 1, n = add.length;
     if (sh.getMaxRows() < start + n) sh.insertRowsAfter(sh.getMaxRows(), start + n - sh.getMaxRows());
+    // 머리글 칸마다 그 값(체크칸 빼고). 지운 칸은 머리글이 없으니 안 채움
+    sh.getRange(start, 1, n, lc).setValues(add.map(function (x) {
+      return hdr.map(function (h, j) { return j + 1 === cC ? false : (h && Object.prototype.hasOwnProperty.call(x.o, h) ? x.o[h] : ''); });
+    }));
     if (cC) sh.getRange(start, cC, n, 1).insertCheckboxes();
-    if (cT) sh.getRange(start, cT, n, 1).setValues(add.map(function (x) { return [x.d]; })).setNumberFormat('yyyy. M. d am/pm h:mm:ss');
-    if (cO) sh.getRange(start, cO, n, 1).setValues(add.map(function (x) { return [x.o]; }));
-    if (cN) sh.getRange(start, cN, n, 1).setValues(add.map(function (x) { return [x.n]; }));
+    if (cT) sh.getRange(start, cT, n, 1).setNumberFormat('yyyy. M. d am/pm h:mm:ss');
     // 날짜별 연한 색 (명단 탭과 같은 색)
-    const cols = [cC, cT, cO, cN].filter(Boolean), c0 = Math.min.apply(null, cols), w = Math.max.apply(null, cols) - c0 + 1;
-    sh.getRange(start, c0, n, w).setBackgrounds(add.map(function (x) {
+    sh.getRange(start, 1, n, lc).setBackgrounds(add.map(function (x) {
       const day = Math.floor((x.t + 9 * 3600000) / 86400000) + 25569;
-      return Array(w).fill(DAY_COLORS[day % 7]);
+      return Array(lc).fill(DAY_COLORS[day % 7]);
     }));
     done = done.concat(add.map(function (x) { return String(x.t); }));
   }
@@ -1061,7 +1087,7 @@ function reviewTab_(ss) {
     tv.forEach(function (x, i) {
       if (!(x[0] instanceof Date) || live[x[0].getTime()] || nt[i][0]) return;
       sh.getRange(i + 2, cT).setNote('폼에서 지운 응답이에요 (취소 등). 줄은 그대로 둬요.');
-      sh.getRange(i + 2, 1, 1, Math.max(sh.getLastColumn(), 1)).setFontColor('#999999');
+      sh.getRange(i + 2, 1, 1, lc).setFontColor('#999999');
     });
   }
   let save = done.join(',');
