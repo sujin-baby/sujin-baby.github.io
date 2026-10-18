@@ -344,6 +344,38 @@ function dropManualColsOnce_(runs) {
   if (kept.length) note_('적힌 내용이 있어서 안 지운 칸: ' + kept.join(', '));
 }
 
+// 이 폼의 응답이 들어가는 탭 (못 찾으면 null)
+function linkedTab_(ss, formId) {
+  const tabs = ss.getSheets().filter(function (s) { return !!s.getFormUrl(); });
+  for (let i = 0; i < tabs.length; i++) {
+    const u = String(tabs[i].getFormUrl());
+    if (u.indexOf(String(formId)) !== -1) return tabs[i];
+    try { if (FormApp.openByUrl(u).getId() === String(formId)) return tabs[i]; } catch (e) {}
+  }
+  return null;
+}
+// 폼 응답이 명단 시트에 안 들어오면 다시 연결: 응답 탭이 아예 없거나, 폼엔 응답이 있는데 탭이 비어 있을 때(마지막 응답 5분 뒤에도)
+//  다시 연결하면 그 시트에 응답 탭이 새로 생기고 지금까지 응답이 다 들어감 → 명단 탭은 fixListRef_/ensureListTab_가 새 탭을 보게 고침. 폼마다 3시간에 한 번까지
+function relinkIfMissing_(r, form) {
+  const sid = String(r['시트ID'] || '');
+  if (!sid) return '';
+  const resp = form.getResponses();
+  if (!resp.length) return '';
+  const ss = SpreadsheetApp.openById(sid), tab = linkedTab_(ss, r['폼ID']);
+  let rows = 0;
+  if (tab && tab.getLastRow() >= 2) rows = tab.getRange(2, 1, tab.getLastRow() - 1, 1).getValues().filter(function (x) { return x[0] instanceof Date; }).length;
+  if (tab && rows > 0) return '';
+  const newest = resp[resp.length - 1].getTimestamp().getTime();
+  if (tab && Date.now() - newest < 5 * 60000) return '';
+  const props = PropertiesService.getScriptProperties(), key = 'RELINK_' + r['폼ID'];
+  if (Date.now() - Number(props.getProperty(key) || 0) < 3 * 3600000) return '폼 응답 ' + resp.length + '개가 명단 시트에 아직 안 들어옴 (다시 연결해 둠, 기다리는 중)';
+  props.setProperty(key, String(Date.now()));
+  try { form.removeDestination(); } catch (e) {}
+  form.setDestination(FormApp.DestinationType.SPREADSHEET, sid);
+  SpreadsheetApp.flush();
+  return '폼 응답 ' + resp.length + '개가 명단 시트에 ' + (tab ? '안 들어와 있어서' : '응답 탭이 없어서') + ' 다시 연결함';
+}
+
 // 명단 탭이 폼 응답 탭을 보고 있는지: 새 진행을 만들 때 폼 응답 탭이 늦게 생기면(15초 넘게) 명단 탭이 빈 기본 탭을 보게 되고,
 //  그 빈 탭이 지워지면 명단·한눈에 탭에 응답이 하나도 안 보임 → 명단 탭을 다시 만듦
 function fixListRef_(ss, r) {
@@ -1749,8 +1781,20 @@ function checkFullInner_() {
       const ft = form.getResponses().map(function (x) { return x.getTimestamp().getTime(); });
       try { times[tk] = allRespTimes_(r['시트ID'], r['폼ID'], ft); } catch (e) { times[tk] = ft; }
     }
+    // 폼에는 응답이 있는데 명단 시트에 응답 탭이 없거나 비어 있으면 폼 응답을 다시 연결 (구글이 연결을 늦게 하거나 놓친 경우)
+    try { const why = relinkIfMissing_(r, form); if (why) { errs[r['명단 제목']] = why; note_('✓ ' + bareTitle_(r['명단 제목']) + ': ' + why); } } catch (e) { errs[r['명단 제목']] = '응답 연결 확인 실패: ' + e.message; }
     const n = runCount_(runs, r, times[tk]);
     if (Number(r['인원']) !== n) setRun_(r.row, '인원', n);
+    // 진단: 폼 응답 수 / 명단 시트 응답 탭 수 / 명단 탭에 보이는 수 (그날 몫)가 다르면 한눈에 '확인 필요' 칸에 적음
+    if (!errs[r['명단 제목']] && n > 0) {
+      try {
+        const inW = function (t) { return t >= w.from && t < w.to; };
+        const sheetN = allRespTimes_(r['시트ID']).filter(inW).length;
+        const lt = SpreadsheetApp.openById(r['시트ID']).getSheetByName(LIST_TAB);
+        const listN = lt && lt.getLastRow() >= 3 ? lt.getRange(3, 1, lt.getLastRow() - 2, 1).getValues().filter(function (x) { return x[0] instanceof Date && inW(x[0].getTime()); }).length : 0;
+        if (sheetN !== n || listN !== n) errs[r['명단 제목']] = '응답 수가 안 맞아요: 폼 ' + n + ' / 응답 탭 ' + sheetN + ' / 명단 탭 ' + listN + (lt ? ' (명단 탭 A3: ' + String(lt.getRange('A3').getFormula()).slice(0, 60) + ')' : ' (명단 탭 없음)');
+      } catch (e) { errs[r['명단 제목']] = '응답 수 확인 실패: ' + e.message; }
+    }
     if (!r['목표인원'] || r['마감 시각'] || n < Number(r['목표인원'])) return;
     form.setAcceptingResponses(false);
     // 옛 공지 링크로 받던 폼(가져온 폼)도 같이 닫음
