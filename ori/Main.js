@@ -1231,9 +1231,15 @@ function fillBlankNicks_(r, w) {
     if (last < 2) return;
     const head = headers_(t).map(hk_);
     const nks = [], names = [];
-    head.forEach(function (h, i) { if (MATCH.nick.test(h)) nks.push(i); else if (/^이름$|성함|수취인|쿠팡\s*닉네임|후기에\s*노출/.test(h)) names.push(i); });
-    if (!nks.length) return;
-    const v = t.getRange(2, 1, last - 1, head.length).getValues(), used = {};
+    head.forEach(function (h, i) { if (MATCH.nick.test(h)) nks.push(i); else if (/^이름$|성함|수취인|수령인|쿠팡\s*닉네임|후기에\s*노출/.test(h)) names.push(i); });
+    // 닉네임 질문이 없는 옛 폼의 응답 탭: 오른쪽 끝(머리글 바로 다음)에 닉네임 칸을 만들어 채움 (한눈에·배정이 이 칸을 봄)
+    if (!nks.length) {
+      const rh = rawHead_(t).length;
+      if (!rh || !names.length || String(head[rh] || '').trim()) return;
+      t.getRange(1, rh + 1).setValue(NICK_Q).setNote('옛 폼이라 카톡 닉네임 질문이 없어서 스크립트가 만든 칸');
+      head[rh] = NICK_Q; nks.push(rh);
+    }
+    const v = t.getRange(2, 1, last - 1, head.length).getValues().map(function (x) { while (x.length < head.length) x.push(''); return x; }), used = {};
     let prev = null;
     v.forEach(function (row, i) {
       if (!(row[0] instanceof Date) || row[0].getTime() < w.from || row[0].getTime() >= w.to) return;
@@ -2196,8 +2202,18 @@ function checkFullInner_() {
       listed[r['시트ID']] = 1;
     }
     // 오늘·앞으로 진행할 폼에는 '방에 참여한 카카오톡 닉네임' 질문이 꼭 있게 (예전 폼을 이어 쓰는 의뢰도)
+    //  공지에 옛 폼 링크가 남아 그 폼으로 들어오는 경우(10/19 김설하·김동욱 닉네임 빈칸)도 있어서, 이 진행 응답을 받는 폼 전부 + 필수로
     if (r['진행일'] instanceof Date && r['진행일'] >= today_()) {
-      try { if (ensureNickQuestion_(form)) note_('✓ ' + bareTitle_(r['명단 제목']) + ' 폼에 닉네임 질문 넣음'); } catch (e) { note_(bareTitle_(r['명단 제목']) + ' 닉네임 질문 실패: ' + e.message); }
+      if (!globalThis.__OBROWS) { try { globalThis.__OBROWS = outboxRows_(); } catch (e) { globalThis.__OBROWS = []; } }
+      const fids = runFormIds_(r, runs, globalThis.__OBROWS).concat(String(props.getProperty('ORPHANS_' + r['시트ID']) || '').split(',').filter(Boolean));
+      fids.filter(function (x, i, a) { return a.indexOf(x) === i; }).forEach(function (fid) {
+        try {
+          const f = String(fid) === String(r['폼ID']) ? form : FormApp.openById(fid);
+          if (ensureNickQuestion_(f)) note_('✓ ' + bareTitle_(r['명단 제목']) + ' 폼에 닉네임 질문 넣음' + (f === form ? '' : ' (공지 속 다른 폼)'));
+          if (f !== form) fixFormQuestions_(f);
+        } catch (e) { note_(bareTitle_(r['명단 제목']) + ' 닉네임 질문 실패: ' + e.message); }
+      });
+      try { fixFormQuestions_(form); } catch (e) {}
     }
     const w = windowOf_(runs, r);
     if (Date.now() < w.from) return;   // 아직 시작 전인 다음 일차
@@ -2322,6 +2338,24 @@ function reviewGuideMsg_(rv, ppl, counts, k) {
   const msg = ['⭐️리뷰내용 가이드⭐️'].concat(lines, ['', g ? '⭐️⭐️⭐️⭐️⭐️' + g.replace(/[.。!\s]+$/, '') + ' !!!!!⭐️⭐️⭐️⭐️⭐️' : '⭐️⭐️⭐️⭐️⭐️(리뷰 가이드: 사장님께 물어보고 채우기)⭐️⭐️⭐️⭐️⭐️']).join('\n');
   return { msg: msg, ask: ask };
 }
+// 그날 응답의 수령인(계정) 이름 순서대로 [{nm, n:1}] (한 사람이 두 계정이면 계정마다 따로). 수령인 칸: 수령인·수취인·이름·성함
+function receivers_(r, w) {
+  const info = rawInfo_(r['시트ID'], r['폼ID']), src = info.src || info.raw, st = info.start || 2, lr = src.getLastRow();
+  const head = info.head.map(hk_);
+  let c = head.findIndex(function (h) { return /수령인|수취인/.test(h); });
+  if (c < 0) c = head.findIndex(function (h) { return /^이름$|^성함$|^이름\s*\(|^성함\s*\(/.test(h); });
+  if (c < 0) c = head.findIndex(function (h) { return /이름|성함/.test(h) && !MATCH.nick.test(h) && !MATCH.account.test(h) && !/쿠팡|닉네임/.test(h); });
+  if (c < 0 || lr < st) return [];
+  const rows = [];
+  src.getRange(st, 1, lr - st + 1, head.length).getValues().forEach(function (x) {
+    const t = tsMs_(x[0]);
+    if (!isFinite(t) || t < w.from || t >= w.to) return;
+    const nm = String(x[c]).replace(/\s+/g, '');
+    if (nm) rows.push({ t: t, nm: nm, n: 1 });
+  });
+  rows.sort(function (a, b) { return a.t - b.t; });
+  return rows.map(function (x) { return { nm: x.nm, n: 1 }; });
+}
 function ensureReviewGuideMsgs_(runs) {
   const props = PropertiesService.getScriptProperties(), now = Date.now();
   let assign = null;
@@ -2334,13 +2368,18 @@ function ensureReviewGuideMsgs_(runs) {
   chainsOf_(runs).forEach(function (c) {
     c.runs.forEach(function (r, k) {
       if (r['진행 상태'] === '종료' || !(r['마감 시각'] instanceof Date) || now - r['마감 시각'].getTime() > 2 * 86400000) return;
-      const key = 'RVMSG_' + String(r['명단 제목']).replace(/\s+/g, '');
+      // V2(10/19): 카톡 이름 대신 수령인(계정) 이름으로. 예전(카톡 이름) 메시지가 아직 대기면 새 글로 바꿈, 보냈으면 그대로
+      const key0 = 'RVMSG_' + String(r['명단 제목']).replace(/\s+/g, ''), key = 'RVMSG2_' + String(r['명단 제목']).replace(/\s+/g, '');
       if (props.getProperty(key)) return;
       const first = c.runs.filter(function (x) { return x['시트ID']; })[0] || r;
       let rv = null; try { rv = JSON.parse(props.getProperty('RV_' + first['시트ID']) || 'null'); } catch (e) {}
       if (!rv || rv.kind === 'photo' || rv.kind === 'confirm') return;
       props.setProperty(key, '1');
-      let ppl = namesOf(r);
+      const old = !!props.getProperty(key0);
+      props.setProperty(key0, '1');
+      let ppl = [];
+      try { ppl = receivers_(r, windowOf_(runs, r)); } catch (e) { note_('리뷰 가이드 수령인 찾기 실패: ' + e.message); }
+      if (!ppl.length) ppl = namesOf(r);
       if (!ppl.length) {
         try {
           const info = rawInfo_(r['시트ID'], r['폼ID']), w = windowOf_(runs, r), src = info.src || info.raw, st = info.start || 2, lr = src.getLastRow();
@@ -2357,6 +2396,15 @@ function ensureReviewGuideMsgs_(runs) {
       });
       const res = reviewGuideMsg_(rv, ppl, counts, k);
       const room = String(r['카톡방'] || bareTitle_(r['명단 제목']));
+      if (old) {
+        // 예전 카톡 이름 글: 아직 안 보냈으면 이 글로 바꾸고, 보냈으면 그대로 둠
+        const ob = outboxSheet_(), ol = ob.getLastRow();
+        if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v, i) {
+          if (String(v[3]) === room && /^⭐️리뷰내용 가이드⭐️/.test(String(v[4])) && v[5] !== '보냄') ob.getRange(i + 2, 5).setValue(res.msg);
+        });
+        note_('✓ 리뷰 가이드 메시지를 수령인 이름으로 바꿈: ' + room);
+        return;
+      }
       queueMsg_(room, res.msg, '방 공지');
       if (res.ask.length) queueMsg_('사장님', '[' + room + '] 의뢰서에 ' + res.ask.join(', ') + '이(가) 없어요. 사장님께 물어보고 리뷰 가이드 공지를 고쳐서 보내기', '할 일');
       note_('✓ 리뷰 가이드 메시지 넣음: ' + room + (res.ask.length ? ' (사장님께 물어볼 것: ' + res.ask.join(', ') + ')' : ''));
