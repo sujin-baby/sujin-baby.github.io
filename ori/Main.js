@@ -4661,6 +4661,30 @@ function payOrder_(sh) {
   if (moved) note_('✓ 월급시트 ' + sh.getName() + ': 진행일 순서로 ' + moved + '줄 옮김');
 }
 
+// 날짜순으로 섞여도 같은 캠페인을 알아보게 캠페인명 칸에 캠페인마다 다른 연한 색 (사용자 선택 10/19)
+//  색은 탭마다 캠페인 처음 나온 순서로 정해서 저장(PAYCOLOR_<탭ID>) → 줄이 옮겨지거나 새 진행이 생겨도 같은 색. 빈 줄은 옆 스토어 칸 색
+const PAY_CAMP_COLORS = ['#d9ead3', '#cfe2f3', '#ead1dc', '#d9d2e9', '#fce5cd', '#d0e0e3', '#f4cccc', '#c9daf8', '#b6d7a8', '#f9cb9c', '#a2c4c9', '#b4a7d6'];
+function payColors_(sh) {
+  const L = payLayout_(sh);
+  if (!L || !L.name) return;
+  const last = sh.getLastRow(), n = last - L.head;
+  if (n < 1) return;
+  const props = PropertiesService.getScriptProperties(), pk = 'PAYCOLOR_' + sh.getSheetId();
+  let map = {}; try { map = JSON.parse(props.getProperty(pk) || '{}'); } catch (e) {}
+  const names = sh.getRange(L.head + 1, L.name, n, 1).getValues().map(function (x) { return String(x[0]).trim(); });
+  const rg = sh.getRange(L.head + 1, L.name, n, 1), cur = rg.getBackgrounds();
+  const base = L.store ? sh.getRange(L.head + 1, L.store, n, 1).getBackgrounds() : cur;
+  let added = false;
+  const want = names.map(function (nm, i) {
+    if (!nm) return [base[i][0]];
+    const k = campKey_(nm) || nm;
+    if (map[k] === undefined) { map[k] = Object.keys(map).length % PAY_CAMP_COLORS.length; added = true; }
+    return [PAY_CAMP_COLORS[map[k]]];
+  });
+  if (added) props.setProperty(pk, JSON.stringify(map));
+  if (want.some(function (w, i) { return String(w[0]).toLowerCase() !== String(cur[i][0]).toLowerCase(); })) rg.setBackgrounds(want);
+}
+
 function payLayout_(sh) {
   const rows = Math.min(sh.getLastRow(), 15), cols = sh.getLastColumn();
   if (rows < 1 || cols < 1) return null;
@@ -4740,6 +4764,7 @@ function updatePay_() {
   try { payStatusAll_(all); } catch (e) { note_('월급시트 상태 잇기 실패: ' + e); }
   // 진행일 칸 채우고 진행일 순서로 줄 정렬 (이번 달, 있으면 다음 달 탭)
   try { payTabsNow_().forEach(payOrder_); } catch (e) { note_('월급시트 날짜순 정렬 실패: ' + e); }
+  try { payTabsNow_().forEach(payColors_); } catch (e) { note_('월급시트 캠페인 색 실패: ' + e); }
   try { payRate_(); } catch (e) { note_('월급시트 진행비 500원 바꾸기 실패: ' + e); }
   // 이번 달 탭(없으면 만듦)과 이미 있는 다음 달 탭에 안 끝난 캠페인 이월 줄
   try { const m0 = new Date().getMonth() + 1; payTab_(m0); payCarry_(all, m0); payCarry_(all, m0 % 12 + 1); } catch (e) { note_('월급시트 이월 실패: ' + e); }
