@@ -3802,8 +3802,9 @@ function onRunSubmit_(e) {
       if (Number(r['인원']) !== n) setRun_(r.row, '인원', n);
       if (r['목표인원'] && !r['마감 시각'] && n >= Number(r['목표인원'])) full = true;
     });
-    try { updatePay_(); } catch (err) { note_('월급시트 갱신 실패: ' + err); }
-    try { buildDashboard_(false); } catch (err) {}
+    // 월급시트·한눈에 탭은 오래 걸려서(합쳐 몇 분) 응답마다 하면 6분 제한에 걸려 한눈에 탭이 비워진 채 멈출 수 있음 (10/20)
+    //  → 1분 뒤 자동 확인 한 번이 둘 다 갱신 (응답이 몰려도 한 번만)
+    try { soonCheck_(); } catch (err) {}
     if (full) checkFull();
   }, 20000);
 }
@@ -5157,7 +5158,10 @@ function buildDashboard_(force) {
   }
   // 남은·신청 칸이 날짜로 보이지 않게 숫자 서식은 매번 (다시 만들지 않을 때도)
   if (sh && runs.length) { try { sh.getRange(2, 4, runs.length, 4).setNumberFormat('0'); } catch (e) {} }
-  if (!force && sh && props.getProperty('DASH_SIG') === sig) return;
+  // 서명이 같아도 위 표가 비어 있으면(지난번에 지우고 쓰다가 멈춤) 다시 만듦
+  if (!force && sh && props.getProperty('DASH_SIG') === sig && (!runs.length || String(sh.getRange(2, 2).getValue()).trim() !== '')) return;
+  // 지우기 전에 서명을 지워 둠: 쓰다가 멈추면 다음 확인이 꼭 다시 만들게
+  props.deleteProperty('DASH_SIG');
   order.forEach(function (id) { grantImport_(ss.getId(), sheets[id].sid); });
   if (!sh) sh = ss.insertSheet(DASH_TAB, 0);
   // 1행은 글자만 지우고 서식은 둠 (직접 칠한 색이 안 풀리게)
