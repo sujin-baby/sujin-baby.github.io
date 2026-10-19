@@ -1858,7 +1858,10 @@ function parseAssign_(text, choices) {
     const choice = choices.length === 1 ? choices[0] : toChoice(opt, opt);
     const priceM = String(text).match(/🐥\s*(?:가격|결제)\s*[:：]\s*([\d,]+)/);
     const price = priceM ? Number(priceM[1].replace(/,/g, '')) : 0;
-    const firstBird = all.findIndex(function (l) { return /🐥/.test(l); });
+    // 이름 줄은 상품 정보(🐥) 아래 또는 폼 링크 바로 아래(생성기 공지: 폼 링크 → 이름 → 상품 정보, 10/20) 중 먼저 나오는 곳부터
+    const birdAt = all.findIndex(function (l) { return /🐥/.test(l); });
+    const formAt = all.findIndex(function (l) { return /forms\.gle|docs\.google\.com\/forms|구글폼\s*링크/.test(l); });
+    const firstBird = formAt >= 0 && (birdAt < 0 || formAt < birdAt) ? formAt + 1 : birdAt;
     const nameTok = /^@?[A-Za-z가-힣][^\s\d:!?~]{0,11}\d?$/;
     all.forEach(function (l, i) {
       const t = l.trim();
