@@ -390,6 +390,13 @@ function fixListRef_(ss, r) {
 //  인원 세기·한눈에 탭·배정 '산 수'가 여기를 봄. 사람은 안 보고 안 고침
 //  수식은 줄 번호 없이 열 전체(A:M)로 쓰고 머리글은 ROW()>1로 뺌: 'A2:M'처럼 쓰면 구글폼이 응답 줄을 끼워 넣을 때마다 A3, A4…로 밀림(10/19). DROP은 구글 시트에 없음
 const MERGE_TAB = '응답합본';
+const MERGE_TS_FMT = 'yyyy. M. d am/pm h:mm:ss';
+// 시트 값 → 시각(ms). 날짜면 그대로, 날짜 서식이 없어 숫자(일련번호, 한국 시간)로 오면 바꿈
+function tsMs_(v) {
+  if (v instanceof Date) return v.getTime();
+  if (typeof v === 'number' && v > 40000 && v < 80000) return Math.round((v - 25569) * 864e5) - 9 * 3600000;
+  return NaN;
+}
 const REAL_YELLOW = '#fff2a8';
 function buildMergeTab_(ss) {
   const tabs = ss.getSheets().filter(function (t) { return !!t.getFormUrl(); });
@@ -419,6 +426,9 @@ function buildMergeTab_(ss) {
     if (f2) mt.getRange('A2').setFormula(f2); else mt.getRange(2, 1, 1, v2.length).setValues([v2]);
   }
   if (mt.getRange('A3').getFormula() !== f3) mt.getRange('A3').setFormula(f3);
+  // 타임스탬프 칸은 날짜 서식으로: 수식이 A:M(1행 글자 머리글부터)을 보면 결과가 숫자(46314.01)로 나와서
+  //  스크립트가 날짜로 못 읽고 '합본 0'으로 셌음 (10/19)
+  if (mt.getMaxRows() >= 3 && mt.getRange('A3').getNumberFormat() !== MERGE_TS_FMT) mt.getRange(3, 1, mt.getMaxRows() - 2, 1).setNumberFormat(MERGE_TS_FMT);
   tabs.forEach(function (t) { try { t.hideSheet(); } catch (e) {} });
   return mt;
 }
@@ -2166,7 +2176,7 @@ function checkFullInner_() {
         const lss0 = SpreadsheetApp.openById(r['시트ID']);
         const lt = lss0.getSheetByName(MERGE_TAB);
         if (!lt) { buildMergeTab_(lss0); throw { quiet: 1 }; }   // 합본 탭을 이제 만들었으면 이번엔 안 비교 (다음 확인부터)
-        const listN = lt && lt.getLastRow() >= 3 ? lt.getRange(3, 1, lt.getLastRow() - 2, 1).getValues().filter(function (x) { return x[0] instanceof Date && inW(x[0].getTime()); }).length : 0;
+        const listN = lt && lt.getLastRow() >= 3 ? lt.getRange(3, 1, lt.getLastRow() - 2, 1).getValues().filter(function (x) { const t = tsMs_(x[0]); return isFinite(t) && inW(t); }).length : 0;
         if (sheetN !== n || listN !== n) errs[r['명단 제목']] = '응답 수가 안 맞아요: 폼 ' + n + ' / 응답 탭 ' + sheetN + ' / 합본 ' + listN + (lt ? ' (합본 A3: ' + String(lt.getRange('A3').getFormula()).slice(0, 60) + ')' : ' (합본 탭 없음)');
       } catch (e) { if (!e || !e.quiet) errs[r['명단 제목']] = '응답 수 확인 실패: ' + (e && e.message); }
     }
