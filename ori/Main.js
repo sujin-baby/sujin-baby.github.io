@@ -2147,6 +2147,7 @@ function checkFullInner_() {
   try { fixTemplateOnce_(); } catch (e) { note_('템플릿 폼 질문 고치기 실패: ' + e); }
   try { fixNoCountNamesOnce_(runs); } catch (e) { note_('이름 인원 수 빼기 실패: ' + e); }
   try { fixSilOnce_(runs); } catch (e) { note_('실 위치 바꾸기 실패: ' + e); }
+  try { fixStaleNamesOnce_(runs); } catch (e) { note_('다음 일차 공지 이름 빼기 실패: ' + e); }
   try { dropManualColsOnce_(runs); } catch (e) { note_('송장번호·실배송 칸 지우기 실패: ' + e); }
   try { ensureListMsgs_(runs); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { ensureReviewGuideMsgs_(runs); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
@@ -4178,6 +4179,47 @@ function optionLabels_(text) {
 }
 
 // 공지 끝(가이드마다 맨 아래)에 이름만 적은 줄 지우기 (예: '정진아 이혜미2 신선영 / 이강희2 임수진') → 새로 모집하는 공지에 어제 사람이 안 들어가게
+// (한 번, 10/20) 예전에 저장한 다음 일차 공지 틀에 1일차 살 사람 이름이 남아서 2일차+ 방 공지(보낼메시지 대기)에 전날 이름이 뜸
+//  → 그 진행에 배정(이름)이 따로 없으면 대기 중인 방 공지와 (그 폼을 마지막으로 쓰는 진행이면) 폼 설명에서 이름을 뺌
+function fixStaleNamesOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FIX_STALENAMES_V1')) return;
+  props.setProperty('FIX_STALENAMES_V1', '1');
+  const assigned = {}, as = assignSheet_(), al = as.getLastRow();
+  if (al >= 2) as.getRange(2, 1, al - 1, 2).getValues().forEach(function (v) { if (String(v[1]).trim()) assigned[String(v[0])] = 1; });
+  const ob = outboxSheet_(), ol = ob.getLastRow(), fixed = [];
+  if (ol < 2) return;
+  ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v, i) {
+    if (v[2] !== '방 공지' || v[5] === '보냄') return;
+    const room = String(v[3]);
+    const r = runs.filter(function (x) { return String(x['카톡방'] || bareTitle_(x['명단 제목'])) === room; })[0];
+    if (!r || !(Number(r['일차']) > 1) || assigned[String(r['명단 제목'])]) return;
+    const msg = String(v[4]), clean = stripNames_(msg);
+    if (clean === msg) return;
+    ob.getRange(i + 2, 5).setValue(clean); fixed.push(room);
+    const latest = runs.filter(function (x) { return String(x['폼ID']) === String(r['폼ID']) && x['진행일'] instanceof Date; }).sort(function (a, b) { return b['진행일'] - a['진행일']; })[0];
+    if (latest === r && r['폼ID']) { try { FormApp.openById(r['폼ID']).setDescription(formDesc_(clean)); } catch (e) {} }
+  });
+  if (fixed.length) note_('✓ 다음 일차 방 공지에서 전날 이름 뺌: ' + fixed.join(', '));
+}
+
+// 공지에서 살 사람 이름 빼기 (다음 일차 공지 틀, 다음 일차 방 공지): ① 옵션 줄 '(2명)' 뒤 이름 ② 폼 링크 아래 이름만 있는 줄 ③ 맨 끝 이름 줄
+function stripNames_(text) {
+  const lines = String(text || '').split('\n').map(function (l) { return l.replace(/(\(\s*\d*\s*명\s*\))[^\n]*$/, '$1'); });
+  const formAt = lines.findIndex(function (l) { return /forms\.gle|docs\.google\.com\/forms|구글폼\s*링크/.test(l); });
+  // ②는 폼 링크와 상품 정보(🐥) 사이 줄만 (상품 정보 안의 옵션 이름 줄은 안 건드림)
+  const birdAt = lines.findIndex(function (l, i) { return i > formAt && /🐥/.test(l); });
+  const out = lines.filter(function (l, i) { return formAt < 0 || i <= formAt || (birdAt >= 0 && i >= birdAt) || !isNamesLine_(l); });
+  // 이름 줄을 빼서 생긴 빈 줄 겹침 정리
+  return stripTrailingNames_(out.join('\n').replace(/\n{3,}/g, '\n\n'));
+}
+function isNamesLine_(l) {
+  const nameTok = /^@?[A-Za-z가-힣][^\s\d:!?~]{0,11}\d?$/;
+  const t = String(l).trim();
+  if (!t || /http|🐥|★|☆|▶|▼|※|[:!?]|\d\s*원|구매|리뷰|링크|가격|배송|검색|사업자|입금|참고|안내|폼/.test(t)) return false;
+  const toks = t.split(/[\s,]+/).filter(Boolean);
+  return toks.length <= 12 && toks.every(function (x) { return nameTok.test(x) || /^[2-9]$/.test(x) || /^[^\s]+\(\s*취소\s*\)$/.test(x); });
+}
 function stripTrailingNames_(text) {
   const nameTok = /^@?[A-Za-z가-힣][^\s\d:!?~]{0,11}\d?$/;
   const isNames = function (l) {
@@ -4368,13 +4410,13 @@ function deleteRunTimes_(r, dates) {
       }
     }
   } catch (e) { note_('명단 탭 줄 지우기 실패: ' + e); }
-  // 3) 인원 갱신, 모자라면 폼 다시 열기 (그 일차의 마지막 진행이고 구매 시간이 안 지났을 때만)
+  // 3) 인원 갱신, 모자라면 폼 다시 열기 (그날 받는 기간 안이면 구매 시간이 지났어도: 조금 늦게 사는 사람도 있어서, 사용자 요청 10/20)
   const runs = readRuns_();
   const me = runs.filter(function (x) { return x.row === r.row; })[0] || r;
   const n = runCount_(runs, me);
   setRun_(r.row, '인원', n);
   let reopened = '';
-  if (r['목표인원'] && n < Number(r['목표인원']) && !form.isAcceptingResponses() && windowOf_(runs, me).last && !pastEnd_(me)) {
+  if (r['목표인원'] && n < Number(r['목표인원']) && !form.isAcceptingResponses() && !runOver_(runs, me)) {
     form.setAcceptingResponses(true);
     setRun_(r.row, '마감 시각', '');
     reopened = ' 인원이 모자라서 폼을 다시 열었어요.';
@@ -4412,7 +4454,7 @@ function savePlan_(d) {
   if (!plan.length) return;
   const camp = campOf_(d.title);
   // 다음 일차 공지 틀에는 오늘 살 사람 이름을 빼고 저장 (화이트 (2명) 김민희 → 화이트 (2명))
-  const tpl = stripTrailingNames_(String(d.desc || '').split('\n').map(function (l) { return l.replace(/(\(\s*\d*\s*명\s*\)).*$/, '$1'); }).join('\n'));
+  const tpl = stripNames_(d.desc);
   const cfg = JSON.stringify({ type: d.type, takdae: !!d.takdae, realship: !!d.realship, platform: d.platform, prices: d.prices,
     croom: d.croom, shop: d.shop, photo: d.photo, opts: d.opts, desc: tpl, slot2: d.slot2 || '자정 ~ 오전 8시 20분 구매', total: d.total, camp: camp, base: d.n });
   const sh = planSheet_();
@@ -4473,7 +4515,7 @@ function makeDueDays_() {
     locked_(function () {
       if (findRunByRequest_(x[0])) { sh.getRange(i + 2, 9).setValue('생성됨'); return; }
       const dateIso = Utilities.formatDate(new Date(x[3]), CONFIG.TIMEZONE, 'yyyy-MM-dd');
-      const desc = adjustNotice_(cfg.desc, JSON.parse(x[7]), cfg.slot2);
+      const desc = adjustNotice_(stripNames_(cfg.desc), JSON.parse(x[7]), cfg.slot2);   // 예전에 저장한 틀에 이름이 남아 있어도 빼고
       const res = createRunInner_({
         k: CONFIG.KEY, n: x[0], title: x[5], room: x[4], fname: x[4], camp: cfg.camp, day: k, total: cfg.total,
         daily: String(x[6]), date: dateIso, desc: desc, type: cfg.type, takdae: cfg.takdae, realship: cfg.realship,
