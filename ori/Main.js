@@ -55,6 +55,13 @@ function report_(name, ok) {
   const when = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'M/d HH:mm');
   const took = globalThis.__ORI_T0 ? ' (' + Math.round((Date.now() - globalThis.__ORI_T0) / 1000) + '초)' : '';
   globalThis.__ORI_T0 = 0;
+  // 다른 작업(보통 15분 자동 확인)이 돌고 있어서 건너뛴 경우: 오류가 아님. 한눈에 칸은 안 건드림(돌고 있는 확인의 ⏳ 표시가 남게)
+  //  메뉴로 눌렀을 때만 창으로 알림 (10/19 '다른 작업 중이라 건너뜀'이 빨간 글씨로 계속 떠서 헷갈렸음)
+  if (ok === false && !notes.length) {
+    try { SpreadsheetApp.getUi().alert('지금 15분 자동 확인이 돌고 있어서 이번엔 건너뛰었어요 (오류 아님).\n\n한눈에 탭 Q1의 ⏳가 ✔로 바뀌면 끝난 거예요. 그 확인이 같은 일을 하니 다시 누르지 않아도 돼요.'); } catch (e) {}
+    globalThis.__ORI_STEPS = [];
+    return;
+  }
   const head = ok === false ? '⚠ ' + when + ' ' + name + ': 다른 작업 중이라 건너뜀' : (notes.length ? '⚠ ' + when + ' ' + name + ' 문제 ' + notes.length + '건' + took + ' ↓' : '✔ ' + when + ' ' + name + ' 정상' + took);
   const lines = notes.map(function (x) { return '⚠ ' + x; }).concat(done.map(function (x) { return '· ' + x.replace(/^✓\s*/, ''); }));
   // 단계별 걸린 시간 (오래 걸린 것만, 느린 원인 찾기용)
