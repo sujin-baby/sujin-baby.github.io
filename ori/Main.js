@@ -4467,7 +4467,12 @@ function payTab_(month, noCreate) {
   const ss = SpreadsheetApp.openById(CONFIG.PAY_SHEET_ID);
   // 같은 달 이름 탭이 여럿이면(작년 1월 탭 등) 날짜 칸의 연도가 맞는 탭
   const want = payYear_(month);
-  const byName = ss.getSheets().filter(function (s) { if (!new RegExp('(^|\\D)' + month + '월').test(s.getName())) return false; const y = tabYear_(s); return y === null || y === want; })[0];
+  //  탭 이름에 'N월'이 없으면(예: 오리방) 머리글 위 날짜 칸의 달로 봄
+  const byName = ss.getSheets().filter(function (s) {
+    if (new RegExp('(^|\\D)' + month + '월').test(s.getName())) { const y = tabYear_(s); return y === null || y === want; }
+    if (/(^|\D)\d{1,2}월/.test(s.getName())) return false;
+    const ym = tabYM_(s); return !!ym && ym.m === month && ym.y === want;
+  })[0];
   if (byName) return byName;
   // 이번 달·다음 달 탭이 없으면 지난달 탭을 복사해서 새로 만듦 (사용자 요청 10/18). 다른 달 진행이 엉뚱한 탭에 들어가지 않게
   const cur = new Date().getMonth() + 1;
@@ -4481,7 +4486,9 @@ function payTab_(month, noCreate) {
 //  (1월에 보는 12월 탭은 작년)
 function payYear_(month) { const now = new Date(), cur = now.getMonth() + 1; return now.getFullYear() + (month < cur - 6 ? 1 : month > cur + 6 ? -1 : 0); }
 // 탭의 연도: 머리글 위쪽 날짜 칸에서 처음 나오는 날짜의 연도 (없으면 null)
-function tabYear_(sh) {
+function tabYear_(sh) { const ym = tabYM_(sh); return ym ? ym.y : null; }
+// 탭의 연·월: 머리글 위쪽 날짜 칸에서 처음 나오는 날짜 (없으면 null)
+function tabYM_(sh) {
   const memo = globalThis.__TABYEAR = globalThis.__TABYEAR || {};
   if (memo[sh.getSheetId()] !== undefined) return memo[sh.getSheetId()];
   let y = null;
@@ -4490,7 +4497,9 @@ function tabYear_(sh) {
     // 진행일 칸(줄마다 날짜)은 빼고 머리글 위 날짜 칸만
     let skip = -1;
     v.forEach(function (row) { row.forEach(function (x, c) { if (/^진행일(자)?$/.test(String(x).replace(/\s/g, ''))) skip = c; }); });
-    v.some(function (row) { return row.some(function (x, c) { if (c !== skip && x instanceof Date) { y = x.getFullYear(); return true; } return false; }); });
+    v.some(function (row) { return row.some(function (x, c) { if (c !== skip && x instanceof Date) { y = { y: x.getFullYear(), m: x.getMonth() + 1 }; return true; } return false; }); });
+    // 날짜가 글자(10월 01일)로 적힌 탭: 연도는 지금 기준
+    if (!y) v.some(function (row) { return row.some(function (x, c) { const m = c !== skip && String(x).trim().match(/^(\d{1,2})\s*월\s*\d{1,2}\s*일/); if (m && Number(m[1]) >= 1 && Number(m[1]) <= 12) { y = { y: payYear_(Number(m[1])), m: Number(m[1]) }; return true; } return false; }); });
   } catch (e) {}
   return (memo[sh.getSheetId()] = y);
 }
@@ -4499,9 +4508,14 @@ function tabYear_(sh) {
 function newMonthTab_(ss, month) {
   const prevM = (month + 10) % 12 + 1;
   const src = payTab_(prevM, true);
-  if (!src || !new RegExp('(^|\\D)' + prevM + '월').test(src.getName())) return null;
+  if (!src) return null;
+  // 이름에 'N월'이 없는 탭은 머리글 날짜가 지난달일 때만 복사 (이번 달 탭을 이번 달로 또 복사하지 않게)
+  if (!new RegExp('(^|\\D)' + prevM + '월').test(src.getName())) { const ym = tabYM_(src); if (!ym || ym.m !== prevM) return null; }
   const year = payYear_(month);
-  let name = src.getName().replace(new RegExp('(^|\\D)' + prevM + '월'), function (m, a) { return a + month + '월'; });
+  // 지난달 탭 이름에 'N월'이 있으면 그 자리만 바꾸고, 없으면(예: 시트1) 'M월'
+  let name = new RegExp('(^|\\D)' + prevM + '월').test(src.getName())
+    ? src.getName().replace(new RegExp('(^|\\D)' + prevM + '월'), function (m, a) { return a + month + '월'; })
+    : month + '월';
   if (month === 1) name = name.replace(/20\d{2}/, function (y) { return String(Number(y) + 1); });
   // 같은 이름 탭(작년 것)이 있으면 연도를 앞에 붙임: 2027년 1월
   if (ss.getSheets().some(function (x) { return x.getName() === name; })) name = year + '년 ' + name;
@@ -4577,6 +4591,15 @@ function payCarry_(all, month) {
     }
     t = read();
   });
+}
+
+// 이번 달 탭(이름에 'N월'이 없어도 지금 쓰는 탭) + 이미 만들어진 다음 달 탭
+function payTabsNow_() {
+  const m1 = new Date().getMonth() + 1, m2 = m1 % 12 + 1, out = [];
+  const t1 = payTab_(m1, true), t2 = payTab_(m2, true);
+  if (t1) out.push(t1);
+  if (t2 && (!t1 || t2.getSheetId() !== t1.getSheetId()) && new RegExp('(^|\\D)' + m2 + '월').test(t2.getName())) out.push(t2);
+  return out;
 }
 
 // 스토어 왼쪽에 '진행일' 칸을 끼움 (오른쪽 칸 수식은 구글 시트가 알아서 따라 바뀜). 서식은 스토어 칸 것을 그대로
@@ -4686,7 +4709,7 @@ function updatePay_() {
   const all = readRuns_().filter(function (r) { return r['시트ID'] && r['진행일'] instanceof Date; });
   const runs = all.filter(function (r) { return r['진행 상태'] !== '종료'; });
   // 스토어 왼쪽에 '진행일' 칸 (사용자 요청 10/19). 탭마다 한 번 (있으면 그대로)
-  try { const m1 = new Date().getMonth() + 1; [m1, m1 % 12 + 1].forEach(function (mo) { const t = payTab_(mo, true); if (t && new RegExp('(^|\\D)' + mo + '월').test(t.getName())) payDateCol_(t); }); } catch (e) { note_('월급시트 진행일 칸 만들기 실패: ' + e); }
+  try { payTabsNow_().forEach(payDateCol_); } catch (e) { note_('월급시트 진행일 칸 만들기 실패: ' + e); }
   const nameOf = function (r) { return String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, '').trim(); };
   // 같은 캠페인 묶기: 캠페인 칸, 없으면 방제에서 #, 택, 날짜, 건수, 띄어쓰기를 뺀 이름이 앞부분까지 같으면 같은 캠페인
   const keyOf = function (r) { return String(r['캠페인'] || nameOf(r)).replace(/^[#업택\s]+\d{1,2}\.\d{1,2}/, '').replace(/\d+\s*$/, '').replace(/\s+/g, ''); };
@@ -4716,7 +4739,7 @@ function updatePay_() {
   });
   try { payStatusAll_(all); } catch (e) { note_('월급시트 상태 잇기 실패: ' + e); }
   // 진행일 칸 채우고 진행일 순서로 줄 정렬 (이번 달, 있으면 다음 달 탭)
-  try { const m1 = new Date().getMonth() + 1; [m1, m1 % 12 + 1].forEach(function (mo) { const t = payTab_(mo, true); if (t && new RegExp('(^|\\D)' + mo + '월').test(t.getName())) payOrder_(t); }); } catch (e) { note_('월급시트 날짜순 정렬 실패: ' + e); }
+  try { payTabsNow_().forEach(payOrder_); } catch (e) { note_('월급시트 날짜순 정렬 실패: ' + e); }
   try { payRate_(); } catch (e) { note_('월급시트 진행비 500원 바꾸기 실패: ' + e); }
   // 이번 달 탭(없으면 만듦)과 이미 있는 다음 달 탭에 안 끝난 캠페인 이월 줄
   try { const m0 = new Date().getMonth() + 1; payTab_(m0); payCarry_(all, m0); payCarry_(all, m0 % 12 + 1); } catch (e) { note_('월급시트 이월 실패: ' + e); }
