@@ -1214,6 +1214,48 @@ function rawFor_(ss, formId) {
 }
 
 // 폼 응답 탭의 질문 머리글 (빈칸이나 예전 도우미 칸 전까지)
+// 폼 응답에 '방에 참여한 카카오톡 닉네임'이 빈 줄 → 배정과 비교가 안 돼 '아직'·'닉네임 확인'으로 나옴 (10/19 김설하·김동욱)
+//  ① 닉네임 칸이 둘(폼 질문을 지우고 다시 만든 경우)이면 다른 칸 값 ② 이름·쿠팡닉네임이 그 진행 배정 이름과 같으면 그 이름
+//  ③ 아니면 바로 앞 응답(10분 안)의 닉네임, 그 사람이 계정수만큼 아직 안 샀을 때만 (두 계정으로 연달아 산 경우)
+//  응답 탭 빈칸에만 쓰고 메모를 남김. 넣은 값이 틀리면 그 칸을 고치면 됨 (다시 안 덮어씀)
+function fillBlankNicks_(r, w) {
+  const sh = assignSheet_(), al = sh.getLastRow();
+  if (al < 2) return '';
+  const norm = function (x) { return String(x == null ? '' : x).replace(/\s+/g, '').toLowerCase(); };
+  const quota = {}, title = String(r['명단 제목']);
+  sh.getRange(2, 1, al - 1, 4).getValues().forEach(function (v) { if (String(v[0]) === title && norm(v[1])) quota[norm(v[1])] = { name: String(v[1]).trim(), n: (quota[norm(v[1])] ? quota[norm(v[1])].n : 0) + (v[3] === '' ? 1 : Number(v[3]) || 0) }; });
+  if (!Object.keys(quota).length) return '';
+  const ss = SpreadsheetApp.openById(r['시트ID']), out = [];
+  ss.getSheets().filter(function (t) { return !!t.getFormUrl(); }).forEach(function (t) {
+    const last = t.getLastRow();
+    if (last < 2) return;
+    const head = headers_(t).map(hk_);
+    const nks = [], names = [];
+    head.forEach(function (h, i) { if (MATCH.nick.test(h)) nks.push(i); else if (/^이름$|성함|수취인|쿠팡\s*닉네임|후기에\s*노출/.test(h)) names.push(i); });
+    if (!nks.length) return;
+    const v = t.getRange(2, 1, last - 1, head.length).getValues(), used = {};
+    let prev = null;
+    v.forEach(function (row, i) {
+      if (!(row[0] instanceof Date) || row[0].getTime() < w.from || row[0].getTime() >= w.to) return;
+      let nk = norm(row[nks[0]]), why = '';
+      if (!nk) {
+        const other = nks.slice(1).map(function (c) { return String(row[c]).trim(); }).filter(Boolean)[0];
+        const byName = names.map(function (c) { return norm(row[c]); }).filter(function (x) { return quota[x]; })[0];
+        if (other) { nk = norm(other); why = '다른 닉네임 칸 값'; }
+        else if (byName) { nk = byName; why = '이름이 배정 이름과 같음'; }
+        else if (prev && row[0].getTime() - prev.t <= 600000 && quota[prev.nk] && (used[prev.nk] || 0) < quota[prev.nk].n) { nk = prev.nk; why = '바로 앞 응답(' + quota[prev.nk].name + ')의 두 번째 계정으로 봄'; }
+        if (nk) {
+          const val = quota[nk] ? quota[nk].name : other;
+          t.getRange(i + 2, nks[0] + 1).setValue(val).setNote('카톡 닉네임을 비워서 자동으로 넣음: ' + why + '. 틀리면 고쳐 주세요');
+          out.push(String(row[names[0]] || '').trim() + '→' + val);
+        }
+      }
+      if (nk) { used[nk] = (used[nk] || 0) + 1; prev = { nk: nk, t: row[0].getTime() }; }
+    });
+  });
+  return out.join(', ');
+}
+
 function rawHead_(raw) {
   const all = headers_(raw);
   let n = 0;
@@ -2083,6 +2125,7 @@ function checkFullInner_() {
   try { fixNamesOnce_(); } catch (e) { note_('공지 이름 정리 실패: ' + e); }
   try { fixTaOnce_(); } catch (e) { note_('배정 (타) 정리 실패: ' + e); }
   try { fixGogumaAssignOnce_(); } catch (e) { note_('고구마말랭이 배정 옮기기 실패: ' + e); }
+  try { fixGoguma1019Once_(); } catch (e) { note_('10.19 고구마말랭이 배정 이름 고치기 실패: ' + e); }
   try { reloadEditTabOnce_(); } catch (e) { note_('폼수정 탭 다시 불러오기 실패: ' + e); }
   try { fixModuAssignOnce_(); } catch (e) { note_('모두의농수산 배정 옮기기 실패: ' + e); }
   try { fixTemplateOnce_(); } catch (e) { note_('템플릿 폼 질문 고치기 실패: ' + e); }
@@ -2168,6 +2211,7 @@ function checkFullInner_() {
     try { const why = relinkIfMissing_(r, form); if (why) { errs[r['명단 제목']] = why; note_('✓ ' + bareTitle_(r['명단 제목']) + ': ' + why); } } catch (e) { errs[r['명단 제목']] = '응답 연결 확인 실패: ' + e.message; }
     const n = runCount_(runs, r, times[tk]);
     if (Number(r['인원']) !== n) setRun_(r.row, '인원', n);
+    try { const fb = fillBlankNicks_(r, w); if (fb) note_('✓ ' + bareTitle_(r['명단 제목']) + ' 카톡 닉네임 빈칸 채움: ' + fb); } catch (e) { note_('닉네임 빈칸 채우기 실패: ' + e.message); }
     // 진단: 폼 응답 수 / 명단 시트 응답 탭 수 / 명단 탭에 보이는 수 (그날 몫)가 다르면 한눈에 '확인 필요' 칸에 적음
     if (!errs[r['명단 제목']] && n > 0) {
       try {
@@ -3073,6 +3117,18 @@ function fixGogumaAssignOnce_() {
   const v = last >= 2 ? sh.getRange(2, 1, last - 1, 2).getValues() : [];
   const has = function (r) { return v.some(function (x) { return String(x[0]) === String(r['명단 제목']) && String(x[1]).trim(); }); };
   if (has(r14) && !has(r16)) note_('✓ ' + moveAssign_(r14, r16));
+}
+
+// (한 번만, 10/19) 10.19 고구마말랭이 배정의 '이진선'은 실제로 이정환 (사용자 확인: 김설하2 김유미2 이문금2 김미경2 이혜영 이정환)
+function fixGoguma1019Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FIX_GOGUMA_1019_V1')) return;
+  props.setProperty('FIX_GOGUMA_1019_V1', '1');
+  const sh = assignSheet_(), last = sh.getLastRow();
+  if (last < 2) return;
+  sh.getRange(2, 1, last - 1, 2).getValues().forEach(function (v, i) {
+    if (dateTok_(v[0]) === '10.19' && /고구마말랭이/.test(String(v[0])) && String(v[1]).trim() === '이진선') { sh.getRange(i + 2, 2).setValue('이정환'); note_('✓ 10.19 고구마말랭이 배정: 이진선 → 이정환'); }
+  });
 }
 
 // (한 번만, 10/15) 10.16 모두의농수산 공지(김민재, 김동환, 강지연)가 10.14 진행에 저장된 것을 10.16으로
