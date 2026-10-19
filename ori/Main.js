@@ -4188,6 +4188,7 @@ function fixStyleOnce_() {
     // 폼 옵션 질문이 '단일옵션' 하나뿐인데 공지 옵션이 여러 개면 옵션별로 나눔 (옵션 나누기 전에 만든 폼)
     try {
       const fo = FormApp.openById(r['폼ID']);
+      try { fixReviewOptions_(fo, r); } catch (e) { note_(room + ' 폼 옵션 되돌리기 실패: ' + e.message); }
       if (formChoices_(fo).length <= 1) {
         const labs = optionLabels_(mine.length ? String(mine[0].v[4]) : (fo.getDescription() || ''));
         if (labs.length >= 2) { setOptionChoices_(fo, labs.join('\n')); note_('✓ ' + room + ' 폼 옵션 ' + labs.length + '개로 나눔'); }
@@ -4213,10 +4214,47 @@ function fixStyleOnce_() {
 }
 
 // 공지에서 옵션 보기 목록 (가이드 여럿이면 상품 이름 붙임, 옵션마다 가격이 다르면 '(17,200원)') — 옵션 줄 'X (N명)', 'X N명', 'X (  명)'
+const REVIEW_OPT_RE = /리뷰|별점|포토|한줄|텍스트/;
+// 폼 옵션 보기가 리뷰 종류(별점·텍스트리뷰)로 잘못 바뀐 폼: 응답에 남은 진짜 옵션(예: 2.5kg 1건 (30,900원))으로 되돌리고,
+//  진짜 옵션이 하나뿐이면 리뷰 종류로 들어온 응답의 옵션 칸(응답 탭·명단 탭)도 그 옵션으로 고침 (택배시트에 옵션이 맞게)
+function fixReviewOptions_(form, r) {
+  const ch = formChoices_(form);
+  if (!ch.length || !ch.every(function (c) { return REVIEW_OPT_RE.test(c); })) return;
+  const ss = SpreadsheetApp.openById(r['시트ID']), cnt = {}, fixCells = [];
+  ss.getSheets().filter(function (t) { return !!t.getFormUrl(); }).forEach(function (t) {
+    const head = headers_(t).map(hk_), c = head.findIndex(function (h) { return MATCH.opt.test(h) && !MATCH.nick.test(h); });
+    if (c < 0 || t.getLastRow() < 2) return;
+    t.getRange(2, c + 1, t.getLastRow() - 1, 1).getValues().forEach(function (v, i) {
+      const x = String(v[0]).trim();
+      if (!x) return;
+      if (REVIEW_OPT_RE.test(x)) fixCells.push({ t: t, row: i + 2, col: c + 1 }); else cnt[x] = (cnt[x] || 0) + 1;
+    });
+  });
+  const real = Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a]; });
+  if (!real.length) { note_(bareTitle_(r['명단 제목']) + ': 폼 옵션이 리뷰 종류(' + ch.join(', ') + ')로 되어 있어요. 진짜 옵션을 몰라서 못 고침 → 폼에서 옵션 보기를 직접 고쳐 주세요'); return; }
+  setOptionChoices_(form, real.join('\n'));
+  note_('✓ ' + bareTitle_(r['명단 제목']) + ' 폼 옵션을 리뷰 종류(' + ch.join(', ') + ')에서 ' + real.join(', ') + '(으)로 되돌림');
+  if (real.length !== 1 || !fixCells.length) return;
+  fixCells.forEach(function (x) { x.t.getRange(x.row, x.col).setValue(real[0]).setNote('폼 옵션이 리뷰 종류로 잘못 바뀌어 있던 때 낸 응답이라 옵션을 ' + real[0] + '(으)로 고침 (10/20)'); });
+  // 명단 탭(값)도
+  const sh = ss.getSheetByName(LIST_TAB);
+  if (sh && sh.getLastRow() >= 3) {
+    const hdr = sh.getRange(2, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(hk_), oc = hdr.findIndex(function (h) { return MATCH.opt.test(h) && !MATCH.nick.test(h); });
+    if (oc >= 0) {
+      const rg = sh.getRange(3, oc + 1, sh.getLastRow() - 2, 1), v = rg.getValues();
+      let n = 0;
+      v.forEach(function (x) { if (REVIEW_OPT_RE.test(String(x[0]))) { x[0] = real[0]; n++; } });
+      if (n) rg.setValues(v);
+    }
+  }
+  note_('✓ ' + bareTitle_(r['명단 제목']) + ': 리뷰 종류로 들어온 응답 ' + fixCells.length + '개의 옵션을 ' + real[0] + '(으)로 고침');
+}
+
 function optionLabels_(text) {
   // 공지 읽기(parseAssign_)를 그대로 쓰려고 옵션 줄 끝에 가짜 이름을 붙여서 읽음
   const t = String(text || '').split('\n').map(function (l) { return /(\(\s*\d*\s*명\s*\)|\d+\s*명)/.test(l) && !/가격|★|http/.test(l) ? l + ' 가' : l; }).join('\n');
-  const out = [], xs = parseAssign_(t, []).filter(function (x) { return x[1]; });
+  // 리뷰 배정 줄(텍스트리뷰 (3명) / 별점 (2명))은 상품 옵션이 아님 (10/20 감홍사과 폼 옵션이 별점·텍스트리뷰로 바뀐 원인)
+  const out = [], xs = parseAssign_(t, []).filter(function (x) { return x[1] && !REVIEW_OPT_RE.test(x[1]); });
   // 옵션 가격이 다 같으면 가격은 빼고 옵션(색상 등)만 (사용자 요청 10/18)
   const same = xs.every(function (x) { return x[4] === xs[0][4]; });
   xs.forEach(function (x) {
@@ -4226,7 +4264,6 @@ function optionLabels_(text) {
   return out;
 }
 
-// 공지 끝(가이드마다 맨 아래)에 이름만 적은 줄 지우기 (예: '정진아 이혜미2 신선영 / 이강희2 임수진') → 새로 모집하는 공지에 어제 사람이 안 들어가게
 // (한 번, 10/20) 예전에 저장한 다음 일차 공지 틀에 1일차 살 사람 이름이 남아서 2일차+ 방 공지(보낼메시지 대기)에 전날 이름이 뜸
 //  → 그 진행에 배정(이름)이 따로 없으면 대기 중인 방 공지와 (그 폼을 마지막으로 쓰는 진행이면) 폼 설명에서 이름을 뺌
 function fixStaleNamesOnce_(runs) {
@@ -4268,6 +4305,7 @@ function isNamesLine_(l) {
   const toks = t.split(/[\s,]+/).filter(Boolean);
   return toks.length <= 12 && toks.every(function (x) { return nameTok.test(x) || /^[2-9]$/.test(x) || /^[^\s]+\(\s*취소\s*\)$/.test(x); });
 }
+// 공지 끝(가이드마다 맨 아래)에 이름만 적은 줄 지우기 (예: '정진아 이혜미2 신선영 / 이강희2 임수진') → 새로 모집하는 공지에 어제 사람이 안 들어가게
 function stripTrailingNames_(text) {
   const nameTok = /^@?[A-Za-z가-힣][^\s\d:!?~]{0,11}\d?$/;
   const isNames = function (l) {
