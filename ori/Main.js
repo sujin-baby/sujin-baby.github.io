@@ -3033,6 +3033,18 @@ function toolAction_(d) {
   const list = runs.filter(function (r) { return r['진행 상태'] !== '종료' && r['폼ID'] && r['시트ID']; })
     .sort(function (a, b) { return (b['진행일'] || 0) - (a['진행일'] || 0); });
   const out = { runs: list.map(function (r) { return { title: String(r['명단 제목']), label: bareTitle_(r['명단 제목']) + '  (' + (Number(r['인원']) || 0) + '/' + (r['목표인원'] || '?') + '명)' }; }) };
+  // 휴대폰에서 한눈에 탭 대신 보는 현황 (한눈에 탭은 명단 시트 20여 개를 실시간으로 불러와서 휴대폰 앱에서 잘 안 뜸, 10/20)
+  try {
+    const t0 = today_().getTime(), md = function (x) { return (x.getMonth() + 1) + '/' + x.getDate(); };
+    const st = runs.filter(function (r) { return r['진행 상태'] !== '종료' && r['진행일'] instanceof Date; });
+    const grp = function (r) { const t = dayStart_(r['진행일']); return t === t0 ? 0 : t > t0 ? 1 : 2; };
+    st.sort(function (a, b) { return grp(a) - grp(b) || (grp(a) === 2 ? b['진행일'] - a['진행일'] : a['진행일'] - b['진행일']); });
+    out.status = st.slice(0, 40).map(function (r) {
+      const got = Number(r['인원']) || 0, goal = Number(r['목표인원']) || 0;
+      return { d: md(r['진행일']), t: bareTitle_(r['명단 제목']), got: got, goal: goal, g: grp(r), done: r['마감 시각'] instanceof Date, real: r['실배송'] === 'Y' };
+    });
+    out.last = String(PropertiesService.getScriptProperties().getProperty('LAST_REPORT') || '');
+  } catch (e) { out.status = []; }
   if (d.act === 'sent' && d.id) markMsg_(String(d.id), '보냄');
   try { out.outbox = outboxItems_().filter(function (x) { return x.st === '대기'; }).slice(0, 15); } catch (e) { out.outbox = []; }
   let r = list.filter(function (x) { return String(x['명단 제목']) === String(d.title || ''); })[0];
@@ -3394,6 +3406,9 @@ const TOOLS_HTML = String.raw`
 </style>
 <h1>진행 도우미</h1>
 <div class="msg" id="msg"></div>
+<div class="card"><h2>현황 (한눈에 탭 요약)</h2>
+  <p class="hint" id="statlast">15분마다 자동 확인이 인원을 셉니다.</p>
+  <div id="stat"></div></div>
 <div class="card" id="altcard" style="display:none;border-color:#e0b4b4"><h2 style="color:#a3271b">날짜가 틀렸으면 눌러서 옮기기</h2>
   <p class="hint">방금 저장한 이름들을 아래 날짜 진행으로 옮겨요. (다시 붙여넣을 필요 없음)</p>
   <div id="alts"></div></div>
@@ -3505,6 +3520,21 @@ function show(o) {
     b.onclick = function () { twice(b, a.label + ' 로 옮겨요', function () { go({ act: 'move', title: o.title, to: a.title }, '옮기는 중…'); }); };
     ab.appendChild(b);
   });
+  if (o.status) {
+    var sb = $('stat'); sb.innerHTML = '';
+    if (o.last) $('statlast').textContent = '마지막 확인: ' + o.last;
+    var heads = ['오늘', '앞으로', '지난 진행'], lastG = -1;
+    o.status.forEach(function (x) {
+      if (x.g !== lastG) { var h = document.createElement('div'); h.textContent = heads[x.g]; h.style.cssText = 'font-weight:700;font-size:15px;margin:10px 0 4px;color:#5b2a86'; sb.appendChild(h); lastG = x.g; }
+      var row = document.createElement('div'), left = x.goal ? x.goal - x.got : 0;
+      row.style.cssText = 'display:flex;gap:8px;padding:6px 4px;border-bottom:1px solid #eee;font-size:16px' + (x.real ? ';background:#fff2a8' : '');
+      var a = document.createElement('span'); a.textContent = x.d; a.style.cssText = 'min-width:40px;color:#676274';
+      var b = document.createElement('span'); b.textContent = x.t; b.style.cssText = 'flex:1';
+      var c = document.createElement('span'); c.textContent = x.done ? '마감 ' + x.got + '/' + x.goal : x.got + '/' + x.goal + (left > 0 ? ' (남은 ' + left + ')' : '');
+      c.style.cssText = 'white-space:nowrap;font-weight:700;color:' + (x.done ? '#2f7a2f' : left > 0 && x.g === 0 ? '#d00000' : '#333');
+      row.appendChild(a); row.appendChild(b); row.appendChild(c); sb.appendChild(row);
+    });
+  }
   var sel = $('run'); sel.innerHTML = '<option value="">자동으로 찾기 (모르면 이대로)</option>';
   (o.runs || []).forEach(function (r) { var op = document.createElement('option'); op.value = r.title; op.textContent = r.label; sel.appendChild(op); });
   if (o.title) sel.value = o.title;
