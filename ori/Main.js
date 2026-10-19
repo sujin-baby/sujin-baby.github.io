@@ -3804,8 +3804,10 @@ function ensureSubmitTriggers_(runs) {
 
 // 폼이 제출되면: 그 폼 진행들의 인원 → 월급시트, 한눈에 탭. 다 찼으면 마감 확인까지
 function onRunSubmit_(e) {
-  // 다른 작업 중이면 20초 기다리고, 그래도 바쁘면 15분 확인이 이어서 함
-  return locked_(function () {
+  // 다른 작업 중이면 20초 기다리고, 그래도 바쁘면 1분 뒤 확인이 이어서 함
+  let ran = false;
+  const out = locked_(function () {
+    ran = true;
     const formId = e.source.getId();
     const runs = readRuns_();
     const ft = e.source.getResponses().map(function (x) { return x.getTimestamp().getTime(); });
@@ -3822,11 +3824,15 @@ function onRunSubmit_(e) {
       if (Number(r['인원']) !== n) setRun_(r.row, '인원', n);
       if (r['목표인원'] && !r['마감 시각'] && n >= Number(r['목표인원'])) full = true;
     });
+    // 명단 탭(값)에 새 응답 줄을 바로 (15분 기다리지 않게, 사용자 요청 10/20). 몇 초면 됨
+    Object.keys(sids).forEach(function (sid) { try { syncList_(SpreadsheetApp.openById(sid)); } catch (err) {} });
     // 월급시트·한눈에 탭은 오래 걸려서(합쳐 몇 분) 응답마다 하면 6분 제한에 걸려 한눈에 탭이 비워진 채 멈출 수 있음 (10/20)
     //  → 1분 뒤 자동 확인 한 번이 둘 다 갱신 (응답이 몰려도 한 번만)
     try { soonCheck_(); } catch (err) {}
     if (full) checkFull();
   }, 20000);
+  if (!ran) { try { soonCheck_(); } catch (err) {} }
+  return out;
 }
 
 function editRun_(sh) {
