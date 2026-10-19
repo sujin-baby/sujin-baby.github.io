@@ -445,9 +445,13 @@ function hk_(h) { return String(h == null ? '' : h).replace(/\s+/g, ' ').trim();
 
 // (한 번) 값 명단 탭 고치기: ① 같은 머리글이 또 생긴 빈 칸 지우기 ② 이미 넣은 줄의 빈칸을 응답 값으로 채우기(있는 값은 안 건드림)
 //  ③ 예전 수식 명단 때 걸어 둔 열 숨김(계좌 칸 묶음)이 엉뚱한 칸을 숨기고 있어서 풀고 다 보이게
-function repairList_(sh, rows) {
-  try { for (let c = 1; c <= sh.getMaxColumns(); c++) while (sh.getColumnGroupDepth(c) > 0) sh.getRange(1, c).getEntireColumn().shiftColumnGroupDepth(-1); } catch (e) {}
+function showAllCols_(sh) {
+  try { sh.expandAllColumnGroups(); } catch (e) {}
+  try { for (let c = 1; c <= sh.getMaxColumns(); c++) { let n = 0; while (sh.getColumnGroupDepth(c) > 0 && n++ < 5) sh.getRange(1, c).getEntireColumn().shiftColumnGroupDepth(-1); } } catch (e) {}
   sh.showColumns(1, sh.getMaxColumns());
+}
+function repairList_(sh, rows) {
+  showAllCols_(sh);
   const lr = sh.getLastRow();
   let lc = Math.max(sh.getLastColumn(), 1), hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_);
   for (let j = hdr.length - 1; j >= 0; j--) {
@@ -505,6 +509,8 @@ function syncList_(ss) {
   const real = !!props.getProperty('LISTREAL_' + id);
   // (10/19 한 번) 머리글 끝 띄어쓰기·줄바꿈 때문에 전화번호·옵션·결제금액·계좌번호 등이 빈칸으로 들어가고 오른쪽에 같은 이름 칸이 또 생긴 것 고치기
   if (!props.getProperty('LISTFIX1_' + id)) { props.setProperty('LISTFIX1_' + id, '1'); try { repairList_(sh, rows); } catch (e) { note_('명단 탭 고치기 실패: ' + e); } }
+  // (10/19 한 번 더) 은행·계좌번호·예금주가 접힌 칸(+ 단추)으로 숨어 있던 것 펼치고 묶음 풀기
+  if (!props.getProperty('LISTFIX2_' + id)) { props.setProperty('LISTFIX2_' + id, '1'); try { showAllCols_(sh); repairList_(sh, rows); } catch (e) { note_('명단 탭 칸 펼치기 실패: ' + e); } }
   // (10/19 한 번) 실배송이면 응답 줄 전부 노란색 (날짜별 색 대신)
   if (real && !props.getProperty('LISTYEL_' + id)) {
     props.setProperty('LISTYEL_' + id, '1');
@@ -1459,13 +1465,7 @@ function formatResponseSheet_(ss, opts) {
 
   sh.setConditionalFormatRules([]);
 
-  // 계좌, 예금주 열 숨기기 (실배송이면 리뷰비 열도)
-  const hide = [];
-  head.forEach(function (h, i) {
-    if (MATCH.account.test(h)) hide.push(i + 1);
-    if (opts.realship && MATCH.reviewFee.test(h)) hide.push(i + 1);
-  });
-  groupColumns_(sh, hide);
+  // (10/19) 은행·계좌번호·예금주 칸도 숨기지 않음 (사용자: 명단 시트에 다 보여야 함)
 
   if (opts.realship) sh.setTabColor('#f4d03f');
 
