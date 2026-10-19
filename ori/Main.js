@@ -509,8 +509,15 @@ function syncList_(ss) {
   const real = !!props.getProperty('LISTREAL_' + id);
   // (10/19 한 번) 머리글 끝 띄어쓰기·줄바꿈 때문에 전화번호·옵션·결제금액·계좌번호 등이 빈칸으로 들어가고 오른쪽에 같은 이름 칸이 또 생긴 것 고치기
   if (!props.getProperty('LISTFIX1_' + id)) { props.setProperty('LISTFIX1_' + id, '1'); try { repairList_(sh, rows); } catch (e) { note_('명단 탭 고치기 실패: ' + e); } }
-  // (10/19 한 번 더) 은행·계좌번호·예금주가 접힌 칸(+ 단추)으로 숨어 있던 것 펼치고 묶음 풀기
-  if (!props.getProperty('LISTFIX2_' + id)) { props.setProperty('LISTFIX2_' + id, '1'); try { showAllCols_(sh); repairList_(sh, rows); } catch (e) { note_('명단 탭 칸 펼치기 실패: ' + e); } }
+  // 은행·계좌번호·예금주 칸은 접어서 숨김(+ 단추로 펼침). 고치기(repairList_)가 묶음을 풀었으면 다시 접음. 한 번만 (사용자가 펼쳐 두면 그대로)
+  if (!props.getProperty('LISTHIDE_' + id)) {
+    props.setProperty('LISTHIDE_' + id, '1');
+    try {
+      const h1 = sh.getRange(2, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(hk_), cols = [];
+      h1.forEach(function (h, i) { if (MATCH.account.test(h) || (real && MATCH.reviewFee.test(h))) cols.push(i + 1); });
+      groupColumns_(sh, cols);
+    } catch (e) { note_('명단 탭 계좌 칸 숨기기 실패: ' + e); }
+  }
   // (10/19 한 번) 실배송이면 응답 줄 전부 노란색 (날짜별 색 대신)
   if (real && !props.getProperty('LISTYEL_' + id)) {
     props.setProperty('LISTYEL_' + id, '1');
@@ -1465,7 +1472,13 @@ function formatResponseSheet_(ss, opts) {
 
   sh.setConditionalFormatRules([]);
 
-  // (10/19) 은행·계좌번호·예금주 칸도 숨기지 않음 (사용자: 명단 시트에 다 보여야 함)
+  // 계좌, 예금주 열 숨기기(접힌 묶음, + 단추로 펼침). 실배송이면 리뷰비 열도 (10/19 사용자 재확인: 입금대행은 숨김이 맞음)
+  const hide = [];
+  head.forEach(function (h, i) {
+    if (MATCH.account.test(h)) hide.push(i + 1);
+    if (opts.realship && MATCH.reviewFee.test(h)) hide.push(i + 1);
+  });
+  groupColumns_(sh, hide);
 
   if (opts.realship) sh.setTabColor('#f4d03f');
 
