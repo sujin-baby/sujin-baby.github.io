@@ -26,9 +26,9 @@
 // 응답 시트 헤더에서 찾는 이름들 (폼 질문 제목에 이 말이 들어 있으면 인식)
 const MATCH = {
   order: /주문\s*번호/,
-  name: /이름|성함|주문자|예금주/,
+  name: /이름|성함|주문자|예금주|수령인|계정명/,   // 폼 질문 '이름'은 '계정명(수령인)'으로 바꿈 (사용자 요청 10/20)
   account: /계좌|예금주|은행/,
-  dup: /아이디|계정|이메일|전화|연락처|휴대폰|핸드폰|주소/,   // 한 명단 시트에서 겹치면 중복(빨간색). 이름은 동명이인이 많아서 뺌
+  dup: /아이디|계정(?!명)|이메일|전화|연락처|휴대폰|핸드폰|주소/,   // 한 명단 시트에서 겹치면 중복(빨간색). 이름은 동명이인이 많아서 뺌
   reviewFee: /리뷰비/,
   nick: /카카오\s*톡?\s*닉네임|카톡\s*닉네임/,   // '방에 참여한 카카오톡 닉네임' (옵션 확인은 이 닉네임으로)
   opt: /옵션/
@@ -541,6 +541,13 @@ function syncList_(ss) {
     if (sh.getLastRow() >= 3) sh.getRange(3, 1, sh.getLastRow() - 2, Math.max(sh.getLastColumn(), 1)).setBackground(REAL_YELLOW);
   }
   let lc = Math.max(sh.getLastColumn(), 1), hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_);
+  // 폼 질문 '이름'을 '계정명(수령인)'으로 바꾸면(10/20) 응답 탭 머리글도 바뀜 → 명단 탭 '이름' 칸 머리글을 바꿔서 그 칸에 이어 씀 (오른쪽 끝에 새 칸 안 생기게)
+  if (heads.indexOf(ACCOUNT_Q) >= 0 && hdr.indexOf(ACCOUNT_Q) === -1 && hdr.indexOf('이름') >= 0) {
+    sh.getRange(2, hdr.indexOf('이름') + 1).setValue(ACCOUNT_Q);
+    hdr[hdr.indexOf('이름')] = ACCOUNT_Q;
+  }
+  // 옛 폼(질문이 '이름') 응답도 그 칸에
+  if (hdr.indexOf(ACCOUNT_Q) >= 0 && hdr.indexOf('이름') === -1) rows.forEach(function (x) { if (Object.prototype.hasOwnProperty.call(x.o, '이름') && !Object.prototype.hasOwnProperty.call(x.o, ACCOUNT_Q)) x.o[ACCOUNT_Q] = x.o['이름']; });
   let known = []; try { known = JSON.parse(props.getProperty('LISTH_' + id) || '[]').map(hk_); } catch (e) {}
   if (!known.length) known = hdr.filter(Boolean);
   heads.filter(function (h) { return hdr.indexOf(h) === -1 && known.indexOf(h) === -1; }).forEach(function (h) {
@@ -2145,6 +2152,7 @@ function checkFullInner_() {
   try { reloadEditTabOnce_(); } catch (e) { note_('폼수정 탭 다시 불러오기 실패: ' + e); }
   try { fixModuAssignOnce_(); } catch (e) { note_('모두의농수산 배정 옮기기 실패: ' + e); }
   try { fixTemplateOnce_(); } catch (e) { note_('템플릿 폼 질문 고치기 실패: ' + e); }
+  try { fixTemplateNameOnce_(); } catch (e) { note_('템플릿 폼 이름 질문 바꾸기 실패: ' + e); }
   try { fixNoCountNamesOnce_(runs); } catch (e) { note_('이름 인원 수 빼기 실패: ' + e); }
   try { fixSilOnce_(runs); } catch (e) { note_('실 위치 바꾸기 실패: ' + e); }
   try { fixStaleNamesOnce_(runs); } catch (e) { note_('다음 일차 공지 이름 빼기 실패: ' + e); }
@@ -3234,6 +3242,14 @@ function fixTemplateOnce_() {
   const n = fixFormQuestions_(FormApp.openById(CONFIG.TEMPLATE_FORM_ID));
   if (n) note_('✓ 템플릿 폼 질문 필수/선택 ' + n + '개 고침');
 }
+// (한 번) 템플릿 폼의 '이름' 질문 → '계정명(수령인)' (앞으로 만드는 폼 전부). 오늘·앞으로 진행 폼은 15분 확인이 fixFormQuestions_로 바꿈
+function fixTemplateNameOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FIX_TEMPLATE_NAMEQ_V1') || !CONFIG.TEMPLATE_FORM_ID) return;
+  props.setProperty('FIX_TEMPLATE_NAMEQ_V1', '1');
+  fixFormQuestions_(FormApp.openById(CONFIG.TEMPLATE_FORM_ID));
+  note_('✓ 템플릿 폼 질문 이름 → ' + ACCOUNT_Q);
+}
 
 // (한 번만) 폼수정 탭을 지금 고른 진행으로 다시 불러옴 (모든 폼 응답을 보여 주게 바뀐 뒤 B1을 안 바꿔도 보이게)
 function reloadEditTabOnce_() {
@@ -4077,10 +4093,13 @@ function withSlotLine_(text, slot, fruit) {
 }
 
 // 구글폼 질문 필수/선택 (사용자 요청): 방에 참여한 카카오톡 닉네임·쿠팡닉네임 = 필수, 리뷰비 계좌 다를 시 작성 = 선택
+const ACCOUNT_Q = '계정명(수령인)';
 function fixFormQuestions_(form) {
   const T = FormApp.ItemType;
   let n = 0;
   form.getItems().forEach(function (it) {
+    // '이름' 질문 → '계정명(수령인)' (사용자 요청 10/20. 리뷰 가이드·택배시트가 이 칸을 수령인으로 씀)
+    if (String(it.getTitle() || '').trim() === '이름') { it.setTitle(ACCOUNT_Q); n++; }
     const t = String(it.getTitle() || '').replace(/\s+/g, '');
     let want = null;
     if (MATCH.nick.test(it.getTitle()) || /쿠팡닉네임/.test(t)) want = true;
@@ -5230,7 +5249,7 @@ function buildDashboard_(force) {
     const find = function (re, not) { return x.hd.findIndex(function (h) { return h && re.test(h) && !(not && not.test(h)) && !MATCH.account.test(h); }) + 1; };
     //  택대가 아니면 택배시트에 옮길 게 없으니 H~K(택배 상품)는 빼고 A~G 다음에 나머지 질문
     x.tak = x.runs.some(function (r) { return r['택대'] === 'Y'; });
-    const T = [['타임스탬프', 1], ['이름', find(MATCH.name)], ['아이디', find(/아이디|계정|이메일/)], ['전화번호', find(/전화|연락처|휴대폰|핸드폰/)],
+    const T = [['타임스탬프', 1], ['이름', find(MATCH.name)], ['아이디', find(/아이디|계정(?!명)|이메일/)], ['전화번호', find(/전화|연락처|휴대폰|핸드폰/)],
       ['주소', find(/주소/, /이메일/)], ['옵션', find(MATCH.opt, MATCH.nick)], ['결제금액', find(/결제\s*금액|금액|가격/)]]
       .concat(x.tak ? [['', 0], ['', 0], ['', 0], ['택배 상품', 'K']] : []);
     const used = T.map(function (t) { return t[1]; });
