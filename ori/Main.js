@@ -4623,16 +4623,18 @@ function payOrder_(sh) {
   const top = sh.getRange(1, 1, L.head, sh.getLastColumn()), topF = top.getFormulas();
   const cur = names.map(function (_, i) { return i; });
   let moved = 0;
-  want.forEach(function (id, p) {
+  // 줄 하나 옮길 때마다 위쪽 수식을 되돌림 (6분 제한에 걸려 중간에 멈춰도 합계가 밀린 채로 남지 않게). 시간이 모자라면 다음 확인 때 이어서
+  const restore = function () { const now = top.getFormulas(); topF.forEach(function (row, r) { row.forEach(function (f, c) { if (f && now[r][c] !== f) sh.getRange(r + 1, c + 1).setFormula(f); }); }); };
+  want.some(function (id, p) {
+    if (late_(320)) return true;
     const j = cur.indexOf(id);
-    if (j === p) return;
+    if (j === p) return false;
     sh.moveRows(sh.getRange((base + j) + ':' + (base + j)), base + p);
+    if (p === 0) restore();   // 맨 윗줄 앞에 넣을 때만 합계 범위(X5:X)가 밀림
     cur.splice(j, 1); cur.splice(p, 0, id); moved++;
+    return false;
   });
-  if (moved) {
-    const now = top.getFormulas();
-    topF.forEach(function (row, r) { row.forEach(function (f, c) { if (f && now[r][c] !== f) sh.getRange(r + 1, c + 1).setFormula(f); }); });
-  }
+  if (moved) restore();
   if (moved) note_('✓ 월급시트 ' + sh.getName() + ': 진행일 순서로 ' + moved + '줄 옮김');
 }
 
