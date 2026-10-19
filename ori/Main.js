@@ -2213,11 +2213,13 @@ function checkFullInner_() {
   try { ensureEditTab_(); } catch (e) { note_('폼수정 탭 만들기 실패: ' + e); }
 }
 
-// 명단방 형식 (사장님 예시): 시트 링크 → 빈 줄 → 명단 제목. 업체방에도
+// 명단방 형식 (사장님 예시): 시트 링크 → 빈 줄 → 명단 제목
+//  업체방(업체 명단)은 안 넣음: 아직 업체 명단방에 없어서 (사용자 요청 10/19). 다시 쓰려면 SEND_COMPANY_LIST = true
+const SEND_COMPANY_LIST = false;
 function queueListMsgs_(r, onlyWithRoom) {
   const listMsg = r['시트 링크'] + '\n\n' + r['명단 제목'];
   queueMsg_(CONFIG.ROOM_LIST, listMsg, '명단 전달');
-  if (!onlyWithRoom || String(r['업체방'] || '').trim()) queueMsg_(r['업체방'], listMsg + '\n오늘 명단입니다. 실시간 시트에서 확인 부탁드립니다!', '업체 명단');
+  if (SEND_COMPANY_LIST && (!onlyWithRoom || String(r['업체방'] || '').trim())) queueMsg_(r['업체방'], listMsg + '\n오늘 명단입니다. 실시간 시트에서 확인 부탁드립니다!', '업체 명단');
   return listMsg;
 }
 
@@ -2451,7 +2453,8 @@ function outboxSheet_() {
 
 // 보낼메시지: 최신순, 한 줄씩(메시지 칸은 잘라 보이고 시각·종류·카톡방·상태가 위로 맞춰 보이게)
 function tidyOutbox_() {
-  const sh = outboxSheet_(), last = sh.getLastRow();
+  const sh = outboxSheet_();
+  let last = sh.getLastRow();
   if (last < 2) return;
   // (10/19 한 번) A열 ID는 숨기고, B열을 '보낼 날짜'로 (예전 줄도 방 날짜로 바꿈)
   const op = PropertiesService.getScriptProperties();
@@ -2461,6 +2464,13 @@ function tidyOutbox_() {
     try { sh.hideColumns(1); } catch (e) {}
     const v = sh.getRange(2, 1, last - 1, 6).getValues();
     sh.getRange(2, 2, last - 1, 1).setValues(v.map(function (x) { return [sendDate_(x[3], x[4], x[2])]; }));
+  }
+  // 업체 명단 줄은 지움 (사용자 요청 10/19)
+  if (!SEND_COMPANY_LIST) {
+    const kinds = sh.getRange(2, 3, last - 1, 1).getValues();
+    for (let i = kinds.length - 1; i >= 0; i--) if (String(kinds[i][0]) === '업체 명단') sh.deleteRow(i + 2);
+    last = sh.getLastRow();
+    if (last < 2) return;
   }
   sortOutbox_(sh);
   sh.getRange(1, 1, last, 6).setVerticalAlignment('top').setWrap(false);
@@ -4373,7 +4383,10 @@ function tabYear_(sh) {
   let y = null;
   try {
     const v = sh.getRange(1, 1, Math.min(Math.max(sh.getLastRow(), 1), 5), Math.min(Math.max(sh.getLastColumn(), 1), 120)).getValues();
-    v.some(function (row) { return row.some(function (x) { if (x instanceof Date) { y = x.getFullYear(); return true; } return false; }); });
+    // 진행일 칸(줄마다 날짜)은 빼고 머리글 위 날짜 칸만
+    let skip = -1;
+    v.forEach(function (row) { row.forEach(function (x, c) { if (/^진행일(자)?$/.test(String(x).replace(/\s/g, ''))) skip = c; }); });
+    v.some(function (row) { return row.some(function (x, c) { if (c !== skip && x instanceof Date) { y = x.getFullYear(); return true; } return false; }); });
   } catch (e) {}
   return (memo[sh.getSheetId()] = y);
 }
@@ -4462,6 +4475,63 @@ function payCarry_(all, month) {
   });
 }
 
+// 스토어 왼쪽에 '진행일' 칸을 끼움 (오른쪽 칸 수식은 구글 시트가 알아서 따라 바뀜). 서식은 스토어 칸 것을 그대로
+function payDateCol_(sh) {
+  const L = payLayout_(sh);
+  if (!L || L.date || !L.store) return;
+  sh.insertColumnBefore(L.store);
+  const mr = sh.getMaxRows();
+  sh.getRange(1, L.store + 1, mr, 1).copyTo(sh.getRange(1, L.store, mr, 1), SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+  sh.getRange(1, L.store, L.head - 1, 1).clearContent();
+  if (mr > L.head) sh.getRange(L.head + 1, L.store, mr - L.head, 1).clearContent().setNumberFormat('M/d').setHorizontalAlignment('center');
+  sh.getRange(L.head, L.store).setValue('진행일');
+  sh.setColumnWidth(L.store, 70);
+  globalThis.__TABYEAR = {};
+  note_('✓ 월급시트 ' + sh.getName() + ': 스토어 왼쪽에 진행일 칸을 넣었어요');
+}
+
+// 진행일 칸이 비었으면 캠페인명의 날짜(#10.14 …)로 채우고, 줄을 진행일 순서로 (빠른 날이 위)
+//  줄 통째로 옮겨서(moveRows) 칩·체크·수식이 같이 움직임. 날짜 없는 줄(이월 등)은 맨 위, 빈 줄은 맨 아래. 이미 순서대로면 아무것도 안 함
+function payOrder_(sh) {
+  const L = payLayout_(sh);
+  if (!L || !L.date) return;
+  const last = sh.getLastRow(), n = last - L.head;
+  if (n < 2) return;
+  const base = L.head + 1, year = tabYear_(sh) || new Date().getFullYear();
+  const names = sh.getRange(base, L.name, n, 1).getValues().map(function (x) { return String(x[0]).trim(); });
+  const dr = sh.getRange(base, L.date, n, 1), dv = dr.getValues(), df = dr.getFormulas();
+  let fill = false;
+  const dates = dv.map(function (x, i) {
+    if (x[0] instanceof Date) return x[0];
+    if (df[i][0] || !names[i]) return null;
+    const m = names[i].match(/(\d{1,2})\.(\d{1,2})/);
+    if (!m) return null;
+    const d = new Date(year, Number(m[1]) - 1, Number(m[2]));
+    dv[i][0] = d; fill = true;
+    return d;
+  });
+  if (fill) dr.setValues(dv.map(function (x, i) { return df[i][0] ? [df[i][0]] : x; })).setNumberFormat('M/d');
+  // 이름이 없는 줄은 맨 아래, 이름은 있는데 날짜가 없으면 맨 위, 나머지는 날짜순 (같은 날은 지금 순서)
+  const key = function (i) { return !names[i] ? Infinity : dates[i] ? dates[i].getTime() : -Infinity; };
+  const want = names.map(function (_, i) { return i; }).sort(function (a, b) { return key(a) - key(b) || a - b; });
+  if (want.every(function (x, i) { return x === i; })) return;
+  // 위쪽 합계 수식(진행비 총액, 금일 진행비 =SUM(X5:X) 등)은 줄을 옮겨도 그대로 (5행 앞에 줄이 들어가면 X6:X로 밀리는 것 막음)
+  const top = sh.getRange(1, 1, L.head, sh.getLastColumn()), topF = top.getFormulas();
+  const cur = names.map(function (_, i) { return i; });
+  let moved = 0;
+  want.forEach(function (id, p) {
+    const j = cur.indexOf(id);
+    if (j === p) return;
+    sh.moveRows(sh.getRange((base + j) + ':' + (base + j)), base + p);
+    cur.splice(j, 1); cur.splice(p, 0, id); moved++;
+  });
+  if (moved) {
+    const now = top.getFormulas();
+    topF.forEach(function (row, r) { row.forEach(function (f, c) { if (f && now[r][c] !== f) sh.getRange(r + 1, c + 1).setFormula(f); }); });
+  }
+  if (moved) note_('✓ 월급시트 ' + sh.getName() + ': 진행일 순서로 ' + moved + '줄 옮김');
+}
+
 function payLayout_(sh) {
   const rows = Math.min(sh.getLastRow(), 15), cols = sh.getLastColumn();
   if (rows < 1 || cols < 1) return null;
@@ -4484,6 +4554,7 @@ function payLayout_(sh) {
     if (!L.left && /^남은$/.test(t)) L.left = c + 1;
     if (!L.status && /^상태$/.test(t)) L.status = c + 1;
     if (!L.report && /완료보고/.test(t)) L.report = c + 1;
+    if (!L.date && /^진행일(자)?$/.test(t)) L.date = c + 1;
   }
   // 날짜 칸: 머리글 줄과 그 위 줄에서 찾음
   [L.head - 1, L.head - 2].forEach(function (r) {
@@ -4508,6 +4579,8 @@ function updatePay_() {
   if (!CONFIG.PAY_SHEET_ID) return;
   const all = readRuns_().filter(function (r) { return r['시트ID'] && r['진행일'] instanceof Date; });
   const runs = all.filter(function (r) { return r['진행 상태'] !== '종료'; });
+  // 스토어 왼쪽에 '진행일' 칸 (사용자 요청 10/19). 탭마다 한 번 (있으면 그대로)
+  try { const m1 = new Date().getMonth() + 1; [m1, m1 % 12 + 1].forEach(function (mo) { const t = payTab_(mo, true); if (t && new RegExp('(^|\\D)' + mo + '월').test(t.getName())) payDateCol_(t); }); } catch (e) { note_('월급시트 진행일 칸 만들기 실패: ' + e); }
   const nameOf = function (r) { return String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, '').trim(); };
   // 같은 캠페인 묶기: 캠페인 칸, 없으면 방제에서 #, 택, 날짜, 건수, 띄어쓰기를 뺀 이름이 앞부분까지 같으면 같은 캠페인
   const keyOf = function (r) { return String(r['캠페인'] || nameOf(r)).replace(/^[#업택\s]+\d{1,2}\.\d{1,2}/, '').replace(/\d+\s*$/, '').replace(/\s+/g, ''); };
@@ -4536,6 +4609,8 @@ function updatePay_() {
       { store: pick('업체'), time: fruit ? '자정 ~ 오전 7시' : payTime_(runSlot_(r)), photo: pick('포토'), earlier: earlier });
   });
   try { payStatusAll_(all); } catch (e) { note_('월급시트 상태 잇기 실패: ' + e); }
+  // 진행일 칸 채우고 진행일 순서로 줄 정렬 (이번 달, 있으면 다음 달 탭)
+  try { const m1 = new Date().getMonth() + 1; [m1, m1 % 12 + 1].forEach(function (mo) { const t = payTab_(mo, true); if (t && new RegExp('(^|\\D)' + mo + '월').test(t.getName())) payOrder_(t); }); } catch (e) { note_('월급시트 날짜순 정렬 실패: ' + e); }
   try { payRate_(); } catch (e) { note_('월급시트 진행비 500원 바꾸기 실패: ' + e); }
   // 이번 달 탭(없으면 만듦)과 이미 있는 다음 달 탭에 안 끝난 캠페인 이월 줄
   try { const m0 = new Date().getMonth() + 1; payTab_(m0); payCarry_(all, m0); payCarry_(all, m0 % 12 + 1); } catch (e) { note_('월급시트 이월 실패: ' + e); }
@@ -4745,6 +4820,7 @@ function writePayRow_(r, name, remain, prevMonth, shared, ex) {
   putIfEmpty(L.note, [r['택대'] === 'Y' ? '택대' : '', r['실배송'] === 'Y' ? '실배송' : '', Number(r['일차']) ? r['일차'] + '일차' : '', /유/.test(String(ex.photo || '')) ? '포토' : ''].filter(Boolean).join(' / '));
   const col = L.days[(day.getMonth() + 1) + '-' + day.getDate()] || L.days[String(day.getDate())];
   put(col, Number(r['인원']) || 0);
+  if (L.date) { const dc = sh.getRange(row, L.date), dv = dc.getValue(); if (!dc.getFormula() && !(dv instanceof Date && dv.getTime() === day.getTime())) dc.setValue(day).setNumberFormat('M/d'); }
   return { sh: sh, row: row, L: L };
 }
 
