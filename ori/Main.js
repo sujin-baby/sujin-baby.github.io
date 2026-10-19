@@ -889,8 +889,11 @@ function go(){
     platform:document.getElementById('platform').value,desc:document.getElementById('desc').value,fname:window.__FNAME||'',k:window.__K||'',n:window.__N||'',opts:window.__OPTS||'',shop:window.__SHOP||'',slot:window.__SLOT||'',photo:window.__PHOTO||'',date:window.__DATE||'',plan:window.__PLAN||'',slot2:window.__SLOT2||'',day:window.__DAY||'',total:window.__TOTAL||'',room:window.__ROOM||'',croom:window.__CROOM||'',rv:window.__RV||''};
   if(!d.title){document.getElementById('msg').textContent='명단 제목을 넣어 주세요.';return;}
   document.getElementById('go').disabled=true;
-  document.getElementById('msg').textContent='만드는 중이에요… (10~20초)';
+  var t0=Date.now(),tick=function(){var s=Math.round((Date.now()-t0)/1000);document.getElementById('msg').textContent='만드는 중이에요… '+s+'초\\n(보통 30초~1분. 15분 자동 확인이 돌고 있으면 그게 멈출 때까지 1~2분 더 걸릴 수 있어요. 창을 닫지 마세요)';};
+  tick();var timer=setInterval(tick,1000);
   google.script.run.withSuccessHandler(function(r){
+    clearInterval(timer);
+    if(!r){document.getElementById('fields').style.display='block';document.getElementById('go').disabled=false;document.getElementById('msg').textContent='실패: 응답이 비어 있어요. 다시 눌러 주세요.';return;}
     document.getElementById('fields').style.display='none';
     document.getElementById('auto').textContent=(r.again?'이미 만든 진행이에요: ':'만들었어요: ')+d.title;
     if(r.notice){document.getElementById('notice').value=r.notice;}
@@ -898,6 +901,7 @@ function go(){
     document.getElementById('done').style.display='block';
     document.getElementById('msg').textContent=(r.assign?r.assign+'\\n':'')+'\\n폼 응답자 링크:\\n'+r.formUrl+'\\n\\n시트: '+r.sheetUrl+'\\n폴더: '+r.folderUrl+'\\n\\n진행목록에도 기록했어요.';
   }).withFailureHandler(function(e){
+    clearInterval(timer);
     document.getElementById('fields').style.display='block';
     document.getElementById('go').disabled=false;
     document.getElementById('msg').textContent='실패: '+e.message;
@@ -950,7 +954,17 @@ function createRun(d) {
     return Object.assign(toolAction_({ act: 'info', title: d.title }), { msg: '⚠ 진행 도우미 화면이 예전 것이에요. 저장 안 했어요.\n창을 닫고 다시 열어 주세요 (시트 옆이면 X 누르고 한눈에 체크칸 다시, 휴대폰이면 새로고침).' });
   if (d.act && /^(info|sent|assign|unassign|move)$/.test(d.act)) return toolAction_(d);
   if (d.act) return locked_(function () { return toolAction_(d); }, 30000) || { msg: '다른 작업 중이에요. 잠시 뒤 다시 눌러 주세요.' };
-  return locked_(function () {
+  // 15분 확인이 돌고 있으면 다음 단계에서 멈추라고 알리고 기다림 (예전엔 60초 넘게 기다리면 아무것도 안 하고 화면만 멈춰 있었음)
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty('WANT_LOCK', String(Date.now()));
+  let out;
+  try { out = locked_(function () { props.deleteProperty('WANT_LOCK'); return createRunLocked_(d); }, 240000); }
+  finally { props.deleteProperty('WANT_LOCK'); }
+  if (!out) throw new Error('자동 확인이 아직 안 끝났어요. 1분 뒤 같은 버튼을 다시 눌러 주세요. (다시 눌러도 두 번 만들어지지 않아요)');
+  return out;
+}
+function createRunLocked_(d) {
+  {
     // 이미 만든 진행(같은 요청ID, 또는 생성기를 다시 열어 같은 방제로 누름)이면 새로 안 만들고
     //  공지에 살 사람 이름이 있으면 배정 저장 + 폼 설명·안 보낸 방 공지를 이름 넣은 공지로
     const run = (d.n && runByRequest_(d.n)) || runByTitle_(d);
@@ -964,7 +978,7 @@ function createRun(d) {
     const made = d.n ? runByRequest_(d.n) : null;
     res.assign = made ? autoAssign_(made, d.desc) : '';
     return res;
-  }, 60000);
+  }
 }
 
 // 생성기 공지에 옵션 줄 뒤 살 사람 이름이 있으면(화이트 (2명) 김민희 선우승) 관리 시트 '배정' 탭에 바로 저장
@@ -1069,7 +1083,6 @@ function createRunInner_(d) {
 
   // 진행목록 기록
   const list = ensureListSheet_();
-  formatList_(list);
   const runDay = /^\d{4}-\d{2}-\d{2}$/.test(String(d.date || '')) ? new Date(d.date + 'T00:00:00') : dayFromTitle_(d.title);
   const rec = {
     '등록일': new Date(), '진행일': runDay, '명단 제목': d.title, '유형': d.type, '택대': d.takdae ? 'Y' : '', '실배송': d.realship ? 'Y' : '', '플랫폼': d.platform,
@@ -1082,8 +1095,9 @@ function createRunInner_(d) {
   list.appendRow(LIST_HEADER.map(function (h) { return rec[h]; }));
   formatList_(list);
   try { ensureEditTab_(); } catch (e) { note_('폼수정 탭 갱신 실패: ' + e); }
-  try { buildDashboard_(true); } catch (e) { note_('한눈에 탭 실패: ' + e); }
   try { ensureCheckTrigger_(); } catch (e) { note_('마감 확인 트리거 실패: ' + e); }
+  // 한눈에 탭·월급시트는 오래 걸려서(각 40초 넘게) 여기서 안 하고 1분 뒤 자동 확인이 갱신
+  try { soonCheck_(); } catch (e) { note_('1분 뒤 확인 예약 실패: ' + e); }
 
   // 공지의 '(구글폼 링크)' 자리에 폼 링크를 넣어서 폼 설명과 카톡 공지를 한 번에 완성
   const fruit0 = d.fruit || (reuse && chainFruit_(reuse));
@@ -1093,7 +1107,6 @@ function createRunInner_(d) {
   if (notice && d.room) queueMsg_(d.room, notice, '방 공지');
   // 여러 날 진행이면 다음 일차 계획 저장 (공지는 폼 링크 넣기 전 원본을 템플릿으로)
   if (d.plan) { try { savePlan_(d); } catch (e) { note_('일정 저장 실패: ' + e); } }
-  try { updatePay_(); } catch (e) { note_('월급시트 갱신 실패: ' + e); }
   const r = list.getLastRow();
   if (d.realship) list.getRange(r, 1, 1, LIST_HEADER.length).setBackground('#fff2a8');
   if (d.takdae) list.getRange(r, lc_('택배 옮김')).insertCheckboxes();
@@ -1926,12 +1939,23 @@ function checkFull() {
   globalThis.__ORI_T0 = Date.now();
   // 0시대에는 폼 열기를 잠금 없이 먼저 (15분 확인이 마침 돌고 있어 잠금을 못 잡아도 0시에 바로 열리게)
   try { if (Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'H') === '0') openStartingForms_(readRuns_(), outboxRows_()); } catch (e) { note_('0시 폼 열기 실패: ' + e); }
-  locked_(function () { ran = true; try { checkFullInner_(); } catch (e) { note_('멈춤: ' + (e && e.message || e)); } }, 120000);
+  locked_(function () {
+    ran = true;
+    try { checkFullInner_(); } catch (e) {
+      if (e && e.yieldLock) { note_('✓ 새 진행 만들기 먼저 하게 확인을 잠깐 멈춤 (1분 뒤 이어서)'); try { soonCheck_(); } catch (e2) {} }
+      else note_('멈춤: ' + (e && e.message || e));
+    }
+  }, 120000);
   report_('자동 확인', ran);
 }
 
 // 한눈에 Q1에 지금 어디까지 했는지 (6분 제한에 걸려 멈추면 ⏳가 그대로 남아서 알 수 있게)
 function step_(what) {
+  // 새 진행 만들기가 기다리고 있으면 여기서 멈추고 잠금을 넘김 (남은 건 1분 뒤 다시 도는 확인이 함)
+  if (globalThis.__ORI_T0) {
+    const want = Number(PropertiesService.getScriptProperties().getProperty('WANT_LOCK') || 0);
+    if (want && Date.now() - want < 300000) throw { yieldLock: 1 };
+  }
   const now = Date.now(), st = globalThis.__ORI_STEPS = globalThis.__ORI_STEPS || [];
   if (st.length) st[st.length - 1].s = Math.round((now - st[st.length - 1].t) / 1000);
   st.push({ w: what, t: now, s: 0 });
@@ -1968,6 +1992,16 @@ function openStartingForms_(runs, msgs) {
     // 열기에 실패하면 표시를 안 남겨서 다음 확인(15분 뒤)에 다시 엶
     if (ok) props.setProperty(key, '1');
   });
+}
+
+// 1분 뒤 자동 확인 한 번 (새 진행을 만든 뒤 한눈에·월급시트 갱신, 확인을 중간에 멈췄을 때 이어서)
+function soonCheck_() {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty('SOON_TRIG_ID'), at = Number(props.getProperty('SOON_TRIG_AT') || 0);
+  if (id && at > Date.now()) return;   // 이미 걸려 있음
+  if (id) ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getUniqueId() === id) ScriptApp.deleteTrigger(t); });
+  const t = ScriptApp.newTrigger('checkFull').timeBased().after(60000).create();
+  props.setProperty('SOON_TRIG_ID', t.getUniqueId()); props.setProperty('SOON_TRIG_AT', String(Date.now() + 60000));
 }
 
 // 정확히 0시에 한 번 더 확인 (15분 확인만 있으면 최대 15분 늦게 열림). 매일 다음 0시 20초에 한 번 도는 예약을 걸어 둠
