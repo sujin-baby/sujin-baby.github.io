@@ -2010,6 +2010,11 @@ function countResponses_(sheetId) {
 }
 
 function checkFull() {
+  // 메뉴로 누르면(시트 화면에서) 명단 탭만 바로 새로고침하고, 오래 걸리는 나머지는 1분 뒤 뒤에서 (사용자: 메뉴 실행이 너무 느림 10/20)
+  //  자동 확인(15분·0시·1분 뒤 예약)은 화면이 없어서 getUi()가 안 되므로 원래대로 전부
+  let ui = null;
+  try { ui = SpreadsheetApp.getUi(); } catch (e) {}
+  if (ui) return quickCheck_(ui);
   let ran = false;
   globalThis.__ORI_T0 = Date.now();
   // 0시대에는 폼 열기를 잠금 없이 먼저 (15분 확인이 마침 돌고 있어 잠금을 못 잡아도 0시에 바로 열리게)
@@ -2022,6 +2027,24 @@ function checkFull() {
     }
   }, 120000);
   report_('자동 확인', ran);
+}
+
+function quickCheck_(ui) {
+  const t0 = Date.now();
+  let added = 0, sheets = 0;
+  const ok = locked_(function () {
+    const runs = readRuns_(), today = today_().getTime(), seen = {};
+    runs.forEach(function (r) {
+      const sid = String(r['시트ID'] || '');
+      if (!sid || seen[sid] || r['진행 상태'] === '종료' || !(r['진행일'] instanceof Date) || dayStart_(r['진행일']) < today - 2 * 86400000) return;
+      seen[sid] = 1; sheets++;
+      try { added += syncList_(SpreadsheetApp.openById(sid)) || 0; } catch (e) {}
+    });
+    return true;
+  }, 15000);
+  try { soonCheck_(); } catch (e) {}
+  if (!ok) { ui.alert('지금 15분 자동 확인이 돌고 있어서 이번엔 건너뛰었어요 (오류 아님).\n한눈에 탭 Q1의 ⏳가 ✔로 바뀌면 끝난 거예요.'); return; }
+  ui.alert('명단 탭 새로고침 했어요 (명단 시트 ' + sheets + '개, 새 줄 ' + added + '개, ' + Math.round((Date.now() - t0) / 1000) + '초).\n\n나머지(인원 세기, 폼 닫기, 한눈에 탭, 월급시트)는 1분 뒤 뒤에서 자동으로 해요. 기다리지 않아도 돼요.');
 }
 
 // 한눈에 Q1에 지금 어디까지 했는지 (6분 제한에 걸려 멈추면 ⏳가 그대로 남아서 알 수 있게)
