@@ -2474,6 +2474,8 @@ function checkFullInner_() {
     setRun_(r.row, '마감 시각', new Date());
     changed = true;
     const listMsg = queueListMsgs_(r);
+    // 폼이 다 차면 리뷰 가이드도 바로 보낼메시지에 (다음 확인까지 안 기다리게, 사용자 요청 10/21)
+    try { ensureReviewGuideMsgs_(readRuns_()); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
     MailApp.sendEmail(me, '[체험단] 명단 마감: ' + r['명단 제목'], [
       '신청 ' + n + '명이 모여서 폼을 자동으로 닫았어요.',
       dupSummary_(r['시트ID']),
@@ -2560,8 +2562,10 @@ function reviewGuideMsg_(rv, ppl, counts, k) {
     if (today[i] > 0) lines.push(pretty(t.label) + '(' + today[i] + '명) : ' + who.join(' '));
   });
   const ask = [];
-  if (queue.length || !totals.length) { lines.push('리뷰 종류 확인 필요(' + queue.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + queue.map(nm).join(' ')); ask.push('리뷰 종류·개수'); }
   const g = String(rv.guide || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean)[0] || '';
+  // 리뷰 종류를 안 나눈 의뢰(전원 같은 리뷰): 한 줄로 전원. 가이드에 사진·촬영·컷이 있으면 포토리뷰 (10/21 속눈썹영양제)
+  if (!totals.length) { if (queue.length) lines.push((rv.kind === 'self' || /사진|촬영|컷|포토/.test(g) ? '포토리뷰' : '리뷰') + '(' + queue.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + queue.map(nm).join(' ')); }
+  else if (queue.length) { lines.push('리뷰 종류 확인 필요(' + queue.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + queue.map(nm).join(' ')); ask.push('리뷰 종류·개수'); }
   if (!g) ask.push('리뷰내용 가이드');
   const msg = ['⭐️리뷰내용 가이드⭐️'].concat(lines, ['', g ? '⭐️⭐️⭐️⭐️⭐️' + g.replace(/[.。!\s]+$/, '') + ' !!!!!⭐️⭐️⭐️⭐️⭐️' : '⭐️⭐️⭐️⭐️⭐️(리뷰 가이드: 사장님께 물어보고 채우기)⭐️⭐️⭐️⭐️⭐️']).join('\n');
   return { msg: msg, ask: ask };
@@ -2601,7 +2605,9 @@ function ensureReviewGuideMsgs_(runs) {
       if (props.getProperty(key)) return;
       const first = c.runs.filter(function (x) { return x['시트ID']; })[0] || r;
       let rv = null; try { rv = JSON.parse(props.getProperty('RV_' + first['시트ID']) || 'null'); } catch (e) {}
-      if (!rv || rv.kind === 'photo' || rv.kind === 'confirm') return;
+      // 포토제공(사진 받은 뒤 진행 도우미로 세트 배정)·구매확정만은 리뷰 가이드 없음. 리뷰 정보가 없는 예전 진행도 이름은 넣고 가이드는 '사장님께 물어보기'로 (10/21)
+      if (!rv) rv = { kind: 'text', mix: '', guide: '' };
+      if (rv.kind === 'photo' || rv.kind === 'confirm') return;
       props.setProperty(key, '1');
       const old = !!props.getProperty(key0);
       props.setProperty(key0, '1');
