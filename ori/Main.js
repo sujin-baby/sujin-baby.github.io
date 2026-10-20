@@ -1296,8 +1296,10 @@ function createRunInner_(d) {
 }
 
 // 폼의 '옵션' 질문 보기를 이번 가이드 옵션으로 바꿈 (예전 템플릿은 '단일옵션' 하나뿐이라 다 단일옵션으로 들어왔음)
+// 옵션이 숫자만('1', '1 (21,800원)')이면 '단일옵션' (의뢰서 '구매옵션 : 1' = 1개, 사용자 요청 10/20)
+function optDigits_(x) { return String(x).replace(/^\s*\d+\s*(개|ea)?\s*(?=\(|$)/i, '단일옵션 ').replace(/\s+$/, ''); }
 function setOptionChoices_(form, opts) {
-  const list = String(opts || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean);
+  const list = String(opts || '').split('\n').map(function (x) { return optDigits_(x.trim()); }).filter(Boolean);
   if (!list.length) return;
   form.getItems().forEach(function (it) {
     if (!/옵션/.test(it.getTitle())) return;
@@ -2321,6 +2323,7 @@ function checkFullInner_() {
   try { ensureMidnightTrigger_(); } catch (e) { note_('0시 확인 예약 실패: ' + e); }
   step_('공지 모양');
   try { fixStyleOnce_(); } catch (e) { note_('공지 모양 정리 실패: ' + e); }
+  try { fixOptDigitsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 단일옵션 실패: ' + e); }
   const runs = readRuns_(), times = {};
   step_('알림');
   try { fruitCheck_(runs); } catch (e) { note_('안 산 사람 확인 실패: ' + e); }
@@ -4686,6 +4689,30 @@ function noticeStyle_(text, fruit) {
 //  - 의뢰서 하나 = 폼 하나: 다음 날·추가 모집 진행이 다른 폼을 가리키고 공지를 아직 안 보냈으면 첫 날 폼으로 바꾸고 공지 링크도 바꿈
 //  - 포토대기 줄, 과일 '자정 ~ 오전 7시까지 구매' 줄, 맨 아래 어제 이름 줄 (보낸 공지도 글은 고쳐 둠, 링크는 안 바꿈)
 const FORM_LINK_RE = /https?:\/\/(?:forms\.gle\/[\w-]+|docs\.google\.com\/forms\/[^\s]+)/g;
+// (한 번, 10/20) 이미 만든 폼의 옵션 보기가 '1 (21,800원)'처럼 숫자만이면 '단일옵션 (21,800원)'으로 (최근 7일 진행)
+function fixOptDigitsOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('OPTDIGIT_V1')) return;
+  props.setProperty('OPTDIGIT_V1', '1');
+  const cut = today_().getTime() - 7 * 86400000, seen = {};
+  runs.forEach(function (r) {
+    const fid = String(r['폼ID'] || '');
+    if (!fid || seen[fid] || !(r['진행일'] instanceof Date) || r['진행일'].getTime() < cut) return;
+    seen[fid] = 1;
+    try {
+      FormApp.openById(fid).getItems().forEach(function (it) {
+        if (!/옵션/.test(it.getTitle())) return;
+        const t = it.getType();
+        const item = t === FormApp.ItemType.MULTIPLE_CHOICE ? it.asMultipleChoiceItem() : t === FormApp.ItemType.LIST ? it.asListItem() : t === FormApp.ItemType.CHECKBOX ? it.asCheckboxItem() : null;
+        if (!item) return;
+        const cur = item.getChoices().map(function (c) { return c.getValue(); }), want = cur.map(optDigits_);
+        if (want.join('\n') === cur.join('\n')) return;
+        item.setChoiceValues(want);
+        note_('✓ 폼 옵션 숫자 → 단일옵션: ' + bareTitle_(r['명단 제목']) + ' (' + cur.join(', ') + ' → ' + want.join(', ') + ')');
+      });
+    } catch (e) { note_('폼 옵션 단일옵션 바꾸기 실패 ' + bareTitle_(r['명단 제목']) + ': ' + e); }
+  });
+}
 function fixStyleOnce_() {
   const runs = readRuns_();
   const ob = outboxSheet_(), last = ob.getLastRow();
@@ -5380,15 +5407,17 @@ function payColors_(sh) {
   });
   if (added) props.setProperty(pk, JSON.stringify(map));
   if (want.some(function (w, i) { return String(w[0]).toLowerCase() !== String(cur[i][0]).toLowerCase(); })) rg.setBackgrounds(want);
-  // 오늘 진행하는 줄은 진행일~계약 수량 글자를 빨간 굵은 글씨로 (사용자 요청 10/20). 탭마다 한 번 (지우면 다시 안 넣음)
-  //  상태 칸 색 규칙과 겹치지 않게 계약 수량까지만, 규칙 목록 맨 뒤에
+  // 오늘 진행하는 줄은 진행일~계약 수량 글자를 빨간색으로 (사용자 요청 10/20, 굵게는 빼고). 탭마다 한 번 (지우면 다시 안 넣음)
+  //  상태 칸 색 규칙과 겹치지 않게 계약 수량까지만, 규칙 목록 맨 뒤에. 먼저 넣었던 빨간 굵은 글씨 규칙(=$B5=TODAY())은 빼고 새로
   try {
-    const tk = 'PAYTODAY1_' + sh.getSheetId();
+    const tk = 'PAYTODAY2_' + sh.getSheetId();
     if (L.date && !props.getProperty(tk)) {
+      const f0 = '=$' + colLetter_(L.date) + (L.head + 1) + '=TODAY()';
+      const keep = sh.getConditionalFormatRules().filter(function (r) { try { const b = r.getBooleanCondition(); return !(b && String(b.getCriteriaValues()[0] || '').replace(/\s/g, '') === f0); } catch (e) { return true; } });
       const endC = Math.max(L.qty || L.name, L.name), rows = sh.getMaxRows() - L.head;
-      const rule = SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$' + colLetter_(L.date) + (L.head + 1) + '=TODAY()')
-        .setFontColor('#d00000').setBold(true).setRanges([sh.getRange(L.head + 1, L.date, rows, endC - L.date + 1)]).build();
-      sh.setConditionalFormatRules(sh.getConditionalFormatRules().concat([rule]));
+      const rule = SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(f0)
+        .setFontColor('#d00000').setRanges([sh.getRange(L.head + 1, L.date, rows, endC - L.date + 1)]).build();
+      sh.setConditionalFormatRules(keep.concat([rule]));
       props.setProperty(tk, '1');
     }
   } catch (e) { note_('월급시트 오늘 빨간 글씨 실패: ' + e); }
