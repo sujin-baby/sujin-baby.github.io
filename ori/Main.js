@@ -2176,6 +2176,7 @@ function checkFullInner_() {
   try { fixModuAssignOnce_(); } catch (e) { note_('모두의농수산 배정 옮기기 실패: ' + e); }
   try { fixTemplateOnce_(); } catch (e) { note_('템플릿 폼 질문 고치기 실패: ' + e); }
   try { fixTemplateNameOnce_(); } catch (e) { note_('템플릿 폼 이름 질문 바꾸기 실패: ' + e); }
+  try { blackSheet_(); } catch (e) { note_('블랙리스트 탭 만들기 실패: ' + e); }
   try { fixNoCountNamesOnce_(runs); } catch (e) { note_('이름 인원 수 빼기 실패: ' + e); }
   try { fixSilOnce_(runs); } catch (e) { note_('실 위치 바꾸기 실패: ' + e); }
   try { fixStaleNamesOnce_(runs); } catch (e) { note_('다음 일차 공지 이름 빼기 실패: ' + e); }
@@ -2270,6 +2271,17 @@ function checkFullInner_() {
     const n = runCount_(runs, r, times[tk]);
     if (Number(r['인원']) !== n) setRun_(r.row, '인원', n);
     try { const fb = fillBlankNicks_(r, w); if (fb) note_('✓ ' + bareTitle_(r['명단 제목']) + ' 카톡 닉네임 빈칸 채움: ' + fb); } catch (e) { note_('닉네임 빈칸 채우기 실패: ' + e.message); }
+    // 블랙리스트 사람이 폼을 냈으면 한눈에 '확인 필요' 칸 + 메일 한 번
+    if (r['진행일'] instanceof Date && r['진행일'] >= new Date(today_().getTime() - 86400000)) {
+      try {
+        const bh = blackInRun_(r, w);
+        if (bh.length) {
+          errs[r['명단 제목']] = '⛔ 블랙리스트 응답: ' + bh.join(', ') + ' (폼수정 탭에서 지우세요)';
+          const bk = 'BLKMAIL_' + String(r['명단 제목']).replace(/\s+/g, '') + '_' + bh.join(',');
+          if (!props.getProperty(bk)) { props.setProperty(bk, '1'); MailApp.sendEmail(me, '[체험단] ⛔ 블랙리스트 응답: ' + bh.join(', '), bareTitle_(r['명단 제목']) + ' 폼에 블랙리스트에 있는 사람(' + bh.join(', ') + ')이 응답했어요.\n관리 시트 폼수정 탭에서 그 응답을 지우세요.'); }
+        }
+      } catch (e) { note_('블랙리스트 확인 실패: ' + e.message); }
+    }
     // 진단: 폼 응답 수 / 명단 시트 응답 탭 수 / 명단 탭에 보이는 수 (그날 몫)가 다르면 한눈에 '확인 필요' 칸에 적음
     if (!errs[r['명단 제목']] && n > 0) {
       try {
@@ -3079,6 +3091,7 @@ function toolAction_(d) {
       return { d: md(r['진행일']), t: bareTitle_(r['명단 제목']), got: got, goal: goal, g: grp(r), done: r['마감 시각'] instanceof Date, real: r['실배송'] === 'Y' };
     });
     out.last = String(PropertiesService.getScriptProperties().getProperty('LAST_REPORT') || '');
+    out.black = Object.keys(blacklist_()).map(function (k) { return blacklist_()[k]; });
   } catch (e) { out.status = []; }
   if (d.act === 'sent' && d.id) markMsg_(String(d.id), '보냄');
   try { out.outbox = outboxItems_().filter(function (x) { return x.st === '대기'; }).slice(0, 15); } catch (e) { out.outbox = []; }
@@ -3566,6 +3579,7 @@ function show(o) {
   if (o.status) {
     var sb = $('stat'); sb.innerHTML = '';
     if (o.last) $('statlast').textContent = '마지막 확인: ' + o.last;
+    if (o.black && o.black.length) { var bl = document.createElement('div'); bl.textContent = '⛔ 블랙리스트 (받으면 안 됨): ' + o.black.join(', '); bl.style.cssText = 'font-weight:700;color:#a3271b;background:#fde8e6;border-radius:8px;padding:8px;margin:6px 0'; sb.appendChild(bl); }
     var heads = ['오늘', '앞으로', '지난 진행'], lastG = -1;
     o.status.forEach(function (x) {
       if (x.g !== lastG) { var h = document.createElement('div'); h.textContent = heads[x.g]; h.style.cssText = 'font-weight:700;font-size:15px;margin:10px 0 4px;color:#5b2a86'; sb.appendChild(h); lastG = x.g; }
@@ -3941,6 +3955,57 @@ function applyAssign_(sh, text) {
   return assignRun_(r, text);
 }
 
+/* ---------------- 블랙리스트: 받으면 안 되는 리뷰어 (사용자 요청 10/20) ----------------
+   관리 시트 '블랙리스트' 탭(한눈에 바로 옆, 빨간 탭). A 이름 | B 메모 | C 추가일. 이름만 적으면 됨 (띄어쓰기 무시)
+   ① 공지 붙여넣기·생성기로 배정할 때 이름이 있으면 ⛔ 알림 ② 폼 응답 이름·계정명·예금주·닉네임에 있으면 한눈에 '확인 필요' 칸 + 메일 한 번 */
+const BLACK_TAB = '블랙리스트';
+function blackSheet_() {
+  const ss = adminSs_();
+  let sh = ss.getSheetByName(BLACK_TAB);
+  if (sh) return sh;
+  sh = ss.insertSheet(BLACK_TAB, Math.min(1, ss.getSheets().length));
+  sh.getRange(1, 1, 1, 3).setValues([['이름', '메모', '추가일']]).setFontWeight('bold').setBackground('#f4cccc');
+  sh.getRange(2, 1, 2, 3).setValues([['배지민', '받으면 안 됨', new Date()], ['김영필', '받으면 안 됨', new Date()]]);
+  sh.getRange(2, 3, 50, 1).setNumberFormat('yyyy-mm-dd');
+  sh.setColumnWidth(1, 140); sh.setColumnWidth(2, 360); sh.setFrozenRows(1);
+  sh.setTabColor('#cc0000');
+  sh.getRange('E1').setValue('여기 적힌 사람은 받으면 안 돼요. 이름을 아래에 추가하면 배정·폼 응답 때 ⛔로 알려 줘요.').setFontColor('#a3271b').setFontWeight('bold');
+  note_('✓ 블랙리스트 탭 만듦 (배지민, 김영필)');
+  return sh;
+}
+function blacklist_() {
+  if (globalThis.__BLACK) return globalThis.__BLACK;
+  const out = {};
+  try {
+    const sh = blackSheet_(), last = sh.getLastRow();
+    if (last >= 2) sh.getRange(2, 1, last - 1, 1).getValues().forEach(function (v) { const k = String(v[0]).replace(/\s+/g, ''); if (k) out[k] = String(v[0]).trim(); });
+  } catch (e) {}
+  return (globalThis.__BLACK = out);
+}
+// 이름 목록 중 블랙리스트에 있는 사람 (끝의 계정 수 숫자 '이혜미2'는 빼고 비교)
+function blackHits_(names) {
+  const bl = blacklist_(), hit = [];
+  names.forEach(function (n) { const k = String(n || '').replace(/\s+/g, '').replace(/[2-9]$/, ''); if (k && bl[k] && hit.indexOf(bl[k]) === -1) hit.push(bl[k]); });
+  return hit;
+}
+// 그날 폼 응답에 블랙리스트 사람이 있으면 이름 목록 (이름·계정명·예금주·카톡/쿠팡 닉네임 칸)
+function blackInRun_(r, w) {
+  if (!Object.keys(blacklist_()).length) return [];
+  const ss = SpreadsheetApp.openById(r['시트ID']), names = [];
+  ss.getSheets().filter(function (t) { return !!t.getFormUrl(); }).forEach(function (t) {
+    if (t.getLastRow() < 2) return;
+    const head = headers_(t).map(hk_), cols = [];
+    head.forEach(function (h, i) { if (MATCH.name.test(h) || MATCH.nick.test(h) || /닉네임/.test(h)) cols.push(i); });
+    if (!cols.length) return;
+    t.getRange(2, 1, t.getLastRow() - 1, head.length).getValues().forEach(function (v) {
+      const ts = tsMs_(v[0]);
+      if (!isFinite(ts) || ts < w.from || ts >= w.to) return;
+      cols.forEach(function (c) { names.push(v[c]); });
+    });
+  });
+  return blackHits_(names);
+}
+
 function assignRun_(r, text) {
   const note = '';
   const info = rawInfo_(r['시트ID'], r['폼ID']);
@@ -3950,7 +4015,9 @@ function assignRun_(r, text) {
   const rows = parseAssign_(text, choices);
   if (!rows.length) return '이름을 못 찾았어요. 옵션 줄 뒤나 아래 줄에 이름을 띄어쓰기로 적어 주세요.';
   writeAssign_(r, rows);
-  const warn = assignWarn_(text, rows);
+  let warn = assignWarn_(text, rows);
+  const black = blackHits_(rows.map(function (x) { return x[0]; }));
+  if (black.length) warn = '\n⛔ 블랙리스트에 있는 사람이에요 (받으면 안 됨): ' + black.join(', ') + warn;
   const by = {};
   let canc = [];
   rows.forEach(function (x) { if (!x[2]) { canc.push(x[0]); return; } const o = String(x[1]) || '옵션 모름'; by[o] = (by[o] || 0) + x[2]; });
@@ -4005,7 +4072,9 @@ function autoNextDay_() {
     const left = c.total - planned;
     if (left <= 0) return;
     const daily = Number(c.runs[0]['목표인원']) || Number(last['목표인원']) || left;
-    note_('✓ 다음 날 진행: ' + addMoreRun_(last, Math.min(daily, left), { next: true }));
+    // 남는 건수가 일 건수의 절반보다 적으면 마지막 날에 같이 (총 50 / 일 7 → 마지막 날 8, 사용자 요청 10/20. 생성기 numDays와 같은 규칙)
+    const n = left > daily && left - daily < daily / 2 ? left : Math.min(daily, left);
+    note_('✓ 다음 날 진행: ' + addMoreRun_(last, n, { next: true }));
   });
 }
 
