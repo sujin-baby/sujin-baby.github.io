@@ -63,6 +63,8 @@
     const b2 = document.createElement("button"); b2.textContent = "닫기"; b2.style.cssText = "width:48%;margin-left:4%;padding:7px;border:1px solid " + col + ";border-radius:6px;background:#fff;color:" + col; b2.onclick = () => bx.remove();
     bx.appendChild(b1); bx.appendChild(b2); document.body.appendChild(bx);
     try { navigator.clipboard.writeText(out).then(() => { b1.textContent = "복사됨 (생성기에 붙여넣기)"; }, () => {}); } catch (e) {}
+    /* 확장 프로그램이 돌릴 때(oy.js)는 결과를 생성기로 바로 보냄. 북마크로 돌릴 때는 chrome.runtime이 없어서 건너뜀 */
+    try { if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id) chrome.runtime.sendMessage(/상품번호\s*[:：]|위치\s*[:：]/.test(out) ? { type: "plResult", text: out } : { type: "plStatus", text: [out, note].filter(Boolean).join(" · ") }); } catch (e) {}
     return bx;
   };
   /* ---------- 네이버: 스마트스토어 상품 페이지 = 상품 정보, 네이버 쇼핑 검색 화면 = 찾은 페이지 ---------- */
@@ -189,6 +191,7 @@
       const sUrl = "https://www.oliveyoung.co.kr/store/search/getSearchMain.do?query=" + encodeURIComponent(kw0) + "#gno=" + gq + "&nm=" + encodeURIComponent(name) + "&st=" + encodeURIComponent(T.st) + (price ? "&pr=" + price : "") + "&kw=" + encodeURIComponent(kwh);
       const bx = show(oyInfo(T).join("\n"),
         "위치는 아래 [위치 찾기] → 열린 올리브영 검색 화면에서 이 북마크를 한 번 더. 키워드: " + kwh.split("|").join(" → "), OY);
+      window.__plOySearch = sUrl;
       const go = document.createElement("a"); go.href = sUrl; go.target = "_blank"; go.rel = "noopener"; go.textContent = "위치 찾기 (올리브영 검색 열기)";
       go.style.cssText = "display:block;margin-top:8px;padding:9px;border-radius:6px;background:" + OY + ";color:#fff;text-align:center;font-weight:700;text-decoration:none";
       bx.appendChild(go);

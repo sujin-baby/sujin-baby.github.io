@@ -12,6 +12,53 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 let busy = false, busySince = 0, cancel = false, work = null;
 
 chrome.action.onClicked.addListener(tab => { start(tab); });
+/* ---------- 생성기와 주고받기 (gen.js, 사용자 요청 10/20) ----------
+   생성기 화면이 열려 있으면 결과(복사하는 글)와 진행 상황을 생성기로 바로 보냄 → 붙여넣기 없이 칸이 채워짐
+   생성기 [자동 가져오기]: 상품 페이지를 뒤에서 열고 아이콘을 누른 것처럼 돌림 */
+let genT = null, autoTab = 0;
+async function genTarget() { if (genT) return genT; const o = await chrome.storage.session.get("genT").catch(() => ({})); return (genT = o.genT || null); }
+async function pushGen(m) { const g = await genTarget(); if (!g) return; try { await chrome.tabs.sendMessage(g.tabId, Object.assign({ type: "plPush" }, m), { frameId: g.frameId }); } catch (e) {} }
+const setGen = sender => { genT = { tabId: sender.tab.id, frameId: sender.frameId || 0 }; chrome.storage.session.set({ genT: genT }).catch(() => {}); };
+chrome.runtime.onMessage.addListener((m, sender) => {
+  if (!m || !sender.tab) return;
+  if (m.type === "plGenHere") setGen(sender);
+  else if (m.type === "plResult") pushGen({ text: m.text });
+  else if (m.type === "plStatus") pushGen({ status: m.text });
+  else if (m.type === "plAuto" && m.url) { setGen(sender); autoRun(m.url, sender.tab).catch(e => pushGen({ status: "멈췄어요: " + ((e && e.message) || e) })); }
+});
+async function autoRun(url, gt) {
+  if (busy && Date.now() - busySince < 12 * 60000) { pushGen({ status: "이미 찾는 중이에요. 끝나고 다시 눌러 주세요." }); return; }
+  pushGen({ status: "상품 페이지 여는 중…" });
+  const t = await chrome.tabs.create({ url: url, active: false, windowId: gt.windowId, index: gt.index + 1 });
+  autoTab = t.id;
+  try {
+    /* 단축 링크(link.coupang.com 등)가 상품 페이지로 넘어갈 때까지 (최대 40초) */
+    let tab = t;
+    for (let i = 0; i < 80; i++) { await sleep(500); tab = await chrome.tabs.get(t.id); if (tab.status === "complete" && /\/products\/\d+|goodsNo=/i.test(tab.url || "")) break; }
+    await sleep(1500);
+    tab = await chrome.tabs.get(t.id);
+    if (/oliveyoung\.co\.kr/.test(tab.url || "")) return await autoOy(tab);
+    if (!/\/products\/\d+/.test(tab.url || "")) { pushGen({ status: "상품 페이지가 안 열렸어요. 열린 탭을 확인해 주세요." }); await chrome.tabs.update(t.id, { active: true }); return; }
+    const isNv = /naver\.com/.test(tab.url || "");
+    const out = await start(tab);
+    /* 쿠팡: 끝나면 상품 탭 닫음 (결과는 생성기에). 네이버: 검색 탭이 따로 열려서 상품 탭만 닫음. 못 찾으면 상품 탭을 보여 줌 */
+    if (out || isNv) chrome.tabs.remove(t.id).catch(() => {});
+    else chrome.tabs.update(t.id, { active: true }).catch(() => {});
+  } finally { autoTab = 0; }
+}
+/* 올리브영: 상품 페이지에서 oy.js(상품 정보) → 같은 탭을 검색 화면으로 → oy.js(몇 번째). 결과는 oy.js가 생성기로 보냄. 탭은 분홍 테두리 확인용으로 둠 */
+async function autoOy(tab) {
+  const tid = tab.id;
+  await chrome.scripting.executeScript({ target: { tabId: tid }, files: ["oy.js"] });
+  await sleep(800);
+  const [r] = await chrome.scripting.executeScript({ target: { tabId: tid }, func: () => window.__plOySearch || "" });
+  const su = r && r.result;
+  if (!su) { pushGen({ status: "올리브영 상품 정보를 못 읽었어요. 열린 탭을 확인해 주세요." }); await chrome.tabs.update(tid, { active: true }); return; }
+  pushGen({ status: "올리브영 검색 화면에서 찾는 중…" });
+  const p = waitComplete(tid, 30000); await chrome.tabs.update(tid, { url: su }); await p;
+  await sleep(1500);
+  await chrome.scripting.executeScript({ target: { tabId: tid }, files: ["oy.js"] });
+}
 /* 결과 상자의 단추 */
 chrome.runtime.onMessage.addListener((m, sender) => {
   if (!m || m.type !== "act" || !sender.tab) return;
@@ -63,7 +110,7 @@ async function call(tabId, name, args) {
   }
   throw err;
 }
-const ui = (tabId, s) => call(tabId, "box", [s]).catch(() => null);
+const ui = (tabId, s) => { if (s && s.title) pushGen({ status: s.title + (s.msg ? " · " + String(s.msg).split("\n")[0] : "") }); return call(tabId, "box", [s]).catch(() => null); };
 
 /* ---------- 키워드 추천 (생성기와 같은 규칙) ----------
    네추럴라이즈 플래티넘 오메가3 1100 1,202mgx180캡슐 → 오메가3 | 플래티넘 오메가3 | 네추럴라이즈 오메가3 */
@@ -327,6 +374,7 @@ async function saveThumb(info) {
 
 /* ---------- 복사 (화면 밖 작은 문서에서) ---------- */
 async function copyText(text, tabId) {
+  pushGen({ text: text });
   if (tabId) { try { if (await call(tabId, "copy", [text])) return true; } catch (e) {} }
   try {
     try { await chrome.offscreen.createDocument({ url: "offscreen.html", reasons: ["CLIPBOARD"], justification: "결과 복사" }); } catch (e) {}
@@ -395,7 +443,7 @@ async function run(tab) {
   notes.push(await thumbP);
   const nv = await verP;
   if (nv) notes.push({ t: "새 버전(" + nv + ")이 있어요. 생성기에서 확장 프로그램을 다시 받아 바꿔 주세요.", warn: true });
-  try { await chrome.windows.update(tab.windowId, { focused: true }); await chrome.tabs.update(tid, { active: true }); } catch (e) {}
+  if (autoTab !== tid) { try { await chrome.windows.update(tab.windowId, { focused: true }); await chrome.tabs.update(tid, { active: true }); } catch (e) {} }
   const copied = await copyText(out, tid);
   const big = (F ? "키워드 : " + F.k + "\n" : "") + "PC " + (filt && pc.found ? filt + " " : "") + (pc.found ? posText(pc.found) : "못 찾음") + "\n모바일 " + (filt && mo.found ? filt + " " : "") + (mo.found ? posText(mo.found) : "못 찾음");
   await ui(tid, { title: copied ? "복사됐어요. 생성기 '상품 정보 붙여넣기' 칸에 Ctrl+V" : "복사를 눌러서 생성기 '상품 정보 붙여넣기' 칸에 붙여넣으세요", big: big, out: out, copied: copied, notes: notes, img: info.img });
