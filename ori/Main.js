@@ -637,20 +637,30 @@ function syncList_(ss) {
     lc = Math.max(sh.getLastColumn(), 1); hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_);
   });
   props.setProperty('LISTH_' + id, JSON.stringify(known));
-  // 맨 오른쪽 '리뷰 확인' 체크칸 (사용자 요청 10/20). 한 번만 만듦 → 지우거나 옮겨도 다시 안 만듦. 다 체크하면 취완 메시지(reviewDone_)
-  if (!props.getProperty('RVCOL_' + id) && hdr.indexOf(RV_CHECK) === -1) {
-    props.setProperty('RVCOL_' + id, '1');
-    const c = lc + 1;
-    if (sh.getMaxColumns() < c) sh.insertColumnsAfter(sh.getMaxColumns(), c - sh.getMaxColumns());
-    sh.getRange(2, lc).copyTo(sh.getRange(2, c), SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
-    sh.getRange(2, c).setValue(RV_CHECK);
-    if (sh.getLastRow() >= 3) {
-      sh.getRange(3, lc, sh.getLastRow() - 2, 1).copyTo(sh.getRange(3, c, sh.getLastRow() - 2, 1), SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);   // 줄 색 그대로
-      sh.getRange(3, c, sh.getLastRow() - 2, 1).insertCheckboxes().setHorizontalAlignment('center');
+  // 리뷰 확인 체크칸: 맨 오른쪽에서 한 칸 띄우고, 머리글 글자·칸 색 없이 (사용자 요청 10/20). 머리글 칸 메모로 알아봄(열을 옮겨도 따라감)
+  //  한 번만 만듦 → 지우거나 옮겨도 다시 안 만듦. 그날 사람 전부 체크하면 취완 메시지(reviewDone_)
+  if (!props.getProperty('RVCOL2_' + id)) {
+    props.setProperty('RVCOL2_' + id, '1');
+    const old = hdr.indexOf(RV_CHECK);
+    if (old >= 0) {
+      // 먼저 만든 '리뷰 확인' 칸(글자·색 있음) → 글자·색 지우고 앞에 빈 칸 하나
+      const c0 = old + 1, rows = Math.max(sh.getLastRow() - 1, 1);
+      sh.getRange(2, c0).setValue('').setNote(RV_NOTE);
+      sh.getRange(2, c0, rows, 1).setBackground(null);
+      sh.insertColumnBefore(c0);
+      sh.getRange(2, c0, rows, 1).clearContent().clearDataValidations().setBackground(null);
+      sh.getRange(2, c0).clearNote();
+    } else if (!props.getProperty('RVCOL_' + id) && rvCol_(sh, lc) < 0) {
+      const c = lc + 2;
+      if (sh.getMaxColumns() < c) sh.insertColumnsAfter(sh.getMaxColumns(), c - sh.getMaxColumns());
+      sh.getRange(2, c).setNote(RV_NOTE);
+      if (sh.getLastRow() >= 3) sh.getRange(3, c, sh.getLastRow() - 2, 1).insertCheckboxes().setHorizontalAlignment('center');
     }
-    sh.setColumnWidth(c, 80);
-    lc = c; hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_);
-  } else if (hdr.indexOf(RV_CHECK) >= 0) props.setProperty('RVCOL_' + id, '1');
+    props.setProperty('RVCOL_' + id, '1');
+    lc = Math.max(sh.getLastColumn(), 1); hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_);
+  }
+  const rvc = rvCol_(sh, lc);   // 체크칸 (1부터, 없으면 -1)
+  const paint = rvc > 0 ? Math.max(Math.min(lc, rvc - 2), 1) : lc;   // 줄 색은 체크칸 앞 빈 칸 전까지만
   const cT = hdr.indexOf('타임스탬프') + 1;
   let done = String(props.getProperty('LISTK_' + id) || '').split(',').filter(Boolean);
   if (!done.length && cT && sh.getLastRow() >= 3) done = sh.getRange(3, cT, sh.getLastRow() - 2, 1).getValues().map(function (x) { return x[0] instanceof Date ? String(x[0].getTime()) : ''; }).filter(Boolean);
@@ -667,13 +677,13 @@ function syncList_(ss) {
     // 사용자가 만든 체크칸(바로 위 줄이 체크칸인 칸)은 새 줄에도 체크칸
     if (start > 3) {
       const above = sh.getRange(start - 1, 1, 1, lc).getValues()[0];
-      above.forEach(function (v, j) { if (typeof v === 'boolean' && heads.indexOf(hdr[j]) === -1 && hdr[j] !== RV_CHECK) sh.getRange(start, j + 1, n, 1).insertCheckboxes(); });
+      above.forEach(function (v, j) { if (typeof v === 'boolean' && heads.indexOf(hdr[j]) === -1 && j + 1 !== rvc) sh.getRange(start, j + 1, n, 1).insertCheckboxes(); });
     }
-    if (hdr.indexOf(RV_CHECK) >= 0) sh.getRange(start, hdr.indexOf(RV_CHECK) + 1, n, 1).insertCheckboxes().setHorizontalAlignment('center');
+    if (rvc > 0) sh.getRange(start, rvc, n, 1).insertCheckboxes().setHorizontalAlignment('center');
     // 날짜별 연한 색. 실배송이면 전부 노란색 (사용자 요청 10/19)
-    sh.getRange(start, 1, n, lc).setBackgrounds(add.map(function (x) {
+    sh.getRange(start, 1, n, paint).setBackgrounds(add.map(function (x) {
       const day = Math.floor((x.t + 9 * 3600000) / 86400000) + 25569;
-      return Array(lc).fill(real ? REAL_YELLOW : DAY_COLORS[day % 7]);
+      return Array(paint).fill(real ? REAL_YELLOW : DAY_COLORS[day % 7]);
     }));
     done = done.concat(add.map(function (x) { return String(x.t); }));
   }
@@ -4087,7 +4097,14 @@ function applyAssign_(sh, text) {
       의뢰(명단 시트) 전체가 다 진행되고 전부 체크되면 → 사장님 갠톡 '안녕하세요 [명단 시트 이름] 리뷰완료되어 보고드립니다 !'
    B1. 의뢰 폴더 안 '리뷰이미지' 폴더(명단이 마감되면 자동으로 만듦)에 카톡 사진을 올려 두면 → 압축 파일(명단 시트 이름.zip)을 의뢰 폴더에 만들고
       보낼메시지 '할 일'에 다운로드 링크 (받아서 사장님 톡에 첨부). 사진을 더 올리면 다시 압축 */
-const RV_IMG_FOLDER = '리뷰이미지', RV_CHECK = '리뷰 확인';
+const RV_IMG_FOLDER = '리뷰이미지', RV_CHECK = '리뷰 확인', RV_NOTE = '리뷰 확인 칸: 그날(그 방) 사람을 전부 체크하면 보낼메시지에 취완이 들어가요';
+// 명단 탭 리뷰 확인 체크칸 열 (1부터): 2행 메모로 찾음, 없으면 예전 '리뷰 확인' 머리글, 없으면 -1
+function rvCol_(sh, lc) {
+  lc = lc || Math.max(sh.getLastColumn(), 1);
+  const notes = sh.getRange(2, 1, 1, lc).getNotes()[0], hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_);
+  const i = notes.findIndex(function (n) { return String(n).indexOf('리뷰 확인 칸') === 0; });
+  return i >= 0 ? i + 1 : (hdr.indexOf(RV_CHECK) >= 0 ? hdr.indexOf(RV_CHECK) + 1 : -1);
+}
 function reviewDone_(runs) {
   const props = PropertiesService.getScriptProperties(), cut = today_().getTime() - 40 * 86400000;
   // 처음 한 번은 이미 다 체크된 예전 의뢰를 '보낸 걸로' 기억만 (예전에 직접 보낸 취완·보고가 다시 안 들어가게)
@@ -4112,9 +4129,10 @@ function reviewDone_(runs) {
       const live = v.map(function (x, i) { return x[cT] instanceof Date && !nt[i][0] ? i : -1; }).filter(function (i) { return i >= 0; });
       if (!live.length) return;
       const isChk = function (c) { return live.every(function (i) { return typeof v[i][c] === 'boolean'; }); };
-      let cc = hdr.indexOf(RV_CHECK) >= 0 && isChk(hdr.indexOf(RV_CHECK)) ? hdr.indexOf(RV_CHECK) : -1;
-      if (cc < 0) cc = hdr.findIndex(function (h, c) { return /체크|확인|리뷰/.test(h) && isChk(c); });
-      if (cc < 0) cc = hdr.findIndex(function (h, c) { return isChk(c); });
+      const rc = rvCol_(sh, lc);
+      let cc = rc > 0 && isChk(rc - 1) ? rc - 1 : -1;
+      // 없으면 맨 오른쪽 체크칸 (값이 전부 참/거짓인 칸)
+      for (let c = lc - 1; cc < 0 && c >= 0; c--) if (isChk(c)) cc = c;
       if (cc < 0) return;
       // A-1. 그날(그 방) 사람 전부 체크 → 취완
       mine.forEach(function (r) {
