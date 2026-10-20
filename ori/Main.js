@@ -645,7 +645,7 @@ function syncList_(ss) {
     if (old >= 0) {
       // 먼저 만든 '리뷰 확인' 칸(글자·색 있음) → 글자·색 지우고 앞에 빈 칸 하나
       const c0 = old + 1, rows = Math.max(sh.getLastRow() - 1, 1);
-      sh.getRange(2, c0).setValue('').setNote(RV_NOTE);
+      sh.getRange(2, c0).setValue('');
       sh.getRange(2, c0, rows, 1).setBackground(null);
       sh.insertColumnBefore(c0);
       sh.getRange(2, c0, rows, 1).clearContent().clearDataValidations().setBackground(null);
@@ -653,20 +653,17 @@ function syncList_(ss) {
     } else if (!props.getProperty('RVCOL_' + id) && rvCol_(sh, lc) < 0) {
       const c = lc + 2;
       if (sh.getMaxColumns() < c) sh.insertColumnsAfter(sh.getMaxColumns(), c - sh.getMaxColumns());
-      try { rvMark_(sh, c); } catch (e) { sh.getRange(2, c).setNote(RV_NOTE); }
+      rvMark_(sh, c);
       if (sh.getLastRow() >= 3) sh.getRange(3, c, sh.getLastRow() - 2, 1).insertCheckboxes().setHorizontalAlignment('center');
     }
     props.setProperty('RVCOL_' + id, '1');
     lc = Math.max(sh.getLastColumn(), 1); hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_);
   }
-  // (한 번, 10/20) 체크칸 머리글 메모가 마우스를 올리면 보여서 → 메모 지우고 숨은 표시로
-  if (!props.getProperty('RVCOL3_' + id)) {
-    props.setProperty('RVCOL3_' + id, '1');
-    try {
-      const notes = sh.getRange(2, 1, 1, lc).getNotes()[0], i = notes.findIndex(function (n) { return String(n).indexOf('리뷰 확인 칸') === 0; });
-      if (i >= 0) { rvMark_(sh, i + 1); sh.getRange(2, i + 1).clearNote(); }
-    } catch (e) {}
-  }
+  // 체크칸 머리글 메모가 마우스를 올리면 보여서 → 남아 있으면 매번 지우고 숨은 표시로 (10/20: 새 시트에 다시 생겼던 것)
+  try {
+    const notes = sh.getRange(2, 1, 1, Math.min(sh.getMaxColumns(), lc + 3)).getNotes()[0], i = notes.findIndex(function (n) { return String(n).indexOf('리뷰 확인 칸') === 0; });
+    if (i >= 0) { rvMark_(sh, i + 1); sh.getRange(2, i + 1).clearNote(); }
+  } catch (e) {}
   const rvc = rvCol_(sh, lc);   // 체크칸 (1부터, 없으면 -1)
   const paint = rvc > 0 ? Math.max(Math.min(lc, rvc - 2), 1) : lc;   // 줄 색은 체크칸 앞 빈 칸 전까지만
   const cT = hdr.indexOf('타임스탬프') + 1;
@@ -4130,7 +4127,11 @@ const RV_IMG_FOLDER = '리뷰이미지', RV_CHECK = '리뷰 확인', RV_NOTE = '
 // 명단 탭 리뷰 확인 체크칸 열 (1부터): 열에 숨겨 둔 표시(개발자 메타데이터, 화면에 안 보이고 열을 옮겨도 따라감),
 //  없으면 예전 2행 메모, 없으면 예전 '리뷰 확인' 머리글, 없으면 -1
 const RV_MD_KEY = 'ori_review_check';
-function rvMark_(sh, c) { sh.getRange(colLetter_(c) + ':' + colLetter_(c)).addDeveloperMetadata(RV_MD_KEY); }
+// 숨은 표시가 안 붙는 시트도 있어서(새 시트에서 메모가 다시 보임, 10/20) 열 번호를 속성에도 적어 둠. 메모는 안 씀
+function rvMark_(sh, c) {
+  try { PropertiesService.getScriptProperties().setProperty('RVCOLN_' + sh.getParent().getId(), String(c)); } catch (e) {}
+  try { sh.getRange(colLetter_(c) + ':' + colLetter_(c)).addDeveloperMetadata(RV_MD_KEY); } catch (e) {}
+}
 function rvCol_(sh, lc) {
   try {
     const md = sh.createDeveloperMetadataFinder().withKey(RV_MD_KEY).find();
@@ -4139,7 +4140,10 @@ function rvCol_(sh, lc) {
   lc = lc || Math.max(sh.getLastColumn(), 1);
   const notes = sh.getRange(2, 1, 1, lc).getNotes()[0], hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_);
   const i = notes.findIndex(function (n) { return String(n).indexOf('리뷰 확인 칸') === 0; });
-  return i >= 0 ? i + 1 : (hdr.indexOf(RV_CHECK) >= 0 ? hdr.indexOf(RV_CHECK) + 1 : -1);
+  if (i >= 0) return i + 1;
+  if (hdr.indexOf(RV_CHECK) >= 0) return hdr.indexOf(RV_CHECK) + 1;
+  let pc = 0; try { pc = Number(PropertiesService.getScriptProperties().getProperty('RVCOLN_' + sh.getParent().getId()) || 0); } catch (e) {}
+  return pc > 0 ? pc : -1;
 }
 function reviewDone_(runs) {
   const props = PropertiesService.getScriptProperties(), cut = today_().getTime() - 40 * 86400000;
@@ -5310,6 +5314,18 @@ function payColors_(sh) {
   });
   if (added) props.setProperty(pk, JSON.stringify(map));
   if (want.some(function (w, i) { return String(w[0]).toLowerCase() !== String(cur[i][0]).toLowerCase(); })) rg.setBackgrounds(want);
+  // 오늘 진행하는 줄은 진행일~계약 수량 글자를 빨간 굵은 글씨로 (사용자 요청 10/20). 탭마다 한 번 (지우면 다시 안 넣음)
+  //  상태 칸 색 규칙과 겹치지 않게 계약 수량까지만, 규칙 목록 맨 뒤에
+  try {
+    const tk = 'PAYTODAY1_' + sh.getSheetId();
+    if (L.date && !props.getProperty(tk)) {
+      const endC = Math.max(L.qty || L.name, L.name), rows = sh.getMaxRows() - L.head;
+      const rule = SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$' + colLetter_(L.date) + (L.head + 1) + '=TODAY()')
+        .setFontColor('#d00000').setBold(true).setRanges([sh.getRange(L.head + 1, L.date, rows, endC - L.date + 1)]).build();
+      sh.setConditionalFormatRules(sh.getConditionalFormatRules().concat([rule]));
+      props.setProperty(tk, '1');
+    }
+  } catch (e) { note_('월급시트 오늘 빨간 글씨 실패: ' + e); }
 }
 
 function payLayout_(sh) {
