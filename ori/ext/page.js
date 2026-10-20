@@ -262,6 +262,8 @@
     }
     bx.textContent = "";
     const add = (tag, css, text) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (text != null) e.textContent = text; bx.appendChild(e); return e; };
+    let ver = ""; try { ver = chrome.runtime.getManifest().version; } catch (e) {}
+    add("div", "float:right;font-size:11px;color:#999", ver ? "v" + ver : "");   /* 설치된 버전 (잘 바뀌었는지 보려고) */
     add("b", "display:block;margin-bottom:4px", s.title || "상품 위치 찾기");
     if (s.big) add("div", "font-size:16px;font-weight:700;color:#5b2a86;margin:4px 0;white-space:pre-wrap", s.big);
     if (s.msg) add("div", "white-space:pre-wrap", s.msg);
