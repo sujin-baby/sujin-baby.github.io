@@ -381,6 +381,7 @@ async function run(tab) {
     "상품번호 : " + info.pid + (info.item ? " - " + mask(info.item) : ""),
     info.opt ? "옵션 : " + info.opt : "",
     price ? "가격 : " + price.toLocaleString("ko-KR") + "원" : "",
+    info.ship ? "배송비 : " + info.ship : "",
     F ? "찾은 키워드 : " + F.k : "",
     filt ? "필터 : " + filt : "",
     "PC 위치 : " + (pc.found ? posText(pc.found) : "못 찾음"),
@@ -403,7 +404,7 @@ async function run(tab) {
 
 /* ================= 네이버 (자동 넘기기 없이, 지금 화면만 읽기) ================= */
 const mask2 = s => s && s.length > 8 ? s.slice(0, 6) + "***" + s.slice(-2) : s;
-const infoLines = t => ["상품명 : " + t.name, "판매처 : " + t.seller, "상품번호 : " + t.pid + (t.item ? " - " + mask2(t.item) : ""), t.opt ? "옵션 : " + t.opt : "", t.price ? "가격 : " + t.price.toLocaleString("ko-KR") + "원" : "", t.img ? "썸네일 : " + t.img : ""].filter(Boolean);
+const infoLines = t => ["상품명 : " + t.name, "판매처 : " + t.seller, "상품번호 : " + t.pid + (t.item ? " - " + mask2(t.item) : ""), t.opt ? "옵션 : " + t.opt : "", t.price ? "가격 : " + t.price.toLocaleString("ko-KR") + "원" : "", t.ship ? "배송비 : " + t.ship : "", t.img ? "썸네일 : " + t.img : ""].filter(Boolean);
 const nvSearchUrl = (k, mob) => (mob ? "https://msearch.shopping.naver.com" : "https://search.shopping.naver.com") + "/search/all?query=" + encodeURIComponent(k);
 const won = n => Number(n).toLocaleString("ko-KR");
 

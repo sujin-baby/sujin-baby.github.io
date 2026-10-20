@@ -40,6 +40,21 @@
     }
     return 0;
   }
+  /* 배송비: 상품명 뒤 글에서 '배송비 3,000원' / '무료배송' / '30,000원 이상 (구매 시) 무료'. 가격이 무료 조건에 맞으면 무료 (사용자 요청 10/20)
+     '일반배송 | 2,500원'(올리브영)도. '추가 배송비'(제주·도서산간), 반품·교환 배송비는 건너뜀 */
+  const shipOf = (txt, name, price) => {
+    const i0 = name ? txt.indexOf(name.slice(0, 10)) : -1, t = (i0 >= 0 ? txt.slice(i0, i0 + 5000) : txt.slice(0, 8000)).replace(/\s+/g, " ");
+    const w = n => n.toLocaleString("ko-KR");
+    const thM = t.match(/(\d{1,3}(?:,\d{3})+|\d{4,})\s*원\s*이상\s*(?:구매|주문|결제)?\s*(?:시|하면)?\s*(?:배송비\s*)?무료/);
+    const th = thM ? Number(thM[1].replace(/,/g, "")) : 0;
+    const re = /(?:배송비|일반\s*배송|택배\s*배송|기본\s*배송)\s*[|:：]?\s*(\d{1,3}(?:,\d{3})+|\d{3,})\s*원/g;
+    let fm, fee = 0;
+    while ((fm = re.exec(t))) { if (/추가|도서|산간|제주|반품|교환|왕복|편도/.test(t.slice(Math.max(0, fm.index - 8), fm.index))) continue; fee = Number(fm[1].replace(/,/g, "")); break; }
+    if (fee) return th && price >= th ? "무료 (" + w(th) + "원 이상 무료, 이 가격은 조건 맞음)" : w(fee) + "원" + (th ? " (" + w(th) + "원 이상 무료인데 이 가격은 안 됨)" : "");
+    if (th) return price >= th ? "무료 (" + w(th) + "원 이상 무료, 이 가격은 조건 맞음)" : "확인 필요 (" + w(th) + "원 이상 무료인데 이 가격은 안 됨, 배송비 금액을 못 읽었어요)";
+    if (/무료\s*배송|배송비\s*[:：]?\s*무료/.test(t)) return "무료";
+    return "확인 필요 (상품 페이지에서 배송비를 못 읽었어요)";
+  };
   function readProduct() {
     const L = location;
     const og = n => { const m = document.querySelector('meta[property="og:' + n + '"]'); return m ? (m.content || "") : ""; };
@@ -65,7 +80,7 @@
       const pe = document.querySelector('.prod-sale-price .total-price strong, .total-price strong, [class*="final-price"] [class*="amount"], .price-amount.final-price-amount, [class*="finalPrice"]');
       if (pe) price = num(pe.textContent);
       if (!price) price = priceAfter(txt, name);
-      return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, opt: opt || "단일옵션", price: price, img: img };
+      return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, opt: opt || "단일옵션", price: price, ship: shipOf(txt, name, price), img: img };
     }
     const pm = L.pathname.match(/products\/(\d+)/);
     if (!pm) return { err: "네이버는 스마트스토어(또는 브랜드스토어) 상품 페이지에서 눌러 주세요." };
@@ -79,7 +94,7 @@
     if (!price) { const sm2 = html.match(/"salePrice"\s*:\s*(\d{3,})/); if (sm2) price = Number(sm2[1]); }
     if (!price) { const i = name ? txt.indexOf(name.slice(0, 10)) : -1; const p = firstPrices(i >= 0 ? txt.slice(i, i + 1500) : txt, 2); if (p.length) price = Math.min.apply(null, p); }
     const opt = readOption();
-    return { site: "naver", mob: /^m\./.test(L.hostname), pid: pm[1], item: "", name: name, seller: seller, opt: opt || "단일옵션", price: price, img: img };
+    return { site: "naver", mob: /^m\./.test(L.hostname), pid: pm[1], item: "", name: name, seller: seller, opt: opt || "단일옵션", price: price, ship: shipOf(txt, name, price), img: img };
   }
 
   /* ---------- 검색 화면: 상품 칸을 위에서부터 순서대로 ---------- */

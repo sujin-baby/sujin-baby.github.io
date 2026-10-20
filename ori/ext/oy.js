@@ -1,4 +1,4 @@
-/* 올리브영: 생성기 v63 북마크와 같은 코드 (생성기 bm-src에서 복사). 상품 페이지 = 상품 정보, 검색 화면 = 몇 번째 */
+/* 올리브영: 생성기 북마크와 같은 코드 (생성기 bm-src에서 복사). 상품 페이지 = 상품 정보, 검색 화면 = 몇 번째 */
 (async () => {
   const L = location;
   /* 고른 옵션: '색상 × 수량' 같은 이름표 바로 옆 값 (콜론은 화면 꾸밈이라 글에 없을 때가 있음). 없으면 단일옵션 */
@@ -33,6 +33,21 @@
     cand.filter(t => t !== main && alts.indexOf(t) === -1 && mods.indexOf(t) === -1).slice(0, 2).forEach(t => add(t + " " + main));
     if (brand) add(brand + " " + main);
     return out.filter(Boolean).slice(0, 4);
+  };
+  /* 배송비: 상품명 뒤 글에서 '배송비 3,000원' / '무료배송' / '30,000원 이상 (구매 시) 무료'. 가격이 무료 조건에 맞으면 무료 (사용자 요청 10/20)
+     '일반배송 | 2,500원'(올리브영)도. '추가 배송비'(제주·도서산간), 반품·교환 배송비는 건너뜀 */
+  const shipOf = (txt, name, price) => {
+    const i0 = name ? txt.indexOf(name.slice(0, 10)) : -1, t = (i0 >= 0 ? txt.slice(i0, i0 + 5000) : txt.slice(0, 8000)).replace(/\s+/g, " ");
+    const w = n => n.toLocaleString("ko-KR");
+    const thM = t.match(/(\d{1,3}(?:,\d{3})+|\d{4,})\s*원\s*이상\s*(?:구매|주문|결제)?\s*(?:시|하면)?\s*(?:배송비\s*)?무료/);
+    const th = thM ? Number(thM[1].replace(/,/g, "")) : 0;
+    const re = /(?:배송비|일반\s*배송|택배\s*배송|기본\s*배송)\s*[|:：]?\s*(\d{1,3}(?:,\d{3})+|\d{3,})\s*원/g;
+    let fm, fee = 0;
+    while ((fm = re.exec(t))) { if (/추가|도서|산간|제주|반품|교환|왕복|편도/.test(t.slice(Math.max(0, fm.index - 8), fm.index))) continue; fee = Number(fm[1].replace(/,/g, "")); break; }
+    if (fee) return th && price >= th ? "무료 (" + w(th) + "원 이상 무료, 이 가격은 조건 맞음)" : w(fee) + "원" + (th ? " (" + w(th) + "원 이상 무료인데 이 가격은 안 됨)" : "");
+    if (th) return price >= th ? "무료 (" + w(th) + "원 이상 무료, 이 가격은 조건 맞음)" : "확인 필요 (" + w(th) + "원 이상 무료인데 이 가격은 안 됨, 배송비 금액을 못 읽었어요)";
+    if (/무료\s*배송|배송비\s*[:：]?\s*무료/.test(t)) return "무료";
+    return "확인 필요 (상품 페이지에서 배송비를 못 읽었어요)";
   };
   /* 주소 뒤 #kw=…&pr=… 읽기, 결과 상자 (네이버·올리브영 같이 씀) */
   const hv = k => { const m = L.hash.match(new RegExp("[#&]" + k + "=([^&]+)")); return m ? decodeURIComponent(m[1]) : ""; };
@@ -69,7 +84,7 @@
       const kw0 = (kwh.split("|")[0] || "").trim() || name;
       const sUrl = (mob0 ? "https://msearch.shopping.naver.com" : "https://search.shopping.naver.com") + "/search/all?query=" + encodeURIComponent(kw0) +
         "#pid=" + pm[1] + "&nm=" + encodeURIComponent(name) + "&st=" + encodeURIComponent(seller) + (kwh ? "&kw=" + encodeURIComponent(kwh) : "") + (prh ? "&pr=" + prh : "");
-      const bx = show(["상품명 : " + name, "판매처 : " + seller, "상품번호 : " + pm[1], "옵션 : " + (readOpt() || "단일옵션"), prh ? "가격 : " + prh.toLocaleString("ko-KR") + "원" : "", img ? "썸네일 : " + img : ""].filter(Boolean).join("\n"),
+      const bx = show(["상품명 : " + name, "판매처 : " + seller, "상품번호 : " + pm[1], "옵션 : " + (readOpt() || "단일옵션"), prh ? "가격 : " + prh.toLocaleString("ko-KR") + "원" : "", "배송비 : " + shipOf(document.body.innerText, name, prh), img ? "썸네일 : " + img : ""].filter(Boolean).join("\n"),
         "위치는 아래 [위치 찾기] → 열린 네이버 쇼핑 화면에서 이 북마크를 한 번 더. 키워드: " + kwh.split("|").join(" → ") + (prh ? " (각각 가격 " + prh.toLocaleString("ko-KR") + "원 필터도)" : ""));
       const go = document.createElement("a"); go.href = sUrl; go.target = "_blank"; go.rel = "noopener"; go.textContent = "위치 찾기 (네이버 쇼핑 열기)";
       go.style.cssText = "display:block;margin-top:8px;padding:9px;border-radius:6px;background:#03c75a;color:#fff;text-align:center;font-weight:700;text-decoration:none";
@@ -154,6 +169,8 @@
   if (/oliveyoung\.co\.kr$/.test(L.hostname)) {
     const OY = "#7aa61a", mobO = /^m\./.test(L.hostname) || /iPhone|iPad|Android/i.test(navigator.userAgent);
     const gq = (L.search.match(/goodsNo=(A\d{9,})/i) || [])[1];
+    /* 결과 상자 위쪽 상품 정보 (검색 화면 결과에도 같이 넣어서 한 번에 붙여넣게) */
+    const oyInfo = T => ["상품명 : " + (T.nm || ""), "판매처 : " + (T.st || "올리브영"), "상품번호 : " + T.gno, "옵션 : " + (T.opt || "단일옵션"), T.pr ? "가격 : " + Number(T.pr).toLocaleString("ko-KR") + "원" : "", T.ship ? "배송비 : " + T.ship : "", T.img ? "썸네일 : " + T.img : ""].filter(Boolean);
     const txtOf = sel => { const e = document.querySelector(sel); return e ? (e.innerText || e.textContent || "").replace(/\s+/g, " ").trim() : ""; };
     if (gq && /GoodsDetail/i.test(L.pathname)) {
       /* 상품 페이지: 상품명, 브랜드(판매처 칸), 상품번호(goodsNo), 가격, 썸네일 */
@@ -167,10 +184,10 @@
       if (!price) { const t0 = document.body.innerText, i0 = t0.indexOf(name.slice(0, 10)); const ps = ((i0 >= 0 ? t0.slice(i0, i0 + 1500) : t0).match(/\d{1,3}(?:,\d{3})+\s*원/g) || []).slice(0, 2).map(x => Number(x.replace(/[^0-9]/g, ""))); if (ps.length) price = Math.min.apply(null, ps); }
       const kwh = hv("kw") || new URLSearchParams(L.search).get("t_search_name") || sugKw(name).join("|");
       const kw0 = (kwh.split("|")[0] || "").trim() || name;
-      const T = { gno: gq, nm: name, kw: kwh };
+      const T = { gno: gq, nm: name, st: brand || "올리브영", pr: price, img: img, opt: readOpt() || "단일옵션", ship: shipOf(document.body.innerText, name, price), kw: kwh };
       try { localStorage.setItem("__pl_oy", JSON.stringify(T)); } catch (e) {}
-      const sUrl = "https://www.oliveyoung.co.kr/store/search/getSearchMain.do?query=" + encodeURIComponent(kw0) + "#gno=" + gq + "&nm=" + encodeURIComponent(name) + "&kw=" + encodeURIComponent(kwh);
-      const bx = show(["상품명 : " + name, "판매처 : " + (brand || "올리브영"), "상품번호 : " + gq, "옵션 : " + (readOpt() || "단일옵션"), price ? "가격 : " + price.toLocaleString("ko-KR") + "원" : "", img ? "썸네일 : " + img : ""].filter(Boolean).join("\n"),
+      const sUrl = "https://www.oliveyoung.co.kr/store/search/getSearchMain.do?query=" + encodeURIComponent(kw0) + "#gno=" + gq + "&nm=" + encodeURIComponent(name) + "&st=" + encodeURIComponent(T.st) + (price ? "&pr=" + price : "") + "&kw=" + encodeURIComponent(kwh);
+      const bx = show(oyInfo(T).join("\n"),
         "위치는 아래 [위치 찾기] → 열린 올리브영 검색 화면에서 이 북마크를 한 번 더. 키워드: " + kwh.split("|").join(" → "), OY);
       const go = document.createElement("a"); go.href = sUrl; go.target = "_blank"; go.rel = "noopener"; go.textContent = "위치 찾기 (올리브영 검색 열기)";
       go.style.cssText = "display:block;margin-top:8px;padding:9px;border-radius:6px;background:" + OY + ";color:#fff;text-align:center;font-weight:700;text-decoration:none";
@@ -180,7 +197,7 @@
     /* 검색 화면: 찾는 상품(goodsNo)이 광고 빼고 몇 번째인지. 대상은 주소 뒤 #gno= → 저장해 둔 것 → 복사해 둔 상품 정보 → 직접 입력 순서 */
     let T = null;
     try { T = JSON.parse(localStorage.getItem("__pl_oy") || "null"); } catch (e) {}
-    if (hv("gno")) T = { gno: hv("gno"), nm: hv("nm"), kw: hv("kw") };
+    if (hv("gno")) { const o = T && T.gno === hv("gno") ? T : {}; T = Object.assign({}, o, { gno: hv("gno"), nm: hv("nm") || o.nm, st: hv("st") || o.st, pr: Number(hv("pr") || 0) || o.pr, kw: hv("kw") || o.kw }); }
     if (!T || !T.gno) { let cb = ""; try { cb = (await navigator.clipboard.readText()) || ""; } catch (e) {} const m = cb.match(/상품번호\s*[:：]\s*(A\d{9,})/), m2 = cb.match(/상품명\s*[:：]\s*([^\n]+)/); if (m) T = { gno: m[1], nm: m2 ? m2[1].trim() : "", kw: "" }; }
     if (!T || !T.gno) { const a = (prompt("찾을 올리브영 상품번호 (상품 주소의 goodsNo=A000… 부분, 주소를 통째로 붙여넣어도 돼요)", "") || "").match(/A\d{9,}/); if (!a) return; T = { gno: a[0], nm: "", kw: "" }; }
     try { localStorage.setItem("__pl_oy", JSON.stringify(T)); } catch (e) {}
@@ -223,7 +240,14 @@
     bx.remove();
     if (f.el) {
       f.el.style.outline = "4px solid #e5397a"; f.el.style.outlineOffset = "2px"; f.el.scrollIntoView({ block: "center" });
-      show([q ? "찾은 키워드 : " + q.trim() : "", mobO ? "모바일 위치 : 위에서 " + f.rank + "번째" : "PC 위치 : " + pg + "페이지 (위에서 " + f.rank + "번째)"].filter(Boolean).join("\n"), "찾았어요 (분홍 테두리, 광고 빼고 " + f.rank + "번째). 복사해서 생성기 '상품 정보 붙여넣기' 칸에.", OY);
+      /* 상품 페이지를 안 거치고 왔으면 찾은 칸에서 상품명·브랜드·가격·사진 */
+      const cq = sel => { const e = f.el.querySelector(sel); return e ? (e.innerText || e.textContent || "").replace(/\s+/g, " ").trim() : ""; };
+      if (!T.nm) T.nm = cq(".tx_name, [class*=name]");
+      if (!T.st) T.st = cq(".tx_brand, [class*=brand]");
+      if (!T.pr) T.pr = Number(cq(".tx_cur .tx_num, .tx_cur, [class*=price]").replace(/[^0-9]/g, "")) || 0;
+      if (!T.img) { const im = f.el.querySelector("img"); T.img = im ? (im.currentSrc || im.src || "") : ""; }
+      if (!T.ship) T.ship = /무료\s*배송/.test(f.el.innerText || "") ? "무료" : (T.pr ? shipOf(f.el.innerText || "", "", T.pr) : "");
+      show(oyInfo(T).concat([q ? "찾은 키워드 : " + q.trim() : "", mobO ? "모바일 위치 : 위에서 " + f.rank + "번째" : "PC 위치 : " + pg + "페이지 (위에서 " + f.rank + "번째)"]).filter(Boolean).join("\n"), "찾았어요 (분홍 테두리, 광고 빼고 " + f.rank + "번째). 복사해서 생성기 '상품 정보 붙여넣기' 칸에.", OY);
     } else {
       show("이 화면에는 없어요", "검색어 '" + q + "', " + (mobO ? "" : pg + "페이지, ") + "상품 " + f.n + "개 확인" + (f.ad ? " (광고 자리에만 있어요)" : "") + ". 찾는 상품번호 " + T.gno + "." + (mobO ? "" : " 다음 페이지를 누르고 북마크를 다시 눌러 주세요."), OY);
     }
@@ -331,6 +355,7 @@
     "상품번호 : " + pid + (item ? " - " + mask(item) : ""),
     opt ? "옵션 : " + opt : "",
     price ? "가격 : " + price.toLocaleString("ko-KR") + "원" : "",
+    "배송비 : " + shipOf(txt, name, price),
     foundKw ? "찾은 키워드 : " + foundKw : "",
     filtLine ? "필터 : " + filtLine : "",
     kw ? (mob ? "모바일 위치 : " : "PC 위치 : ") + pageLine : "",
