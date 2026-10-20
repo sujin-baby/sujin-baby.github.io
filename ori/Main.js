@@ -164,6 +164,70 @@ function dateTok_(t) { const m = String(t || '').match(/(\d{1,2})\.(\d{1,2})/); 
 function sameRunTitle_(a, b) { return !!dateTok_(a) && dateTok_(a) === dateTok_(b) && campKey_(a) === campKey_(b); }
 function bareTitle_(t) { return String(t || '').replace(/\s*\([^)]*\)\s*$/, '').trim(); }
 
+// 진행 날짜 옮기기: 방제·명단 제목 날짜(#10.22 → #10.23), 진행 상태, 보낼메시지(안 보낸 것) 방·날짜·글 속 방제, 월급시트 줄 이름·진행일
+//  같은 명단 시트의 뒤 진행·일정 탭 대기 계획은 날짜가 겹치거나 앞서면 다음 진행일로 차례로 미룸 (예: 목요일 건너뛰기 → 목→금, 금→월)
+function moveRunDate_(r, d) {
+  d = new Date(d); d.setHours(0, 0, 0, 0);
+  const oldBare = bareTitle_(r['명단 제목']), md = function (x) { return (x.getMonth() + 1) + '.' + x.getDate(); };
+  if (dateTok_(oldBare) === md(d)) { setRun_(r.row, '진행 상태', statusFor_(d)); return oldBare + ': 날짜가 같아요.'; }
+  const one = function (run, day) {
+    const ob0 = bareTitle_(run['명단 제목']), nb = retitleDate_(ob0, day);
+    setRun_(run.row, '진행일', day); run['진행일'] = day;
+    if (run['진행 상태'] !== '종료') setRun_(run.row, '진행 상태', statusFor_(day));
+    renameRun_(run, nb);
+    // 안 보낸 메시지: 글 속 옛 방제도 새 방제로, 보낼 날짜 다시
+    try {
+      const ob = outboxSheet_(), ol = ob.getLastRow();
+      if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v, i) {
+        if (v[5] === '보냄' || String(v[3]) !== nb) return;
+        const m2 = String(v[4]).split(ob0).join(nb);
+        if (m2 !== String(v[4])) ob.getRange(i + 2, 5).setValue(m2);
+        ob.getRange(i + 2, 2).setValue(sendDate_(v[3], m2, v[2]));
+      });
+    } catch (e) {}
+    // 월급시트 줄 이름·진행일
+    try {
+      payTabsNow_().forEach(function (sh) {
+        const L = payLayout_(sh); if (!L) return;
+        const n = Math.max(sh.getLastRow() - L.head, 1), names = sh.getRange(L.head + 1, L.name, n, 1).getValues();
+        names.forEach(function (x, i) {
+          if (String(x[0]).replace(/\s+/g, '') !== ob0.replace(/\s+/g, '')) return;
+          sh.getRange(L.head + 1 + i, L.name).setValue(nb);
+          if (L.date) sh.getRange(L.head + 1 + i, L.date).setValue(day).setNumberFormat('M/d');
+        });
+      });
+    } catch (e) {}
+    return ob0 + ' → ' + nb;
+  };
+  // 원래 날짜 = 방제의 날짜 (진행일 칸은 이미 새 날짜로 고쳐져 있음)
+  const om = (dateTok_(oldBare) || '').split('.'), oldDay = om.length === 2 ? new Date(d.getFullYear(), Number(om[0]) - 1, Number(om[1])) : d;
+  const done = [one(r, d)];
+  // 뒤 진행 (같은 명단 시트, 원래 이 진행보다 뒤): 겹치거나 앞서면 다음 진행일로
+  let prev = d;
+  const later = readRuns_().filter(function (x) { return x.row !== r.row && x['시트ID'] && String(x['시트ID']) === String(r['시트ID']) && x['진행일'] instanceof Date && x['진행 상태'] !== '종료' && dayStart_(x['진행일']) > dayStart_(oldDay); })
+    .sort(function (a, b) { return a['진행일'] - b['진행일']; });
+  later.forEach(function (x) {
+    if (dayStart_(x['진행일']) > dayStart_(prev)) { prev = x['진행일']; return; }
+    const nd = nextWorkday_(prev);
+    done.push(one(x, nd)); prev = nd;
+  });
+  // 일정 탭 대기 계획 (아직 안 만든 다음 일차)
+  try {
+    const ps = planSheet_(), pl = ps.getLastRow(), ck = campKey_(r['캠페인'] || r['명단 제목']);
+    if (pl >= 2) {
+      const rows = ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().map(function (x, i) { return { x: x, i: i }; })
+        .filter(function (o) { return o.x[8] === '대기' && campKey_(o.x[1]) === ck && o.x[3] instanceof Date && dayStart_(o.x[3]) > dayStart_(oldDay); }).sort(function (a, b) { return a.x[3] - b.x[3]; });
+      rows.forEach(function (o) {
+        if (dayStart_(o.x[3]) > dayStart_(prev)) { prev = o.x[3]; return; }
+        const nd = nextWorkday_(prev);
+        ps.getRange(o.i + 2, 4, 1, 3).setValues([[nd, retitleDate_(o.x[4], nd), retitleDate_(o.x[5], nd)]]);
+        done.push('(일정) ' + bareTitle_(o.x[5]) + ' → ' + bareTitle_(retitleDate_(o.x[5], nd))); prev = nd;
+      });
+    }
+  } catch (e) {}
+  return '✓ 진행일 바꿈: ' + done.join(', ');
+}
+
 // 방제(명단 제목) 바꾸기: 진행목록 명단 제목·카톡방, 보낼 메시지함의 대기 중인 방 이름. 월급시트 캠페인명은 15분 갱신 때 같은 날짜·캠페인 줄을 찾아 바꿈
 function renameRun_(r, title) {
   title = bareTitle_(title);
@@ -945,7 +1009,7 @@ function doGet(e) {
   const p = (e && e.parameter) || {};
   if (p.k !== CONFIG.KEY) return HtmlService.createHtmlOutput('링크가 올바르지 않아요. 체험단 가이드 생성기의 버튼으로 열어 주세요.');
   if (p.p === 'queue') return ContentService.createTextOutput(queueText_());
-  if (p.p === 'sent') { markMsg_(p.id, p.st === 'fail' ? '방 못 찾음' : '보냄'); return ContentService.createTextOutput('ok'); }
+  if (p.p === 'sent') { markMsg_(p.id, p.st === 'fail' ? '대기' : '보냄'); return ContentService.createTextOutput('ok'); }
   if (p.p === 'rank') return rankPage_(p);
   if (p.p === 'review') return reviewPage_(p);
   if (p.p === 'tools') {
@@ -2177,6 +2241,7 @@ function checkFullInner_() {
   try { fixTemplateOnce_(); } catch (e) { note_('템플릿 폼 질문 고치기 실패: ' + e); }
   try { fixTemplateNameOnce_(); } catch (e) { note_('템플릿 폼 이름 질문 바꾸기 실패: ' + e); }
   try { blackSheet_(); } catch (e) { note_('블랙리스트 탭 만들기 실패: ' + e); }
+  try { ensureUsageTab_(); } catch (e) { note_('사용법 탭 만들기 실패: ' + e); }
   try { fixNoCountNamesOnce_(runs); } catch (e) { note_('이름 인원 수 빼기 실패: ' + e); }
   try { fixSilOnce_(runs); } catch (e) { note_('실 위치 바꾸기 실패: ' + e); }
   try { fixStaleNamesOnce_(runs); } catch (e) { note_('다음 일차 공지 이름 빼기 실패: ' + e); }
@@ -2212,6 +2277,8 @@ function checkFullInner_() {
   props.setProperty('RUN_ERRORS', JSON.stringify(errs));
   // 리뷰체크 탭은 사용자 요청으로 없앰(10/19). 만들어 둔 탭은 한 번 지움
   try { dropReviewTabsOnce_(runs); } catch (e) { note_('리뷰체크 탭 지우기 실패: ' + e); }
+  step_('리뷰 완료');
+  if (!late_(200)) { try { reviewDone_(readRuns_()); } catch (e) { note_('리뷰 완료 확인 실패: ' + e); } }
   step_('명단 탭(지난 의뢰)');
   try { listTabsRecent_(runs, listed); } catch (e) { note_('지난 명단 탭 실패: ' + e); }
   try { refreshEditTab_(); } catch (e) { note_('폼수정 탭 새로고침 실패: ' + e); }
@@ -2581,7 +2648,7 @@ function outboxSheet_() {
   if (sh && !PropertiesService.getScriptProperties().getProperty('OUTBOX_SORTED')) {
     const last = sh.getLastRow();
     if (last >= 3) sh.getRange(2, 1, last - 1, 6).sort({ column: 2, ascending: false });
-    if (last >= 2) sh.getRange(2, 6, last - 1, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['대기', '보냄', '방 못 찾음'], true).build());
+    if (last >= 2) sh.getRange(2, 6, last - 1, 1).setDataValidation(obCheck_());
     sh.getRange(1, 1, Math.max(last, 1), 6).setVerticalAlignment('middle');
     sh.getRange(1, 1, Math.max(last, 1), 4).setHorizontalAlignment('center');
     sh.getRange(1, 6, Math.max(last, 1), 1).setHorizontalAlignment('center');
@@ -2589,7 +2656,7 @@ function outboxSheet_() {
   }
   if (!sh) {
     sh = ss.insertSheet(OUTBOX_SHEET, 1);
-    sh.appendRow(['ID', '보낼 날짜', '종류', '카톡방', '메시지', '상태']);
+    sh.appendRow(['ID', '보낼 날짜', '종류', '카톡방', '메시지', '보냄 체크']);
     sh.getRange(1, 1, 1, 6).setFontWeight('bold').setBackground('#efe6f7');
     sh.setFrozenRows(1);
     sh.setColumnWidth(5, 420);
@@ -2618,6 +2685,13 @@ function tidyOutbox_() {
     last = sh.getLastRow();
     if (last < 2) return;
   }
+  // (한 번, 10/20) 상태 칸을 체크칸으로: 체크하면 보냄. '방 못 찾음'은 대기로
+  if (!op.getProperty('OUTBOX_V4')) {
+    op.setProperty('OUTBOX_V4', '1');
+    const st = sh.getRange(2, 6, last - 1, 1), sv = st.getValues();
+    st.setValues(sv.map(function (x) { return [x[0] === '보냄' ? '보냄' : '대기']; })).setDataValidation(obCheck_());
+    sh.getRange(1, 6).setValue('보냄 체크');
+  }
   sortOutbox_(sh);
   sh.getRange(1, 1, last, 6).setVerticalAlignment('top').setWrap(false);
   sh.getRange(2, 5, last - 1, 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
@@ -2628,7 +2702,6 @@ function tidyOutbox_() {
   const all = sh.getRange(2, 1, Math.max(sh.getMaxRows() - 1, 1), 6);
   sh.setConditionalFormatRules([
     SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$F2="대기"').setBackground('#fff2cc').setRanges([all]).build(),
-    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$F2="방 못 찾음"').setBackground('#f8c9c4').setRanges([all]).build(),
     SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$F2="보냄"').setFontColor('#9e9e9e').setRanges([all]).build()
   ]);
   sh.getRange(2, 6, last - 1, 1).setFontWeight('bold').setHorizontalAlignment('center');
@@ -2675,7 +2748,7 @@ function queueMsg_(room, msg, kind) {
     const ob = outboxSheet_();
     ob.insertRowBefore(2);
     ob.getRange(2, 1, 1, 6).setValues([[Utilities.getUuid().replace(/-/g, '').slice(0, 10), sendDate_(room, msg, kind), kind || '', String(room || ''), String(msg), '대기']]);
-    ob.getRange(2, 6).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['대기', '보냄', '방 못 찾음'], true).build());
+    ob.getRange(2, 6).setDataValidation(obCheck_());
     ob.getRange(2, 1, 1, 6).setWrap(false).setVerticalAlignment('middle').setFontWeight('normal').setBackground(null);
     ob.getRange(2, 5).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
     ob.setRowHeight(2, 21);
@@ -2699,7 +2772,10 @@ function queueText_() {
     .map(function (x) { return x.id + '\t' + b(x.room) + '\t' + b(x.msg); }).join('\n');
 }
 
+// 보낼메시지 상태 칸 = 체크칸 (체크 = '보냄', 빈칸 = '대기'). 값은 글자 그대로라 다른 코드는 안 바꿔도 됨. '방 못 찾음'은 없앰 (사용자 요청 10/20)
+function obCheck_() { return SpreadsheetApp.newDataValidation().requireCheckbox('보냄', '대기').build(); }
 function markMsg_(id, st) {
+  if (st !== '보냄') st = '대기';
   const sh = outboxSheet_();
   const last = sh.getLastRow();
   if (last < 2 || !id) return;
@@ -3746,6 +3822,18 @@ function onAdminEdit(e) {
 
 function onAdminEditInner_(e) {
   const sh = e.range.getSheet();
+  // 진행목록 '진행일'을 고치면 그 진행 날짜를 옮김 (방제·카톡방·보낼메시지·월급시트, 뒤 일차·일정은 겹치지 않게 미룸) (사용자 요청 10/20)
+  if (sh.getName() === CONFIG.LIST_SHEET && e.range.getColumn() === lc_('진행일') && e.range.getRow() >= 2 && e.range.getNumRows() === 1) {
+    const d = e.range.getValue();
+    if (!(d instanceof Date)) { try { e.source.toast('진행일은 날짜로 적어 주세요 (예: 10/23)', '진행일', 8); } catch (err) {} return; }
+    const r = readRuns_().filter(function (x) { return x.row === e.range.getRow(); })[0];
+    if (!r) return;
+    let msg = '';
+    try { msg = moveRunDate_(r, d); } catch (err) { msg = '날짜 옮기기 실패: ' + err.message; }
+    try { e.source.toast(msg, '진행일 바꿈', 15); } catch (err) {}
+    note_(msg);
+    return;
+  }
   if (sh.getName() === DASH_TAB && e.range.getColumn() === 2 && e.range.getRow() >= 2 && e.oldValue && e.value) {
     // 한눈에 탭 방제를 고치면 진행목록, 카톡방, 보낼 메시지함, 월급시트까지 같이
     const r = readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']) === String(e.oldValue).trim() || sameRunTitle_(x['명단 제목'], e.oldValue); }).pop();
@@ -3955,6 +4043,158 @@ function applyAssign_(sh, text) {
   return assignRun_(r, text);
 }
 
+/* ---------------- 리뷰 완료: 취완 · 사장님 보고 · 리뷰 이미지 압축 (사용자 요청 10/20, A + B1) ----------------
+   A. 명단 탭 맨 왼쪽 체크칸(리뷰 확인)을 그 방(그날) 사람 전부 체크하면 → 보낼메시지에 그 카톡방 '취완'
+      의뢰(명단 시트) 전체가 다 진행되고 전부 체크되면 → 사장님 갠톡 '안녕하세요 [명단 시트 이름] 리뷰완료되어 보고드립니다 !'
+   B1. 의뢰 폴더 안 '리뷰이미지' 폴더(명단이 마감되면 자동으로 만듦)에 카톡 사진을 올려 두면 → 압축 파일(명단 시트 이름.zip)을 의뢰 폴더에 만들고
+      보낼메시지 '할 일'에 다운로드 링크 (받아서 사장님 톡에 첨부). 사진을 더 올리면 다시 압축 */
+const RV_IMG_FOLDER = '리뷰이미지';
+function reviewDone_(runs) {
+  const props = PropertiesService.getScriptProperties(), cut = today_().getTime() - 40 * 86400000;
+  // 처음 한 번은 이미 다 체크된 예전 의뢰를 '보낸 걸로' 기억만 (예전에 직접 보낸 취완·보고가 다시 안 들어가게)
+  const init = !props.getProperty('RVDONE_INIT');
+  const bySheet = {};
+  runs.forEach(function (r) { if (r['시트ID'] && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut) (bySheet[r['시트ID']] = bySheet[r['시트ID']] || []).push(r); });
+  let pend = {};
+  try { const ps = planSheet_(), pl = ps.getLastRow(); if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x) { if (x[8] === '대기') pend[campKey_(x[1])] = 1; }); } catch (e) {}
+  Object.keys(bySheet).forEach(function (sid) {
+    const mine = bySheet[sid].sort(function (a, b) { return a['진행일'] - b['진행일']; });
+    if (!mine.some(function (r) { return r['마감 시각'] instanceof Date; })) return;   // 아직 명단이 하나도 안 끝난 의뢰
+    try {
+      const lss = SpreadsheetApp.openById(sid), name = lss.getName();
+      const folder = rvFolder_(mine, props, sid);
+      const sh = lss.getSheetByName(LIST_TAB);
+      if (!sh || !props.getProperty('LISTV_' + sid) || sh.getLastRow() < 3) return;
+      const lc = Math.max(sh.getLastColumn(), 1), hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_);
+      const cT = hdr.indexOf('타임스탬프');
+      if (cT < 0) return;
+      const rg = sh.getRange(3, 1, sh.getLastRow() - 2, lc), v = rg.getValues(), nt = sh.getRange(3, cT + 1, sh.getLastRow() - 2, 1).getNotes();
+      // 체크칸: 값이 있는 줄이 전부 참/거짓인 칸 (머리글에 체크·확인·리뷰가 있으면 그 칸 먼저)
+      const live = v.map(function (x, i) { return x[cT] instanceof Date && !nt[i][0] ? i : -1; }).filter(function (i) { return i >= 0; });
+      if (!live.length) return;
+      const isChk = function (c) { return live.every(function (i) { return typeof v[i][c] === 'boolean'; }); };
+      let cc = hdr.findIndex(function (h, c) { return /체크|확인|리뷰/.test(h) && isChk(c); });
+      if (cc < 0) cc = hdr.findIndex(function (h, c) { return isChk(c); });
+      if (cc < 0) return;
+      // A-1. 그날(그 방) 사람 전부 체크 → 취완
+      mine.forEach(function (r) {
+        if (!(r['마감 시각'] instanceof Date) && !pastEnd_(r)) return;
+        const w = windowOf_(runs, r);
+        const rows = live.filter(function (i) { const t = v[i][cT].getTime(); return t >= w.from && t < w.to; });
+        if (!rows.length || !rows.every(function (i) { return v[i][cc] === true; })) return;
+        const k = 'RVDONE_' + String(r['명단 제목']).replace(/\s+/g, '');
+        if (props.getProperty(k)) return;
+        props.setProperty(k, '1');
+        if (init) return;
+        queueMsg_(String(r['카톡방'] || bareTitle_(r['명단 제목'])), '취완', '취완');
+        note_('✓ 취완 메시지 넣음: ' + bareTitle_(r['명단 제목']));
+      });
+      // A-2. 의뢰 전체 끝 + 전부 체크 → 사장님 보고
+      const total = mine.reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0);
+      const got = mine.reduce(function (a, x) { return a + (Number(x['인원']) || 0); }, 0);
+      const allDone = (!total || got >= total) && !pend[campKey_(mine[0]['캠페인'] || mine[0]['명단 제목'])] && live.every(function (i) { return v[i][cc] === true; });
+      const rk = 'RVRPT_' + sid;
+      if (allDone && !props.getProperty(rk)) {
+        props.setProperty(rk, '1');
+        if (!init) queueMsg_('사장님', '안녕하세요 ' + name + ' 리뷰완료되어 보고드립니다 !', '리뷰 보고');
+        if (!init) note_('✓ 사장님 리뷰 완료 보고 넣음: ' + name);
+      }
+      // B1. 리뷰이미지 폴더 사진 → 압축
+      if (folder) rvZip_(folder, name, props, sid);
+    } catch (e) { note_('리뷰 완료 확인 실패 ' + sid + ': ' + e.message); }
+  });
+  if (init) props.setProperty('RVDONE_INIT', '1');
+}
+// 의뢰 폴더 안 '리뷰이미지' 폴더 (없으면 만듦)
+function rvFolder_(mine, props, sid) {
+  const first = mine.filter(function (x) { return x['폴더 링크']; })[0];
+  if (!first) return null;
+  const id = (String(first['폴더 링크']).match(/[-\w]{25,}/) || [])[0];
+  if (!id) return null;
+  const parent = DriveApp.getFolderById(id), it = parent.getFoldersByName(RV_IMG_FOLDER);
+  if (it.hasNext()) return { parent: parent, img: it.next() };
+  const img = parent.createFolder(RV_IMG_FOLDER);
+  note_('✓ 리뷰 이미지 폴더 만듦: ' + parent.getName() + '/' + RV_IMG_FOLDER);
+  return { parent: parent, img: img };
+}
+function rvZip_(f, name, props, sid) {
+  const files = [], it = f.img.getFiles();
+  while (it.hasNext()) { const x = it.next(); if (/^image\//.test(x.getMimeType())) files.push(x); }
+  if (!files.length) return;
+  const sig = files.length + ':' + files.reduce(function (m, x) { return Math.max(m, x.getLastUpdated().getTime()); }, 0);
+  if (props.getProperty('RVZIP_' + sid) === sig) return;
+  const size = files.reduce(function (a, x) { return a + x.getSize(); }, 0);
+  if (size > 45 * 1024 * 1024) { note_(name + ' 리뷰 이미지가 너무 커서(' + Math.round(size / 1048576) + 'MB) 압축 못 함. 나눠서 올려 주세요'); props.setProperty('RVZIP_' + sid, sig); return; }
+  const zipName = name.replace(/\s*\d+\s*$/, '').trim() + '.zip';
+  const used = {};
+  const blobs = files.map(function (x) { let n = x.getName(); while (used[n]) n = '_' + n; used[n] = 1; return x.getBlob().setName(n); });
+  const old = f.parent.getFilesByName(zipName);
+  while (old.hasNext()) old.next().setTrashed(true);
+  const zip = f.parent.createFile(Utilities.zip(blobs, zipName));
+  props.setProperty('RVZIP_' + sid, sig);
+  const msg = '[' + name + '] 리뷰 이미지 ' + files.length + '장 압축했어요 → 받아서 사장님 톡에 보고 문구와 같이 보내기\n' + zip.getUrl();
+  // 안 보낸 '할 일'이 있으면 새 링크로 바꿈
+  const ob = outboxSheet_(), ol = ob.getLastRow();
+  let done = false;
+  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v, i) { if (!done && v[2] === '할 일' && v[5] !== '보냄' && String(v[4]).indexOf('[' + name + '] 리뷰 이미지') === 0) { ob.getRange(i + 2, 5).setValue(msg); done = true; } });
+  if (!done) queueMsg_('사장님', msg, '할 일');
+  note_('✓ 리뷰 이미지 압축: ' + zipName + ' (' + files.length + '장)');
+}
+
+/* ---------------- 사용법 탭 (맨 앞, 사용자 요청 10/20). 글을 바꾸면 USAGE_VER를 올림 → 다시 씀 ---------------- */
+const USAGE_TAB = '사용법', USAGE_VER = '1';
+const USAGE_ROWS = [
+  ['체험단 관리 시트 사용법', '(스크립트가 쓰는 탭이라 여기 고친 글은 다음 업데이트 때 다시 써져요)'],
+  ['', ''],
+  ['■ 탭', ''],
+  ['한눈에', '오늘·앞으로·지난 진행 현황과 날마다 명단. 휴대폰에서는 표 아래 "휴대폰: ▶ 진행 도우미" 링크(홈 화면에 추가)로 보기'],
+  ['블랙리스트', '받으면 안 되는 사람. 이름만 아래에 추가. 배정·폼 응답에 있으면 ⛔로 알려 줌'],
+  ['보낼메시지', '카톡에 보낼 글. 위에서부터(보낼 날짜 빠른 순) 복사해서 보내고 맨 오른쪽 "보냄 체크" 칸 체크'],
+  ['진행목록', '모든 진행 기록. "진행일" 칸을 고치면 그 진행 날짜가 옮겨짐 (아래 "날짜 바꾸기")'],
+  ['폼수정', 'B1에서 진행 고르기 → E2 공지 붙여넣기(배정) / 응답 체크 후 삭제 실행 / I2에 숫자 = 추가 모집'],
+  ['배정', '누가 어떤 옵션을 사기로 했는지 (공지 이름에서 자동). 안 산 사람·옵션 틀림 확인에 씀. 지우지 마세요'],
+  ['일정', '아직 안 만든 다음 일차 계획. 진행 전날 오전 10시에 자동으로 폼·방 공지가 만들어짐'],
+  ['', ''],
+  ['■ 매일 할 일', ''],
+  ['1. 새 의뢰', '생성기에 의뢰서 붙여넣기 → 공지에 살 사람 이름 적기 → [이 내용으로 새 진행 만들기] (폼·명단 시트·방 공지·배정·다음 일차 계획까지 자동)'],
+  ['2. 카톡 보내기', '보낼메시지 "대기"를 위에서부터 복사 → 카톡방에 붙여넣고 보내기 → 보냄 체크'],
+  ['3. 폼', '진행일 0시에 자동으로 열리고, 인원이 차면 자동으로 닫힘 → 명단 전달·리뷰내용 가이드 메시지가 보낼메시지에 들어감'],
+  ['4. 택배대행', '한눈에 탭 그날 명단에서 A~K 복사 → 택배시트에 붙여넣기 → "택배 옮김" 체크 (2시 전)'],
+  ['', ''],
+  ['■ 이럴 땐', ''],
+  ['날짜 바꾸기', '예) 목요일 건너뛰고 금요일에: 진행목록에서 그 진행 "진행일"을 새 날짜(10/23)로 고치기 → 방제·카톡방 이름·보낼메시지·월급시트·뒤 일차까지 같이 바뀜 (오른쪽 아래 알림). 이미 만든 카톡방 이름은 직접 바꾸기. 아직 안 만든 일차는 "일정" 탭 진행일을 고치기'],
+  ['안 산 사람 (인원 모자람)', '그대로 두면 됨. 의뢰 마지막 날이면 그날 오전 10시 이후 다음 진행일에 모자란 만큼 진행이 자동으로 생김(보낼메시지에 방 공지). 중간 날 모자란 건 마지막 날 끝난 뒤 한꺼번에. 바로 더 받으려면 폼수정 탭 I2에 인원 숫자'],
+  ['잘못 산 사람·방 나간 사람', '폼수정 탭 B1에서 진행 고르기 → 그 응답 체크 → 삭제 실행. 그날 안이면 폼이 다시 열려 다른 사람을 받음'],
+  ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
+  ['리뷰 완료 (취완)', '명단 시트 "명단" 탭 맨 왼쪽 체크칸에 리뷰 확인 체크 → 그 방 사람 전부 체크되면 보낼메시지에 그 방 "취완", 의뢰 전체가 끝나고 전부 체크되면 사장님 보고 문구'],
+  ['리뷰 이미지 압축', '카톡 사진 전체 저장 → 의뢰 폴더(진행목록 "폴더 링크") 안 "리뷰이미지" 폴더에 올리기 → 압축 파일(명단 시트 이름.zip)이 생기고 보낼메시지 "할 일"에 링크 → 받아서 사장님 톡에 첨부'],
+  ['블랙리스트 사람이 폼을 냄', '한눈에 "확인 필요" 칸에 ⛔ + 메일 → 폼수정 탭에서 그 응답 지우기'],
+  ['명단이 안 보임', '메뉴 체험단 도구 → 지금 명단 마감 확인 (명단 탭만 바로 새로고침, 나머지는 1분 뒤 자동)'],
+  ['화면이 이상함', '메뉴 → 지금 최신 버전으로 업데이트 → 한눈에 탭 새로 만들기'],
+  ['', ''],
+  ['■ 주의', ''],
+  ['탭', '탭 순서는 마음대로 옮겨도 됨. 탭 이름은 바꾸지 마세요 (스크립트가 이름으로 찾아요)'],
+  ['택배시트', '스크립트가 절대 안 고침 (직접)'],
+  ['카톡', '보내기는 항상 직접 (스크립트는 글만 준비)'],
+  ['한눈에 Q1 ⏳', '자동 확인이 도는 중. ✔로 바뀔 때까지 메뉴를 누르지 말고 기다리기']
+];
+function ensureUsageTab_() {
+  const props = PropertiesService.getScriptProperties(), ss = adminSs_();
+  let sh = ss.getSheetByName(USAGE_TAB);
+  if (sh && props.getProperty('USAGE_VER') === USAGE_VER) return;
+  if (!sh) { sh = ss.insertSheet(USAGE_TAB, 0); sh.setTabColor('#5b2a86'); }
+  sh.clear();
+  sh.getRange(1, 1, USAGE_ROWS.length, 2).setValues(USAGE_ROWS).setWrap(true).setVerticalAlignment('top');
+  sh.setColumnWidth(1, 190); sh.setColumnWidth(2, 820);
+  sh.getRange(1, 1).setFontSize(14).setFontWeight('bold');
+  USAGE_ROWS.forEach(function (r, i) {
+    if (/^■/.test(r[0])) sh.getRange(i + 1, 1, 1, 2).setFontWeight('bold').setBackground('#efe6f7');
+    else if (r[0] && i > 0) sh.getRange(i + 1, 1).setFontWeight('bold');
+  });
+  sh.getRange(1, 2).setFontColor('#888888');
+  props.setProperty('USAGE_VER', USAGE_VER);
+}
+
 /* ---------------- 블랙리스트: 받으면 안 되는 리뷰어 (사용자 요청 10/20) ----------------
    관리 시트 '블랙리스트' 탭(한눈에 바로 옆, 빨간 탭). A 이름 | B 메모 | C 추가일. 이름만 적으면 됨 (띄어쓰기 무시)
    ① 공지 붙여넣기·생성기로 배정할 때 이름이 있으면 ⛔ 알림 ② 폼 응답 이름·계정명·예금주·닉네임에 있으면 한눈에 '확인 필요' 칸 + 메일 한 번 */
@@ -4068,9 +4308,11 @@ function autoNextDay_() {
     const last = c.runs[c.runs.length - 1];
     if (!last['폼ID'] || last['진행 상태'] === '종료' || !(last['진행일'] instanceof Date)) return;
     if (Utilities.formatDate(last['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd') !== todayKey) return;   // 오늘이 마지막 진행인 의뢰만
-    const planned = c.runs.reduce(function (a, x) { return a + (x['진행일'] < today_() ? (Number(x['인원']) || 0) : (Number(x['목표인원']) || 0)); }, 0);
+    // 지난 날은 실제 인원, 오늘은 구매 시간(예: 오전 8시 20분)이 지났으면 실제 인원 → 오늘 모자란 만큼(안 산 사람) 다음 날 자동으로 더 모집 (10/20 고구마말랭이 8/10)
+    const planned = c.runs.reduce(function (a, x) { return a + (x['진행일'] < today_() || pastEnd_(x) ? (Number(x['인원']) || 0) : (Number(x['목표인원']) || 0)); }, 0);
     const left = c.total - planned;
     if (left <= 0) return;
+    if (pastEnd_(last) && !(Number(last['인원']) > 0)) return;   // 오늘 인원이 0이면 세기가 잘못됐을 수 있어서 자동으로 안 만듦
     const daily = Number(c.runs[0]['목표인원']) || Number(last['목표인원']) || left;
     // 남는 건수가 일 건수의 절반보다 적으면 마지막 날에 같이 (총 50 / 일 7 → 마지막 날 8, 사용자 요청 10/20. 생성기 numDays와 같은 규칙)
     const n = left > daily && left - daily < daily / 2 ? left : Math.min(daily, left);
@@ -4116,7 +4358,7 @@ function addMoreRun_(r, n, opt) {
   const sum = Object.keys(short).reduce(function (a, o) { return a + short[o]; }, 0);
   const desc = String(form.getDescription() || '');
   // 새로 모집하는 공지라 옵션 줄 뒤의 이름(어제 사람)은 지움
-  const notice = stripTrailingNames_(sum ? noticeForMore_(desc, short) : desc.split('\n').map(function (l) { return l.replace(/(\(\s*\d*\s*명\s*\)|\d+\s*명).*$/, '(  명)'); }).join('\n'));
+  const notice = stripNames_(sum ? noticeForMore_(desc, short) : desc.split('\n').map(function (l) { return l.replace(/(\(\s*\d*\s*명\s*\)|\d+\s*명).*$/, '(  명)'); }).join('\n'));
   if (sum && !n) n = sum;
   // 의뢰서 하나 = 폼 하나: 첫 날 폼을 계속 씀 (공지 안 폼 링크도 첫 날 폼으로)
   const first = firstSheetRun_(r);
@@ -4658,7 +4900,7 @@ function makeDueDays_() {
     const prev = chain ? chain.runs[chain.runs.length - 1] : null;
     // 계획 날짜가 주말·공휴일이면 다음 진행일로 미룸 (방제·명단 제목 날짜도)
     const day0 = new Date(x[3]), dayW = workdayOnOrAfter_(day0);
-    if (dayW.getTime() !== dayStart_(day0)) {
+    if (dayW.getTime() !== dayStart_(day0) || (dateTok_(x[5]) && dateTok_(x[5]) !== (dayW.getMonth() + 1) + '.' + dayW.getDate())) {   // 주말이라 미뤘거나 일정 탭에서 날짜를 직접 고침
       x[3] = dayW; x[4] = retitleDate_(x[4], dayW); x[5] = retitleDate_(x[5], dayW);
       sh.getRange(i + 2, 4, 1, 3).setValues([[dayW, x[4], x[5]]]);
     }
