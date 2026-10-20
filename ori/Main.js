@@ -202,6 +202,7 @@ function moveRunDate_(r, d) {
   // 원래 날짜 = 방제의 날짜 (진행일 칸은 이미 새 날짜로 고쳐져 있음)
   const om = (dateTok_(oldBare) || '').split('.'), oldDay = om.length === 2 ? new Date(d.getFullYear(), Number(om[0]) - 1, Number(om[1])) : d;
   const done = [one(r, d)];
+  renameTodo_(r, oldBare, retitleDate_(oldBare, d));
   // 뒤 진행 (같은 명단 시트, 원래 이 진행보다 뒤): 겹치거나 앞서면 다음 진행일로
   let prev = d;
   const later = readRuns_().filter(function (x) { return x.row !== r.row && x['시트ID'] && String(x['시트ID']) === String(r['시트ID']) && x['진행일'] instanceof Date && x['진행 상태'] !== '종료' && dayStart_(x['진행일']) > dayStart_(oldDay); })
@@ -209,7 +210,9 @@ function moveRunDate_(r, d) {
   later.forEach(function (x) {
     if (dayStart_(x['진행일']) > dayStart_(prev)) { prev = x['진행일']; return; }
     const nd = nextWorkday_(prev);
+    const ob1 = bareTitle_(x['명단 제목']);
     done.push(one(x, nd)); prev = nd;
+    renameTodo_(x, ob1, retitleDate_(ob1, nd));
   });
   // 일정 탭 대기 계획 (아직 안 만든 다음 일차)
   try {
@@ -226,6 +229,15 @@ function moveRunDate_(r, d) {
     }
   } catch (e) {}
   return '✓ 진행일 바꿈: ' + done.join(', ');
+}
+
+// 스크립트가 방제를 바꿨을 때(인원 줄임, 날짜 옮김) 보낼메시지 '할 일': 카톡방 이름 바꾸기 + (명단을 이미 보냈으면) 오리명단방 명단 메시지 고치기. 그날 할 일
+function renameTodo_(r, oldBare, newBare) {
+  if (!oldBare || oldBare === newBare) return;
+  const lines = ['[방제 바뀜] ' + oldBare + ' → ' + newBare, '1. 카톡방 이름을 ' + newBare + ' 로 바꾸기'];
+  // 진행일이 지났거나 오늘이면 명단을 이미 보냈을 수 있어서 고칠 글도 같이
+  if (r['시트 링크'] && r['진행일'] instanceof Date && dayStart_(r['진행일']) <= today_().getTime()) lines.push('2. 오리명단방에 명단을 이미 보냈으면 아래로 고치기(또는 다시 보내기):', '', r['시트 링크'] + '\n\n' + newBare + ((String(r['명단 제목']).match(/\s*\([^)]*\)\s*$/) || [''])[0]));
+  queueMsg_('내 할 일', lines.join('\n'), '할 일');
 }
 
 // 방제(명단 제목) 바꾸기: 진행목록 명단 제목·카톡방, 보낼 메시지함의 대기 중인 방 이름. 월급시트 캠페인명은 15분 갱신 때 같은 날짜·캠페인 줄을 찾아 바꿈
@@ -2260,6 +2272,7 @@ function checkFullInner_() {
   try { fixNoCountNamesOnce_(runs); } catch (e) { note_('이름 인원 수 빼기 실패: ' + e); }
   try { fixSilOnce_(runs); } catch (e) { note_('실 위치 바꾸기 실패: ' + e); }
   try { fixStaleNamesOnce_(runs); } catch (e) { note_('다음 일차 공지 이름 빼기 실패: ' + e); }
+  try { fixShrinkOnce_(runs); } catch (e) { note_('인원 맞춤 실패: ' + e); }
   try { dropManualColsOnce_(runs); } catch (e) { note_('송장번호·실배송 칸 지우기 실패: ' + e); }
   try { ensureListMsgs_(runs); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { ensureReviewGuideMsgs_(runs); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
@@ -4310,6 +4323,28 @@ function firstSheetRun_(r) {
 // 의뢰 총건수가 남았는데 내일 진행이 없으면(일정 탭 계획이 없는 의뢰 등) 오늘 오전 10시(NEXT_DAY_HOUR)부터 내일 진행을 자동으로
 //  같은 폼·같은 명단 시트, 공지는 오늘 공지(폼 설명)에서 이름을 뺀 것, 건수 = min(일 진행 건수, 남은 건수)
 const SHORT_NEXT_HOUR = 14;
+function shrinkToGot_(r) {
+  const got = Number(r['인원']) || 0, goal = Number(r['목표인원']) || 0;
+  if (!got || got >= goal) return;
+  const oldBare = bareTitle_(r['명단 제목']), nb = oldBare.replace(/\d+\s*$/, String(got));
+  if (nb === oldBare || !renameRun_(r, nb)) return;
+  setRun_(r.row, '목표인원', got);
+  renameTodo_(r, oldBare, nb);
+  note_('✓ 인원 맞춤: ' + oldBare + ' → ' + nb);
+}
+// (한 번, 10/20) 이미 모자란 만큼 다음 날 진행을 만든 진행(# 10.20 고구마말랭이 10, 8명)도 방제를 실제 인원으로
+function fixShrinkOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FIX_SHRINK_V1')) return;
+  props.setProperty('FIX_SHRINK_V1', '1');
+  runs.forEach(function (r) {
+    if (r['진행 상태'] === '종료' || !(r['진행일'] instanceof Date) || !pastEnd_(r)) return;
+    const iso = Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyy-MM-dd');
+    if (!runs.some(function (x) { return String(x['요청ID']).indexOf('next-' + r['시트ID'] + '-') === 0 && x['진행일'] instanceof Date && x['진행일'] > r['진행일'] && Utilities.formatDate(x['진행일'], CONFIG.TIMEZONE, 'yyyy-MM-dd') !== iso; })) return;
+    if (runs.some(function (x) { return x !== r && String(x['시트ID']) === String(r['시트ID']) && x['진행일'] instanceof Date && x['진행일'] > r['진행일'] && !/^next-/.test(String(x['요청ID'])); })) return;   // 마지막 날만
+    shrinkToGot_(r);
+  });
+}
 function autoNextDay_() {
   const hour = Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'H'));
   if (hour < (Number(CONFIG.NEXT_DAY_HOUR) || 10)) return;
@@ -4338,6 +4373,8 @@ function autoNextDay_() {
     // 남는 건수가 일 건수의 절반보다 적으면 마지막 날에 같이 (총 50 / 일 7 → 마지막 날 8, 사용자 요청 10/20. 생성기 numDays와 같은 규칙)
     const n = left > daily && left - daily < daily / 2 ? left : Math.min(daily, left);
     note_('✓ 다음 날 진행: ' + addMoreRun_(last, n, { next: true }));
+    // 오늘 진행은 실제 산 인원으로 방제·목표를 줄임 (# 10.20 고구마말랭이 10 → 8, 사용자 요청 10/20) + 카톡방 이름·명단 메시지 고치기 할 일
+    shrinkToGot_(last);
   });
 }
 
@@ -4928,7 +4965,11 @@ function makeDueDays_() {
     const chain = baseRun ? chainsOf_(runs).filter(function (c) { return c.runs.indexOf(baseRun) >= 0; })[0]
       : chainsOf_(runs).filter(function (c) { return c.key === ck; }).pop();
     if (chain && chain.total && chain.done >= chain.total) { sh.getRange(i + 2, 9).setValue('건너뜀 (이미 다 진행)'); return; }
-    if (chain && chain.runs.some(function (r) { return r['진행일'] instanceof Date && Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd') === Utilities.formatDate(new Date(x[3]), CONFIG.TIMEZONE, 'yyyyMMdd'); })) { sh.getRange(i + 2, 9).setValue('건너뜀 (그날 진행 있음)'); return; }
+    const sameDay = function (d0) { return chain ? chain.runs.filter(function (r) { return r['진행일'] instanceof Date && Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd') === Utilities.formatDate(new Date(d0), CONFIG.TIMEZONE, 'yyyyMMdd'); })[0] : null; };
+    const clash = sameDay(x[3]);
+    if (clash && Number(clash['일차']) === k) { sh.getRange(i + 2, 9).setValue('건너뜀 (그날 진행 있음)'); return; }
+    // 다른 일차가 그날에 있으면(날짜를 옮겨서 겹침) 빈 진행일로 미룸 (10/20)
+    if (clash) { let nd = nextWorkday_(new Date(x[3])); while (sameDay(nd)) nd = nextWorkday_(nd); x[3] = nd; sh.getRange(i + 2, 4).setValue(nd); }
     const prev = chain ? chain.runs[chain.runs.length - 1] : null;
     // 계획 날짜가 주말·공휴일이면 다음 진행일로 미룸 (방제·명단 제목 날짜도)
     const day0 = new Date(x[3]), dayW = workdayOnOrAfter_(day0);
