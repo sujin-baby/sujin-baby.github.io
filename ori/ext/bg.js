@@ -22,10 +22,19 @@ const setGen = sender => { genT = { tabId: sender.tab.id, frameId: sender.frameI
 chrome.runtime.onMessage.addListener((m, sender) => {
   if (!m || !sender.tab) return;
   if (m.type === "plGenHere") setGen(sender);
-  else if (m.type === "plResult") pushGen({ text: m.text });
+  else if (m.type === "plResult") { pushGen({ text: m.text }); oyThumb(m.text); }
   else if (m.type === "plStatus") pushGen({ status: m.text });
   else if (m.type === "plAuto" && m.url) { setGen(sender); autoRun(m.url, sender.tab).catch(e => pushGen({ status: "멈췄어요: " + ((e && e.message) || e) })); }
 });
+/* 올리브영(oy.js) 결과의 썸네일도 다운로드 폴더에 저장 (쿠팡·네이버와 같은 곳, 상품마다 한 번) */
+let oyThumbDone = "";
+function oyThumb(text) {
+  const g = k => ((String(text || "").match(new RegExp("^" + k + "\\s*[:：]\\s*(.+)$", "m")) || [])[1] || "").trim();
+  const img = g("썸네일"), pid = g("상품번호");
+  if (!/^https?:\/\//.test(img) || !pid || oyThumbDone === pid) return;
+  oyThumbDone = pid;
+  saveThumb({ img: img, name: g("상품명"), pid: pid }).then(r => pushGen({ status: r.t }));
+}
 async function autoRun(url, gt) {
   if (busy && Date.now() - busySince < 12 * 60000) { pushGen({ status: "이미 찾는 중이에요. 끝나고 다시 눌러 주세요." }); return; }
   pushGen({ status: "상품 페이지 여는 중…" });
