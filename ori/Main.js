@@ -326,7 +326,9 @@ function respTimes_(sheetId) {
   const raw = responseSheet_(SpreadsheetApp.openById(sheetId));
   const last = raw.getLastRow();
   if (last < 2) return [];
-  return raw.getRange(2, 1, last - 1, 1).getValues().map(function (x) { return x[0] instanceof Date ? x[0].getTime() : null; }).filter(function (t) { return t !== null; });
+  // 시각만 있고 답이 없는 줄은 사람으로 안 셈 (10/21)
+  const w = Math.max(raw.getLastColumn(), 1);
+  return raw.getRange(2, 1, last - 1, w).getValues().map(function (x) { return x[0] instanceof Date && x.slice(1).some(function (v) { return v !== '' && v !== null; }) ? x[0].getTime() : null; }).filter(function (t) { return t !== null; });
 }
 
 // 폼에 실제로 들어온 응답 시각 (명단 시트보다 폼이 정확: 시트 연결이 끊겨도 셀 수 있음)
@@ -343,7 +345,8 @@ function allRespTimes_(sheetId, formId, formTimes) {
     if (formTimes && m && m[1] === String(formId)) return;
     const last = t.getLastRow();
     if (last < 2) return;
-    t.getRange(2, 1, last - 1, 1).getValues().forEach(function (v) { if (v[0] instanceof Date) out.push(v[0].getTime()); });
+    // 시각만 있고 답이 없는 줄은 사람으로 안 셈 (10/21)
+    t.getRange(2, 1, last - 1, Math.max(t.getLastColumn(), 1)).getValues().forEach(function (v) { if (v[0] instanceof Date && v.slice(1).some(function (x) { return x !== '' && x !== null; })) out.push(v[0].getTime()); });
   });
   return out;
 }
@@ -593,6 +596,8 @@ function syncList_(ss) {
     if (lr < 2 || !h.length) return;
     t.getRange(2, 1, lr - 1, h.length).getValues().forEach(function (x) {
       if (!(x[0] instanceof Date)) return;
+      // 시각만 있고 답이 하나도 없는 줄은 사람이 아니라서 명단에 안 넣음 (10/21 마켓담온 귤 8행)
+      if (!x.slice(1).some(function (v) { return v !== '' && v !== null; })) return;
       const o = {}; h.forEach(function (name, j) { o[name] = x[j]; });
       rows.push({ t: x[0].getTime(), o: o });
     });
@@ -1510,6 +1515,8 @@ function reviewTab_(ss) {
     if (lr < 2) return;
     t.getRange(2, 1, lr - 1, h.length).getValues().forEach(function (x) {
       if (!(x[0] instanceof Date)) return;
+      // 시각만 있고 답이 하나도 없는 줄은 사람이 아니라서 명단에 안 넣음 (10/21 마켓담온 귤 8행)
+      if (!x.slice(1).some(function (v) { return v !== '' && v !== null; })) return;
       const o = {}; h.forEach(function (name, j) { o[name] = x[j]; });
       rows.push({ t: x[0].getTime(), o: o });
     });
@@ -4917,7 +4924,7 @@ function fruitCheck_(runs) {
     const names = list.map(function (x) { return x[0].split(' ').map(function (nm) { return '@' + nm; }).join(' ') + (x[1] > 1 ? ' (' + x[1] + '건)' : '') + (x[0].indexOf(' ') >= 0 ? ' - ' + x[2] : ''); });
     const me = Session.getEffectiveUser().getEmail();
     if (step === 7) {
-      const msg = '📢 아직 구매 확인이 안 된 분들이에요\n' + names.join('\n') + '\n\n7시 30분까지 구매하고 폼 작성 부탁드려요!\n답이 없으면 다른 분으로 바꿀게요 🙏';
+      const msg = '📢 아직 구매 확인이 안 된 분들이에요\n' + names.join('\n') + '\n\n구매부탁드립니당! 30분까지 답장없으시면 대체할게용 ㅠ_ㅠ';   // 사용자 문구 (10/21)
       if (r['카톡방']) queueMsg_(r['카톡방'], msg, '안 산 사람');
       MailApp.sendEmail(me, '[체험단] 7시 안 산 사람 ' + list.length + '명: ' + r['명단 제목'], names.join(' ') + '\n\n카톡방에 보낼 글 (보낼 메시지함에도 있어요):\n\n' + msg + '\n\n' + outboxUrl_());
     } else {
