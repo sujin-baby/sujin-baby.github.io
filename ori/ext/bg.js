@@ -457,7 +457,8 @@ async function naverHere(tab) {
   if (!mob && h.page < MAXP) actions.push({ label: "다음 페이지 (" + (h.page + 1) + "페이지) 보고 다시 찾기", act: "next" });
   if (nextStep) actions.push(nextStep[1] ? { label: "가격 " + won(t.price) + "~" + won(t.price) + "원 넣고 다시 찾기", act: "price" } : { label: "'" + nextStep[0] + "' 검색하고 다시 찾기", act: "kw:" + nextStep[0], color: "#5b2a86" });
   await ui(tid, { title: "이 화면" + (mob ? "" : "(" + h.page + "페이지)") + "에는 없어요", msg: "검색어 '" + (h.query || "?") + "'" + (filtered ? ", 가격 " + won(h.lo) + "~" + won(h.hi) + "원" : "") + ", 상품 " + s.n + "개 확인" + (s.adHit >= 0 ? " (광고 자리에만 있어요)" : "") + (s.n === 0 ? "\n화면: " + (s.snip || "") : ""),
-    actions: actions, notes: [{ t: "단추를 누르면 한 화면만 넘기고 다시 찾아요. 너무 빨리 여러 번 누르지 마세요(네이버가 막아요)." }] });
+    actions: actions, notes: [{ t: "단추를 누르면 한 화면만 넘기고 다시 찾아요. 너무 빨리 여러 번 누르지 마세요(네이버가 막아요)." },
+      s.near && s.near.sc >= 0.5 ? { t: "가장 비슷한 칸(" + s.near.i + "번째, 상품명 " + Math.round(s.near.sc * 100) + "% 같음" + (s.near.st ? ", 스토어 같음" : ", 스토어 다름/안 보임") + (s.near.ad ? ", 광고" : "") + "): " + s.near.t + "\n이게 맞는 상품이면 이 화면을 캡처해서 알려 주세요.", warn: true } : null].filter(Boolean) });
 }
 
 async function naverAct(tab, act) {

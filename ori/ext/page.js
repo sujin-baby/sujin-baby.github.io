@@ -121,9 +121,19 @@
     const pidRe = new RegExp((isNaver ? "(^|\\D)" : "products/") + o.pid + "(?!\\d)");
     if (!isNaver) return pidRe.test(el.innerHTML) ? "상품번호" : "";
     if (o.pid && o.pid.length >= 8 && pidRe.test(el.innerHTML)) return "상품번호";
-    const t = norm(el.innerText), nk = norm(o.nm).slice(0, 25);
-    if (nk.length >= 6 && t.indexOf(nk) !== -1) return o.st && t.indexOf(norm(o.st)) !== -1 ? "상품명+스토어" : "상품명";
+    const t = norm(el.innerText), nk = norm(o.nm).slice(0, 25), stOk = !!(o.st && norm(o.st).length >= 2 && t.indexOf(norm(o.st)) !== -1);
+    if (nk.length >= 6 && t.indexOf(nk) !== -1) return stOk ? "상품명+스토어" : "상품명";
+    /* 상품명 앞부분이 조금 달라도(띄어쓰기·기호·순서) 상품명 낱말 대부분 + 스토어 이름이 같으면 같은 상품 (10/20 마켓 담온 귤을 못 찾음) */
+    const sc = nameScore(t, o.nm);
+    if (sc >= 0.8 && stOk) return "상품명+스토어";
+    if (sc >= 0.95) return "상품명";
     return "";
+  }
+  /* 상품명 낱말(2글자 이상) 중 칸 글자에 들어 있는 비율 */
+  function nameScore(t, nm) {
+    const toks = String(nm || "").split(/[\s\/,·|]+/).map(norm).filter(x => x.length >= 2);
+    if (toks.length < 3) return 0;
+    return toks.filter(x => t.indexOf(x) !== -1).length / toks.length;
   }
   /* 쇼핑몰이 띄운 보안 확인(캡차) 화면인지: 상품 칸이 하나도 없고 보안 확인 문구가 있을 때만 */
   const BLOCK_RE = /자동\s*입력\s*방지|보안\s*확인|영수증|비정상적인|일시적으로\s*제한|접속이\s*(제한|불가)|로봇이\s*아닙|Access Denied|captcha|unusual traffic/i;
@@ -173,7 +183,10 @@
     const nk15 = norm(o.nm).slice(0, 15);
     const sameN = nk15.length >= 8 ? list.filter(c => !isAd(c.el) && norm(c.el.innerText).indexOf(nk15) !== -1).length : 0;
     const similar = hit >= 0 && (/판매처\s*\d+|쇼핑몰별\s*최저가|최저\s*[\d,]+\s*원|가격\s*비교/.test(list[hit].el.innerText || "") || sameN >= 2);
-    return { n: list.length, hit: hit, org: org, similar: similar, how: how, adHit: adHit, keys: list.slice(0, 6).map(c => c.k), url: location.href, len: body.length, snip: list.length ? "" : snippet(),
+    /* 못 찾았을 때 가장 비슷한 칸 (왜 못 찾았는지 보려고) */
+    let near = null;
+    if (hit < 0 && isNaver) list.forEach((c, i) => { const sc = nameScore(norm(c.el.innerText), o.nm); if (!near || sc > near.sc) near = { i: i + 1, sc: sc, t: (c.el.innerText || "").replace(/\s+/g, " ").trim().slice(0, 60), st: !!(o.st && norm(c.el.innerText).indexOf(norm(o.st)) !== -1), ad: isAd(c.el) }; });
+    return { n: list.length, hit: hit, org: org, similar: similar, how: how, adHit: adHit, near: near, keys: list.slice(0, 6).map(c => c.k), url: location.href, len: body.length, snip: list.length ? "" : snippet(),
       noResult: /검색\s*결과가\s*없|검색결과가\s*없|상품이\s*없습니다/.test(body) && list.length === 0,
       priceChip: o.lo ? new RegExp(o.lo.toLocaleString("ko-KR") + "\\s*원?\\s*~\\s*" + o.hi.toLocaleString("ko-KR")).test(body) : false };
   }
