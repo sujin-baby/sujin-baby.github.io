@@ -691,6 +691,7 @@ function syncList_(ss) {
       return Array(paint).fill(real ? REAL_YELLOW : DAY_COLORS[day % 7]);
     }));
     done = done.concat(add.map(function (x) { return String(x.t); }));
+    try { payCheck_(ss, add); } catch (e) { note_('결제금액 확인 실패: ' + e); }
   }
   if (cT && sh.getLastRow() >= 3) {
     const live = {}; rows.forEach(function (x) { live[x.t] = 1; });
@@ -705,6 +706,48 @@ function syncList_(ss) {
   while (save.length > 8500) { done.shift(); save = done.join(','); }
   props.setProperty('LISTK_' + id, save);
   return add.length;
+}
+
+// 결제금액 확인 (사용자 요청 10/20): 새 응답의 결제금액이 공지 가격(배송비 포함)과 다르면 보낼메시지 '내 할 일'에. 명단 시트에는 아무것도 안 씀
+//  공지 가격: 고른 옵션 글의 '(17,200원)', 없으면 진행목록 가격(하나거나 다 같을 때만). 2~5개 산 금액(가격 × 개수)은 맞는 걸로
+function payCheck_(ss, add) {
+  const sid = ss.getId(), runs = readRuns_(), mine = runs.filter(function (r) { return String(r['시트ID']) === sid && r['진행일'] instanceof Date; });
+  if (!mine.length) return;
+  const num = function (x) { return Number(String(x == null ? '' : x).replace(/[^0-9]/g, '')) || 0; };
+  const won = function (n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '원'; };
+  const bad = {};
+  add.forEach(function (x) {
+    const keys = Object.keys(x.o);
+    const kPay = keys.filter(function (k) { return /결제\s*금액|결제\s*가격|구매\s*금액|결제한\s*금액/.test(k); })[0];
+    const paid = kPay ? num(x.o[kPay]) : 0;
+    if (!paid) return;
+    const r = mine.filter(function (m) { const w = windowOf_(runs, m); return x.t >= w.from && x.t < w.to; })[0] || mine[mine.length - 1];
+    const kOpt = keys.filter(function (k) { return MATCH.opt.test(k); })[0];
+    const om = kOpt ? String(x.o[kOpt]).match(/\(\s*([\d,]+)\s*원\s*\)/) : null;
+    let exp = om ? num(om[1]) : 0;
+    if (!exp) { const ps = runPrices_(r['가격']); if (ps.length && ps.every(function (p) { return p === ps[0]; })) exp = ps[0]; }
+    if (!exp) return;
+    for (let k = 1; k <= 5; k++) if (paid === exp * k) return;
+    const kName = keys.filter(function (k) { return /수령인|계정명/.test(k); })[0] || keys.filter(function (k) { return /이름|성함/.test(k) && !MATCH.nick.test(k); })[0];
+    const room = bareTitle_(r['명단 제목']);
+    (bad[room] = bad[room] || []).push((kName ? String(x.o[kName]).trim() : '?') + ': ' + won(paid) + ' 결제 (공지 ' + won(exp) + ', ' + (paid > exp ? '더 비싸게 삼' : '더 싸게 삼') + ')');
+  });
+  Object.keys(bad).forEach(function (room) {
+    queueMsg_('내 할 일', '[결제금액 확인] ' + room + '\n' + bad[room].join('\n') + '\n→ 결제 캡처를 보고, 다르면 그분께 따로 물어보기 (쿠폰·할인이면 그대로 둬도 돼요)', '할 일');
+    note_('결제금액 다른 사람 ' + bad[room].length + '명: ' + room);
+  });
+}
+// 진행목록 '가격' 칸 → 숫자 목록. 예전 의뢰는 '17, 200, 23, 400'처럼 쉼표가 갈라져 저장돼서 세 자리 조각은 앞 숫자에 붙임
+function runPrices_(s) {
+  const out = [];
+  let short = false;
+  String(s || '').split(/[,\s]+/).filter(Boolean).forEach(function (t) {
+    t = t.replace(/[^0-9]/g, '');
+    if (!t) return;
+    if (t.length === 3 && out.length && short) { out[out.length - 1] = out[out.length - 1] * 1000 + Number(t); short = false; return; }
+    out.push(Number(t)); short = t.length <= 3;
+  });
+  return out.filter(function (n) { return n >= 100; });
 }
 
 // 최근 30일 의뢰의 명단 시트도 값 명단으로 바꾸고 새 응답 붙이기 (15분 확인에서 안 보는 끝난 진행용, 시트마다 25분에 한 번)
@@ -4174,6 +4217,29 @@ function reviewDone_(runs) {
       // 없으면 맨 오른쪽 체크칸 (값이 전부 참/거짓인 칸)
       for (let c = lc - 1; cc < 0 && c >= 0; c--) if (isChk(c)) cc = c;
       if (cc < 0) return;
+      // C. 리뷰 독촉 (사용자 요청 10/20): 진행일부터 주말 포함 10일(쿠팡·네이버. 리뷰 기한이 10일인 다른 플랫폼은 13일) 지나도
+      //  체크칸이 안 된 사람 → 그 방에 독촉 글. 3일 뒤에도 남아 있으면 한 번 더. 기한이 10일 넘게 지난 예전 진행은 건너뜀. 명단 시트에는 안 씀
+      const cName = (function () { let i = hdr.findIndex(function (h) { return /수령인|계정명/.test(h); }); if (i < 0) i = hdr.findIndex(function (h) { return /이름|성함/.test(h) && !MATCH.nick.test(h); }); return i; })();
+      mine.forEach(function (r) {
+        if (cName < 0) return;
+        const D = !r['플랫폼'] || /쿠팡|네이버/.test(String(r['플랫폼'])) ? 10 : 13;
+        const due = dayStart_(r['진행일']) + D * 86400000, now = today_().getTime();
+        if (now < due || now - due > 10 * 86400000) return;
+        const key = String(r['명단 제목']).replace(/\s+/g, ''), k1 = 'RVLATE_' + key, k2 = 'RVLATE2_' + key;
+        const again = !!props.getProperty(k1);
+        if (again && (props.getProperty(k2) || now < due + 3 * 86400000)) return;
+        const w = windowOf_(runs, r);
+        const names = live.filter(function (i) { const t = v[i][cT].getTime(); return t >= w.from && t < w.to && v[i][cc] !== true; })
+          .map(function (i) { return String(v[i][cName]).trim(); }).filter(Boolean);
+        if (!names.length) return;
+        props.setProperty(again ? k2 : k1, '1');
+        queueMsg_(String(r['카톡방'] || bareTitle_(r['명단 제목'])), [
+          '⏰ 리뷰 작성 기한이 ' + (again ? '3일 지났어요' : '지났어요'),
+          '아직 리뷰 확인이 안 된 분: ' + names.join(', '),
+          '이미 쓰셨으면 리뷰 캡처를 올려 주시고, 아직이면 오늘 중으로 작성 부탁드려요!'
+        ].join('\n'), '리뷰 독촉');
+        note_('✓ 리뷰 독촉 넣음: ' + bareTitle_(r['명단 제목']) + ' ' + names.length + '명');
+      });
       // A-1. 그날(그 방) 사람 전부 체크 → 취완
       mine.forEach(function (r) {
         if (!(r['마감 시각'] instanceof Date) && !pastEnd_(r)) return;
