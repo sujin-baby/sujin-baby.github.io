@@ -286,6 +286,11 @@ function isWorkday_(d) {
   const ymd = iso.split('-').map(Number), dow = new Date(Date.UTC(ymd[0], ymd[1] - 1, ymd[2])).getUTCDay();   // 0 일 ~ 6 토
   return dow > 0 && dow < 6 && KR_HOLIDAYS.indexOf(iso) === -1 && (CONFIG.EXTRA_HOLIDAYS || []).indexOf(iso) === -1;
 }
+// 공휴일을 시트 날짜 숫자로 (1899-12-30부터 날 수). 진행해야 하는 예외 날(CONFIG.WORK_DAYS)은 뺌
+function holidaySerials_() {
+  return KR_HOLIDAYS.concat(CONFIG.EXTRA_HOLIDAYS || []).filter(function (iso, i, a) { return a.indexOf(iso) === i && (CONFIG.WORK_DAYS || []).indexOf(iso) === -1; })
+    .map(function (iso) { const y = iso.split('-').map(Number); return Math.round((Date.UTC(y[0], y[1] - 1, y[2]) - Date.UTC(1899, 11, 30)) / 86400000); });
+}
 // d 다음 진행일 (d가 금요일이면 월요일)
 function nextWorkday_(d) {
   const x = new Date(d); x.setHours(12, 0, 0, 0);
@@ -5593,7 +5598,7 @@ function putFileChip_(sh, row, col, url) {
 // 택배시트는 바로가기만 걸고 절대 고치지 않음
 
 const DASH_TAB = '한눈에';
-const DASH_VER = '18';
+const DASH_VER = '19';
 const DASH_LIST_DAYS = 2;   // 아래 명단 덩어리를 보여 줄 지난 날 수   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
@@ -5863,11 +5868,12 @@ function buildDashboard_(force) {
     rules.unshift(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER(G2),G2<>0)').setFontColor('#d00000').setBold(true).setRanges([sh.getRange(2, 7, runs.length, 1)]).build());
     rules.push(SpreadsheetApp.newConditionalFormatRule().whenNumberGreaterThan(0).setBackground('#ea9999').setFontColor('#7f0000').setBold(true).setRanges([sh.getRange(2, 12, runs.length, 1)]).build());
     rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISLOGICAL(M2),M2=FALSE)').setBackground('#ea9999').setRanges([sh.getRange(2, 13, runs.length, 1)]).build());
-    // 오늘 진행 = 연두, 다음 진행일(금요일이면 월요일) = 하늘색. 수식이라 날이 바뀌면 저절로 바뀜 (사용자 요청 10/20). 위 빨간 표시가 먼저
+    // 오늘 진행 = 연두, 다음 진행일(금요일이면 월요일, 공휴일도 건너뜀) = 하늘색. 수식이라 날이 바뀌면 저절로 바뀜 (사용자 요청 10/20). 위 빨간 표시가 먼저
+    //  공휴일은 스크립트의 공휴일 목록(KR_HOLIDAYS + CONFIG.EXTRA_HOLIDAYS)을 날짜 숫자로 WORKDAY에 넣음
     const top = sh.getRange(2, 1, runs.length, head.length);
     rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=INT($A2)=TODAY()').setBackground('#d9ead3').setRanges([top]).build());
-    rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=INT($A2)=WORKDAY(TODAY(),1)').setBackground('#cfe2f3').setRanges([top]).build());
-    sh.getRange(1, 1).setNote('연두 = 오늘 진행, 하늘색 = 다음 진행일(금요일이면 월요일)');
+    rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=INT($A2)=WORKDAY(TODAY(),1,{' + holidaySerials_().join(',') + '})').setBackground('#cfe2f3').setRanges([top]).build());
+    sh.getRange(1, 1).setNote('연두 = 오늘 진행, 하늘색 = 다음 진행일(금요일이면 월요일, 공휴일 건너뜀)');
   }
   // 명단 줄 번갈아 연한 색 (읽기 쉽게, 다른 표시보다 약하게 맨 뒤에)
   show.forEach(function (id) {
@@ -5875,7 +5881,15 @@ function buildDashboard_(force) {
     rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND($A' + (x.top + 2) + '<>"",ISEVEN(ROW()))').setBackground('#f6f4fb')
       .setRanges([sh.getRange(x.top + 2, 1, x.n, Math.max(x.layout.length + (x.chk ? 1 : 0), 6))]).build());
   });
-  sh.setConditionalFormatRules(rules);
+  // 공휴일 넣은 다음 진행일 색 규칙이 안 먹으면(시트가 수식을 거부) 그 규칙만 공휴일 없이
+  try { sh.setConditionalFormatRules(rules); }
+  catch (e) {
+    note_('한눈에 색 규칙 공휴일 빼고 다시: ' + e.message);
+    sh.setConditionalFormatRules(rules.map(function (r) {
+      const c = r.getBooleanCondition(), f = c ? String((c.getCriteriaValues() || [])[0] || '') : '';
+      return /WORKDAY\(TODAY\(\),1,\{/.test(f) ? SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=INT($A2)=WORKDAY(TODAY(),1)').setBackground('#cfe2f3').setRanges(r.getRanges()).build() : r;
+    }));
+  }
   props.setProperty('DASH_SIG', sig);
   props.setProperty('DASH_TITLES', JSON.stringify(runs.map(function (r) { return bareTitle_(r['명단 제목']); })));
 }
