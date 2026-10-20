@@ -653,11 +653,19 @@ function syncList_(ss) {
     } else if (!props.getProperty('RVCOL_' + id) && rvCol_(sh, lc) < 0) {
       const c = lc + 2;
       if (sh.getMaxColumns() < c) sh.insertColumnsAfter(sh.getMaxColumns(), c - sh.getMaxColumns());
-      sh.getRange(2, c).setNote(RV_NOTE);
+      try { rvMark_(sh, c); } catch (e) { sh.getRange(2, c).setNote(RV_NOTE); }
       if (sh.getLastRow() >= 3) sh.getRange(3, c, sh.getLastRow() - 2, 1).insertCheckboxes().setHorizontalAlignment('center');
     }
     props.setProperty('RVCOL_' + id, '1');
     lc = Math.max(sh.getLastColumn(), 1); hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_);
+  }
+  // (한 번, 10/20) 체크칸 머리글 메모가 마우스를 올리면 보여서 → 메모 지우고 숨은 표시로
+  if (!props.getProperty('RVCOL3_' + id)) {
+    props.setProperty('RVCOL3_' + id, '1');
+    try {
+      const notes = sh.getRange(2, 1, 1, lc).getNotes()[0], i = notes.findIndex(function (n) { return String(n).indexOf('리뷰 확인 칸') === 0; });
+      if (i >= 0) { rvMark_(sh, i + 1); sh.getRange(2, i + 1).clearNote(); }
+    } catch (e) {}
   }
   const rvc = rvCol_(sh, lc);   // 체크칸 (1부터, 없으면 -1)
   const paint = rvc > 0 ? Math.max(Math.min(lc, rvc - 2), 1) : lc;   // 줄 색은 체크칸 앞 빈 칸 전까지만
@@ -2262,6 +2270,11 @@ function checkFullInner_() {
   const props = PropertiesService.getScriptProperties();
   let changed = false;
   // 빨리 끝나고 꼭 해야 하는 것 먼저 (뒤에서 시간이 모자라도 이건 되게)
+  // 새로 만든 진행이 한눈에 탭에 아직 없으면 먼저 다시 그림 (맨 끝 '한눈에' 단계까지 5분 넘게 걸려서, 10/20)
+  try {
+    const shown = JSON.parse(PropertiesService.getScriptProperties().getProperty('DASH_TITLES') || '[]');
+    if (readRuns_().some(function (r) { return r['진행 상태'] !== '종료' && r['시트ID'] && shown.indexOf(bareTitle_(r['명단 제목'])) === -1; })) { step_('한눈에(새 진행)'); buildDashboard_(false); }
+  } catch (e) { note_('한눈에 탭(새 진행) 실패: ' + e); }
   step_('보낼메시지, 폼 닫기');
   try { tidyOutbox_(); } catch (e) { note_('보낼메시지 정리 실패: ' + e); }
   try { const rr = readRuns_(), mm = outboxRows_(); closeIdleForms_(rr, mm); openStartingForms_(rr, mm); } catch (e) { note_('폼 열고 닫기 실패: ' + e); }
@@ -3866,7 +3879,23 @@ function onAdminEdit(e) {
     try { showToolsSidebar_(); } catch (err) { e.range.getSheet().getRange(e.range.getRow(), 2).setValue('도우미 열기 실패: ' + err.message + ' → 옆 링크로 열어 주세요'); }
     return;
   }
-  return locked_(function () { return onAdminEditInner_(e); }, 30000);
+  // 손으로 하는 동작(폼수정 탭 칸, 진행목록 진행일, 한눈에 방제·택배 옮김)은 15분 자동 확인이 돌고 있어도 양보받아서 함
+  //  (예전엔 30초만 기다리고 조용히 안 해서 공지 붙여넣기가 배정에 안 들어갔음, 10/20)
+  const sh0 = e.range.getSheet(), nm0 = sh0.getName(), a10 = e.range.getA1Notation();
+  const action = (nm0 === EDIT_TAB && /^(B1|E1|E2|G2|I2)$/.test(a10)) || (nm0 === CONFIG.LIST_SHEET && e.range.getColumn() === lc_('진행일')) ||
+    (nm0 === DASH_TAB && (e.range.getColumn() === 2 || e.range.getColumn() === 13));
+  if (!action) return;
+  const props = PropertiesService.getScriptProperties();
+  if (nm0 === EDIT_TAB && a10 !== 'B1') { try { sh0.getRange('G1').setValue('⏳ 처리 중… (자동 확인이 돌고 있으면 1~2분 걸려요)'); } catch (err) {} }
+  props.setProperty('WANT_LOCK', String(Date.now()));
+  let ran = false, out;
+  try { out = locked_(function () { ran = true; props.deleteProperty('WANT_LOCK'); return onAdminEditInner_(e); }, 170000); }
+  finally { props.deleteProperty('WANT_LOCK'); }
+  if (!ran) {
+    const msg = '⚠ 자동 확인이 안 끝나서 못 했어요. 1~2분 뒤 다시 해 주세요 (붙여넣기면 다시 붙여넣기)';
+    try { if (nm0 === EDIT_TAB) sh0.getRange('G1').setValue(msg); else e.source.toast(msg, '체험단', 10); } catch (err) {}
+  }
+  return out;
 }
 
 function onAdminEditInner_(e) {
@@ -4098,8 +4127,15 @@ function applyAssign_(sh, text) {
    B1. 의뢰 폴더 안 '리뷰이미지' 폴더(명단이 마감되면 자동으로 만듦)에 카톡 사진을 올려 두면 → 압축 파일(명단 시트 이름.zip)을 의뢰 폴더에 만들고
       보낼메시지 '할 일'에 다운로드 링크 (받아서 사장님 톡에 첨부). 사진을 더 올리면 다시 압축 */
 const RV_IMG_FOLDER = '리뷰이미지', RV_CHECK = '리뷰 확인', RV_NOTE = '리뷰 확인 칸: 그날(그 방) 사람을 전부 체크하면 보낼메시지에 취완이 들어가요';
-// 명단 탭 리뷰 확인 체크칸 열 (1부터): 2행 메모로 찾음, 없으면 예전 '리뷰 확인' 머리글, 없으면 -1
+// 명단 탭 리뷰 확인 체크칸 열 (1부터): 열에 숨겨 둔 표시(개발자 메타데이터, 화면에 안 보이고 열을 옮겨도 따라감),
+//  없으면 예전 2행 메모, 없으면 예전 '리뷰 확인' 머리글, 없으면 -1
+const RV_MD_KEY = 'ori_review_check';
+function rvMark_(sh, c) { sh.getRange(colLetter_(c) + ':' + colLetter_(c)).addDeveloperMetadata(RV_MD_KEY); }
 function rvCol_(sh, lc) {
+  try {
+    const md = sh.createDeveloperMetadataFinder().withKey(RV_MD_KEY).find();
+    for (let i = 0; i < md.length; i++) { const col = md[i].getLocation().getColumn(); if (col) return col.getColumn(); }
+  } catch (e) {}
   lc = lc || Math.max(sh.getLastColumn(), 1);
   const notes = sh.getRange(2, 1, 1, lc).getNotes()[0], hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_);
   const i = notes.findIndex(function (n) { return String(n).indexOf('리뷰 확인 칸') === 0; });
