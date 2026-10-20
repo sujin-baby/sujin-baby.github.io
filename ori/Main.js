@@ -2607,7 +2607,9 @@ function ensureReviewGuideMsgs_(runs) {
       let rv = null; try { rv = JSON.parse(props.getProperty('RV_' + first['시트ID']) || 'null'); } catch (e) {}
       // 포토제공(사진 받은 뒤 진행 도우미로 세트 배정)·구매확정만은 리뷰 가이드 없음. 리뷰 정보가 없는 예전 진행도 이름은 넣고 가이드는 '사장님께 물어보기'로 (10/21)
       if (!rv) rv = { kind: 'text', mix: '', guide: '' };
-      if (rv.kind === 'photo' || rv.kind === 'confirm') return;
+      if (rv.kind === 'confirm') return;
+      // 포토제공 의뢰: 폼이 차면 그 방에 '⭐️포토대기⭐️' (사진은 받은 뒤 따로, 사용자 요청 10/21)
+      if (rv.kind === 'photo') { props.setProperty(key, '1'); queueMsg_(String(r['카톡방'] || bareTitle_(r['명단 제목'])), '⭐️포토대기⭐️', '방 공지'); return; }
       props.setProperty(key, '1');
       const old = !!props.getProperty(key0);
       props.setProperty(key0, '1');
@@ -5434,6 +5436,16 @@ function payColors_(sh) {
       props.setProperty(tk, '1');
     }
   } catch (e) { note_('월급시트 오늘 빨간 글씨 실패: ' + e); }
+  // 상태 칸 색(진행중 청록, 완료 주황)이 오늘 빨간 글씨 규칙을 넣을 때 같이 사라져서(10/21) 다시. 탭마다 한 번, 규칙 목록 맨 앞에
+  try {
+    const sk = 'PAYSTATUS1_' + sh.getSheetId();
+    if (L.status && !props.getProperty(sk)) {
+      const rg = sh.getRange(L.head + 1, L.status, sh.getMaxRows() - L.head, 1);
+      const mk = function (t, bg, fc) { return SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(t).setBackground(bg).setFontColor(fc).setRanges([rg]).build(); };
+      sh.setConditionalFormatRules([mk('진행중', '#46bdc6', '#000000'), mk('완료', '#ff6d01', '#000000')].concat(sh.getConditionalFormatRules()));
+      props.setProperty(sk, '1');
+    }
+  } catch (e) { note_('월급시트 상태 색 실패: ' + e); }
 }
 
 function payLayout_(sh) {
