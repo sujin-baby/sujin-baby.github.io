@@ -2732,12 +2732,17 @@ function tidyOutbox_() {
   sh.setRowHeights(2, last - 1, 21);
   sh.getRange(2, 2, last - 1, 1).setNumberFormat('M/d (ddd)');
   sh.setFrozenRows(1);
-  // 보낼 것(대기) 줄은 노랑 + 상태 칸 주황, 보낸 건 회색 글씨
+  // 보낼 것(대기) 줄은 날짜별 색, 보낸 건 회색 글씨
   const all = sh.getRange(2, 1, Math.max(sh.getMaxRows() - 1, 1), 6);
-  sh.setConditionalFormatRules([
+  const obRules = function (hol) { return [
+    // 안 보낸 것: 보낼 날짜가 지났으면 빨강, 오늘 연두, 다음 진행일(금→월, 공휴일 건너뜀) 하늘색, 그 뒤는 노랑 (사용자 요청 10/20, 한눈에 탭과 같은 색)
+    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND($F2="대기",ISNUMBER($B2),INT($B2)<TODAY())').setBackground('#f4cccc').setRanges([all]).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND($F2="대기",ISNUMBER($B2),INT($B2)=TODAY())').setBackground('#d9ead3').setRanges([all]).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND($F2="대기",ISNUMBER($B2),INT($B2)=WORKDAY(TODAY(),1' + (hol ? ',{' + holidaySerials_().join(',') + '}' : '') + '))').setBackground('#cfe2f3').setRanges([all]).build(),
     SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$F2="대기"').setBackground('#fff2cc').setRanges([all]).build(),
     SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$F2="보냄"').setFontColor('#9e9e9e').setRanges([all]).build()
-  ]);
+  ]; };
+  try { sh.setConditionalFormatRules(obRules(true)); } catch (e) { sh.setConditionalFormatRules(obRules(false)); }   // 공휴일 목록을 시트가 안 받으면 주말만
   sh.getRange(2, 6, last - 1, 1).setFontWeight('bold').setHorizontalAlignment('center');
 }
 
