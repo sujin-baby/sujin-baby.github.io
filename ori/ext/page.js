@@ -116,7 +116,8 @@
   }
   /* 광고 표시: '광고', '광고ⓘ', 'AD' (상품명 속 '광고용' 같은 건 아님) */
   const AD_TXT = /(^|[\s·|])(광고|AD)(?![가-힣A-Za-z])/;
-  const isAd = el => AD_TXT.test(el.innerText || "") || !!el.querySelector('a[href*="adcr"], [class*="ad-badge"], [class*="adBadge"], [class*="ad_label"], [class*="AdMark"], img[alt="광고"], img[alt="AD"]');
+  /* 네이버는 광고 아닌 상품 링크도 클릭 기록용 adcr 주소를 써서, 네이버에서는 링크 주소로 광고를 판단하지 않음 */
+  const isAd = el => AD_TXT.test(el.innerText || "") || !!el.querySelector((isNaver ? "" : 'a[href*="adcr"], ') + '[class*="ad-badge"], [class*="adBadge"], [class*="ad_label"], [class*="AdMark"], img[alt="광고"], img[alt="AD"]');
   function matchOf(el, o) {
     const pidRe = new RegExp((isNaver ? "(^|\\D)" : "products/") + o.pid + "(?!\\d)");
     if (!isNaver) return pidRe.test(el.innerHTML) ? "상품번호" : "";
@@ -202,26 +203,53 @@
     await waitReady();
     if (blockedText()) return { blocked: true, url: location.href, snip: snippet() };
     const found = () => cardList().some(c => matchOf(c.el, o) && !isAd(c.el));
-    if (o.quick) {}
-    else if (o.scroll) await loadAll(80, () => found() || cardList().length >= (o.max || 200));
-    else await loadAll(40);
-    const list = cardList();
-    let hit = -1, how = "", adHit = -1;
-    list.forEach((c, i) => { const h = matchOf(c.el, o); if (!h) return; if (isAd(c.el)) { if (adHit < 0) adHit = i; return; } if (hit < 0 || (how === "상품명" && h !== "상품명")) { hit = i; how = h; } });
+    /* 지금 그려져 있는 화면에서 찾기 (링크 칸 → 안 되면 화면 글자) */
+    let maxN = 0, nearBest = null;
+    const probe = () => {
+      const list = cardList();
+      maxN = Math.max(maxN, list.length);
+      let hit = -1, how = "", adHit = -1;
+      list.forEach((c, i) => { const h = matchOf(c.el, o); if (!h) return; if (isAd(c.el)) { if (adHit < 0) adHit = i; return; } if (hit < 0 || (how === "상품명" && h !== "상품명")) { hit = i; how = h; } });
+      let org = hit >= 0 ? list.slice(0, hit).filter(c => !isAd(c.el)).length + 1 : 0, el = hit >= 0 ? list[hit].el : null;
+      if (hit < 0 && isNaver && o.nm) { const tf = textFind(o); if (tf) { el = tf.el; hit = 0; org = tf.org; how = tf.st ? "화면 글자(상품명+스토어)" : "화면 글자(상품명)"; } }
+      if (hit < 0 && isNaver) list.forEach((c, i) => { const sc = nameScore(norm(c.el.innerText), o.nm); if (!nearBest || sc > nearBest.sc) nearBest = { i: i + 1, sc: sc, t: (c.el.innerText || "").replace(/\s+/g, " ").trim().slice(0, 60), st: !!(o.st && norm(c.el.innerText).indexOf(norm(o.st)) !== -1), ad: isAd(c.el) }; });
+      return { list: list, hit: hit, how: how, adHit: adHit, org: org, el: el };
+    };
+    let P;
+    if (isNaver) {
+      /* 네이버: 아래로 내리면 위쪽 상품을 화면에서 지워 버림(10/20 첫 번째 상품을 못 찾은 원인) → 맨 위에서 먼저 찾고, 한 칸씩 내리면서 매번 찾음 */
+      window.scrollTo(0, 0); await sleep(300);
+      P = probe();
+      let last = -1, same = 0;
+      for (let i = 0; !o.quick && P.hit < 0 && i < (o.scroll ? 80 : 40); i++) {
+        window.scrollBy(0, Math.max(600, window.innerHeight * 0.7));
+        await sleep(450);
+        P = probe();
+        if (o.scroll && maxN >= (o.max || 200)) break;
+        const hgt = document.documentElement.scrollHeight;
+        if (hgt === last && window.innerHeight + window.scrollY >= hgt - 5) { if (++same >= 3) break; } else same = 0;
+        last = hgt;
+      }
+      if (P.el) P.el.scrollIntoView({ block: "center" });
+    } else {
+      if (o.quick) {}
+      else if (o.scroll) await loadAll(80, () => found() || cardList().length >= (o.max || 200));
+      else await loadAll(40);
+      P = probe();
+    }
+    const list = P.list;
+    let hit = P.hit, how = P.how, adHit = P.adHit, org = P.org;
+    FOUND_EL = P.el;
     const body = document.body.innerText;
-    window.scrollTo(0, 0);
-    /* 광고 칸은 빼고 몇 번째 상품인지 */
-    let org = hit >= 0 ? list.slice(0, hit).filter(c => !isAd(c.el)).length + 1 : 0;
-    if (hit < 0 && isNaver && o.nm) { const tf = textFind(o); if (tf) { FOUND_EL = tf.el; hit = 0; org = tf.org; how = tf.st ? "화면 글자(상품명+스토어)" : "화면 글자(상품명)"; } }
+    if (!isNaver) window.scrollTo(0, 0);
     /* 비슷한 상품이 많은지: 가격비교·카탈로그로 묶인 칸이거나, 같은 상품명이 광고 아닌 칸에 2개 이상 */
     const nk15 = norm(o.nm).slice(0, 15);
     const sameN = nk15.length >= 8 ? list.filter(c => !isAd(c.el) && norm(c.el.innerText).indexOf(nk15) !== -1).length : 0;
     const hitEl = FOUND_EL || (hit >= 0 && list[hit] ? list[hit].el : null);
     const similar = !!hitEl && (/판매처\s*\d+|쇼핑몰별\s*최저가|최저\s*[\d,]+\s*원|가격\s*비교/.test(hitEl.innerText || "") || sameN >= 2);
     /* 못 찾았을 때 가장 비슷한 칸 (왜 못 찾았는지 보려고) */
-    let near = null;
-    if (hit < 0 && isNaver) list.forEach((c, i) => { const sc = nameScore(norm(c.el.innerText), o.nm); if (!near || sc > near.sc) near = { i: i + 1, sc: sc, t: (c.el.innerText || "").replace(/\s+/g, " ").trim().slice(0, 60), st: !!(o.st && norm(c.el.innerText).indexOf(norm(o.st)) !== -1), ad: isAd(c.el) }; });
-    return { n: list.length, hit: hit, org: org, similar: similar, how: how, adHit: adHit, near: near, keys: list.slice(0, 6).map(c => c.k), url: location.href, len: body.length, snip: list.length ? "" : snippet(),
+    const near = hit < 0 ? nearBest : null;
+    return { n: Math.max(list.length, maxN), hit: hit, org: org, similar: similar, how: how, adHit: adHit, near: near, keys: list.slice(0, 6).map(c => c.k), url: location.href, len: body.length, snip: list.length ? "" : snippet(),
       noResult: /검색\s*결과가\s*없|검색결과가\s*없|상품이\s*없습니다/.test(body) && list.length === 0,
       priceChip: o.lo ? new RegExp(o.lo.toLocaleString("ko-KR") + "\\s*원?\\s*~\\s*" + o.hi.toLocaleString("ko-KR")).test(body) : false };
   }
