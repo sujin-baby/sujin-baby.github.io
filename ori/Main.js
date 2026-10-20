@@ -4158,7 +4158,7 @@ function rvZip_(f, name, props, sid) {
 }
 
 /* ---------------- 사용법 탭 (맨 앞, 사용자 요청 10/20). 글을 바꾸면 USAGE_VER를 올림 → 다시 씀 ---------------- */
-const USAGE_TAB = '사용법', USAGE_VER = '2';
+const USAGE_TAB = '사용법', USAGE_VER = '3';
 const USAGE_ROWS = [
   ['체험단 관리 시트 사용법', '(스크립트가 쓰는 탭이라 여기 고친 글은 다음 업데이트 때 다시 써져요)'],
   ['', ''],
@@ -4169,7 +4169,7 @@ const USAGE_ROWS = [
   ['진행목록', '모든 진행 기록. "진행일" 칸을 고치면 그 진행 날짜가 옮겨짐 (아래 "날짜 바꾸기")'],
   ['폼수정', 'B1에서 진행 고르기 → E2 공지 붙여넣기(배정) / 응답 체크 후 삭제 실행 / I2에 숫자 = 추가 모집'],
   ['배정', '누가 어떤 옵션을 사기로 했는지 (공지 이름에서 자동). 안 산 사람·옵션 틀림 확인에 씀. 지우지 마세요'],
-  ['일정', '아직 안 만든 다음 일차 계획. 진행 전날 오전 10시에 자동으로 폼·방 공지가 만들어짐'],
+  ['일정', '아직 안 만든 다음 일차 계획(상태 "대기"). 진행 전날 오전 10시에 자동으로 진행·방 공지가 만들어짐. 날짜를 바꾸려면 "진행일" 칸을 고치기'],
   ['', ''],
   ['■ 매일 할 일', ''],
   ['1. 새 의뢰', '생성기에 의뢰서 붙여넣기 → 공지에 살 사람 이름 적기 → [이 내용으로 새 진행 만들기] (폼·명단 시트·방 공지·배정·다음 일차 계획까지 자동)'],
@@ -4179,7 +4179,7 @@ const USAGE_ROWS = [
   ['', ''],
   ['■ 이럴 땐', ''],
   ['날짜 바꾸기', '예) 목요일 건너뛰고 금요일에: 진행목록에서 그 진행 "진행일"을 새 날짜(10/23)로 고치기 → 방제·카톡방 이름·보낼메시지·월급시트·뒤 일차까지 같이 바뀜 (오른쪽 아래 알림). 이미 만든 카톡방 이름은 직접 바꾸기. 아직 안 만든 일차는 "일정" 탭 진행일을 고치기'],
-  ['안 산 사람 (인원 모자람)', '그대로 두면 됨. 의뢰 마지막 날이면 그날 오전 10시 이후 다음 진행일에 모자란 만큼 진행이 자동으로 생김(보낼메시지에 방 공지). 중간 날 모자란 건 마지막 날 끝난 뒤 한꺼번에. 바로 더 받으려면 폼수정 탭 I2에 인원 숫자'],
+  ['안 산 사람 (인원 모자람)', '그대로 두면 됨. 의뢰 마지막 날이면 그날 오후 2시 이후 다음 진행일에 모자란 만큼 진행이 자동으로 생김(보낼메시지에 방 공지). 중간 날 모자란 건 마지막 날 끝난 뒤 한꺼번에. 바로 더 받으려면 폼수정 탭 I2에 인원 숫자'],
   ['잘못 산 사람·방 나간 사람', '폼수정 탭 B1에서 진행 고르기 → 그 응답 체크 → 삭제 실행. 그날 안이면 폼이 다시 열려 다른 사람을 받음'],
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
   ['리뷰 완료 (취완)', '명단 시트 "명단" 탭 맨 오른쪽 "리뷰 확인" 체크칸에 체크 → 그 방 사람 전부 체크되면 보낼메시지에 그 방 "취완", 의뢰 전체가 끝나고 전부 체크되면 사장님 보고 문구'],
@@ -4309,8 +4309,10 @@ function firstSheetRun_(r) {
 
 // 의뢰 총건수가 남았는데 내일 진행이 없으면(일정 탭 계획이 없는 의뢰 등) 오늘 오전 10시(NEXT_DAY_HOUR)부터 내일 진행을 자동으로
 //  같은 폼·같은 명단 시트, 공지는 오늘 공지(폼 설명)에서 이름을 뺀 것, 건수 = min(일 진행 건수, 남은 건수)
+const SHORT_NEXT_HOUR = 14;
 function autoNextDay_() {
-  if (Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'H')) < (Number(CONFIG.NEXT_DAY_HOUR) || 10)) return;
+  const hour = Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'H'));
+  if (hour < (Number(CONFIG.NEXT_DAY_HOUR) || 10)) return;
   const runs = readRuns_();
   const todayKey = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
   // 일정 탭에 이 캠페인의 대기 중인 계획이 있으면 그쪽(makeDueDays_)이 만듦
@@ -4328,6 +4330,9 @@ function autoNextDay_() {
     const planned = c.runs.reduce(function (a, x) { return a + (x['진행일'] < today_() || pastEnd_(x) ? (Number(x['인원']) || 0) : (Number(x['목표인원']) || 0)); }, 0);
     const left = c.total - planned;
     if (left <= 0) return;
+    // 남은 건수가 오늘 안 산 사람 때문에만 생긴 거면 오후 2시 이후에 (늦게 사는 사람 기다림, 사용자 요청 10/20)
+    const byTarget = c.total - c.runs.reduce(function (a, x) { return a + (x['진행일'] < today_() ? (Number(x['인원']) || 0) : (Number(x['목표인원']) || 0)); }, 0);
+    if (byTarget <= 0 && hour < SHORT_NEXT_HOUR) return;
     if (pastEnd_(last) && !(Number(last['인원']) > 0)) return;   // 오늘 인원이 0이면 세기가 잘못됐을 수 있어서 자동으로 안 만듦
     const daily = Number(c.runs[0]['목표인원']) || Number(last['목표인원']) || left;
     // 남는 건수가 일 건수의 절반보다 적으면 마지막 날에 같이 (총 50 / 일 7 → 마지막 날 8, 사용자 요청 10/20. 생성기 numDays와 같은 규칙)
@@ -4858,7 +4863,18 @@ function planSheet_() {
     sh.getRange('D:D').setNumberFormat('yyyy-mm-dd');
     sh.setColumnWidth(10, 80);
   }
-  try { if (!sh.isSheetHidden()) sh.hideSheet(); } catch (e) {}
+  // (10/20) 숨겨 두던 탭을 보이게: 아직 안 만든 다음 일차 날짜를 직접 고칠 수 있게. 스크립트용 칸(ID, 옵션 인원, 설정)만 숨김
+  const props = PropertiesService.getScriptProperties();
+  if (!props.getProperty('PLAN_SHOWN_V1')) {
+    props.setProperty('PLAN_SHOWN_V1', '1');
+    try {
+      sh.showSheet();
+      sh.hideColumns(1); sh.hideColumns(8); sh.hideColumns(10);
+      sh.setColumnWidth(5, 220); sh.setColumnWidth(6, 260);
+      sh.getRange('D1').setNote('아직 안 만든 다음 일차의 진행일. 고치면 그 날짜로 만들어져요 (방제 날짜도 맞춰짐). 상태가 "대기"인 줄만 해당');
+      sh.setTabColor('#93c47d');
+    } catch (e) {}
+  }
   return sh;
 }
 
