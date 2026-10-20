@@ -236,7 +236,7 @@ function renameTodo_(r, oldBare, newBare) {
   if (!oldBare || oldBare === newBare) return;
   const lines = ['[방제 바뀜] ' + oldBare + ' → ' + newBare, '1. 카톡방 이름을 ' + newBare + ' 로 바꾸기'];
   // 진행일이 지났거나 오늘이면 명단을 이미 보냈을 수 있어서 고칠 글도 같이
-  if (r['시트 링크'] && r['진행일'] instanceof Date && dayStart_(r['진행일']) <= today_().getTime()) lines.push('2. 오리명단방에 명단을 이미 보냈으면 아래로 고치기(또는 다시 보내기):', '', r['시트 링크'] + '\n\n' + newBare + ((String(r['명단 제목']).match(/\s*\([^)]*\)\s*$/) || [''])[0]));
+  if (r['시트 링크'] && r['진행일'] instanceof Date && dayStart_(r['진행일']) <= today_().getTime()) lines.push('2. 오리명단방에 보낸 명단 카톡 메시지를 아래 글로 수정 (새로 보내지 말고 수정)', '', r['시트 링크'] + '\n\n' + newBare + ((String(r['명단 제목']).match(/\s*\([^)]*\)\s*$/) || [''])[0]));
   queueMsg_('내 할 일', lines.join('\n'), '할 일');
 }
 
@@ -2441,6 +2441,7 @@ function ensureListMsgs_(runs) {
   runs.forEach(function (r) {
     if (r['진행 상태'] === '종료' || !(r['마감 시각'] instanceof Date) || !r['시트 링크']) return;
     if (Utilities.formatDate(r['마감 시각'], CONFIG.TIMEZONE, 'yyyyMMdd') !== tk) return;
+    if (PropertiesService.getScriptProperties().getProperty('NOLISTMSG_' + bareTitle_(r['명단 제목']).replace(/\s+/g, ''))) return;   // 인원을 줄여서 끝낸 진행: 보낸 메시지를 고치는 할 일로 대신
     const want = r['시트 링크'] + '\n\n' + r['명단 제목'];
     let found = false;
     v.forEach(function (x, i) {
@@ -4171,7 +4172,7 @@ function rvZip_(f, name, props, sid) {
 }
 
 /* ---------------- 사용법 탭 (맨 앞, 사용자 요청 10/20). 글을 바꾸면 USAGE_VER를 올림 → 다시 씀 ---------------- */
-const USAGE_TAB = '사용법', USAGE_VER = '3';
+const USAGE_TAB = '사용법', USAGE_VER = '4';
 const USAGE_ROWS = [
   ['체험단 관리 시트 사용법', '(스크립트가 쓰는 탭이라 여기 고친 글은 다음 업데이트 때 다시 써져요)'],
   ['', ''],
@@ -4181,8 +4182,9 @@ const USAGE_ROWS = [
   ['보낼메시지', '카톡에 보낼 글. 위에서부터(보낼 날짜 빠른 순) 복사해서 보내고 맨 오른쪽 "보냄 체크" 칸 체크'],
   ['진행목록', '모든 진행 기록. "진행일" 칸을 고치면 그 진행 날짜가 옮겨짐 (아래 "날짜 바꾸기")'],
   ['폼수정', 'B1에서 진행 고르기 → E2 공지 붙여넣기(배정) / 응답 체크 후 삭제 실행 / I2에 숫자 = 추가 모집'],
-  ['배정', '누가 어떤 옵션을 사기로 했는지 (공지 이름에서 자동). 안 산 사람·옵션 틀림 확인에 씀. 지우지 마세요'],
-  ['일정', '아직 안 만든 다음 일차 계획(상태 "대기"). 진행 전날 오전 10시에 자동으로 진행·방 공지가 만들어짐. 날짜를 바꾸려면 "진행일" 칸을 고치기'],
+  ['배정', '누가 어떤 옵션을 사기로 했는지 (공지 이름에서 자동). 한눈에 탭 "안 산 사람"·"옵션 확인"이 이걸로 나옴. 지우지 마세요 (중복 확인은 배정과 상관없이 한눈에 명단에서 빨간 글씨)'],
+  ['일정', '아직 안 만든 다음 일차 예약(상태 "대기"). 진행 전날 오전 10시에 자동으로 진행목록으로 넘어감(폼·방 공지 생김). 진행목록에서 날짜를 고치면 일정도 따라 밀려서 보통은 안 봐도 됨'],
+  ['진행목록 vs 일정', '진행목록 = 이미 만든 진행(폼·명단 시트·방 공지 있음) → 날짜를 바꾸려면 여기 "진행일". 일정 = 아직 안 만든 다음 일차 → 그 날짜만 따로 바꿀 때만 일정 탭 "진행일"'],
   ['', ''],
   ['■ 매일 할 일', ''],
   ['1. 새 의뢰', '생성기에 의뢰서 붙여넣기 → 공지에 살 사람 이름 적기 → [이 내용으로 새 진행 만들기] (폼·명단 시트·방 공지·배정·다음 일차 계획까지 자동)'],
@@ -4192,7 +4194,7 @@ const USAGE_ROWS = [
   ['', ''],
   ['■ 이럴 땐', ''],
   ['날짜 바꾸기', '예) 목요일 건너뛰고 금요일에: 진행목록에서 그 진행 "진행일"을 새 날짜(10/23)로 고치기 → 방제·카톡방 이름·보낼메시지·월급시트·뒤 일차까지 같이 바뀜 (오른쪽 아래 알림). 이미 만든 카톡방 이름은 직접 바꾸기. 아직 안 만든 일차는 "일정" 탭 진행일을 고치기'],
-  ['안 산 사람 (인원 모자람)', '그대로 두면 됨. 의뢰 마지막 날이면 그날 오후 2시 이후 다음 진행일에 모자란 만큼 진행이 자동으로 생김(보낼메시지에 방 공지). 중간 날 모자란 건 마지막 날 끝난 뒤 한꺼번에. 바로 더 받으려면 폼수정 탭 I2에 인원 숫자'],
+  ['안 산 사람 (인원 모자람)', '그대로 두면 됨. 의뢰 마지막 날이면 그날 오후 2시 이후 다음 진행일에 모자란 만큼 진행이 자동으로 생김(보낼메시지에 방 공지). 그날 방제는 산 인원으로 바뀜(10→8, 월급시트 캠페인명도) → 보낼메시지 "할 일"대로 카톡방 이름·오리명단방 명단 메시지를 수정. 중간 날 모자란 건 마지막 날 끝난 뒤 한꺼번에. 바로 더 받으려면 폼수정 탭 I2에 인원 숫자'],
   ['잘못 산 사람·방 나간 사람', '폼수정 탭 B1에서 진행 고르기 → 그 응답 체크 → 삭제 실행. 그날 안이면 폼이 다시 열려 다른 사람을 받음'],
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
   ['리뷰 완료 (취완)', '명단 시트 "명단" 탭 맨 오른쪽 "리뷰 확인" 체크칸에 체크 → 그 방 사람 전부 체크되면 보낼메시지에 그 방 "취완", 의뢰 전체가 끝나고 전부 체크되면 사장님 보고 문구'],
@@ -4329,6 +4331,14 @@ function shrinkToGot_(r) {
   const oldBare = bareTitle_(r['명단 제목']), nb = oldBare.replace(/\d+\s*$/, String(got));
   if (nb === oldBare || !renameRun_(r, nb)) return;
   setRun_(r.row, '목표인원', got);
+  // 그날은 이 인원으로 끝: 마감 시각을 직접 넣어서 새 명단 전달 메시지를 만들지 않음 (이미 보낸 카톡 메시지를 고치면 됨, 사용자 10/20)
+  if (!(r['마감 시각'] instanceof Date)) { setRun_(r.row, '마감 시각', new Date()); r['마감 시각'] = new Date(); }
+  PropertiesService.getScriptProperties().setProperty('NOLISTMSG_' + nb.replace(/\s+/g, ''), '1');
+  // 보낼메시지에 있는 그 진행 명단 전달 글도 새 방제로 (보낸 것도 기록이 맞게)
+  try {
+    const ob = outboxSheet_(), ol = ob.getLastRow();
+    if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v, i) { if (v[2] === '명단 전달' && String(v[4]).indexOf(oldBare) >= 0) ob.getRange(i + 2, 5).setValue(String(v[4]).split(oldBare).join(nb)); });
+  } catch (e) {}
   renameTodo_(r, oldBare, nb);
   note_('✓ 인원 맞춤: ' + oldBare + ' → ' + nb);
 }
@@ -5583,7 +5593,8 @@ function putFileChip_(sh, row, col, url) {
 // 택배시트는 바로가기만 걸고 절대 고치지 않음
 
 const DASH_TAB = '한눈에';
-const DASH_VER = '16';   // 모양을 바꾸면 올려서 다시 만들게 함
+const DASH_VER = '17';
+const DASH_LIST_DAYS = 2;   // 아래 명단 덩어리를 보여 줄 지난 날 수   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
   buildDashboard_(true);
@@ -5648,6 +5659,13 @@ function buildDashboard_(force) {
     blk[b.key] = b; border.push(b.key);
   });
   sheets = blk; order = border;
+  // 아래 명단 덩어리는 최근 것만 (오늘·앞으로 + 지난 2일, 택배 옮김 안 한 택대). 진행이 쌓일수록 IMPORTRANGE가 많아져 느려져서 (사용자 10/20)
+  //  위 표(신청·남은)는 전부 그대로. 지난 명단은 위 표 '명단' 링크로
+  const recentCut = today_().getTime() - DASH_LIST_DAYS * 86400000;
+  const show = order.filter(function (id) {
+    const r = sheets[id].runs[0];
+    return !(r['진행일'] instanceof Date) || r['진행일'].getTime() >= recentCut || (r['택대'] === 'Y' && r['택배 옮김'] !== true);
+  });
   // 덩어리 줄 수는 지금 인원 + 여유 5줄 (넘칠 것 같으면 다시 만듦). 빈칸이 너무 길지 않게
   order.forEach(function (id) {
     const x = sheets[id];
@@ -5655,7 +5673,7 @@ function buildDashboard_(force) {
     x.n = Math.max(Math.ceil((x.count + 5) / 5) * 5, 6);   // 5줄 단위라 응답 몇 개마다만 다시 만듦
     if (goal) x.n = Math.min(x.n, Math.max(goal + 3, x.count + 2));
   });
-  const sig = DASH_VER + '|' + props.getProperty('RUN_ERRORS') + '|' + order.map(function (id) { return id + ':' + sheets[id].n; }).join(',') + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태'] + ':' + r['진행일'] + ':' + r['택배 옮김']; }).join('|');
+  const sig = DASH_VER + '|' + show.join(',') + '|' + props.getProperty('RUN_ERRORS') + '|' + order.map(function (id) { return id + ':' + sheets[id].n; }).join(',') + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태'] + ':' + r['진행일'] + ':' + r['택배 옮김']; }).join('|');
   let sh = ss.getSheetByName(DASH_TAB);
   // 한눈에 탭에서 방제를 직접 고쳐 둔 게 있으면 다시 만들기 전에 진행목록에 반영
   //  (지난번에 스크립트가 적은 값과 다를 때만 = 한눈에서 직접 고친 것. 진행목록에서 고친 걸 옛 값으로 되돌리지 않게)
@@ -5692,7 +5710,7 @@ function buildDashboard_(force) {
   const payUrl = CONFIG.PAY_SHEET_ID ? 'https://docs.google.com/spreadsheets/d/' + CONFIG.PAY_SHEET_ID + '/edit#gid=' + CONFIG.PAY_TAB_GID : '';
   // 아래 덩어리 자리 먼저 계산 (위 표 '틀린 옵션'이 덩어리의 옵션 확인 칸을 셈)
   let row = runs.length + 4;
-  order.forEach(function (id) {
+  show.forEach(function (id) {
     const x = sheets[id];
     x.top = row;
     // 택배시트 칸 순서 그대로 (A 시간, B 이름, C 아이디, D 전화, E 주소, F 옵션, G 금액, H~J 빈칸, K 업체+상품) → 그대로 복사해서 붙여넣기
@@ -5767,7 +5785,7 @@ function buildDashboard_(force) {
   // 아래: 명단 내용 (중복, 금액, 옵션 확인 표시는 여기서만. 명단 시트는 업체도 봐서 깨끗하게 둠)
   const rules = [];
   const A = "'" + ASSIGN_TAB + "'!";
-  order.forEach(function (id) {
+  show.forEach(function (id) {
     const x = sheets[id], top = x.top, n = x.n, width = Math.max(x.layout.length + (x.chk ? 1 : 0), 6);
     const titles = x.runs.map(function (r) { return String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''); }).reverse();
     sh.getRange(top, 1, 1, width).setBackground('#f0e8f8');
@@ -5847,7 +5865,7 @@ function buildDashboard_(force) {
     rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISLOGICAL(M2),M2=FALSE)').setBackground('#ea9999').setRanges([sh.getRange(2, 13, runs.length, 1)]).build());
   }
   // 명단 줄 번갈아 연한 색 (읽기 쉽게, 다른 표시보다 약하게 맨 뒤에)
-  order.forEach(function (id) {
+  show.forEach(function (id) {
     const x = sheets[id];
     rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND($A' + (x.top + 2) + '<>"",ISEVEN(ROW()))').setBackground('#f6f4fb')
       .setRanges([sh.getRange(x.top + 2, 1, x.n, Math.max(x.layout.length + (x.chk ? 1 : 0), 6))]).build());
