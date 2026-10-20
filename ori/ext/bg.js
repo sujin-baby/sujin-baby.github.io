@@ -343,8 +343,10 @@ const cmpVer = (a, b) => { const x = a.split(".").map(Number), y = b.split(".").
 async function run(tab) {
   const tid = tab.id;
   if (/^https:\/\/(m?search)\.shopping\.naver\.com\//.test(tab.url || "")) return naverHere(tab);
+  /* 올리브영: 상품 페이지·검색 화면 모두 북마크와 같은 코드(oy.js)로 */
+  if (/^https?:\/\/([a-z]+\.)?oliveyoung\.co\.kr\//.test(tab.url || "")) { await chrome.scripting.executeScript({ target: { tabId: tid }, files: ["oy.js"] }); return; }
   const info = await call(tid, "readProduct").catch(() => null);
-  if (!info) { await ui(tid, { title: "상품 위치 찾기", msg: "이 화면은 읽을 수 없어요. 쿠팡·네이버 상품 페이지에서 눌러 주세요." }); return; }
+  if (!info) { await ui(tid, { title: "상품 위치 찾기", msg: "이 화면은 읽을 수 없어요. 쿠팡·네이버·올리브영 상품 페이지에서 눌러 주세요." }); return; }
   if (info.err) { await ui(tid, { title: "상품 위치 찾기", msg: info.err }); return; }
   const site = info.site;
   if (site === "naver") return naverProduct(tab, info);
