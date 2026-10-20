@@ -129,6 +129,38 @@
     if (sc >= 0.95) return "상품명";
     return "";
   }
+  /* 링크로 상품 칸을 못 잡는 화면(상품명이 링크가 아님 등)용: 화면 글자에서 상품명(+스토어)이 든 가장 작은 칸을 찾고,
+     가격(원)이 적힌 형제 칸들 사이에서 몇 번째인지 셈 (10/20 네이버 가격비교 화면에서 마켓 담온 귤을 못 찾음) */
+  let FOUND_EL = null;
+  function textFind(o) {
+    const nm = String(o.nm || ""), stN = norm(o.st), nk = norm(nm).slice(0, 25);
+    const toks = nm.split(/[\s\/,·|]+/).filter(x => x.length >= 2).sort((a, b) => b.length - a.length);
+    if (!toks.length) return null;
+    const key = toks[0];
+    const ok = el => {
+      if (el.closest("#__pl_box")) return false;
+      const tc = el.textContent || "";
+      if (tc.length > 3000 || tc.indexOf(key) === -1) return false;
+      const t = norm(el.innerText), sc = nameScore(t, nm);
+      return (nk.length >= 6 && t.indexOf(nk) !== -1) || (sc >= 0.8 && stN.length >= 2 && t.indexOf(stN) !== -1) || sc >= 0.95;
+    };
+    const all = [...document.querySelectorAll("li,div,article,section,td")].filter(ok);
+    const leaves = all.filter(el => !all.some(x => x !== el && el.contains(x)));
+    const PRICE = /\d{1,3}(?:,\d{3})+\s*원/;
+    for (const leaf of leaves) {
+      let a = leaf;
+      while (a.parentElement && a.parentElement !== document.body) {
+        const sib = [...a.parentElement.children].filter(c => PRICE.test(c.textContent || ""));
+        if (sib.length >= 3 && sib.indexOf(a) >= 0) {
+          if (isAd(a)) break;
+          const org = sib.slice(0, sib.indexOf(a)).filter(c => !isAd(c)).length + 1;
+          return { el: a, org: org, st: !!(stN.length >= 2 && norm(a.innerText).indexOf(stN) !== -1) };
+        }
+        a = a.parentElement;
+      }
+    }
+    return null;
+  }
   /* 상품명 낱말(2글자 이상) 중 칸 글자에 들어 있는 비율 */
   function nameScore(t, nm) {
     const toks = String(nm || "").split(/[\s\/,·|]+/).map(norm).filter(x => x.length >= 2);
@@ -166,6 +198,7 @@
     try { return await scan0(o); } catch (e) { return { error: String((e && e.message) || e), snip: snippet(), n: 0, keys: [] }; }
   }
   async function scan0(o) {
+    FOUND_EL = null;
     await waitReady();
     if (blockedText()) return { blocked: true, url: location.href, snip: snippet() };
     const found = () => cardList().some(c => matchOf(c.el, o) && !isAd(c.el));
@@ -178,11 +211,13 @@
     const body = document.body.innerText;
     window.scrollTo(0, 0);
     /* 광고 칸은 빼고 몇 번째 상품인지 */
-    const org = hit >= 0 ? list.slice(0, hit).filter(c => !isAd(c.el)).length + 1 : 0;
+    let org = hit >= 0 ? list.slice(0, hit).filter(c => !isAd(c.el)).length + 1 : 0;
+    if (hit < 0 && isNaver && o.nm) { const tf = textFind(o); if (tf) { FOUND_EL = tf.el; hit = 0; org = tf.org; how = tf.st ? "화면 글자(상품명+스토어)" : "화면 글자(상품명)"; } }
     /* 비슷한 상품이 많은지: 가격비교·카탈로그로 묶인 칸이거나, 같은 상품명이 광고 아닌 칸에 2개 이상 */
     const nk15 = norm(o.nm).slice(0, 15);
     const sameN = nk15.length >= 8 ? list.filter(c => !isAd(c.el) && norm(c.el.innerText).indexOf(nk15) !== -1).length : 0;
-    const similar = hit >= 0 && (/판매처\s*\d+|쇼핑몰별\s*최저가|최저\s*[\d,]+\s*원|가격\s*비교/.test(list[hit].el.innerText || "") || sameN >= 2);
+    const hitEl = FOUND_EL || (hit >= 0 && list[hit] ? list[hit].el : null);
+    const similar = !!hitEl && (/판매처\s*\d+|쇼핑몰별\s*최저가|최저\s*[\d,]+\s*원|가격\s*비교/.test(hitEl.innerText || "") || sameN >= 2);
     /* 못 찾았을 때 가장 비슷한 칸 (왜 못 찾았는지 보려고) */
     let near = null;
     if (hit < 0 && isNaver) list.forEach((c, i) => { const sc = nameScore(norm(c.el.innerText), o.nm); if (!near || sc > near.sc) near = { i: i + 1, sc: sc, t: (c.el.innerText || "").replace(/\s+/g, " ").trim().slice(0, 60), st: !!(o.st && norm(c.el.innerText).indexOf(norm(o.st)) !== -1), ad: isAd(c.el) }; });
@@ -259,6 +294,7 @@
 
   /* 찾은 상품 칸 표시 */
   function mark(i) {
+    if (FOUND_EL) { FOUND_EL.style.outline = "4px solid #e5397a"; FOUND_EL.style.outlineOffset = "2px"; FOUND_EL.scrollIntoView({ block: "center" }); return true; }
     const c = cardList()[i]; if (!c) return false;
     c.el.style.outline = "4px solid #e5397a"; c.el.style.outlineOffset = "2px";
     c.el.scrollIntoView({ block: "center" });
