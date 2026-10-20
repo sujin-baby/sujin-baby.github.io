@@ -5593,7 +5593,7 @@ function putFileChip_(sh, row, col, url) {
 // 택배시트는 바로가기만 걸고 절대 고치지 않음
 
 const DASH_TAB = '한눈에';
-const DASH_VER = '17';
+const DASH_VER = '18';
 const DASH_LIST_DAYS = 2;   // 아래 명단 덩어리를 보여 줄 지난 날 수   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
@@ -5863,6 +5863,11 @@ function buildDashboard_(force) {
     rules.unshift(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER(G2),G2<>0)').setFontColor('#d00000').setBold(true).setRanges([sh.getRange(2, 7, runs.length, 1)]).build());
     rules.push(SpreadsheetApp.newConditionalFormatRule().whenNumberGreaterThan(0).setBackground('#ea9999').setFontColor('#7f0000').setBold(true).setRanges([sh.getRange(2, 12, runs.length, 1)]).build());
     rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISLOGICAL(M2),M2=FALSE)').setBackground('#ea9999').setRanges([sh.getRange(2, 13, runs.length, 1)]).build());
+    // 오늘 진행 = 연두, 다음 진행일(금요일이면 월요일) = 하늘색. 수식이라 날이 바뀌면 저절로 바뀜 (사용자 요청 10/20). 위 빨간 표시가 먼저
+    const top = sh.getRange(2, 1, runs.length, head.length);
+    rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=INT($A2)=TODAY()').setBackground('#d9ead3').setRanges([top]).build());
+    rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=INT($A2)=WORKDAY(TODAY(),1)').setBackground('#cfe2f3').setRanges([top]).build());
+    sh.getRange(1, 1).setNote('연두 = 오늘 진행, 하늘색 = 다음 진행일(금요일이면 월요일)');
   }
   // 명단 줄 번갈아 연한 색 (읽기 쉽게, 다른 표시보다 약하게 맨 뒤에)
   show.forEach(function (id) {
