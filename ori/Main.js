@@ -620,6 +620,20 @@ function syncList_(ss) {
     lc = Math.max(sh.getLastColumn(), 1); hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_);
   });
   props.setProperty('LISTH_' + id, JSON.stringify(known));
+  // 맨 오른쪽 '리뷰 확인' 체크칸 (사용자 요청 10/20). 한 번만 만듦 → 지우거나 옮겨도 다시 안 만듦. 다 체크하면 취완 메시지(reviewDone_)
+  if (!props.getProperty('RVCOL_' + id) && hdr.indexOf(RV_CHECK) === -1) {
+    props.setProperty('RVCOL_' + id, '1');
+    const c = lc + 1;
+    if (sh.getMaxColumns() < c) sh.insertColumnsAfter(sh.getMaxColumns(), c - sh.getMaxColumns());
+    sh.getRange(2, lc).copyTo(sh.getRange(2, c), SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+    sh.getRange(2, c).setValue(RV_CHECK);
+    if (sh.getLastRow() >= 3) {
+      sh.getRange(3, lc, sh.getLastRow() - 2, 1).copyTo(sh.getRange(3, c, sh.getLastRow() - 2, 1), SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);   // 줄 색 그대로
+      sh.getRange(3, c, sh.getLastRow() - 2, 1).insertCheckboxes().setHorizontalAlignment('center');
+    }
+    sh.setColumnWidth(c, 80);
+    lc = c; hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_);
+  } else if (hdr.indexOf(RV_CHECK) >= 0) props.setProperty('RVCOL_' + id, '1');
   const cT = hdr.indexOf('타임스탬프') + 1;
   let done = String(props.getProperty('LISTK_' + id) || '').split(',').filter(Boolean);
   if (!done.length && cT && sh.getLastRow() >= 3) done = sh.getRange(3, cT, sh.getLastRow() - 2, 1).getValues().map(function (x) { return x[0] instanceof Date ? String(x[0].getTime()) : ''; }).filter(Boolean);
@@ -636,8 +650,9 @@ function syncList_(ss) {
     // 사용자가 만든 체크칸(바로 위 줄이 체크칸인 칸)은 새 줄에도 체크칸
     if (start > 3) {
       const above = sh.getRange(start - 1, 1, 1, lc).getValues()[0];
-      above.forEach(function (v, j) { if (typeof v === 'boolean' && heads.indexOf(hdr[j]) === -1) sh.getRange(start, j + 1, n, 1).insertCheckboxes(); });
+      above.forEach(function (v, j) { if (typeof v === 'boolean' && heads.indexOf(hdr[j]) === -1 && hdr[j] !== RV_CHECK) sh.getRange(start, j + 1, n, 1).insertCheckboxes(); });
     }
+    if (hdr.indexOf(RV_CHECK) >= 0) sh.getRange(start, hdr.indexOf(RV_CHECK) + 1, n, 1).insertCheckboxes().setHorizontalAlignment('center');
     // 날짜별 연한 색. 실배송이면 전부 노란색 (사용자 요청 10/19)
     sh.getRange(start, 1, n, lc).setBackgrounds(add.map(function (x) {
       const day = Math.floor((x.t + 9 * 3600000) / 86400000) + 25569;
@@ -4044,11 +4059,11 @@ function applyAssign_(sh, text) {
 }
 
 /* ---------------- 리뷰 완료: 취완 · 사장님 보고 · 리뷰 이미지 압축 (사용자 요청 10/20, A + B1) ----------------
-   A. 명단 탭 맨 왼쪽 체크칸(리뷰 확인)을 그 방(그날) 사람 전부 체크하면 → 보낼메시지에 그 카톡방 '취완'
+   A. 명단 탭 맨 오른쪽 '리뷰 확인' 체크칸(syncList_가 만듦)을 그 방(그날) 사람 전부 체크하면 → 보낼메시지에 그 카톡방 '취완'
       의뢰(명단 시트) 전체가 다 진행되고 전부 체크되면 → 사장님 갠톡 '안녕하세요 [명단 시트 이름] 리뷰완료되어 보고드립니다 !'
    B1. 의뢰 폴더 안 '리뷰이미지' 폴더(명단이 마감되면 자동으로 만듦)에 카톡 사진을 올려 두면 → 압축 파일(명단 시트 이름.zip)을 의뢰 폴더에 만들고
       보낼메시지 '할 일'에 다운로드 링크 (받아서 사장님 톡에 첨부). 사진을 더 올리면 다시 압축 */
-const RV_IMG_FOLDER = '리뷰이미지';
+const RV_IMG_FOLDER = '리뷰이미지', RV_CHECK = '리뷰 확인';
 function reviewDone_(runs) {
   const props = PropertiesService.getScriptProperties(), cut = today_().getTime() - 40 * 86400000;
   // 처음 한 번은 이미 다 체크된 예전 의뢰를 '보낸 걸로' 기억만 (예전에 직접 보낸 취완·보고가 다시 안 들어가게)
@@ -4073,7 +4088,8 @@ function reviewDone_(runs) {
       const live = v.map(function (x, i) { return x[cT] instanceof Date && !nt[i][0] ? i : -1; }).filter(function (i) { return i >= 0; });
       if (!live.length) return;
       const isChk = function (c) { return live.every(function (i) { return typeof v[i][c] === 'boolean'; }); };
-      let cc = hdr.findIndex(function (h, c) { return /체크|확인|리뷰/.test(h) && isChk(c); });
+      let cc = hdr.indexOf(RV_CHECK) >= 0 && isChk(hdr.indexOf(RV_CHECK)) ? hdr.indexOf(RV_CHECK) : -1;
+      if (cc < 0) cc = hdr.findIndex(function (h, c) { return /체크|확인|리뷰/.test(h) && isChk(c); });
       if (cc < 0) cc = hdr.findIndex(function (h, c) { return isChk(c); });
       if (cc < 0) return;
       // A-1. 그날(그 방) 사람 전부 체크 → 취완
@@ -4142,7 +4158,7 @@ function rvZip_(f, name, props, sid) {
 }
 
 /* ---------------- 사용법 탭 (맨 앞, 사용자 요청 10/20). 글을 바꾸면 USAGE_VER를 올림 → 다시 씀 ---------------- */
-const USAGE_TAB = '사용법', USAGE_VER = '1';
+const USAGE_TAB = '사용법', USAGE_VER = '2';
 const USAGE_ROWS = [
   ['체험단 관리 시트 사용법', '(스크립트가 쓰는 탭이라 여기 고친 글은 다음 업데이트 때 다시 써져요)'],
   ['', ''],
@@ -4166,7 +4182,7 @@ const USAGE_ROWS = [
   ['안 산 사람 (인원 모자람)', '그대로 두면 됨. 의뢰 마지막 날이면 그날 오전 10시 이후 다음 진행일에 모자란 만큼 진행이 자동으로 생김(보낼메시지에 방 공지). 중간 날 모자란 건 마지막 날 끝난 뒤 한꺼번에. 바로 더 받으려면 폼수정 탭 I2에 인원 숫자'],
   ['잘못 산 사람·방 나간 사람', '폼수정 탭 B1에서 진행 고르기 → 그 응답 체크 → 삭제 실행. 그날 안이면 폼이 다시 열려 다른 사람을 받음'],
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
-  ['리뷰 완료 (취완)', '명단 시트 "명단" 탭 맨 왼쪽 체크칸에 리뷰 확인 체크 → 그 방 사람 전부 체크되면 보낼메시지에 그 방 "취완", 의뢰 전체가 끝나고 전부 체크되면 사장님 보고 문구'],
+  ['리뷰 완료 (취완)', '명단 시트 "명단" 탭 맨 오른쪽 "리뷰 확인" 체크칸에 체크 → 그 방 사람 전부 체크되면 보낼메시지에 그 방 "취완", 의뢰 전체가 끝나고 전부 체크되면 사장님 보고 문구'],
   ['리뷰 이미지 압축', '카톡 사진 전체 저장 → 의뢰 폴더(진행목록 "폴더 링크") 안 "리뷰이미지" 폴더에 올리기 → 압축 파일(명단 시트 이름.zip)이 생기고 보낼메시지 "할 일"에 링크 → 받아서 사장님 톡에 첨부'],
   ['블랙리스트 사람이 폼을 냄', '한눈에 "확인 필요" 칸에 ⛔ + 메일 → 폼수정 탭에서 그 응답 지우기'],
   ['명단이 안 보임', '메뉴 체험단 도구 → 지금 명단 마감 확인 (명단 탭만 바로 새로고침, 나머지는 1분 뒤 자동)'],
