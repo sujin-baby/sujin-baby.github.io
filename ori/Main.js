@@ -656,7 +656,7 @@ function syncList_(ss) {
       sh.getRange(2, c0, rows, 1).clearContent().clearDataValidations().setBackground(null);
       sh.getRange(2, c0).clearNote();
     } else if (!props.getProperty('RVCOL_' + id) && rvCol_(sh, lc) < 0) {
-      const c = lc + 2;
+      const c = lc + 1;   // 맨 오른쪽 바로 옆 칸 (사용자 요청 10/21: M칸)
       if (sh.getMaxColumns() < c) sh.insertColumnsAfter(sh.getMaxColumns(), c - sh.getMaxColumns());
       rvMark_(sh, c);
       if (sh.getLastRow() >= 3) sh.getRange(3, c, sh.getLastRow() - 2, 1).insertCheckboxes().setHorizontalAlignment('center');
@@ -669,8 +669,16 @@ function syncList_(ss) {
     const notes = sh.getRange(2, 1, 1, Math.min(sh.getMaxColumns(), lc + 3)).getNotes()[0], i = notes.findIndex(function (n) { return String(n).indexOf('리뷰 확인 칸') === 0; });
     if (i >= 0) { rvMark_(sh, i + 1); sh.getRange(2, i + 1).clearNote(); }
   } catch (e) {}
-  const rvc = rvCol_(sh, lc);   // 체크칸 (1부터, 없으면 -1)
-  const paint = rvc > 0 ? Math.max(Math.min(lc, rvc - 2), 1) : lc;   // 줄 색은 체크칸 앞 빈 칸 전까지만
+  let rvc = rvCol_(sh, lc);   // 체크칸 (1부터, 없으면 -1)
+  // (한 번, 10/21) 한 칸 띄운 체크칸(N)을 바로 옆(M)으로: 앞 칸이 통째로 비어 있을 때만
+  if (rvc > 2 && !props.getProperty('RVCOLM_' + id)) {
+    props.setProperty('RVCOLM_' + id, '1');
+    try {
+      const gap = sh.getRange(1, rvc - 1, Math.max(sh.getLastRow(), 2), 1).getValues();
+      if (gap.every(function (x) { return x[0] === '' || x[0] === null; })) { sh.moveColumns(sh.getRange(colLetter_(rvc) + ':' + colLetter_(rvc)), rvc - 1); rvc--; props.setProperty('RVCOLN_' + id, String(rvc)); lc = Math.max(sh.getLastColumn(), 1); hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_); }
+    } catch (e) { note_('체크칸 옮기기 실패: ' + e); }
+  }
+  const paint = rvc > 0 ? Math.max(Math.min(lc, rvc - (hdr[rvc - 2] ? 1 : 2)), 1) : lc;   // 줄 색은 체크칸 앞 빈 칸 전까지만
   const cT = hdr.indexOf('타임스탬프') + 1;
   let done = String(props.getProperty('LISTK_' + id) || '').split(',').filter(Boolean);
   if (!done.length && cT && sh.getLastRow() >= 3) done = sh.getRange(3, cT, sh.getLastRow() - 2, 1).getValues().map(function (x) { return x[0] instanceof Date ? String(x[0].getTime()) : ''; }).filter(Boolean);
@@ -2331,6 +2339,7 @@ function checkFullInner_() {
   step_('공지 모양');
   try { fixStyleOnce_(); } catch (e) { note_('공지 모양 정리 실패: ' + e); }
   try { reopenAndSunnyOnce_(readRuns_()); } catch (e) { note_('폼 다시 열기 실패: ' + e); }
+  try { dropSunnyExtraOnce_(readRuns_()); } catch (e) { note_('부유단감 추가 진행 지우기 실패: ' + e); }
   try { fixOzneOnce_(readRuns_()); } catch (e) { note_('오즈네즈 폼 제목 실패: ' + e); }
   try { fixOptDigitsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 단일옵션 실패: ' + e); }
   const runs = readRuns_(), times = {};
@@ -2507,8 +2516,24 @@ function checkFullInner_() {
 // 명단방 형식 (사장님 예시): 시트 링크 → 빈 줄 → 명단 제목
 //  업체방(업체 명단)은 안 넣음: 아직 업체 명단방에 없어서 (사용자 요청 10/19). 다시 쓰려면 SEND_COMPANY_LIST = true
 const SEND_COMPANY_LIST = false;
+// 명단 전달 글: 시트 링크 + 명단 제목(닉네임 붙임). 의뢰 마지막 날이면 맨 밑에 '10.14~ 10.21  50건 구매완료', 하루로 끝나는 의뢰는 '마지막' (사용자 요청 10/21)
+function listMsgText_(r) {
+  let t = String(r['명단 제목']).trim();
+  if (!/\([^)]*\)\s*$/.test(t)) t += ' (뽀짝오리)';
+  let tail = '';
+  try {
+    const runs = readRuns_(), me = runs.filter(function (x) { return x.row === r.row; })[0] || r;
+    const sib = siblings_(runs, me), total = Number(me['총건수']) || 0;
+    const got = sib.reduce(function (a, x) { return a + (Number(x['인원']) || 0); }, 0);
+    if (total && sib.length && sib[sib.length - 1].row === me.row && got >= total) {
+      const md = function (x) { return (x['진행일'].getMonth() + 1) + '.' + String(x['진행일'].getDate()).padStart(2, '0'); };
+      tail = sib.length === 1 ? '마지막' : md(sib[0]) + '~ ' + md(me) + '  ' + total + '건 구매완료';
+    }
+  } catch (e) {}
+  return r['시트 링크'] + '\n\n' + t + (tail ? '\n' + tail : '');
+}
 function queueListMsgs_(r, onlyWithRoom) {
-  const listMsg = r['시트 링크'] + '\n\n' + r['명단 제목'];
+  const listMsg = listMsgText_(r);
   queueMsg_(CONFIG.ROOM_LIST, listMsg, '명단 전달');
   if (SEND_COMPANY_LIST && (!onlyWithRoom || String(r['업체방'] || '').trim())) queueMsg_(r['업체방'], listMsg + '\n오늘 명단입니다. 실시간 시트에서 확인 부탁드립니다!', '업체 명단');
   return listMsg;
@@ -2524,12 +2549,11 @@ function ensureListMsgs_(runs) {
     if (r['진행 상태'] === '종료' || !(r['마감 시각'] instanceof Date) || !r['시트 링크']) return;
     if (Utilities.formatDate(r['마감 시각'], CONFIG.TIMEZONE, 'yyyyMMdd') !== tk) return;
     if (PropertiesService.getScriptProperties().getProperty('NOLISTMSG_' + bareTitle_(r['명단 제목']).replace(/\s+/g, ''))) return;   // 인원을 줄여서 끝낸 진행: 보낸 메시지를 고치는 할 일로 대신
-    const want = r['시트 링크'] + '\n\n' + r['명단 제목'];
+    const want = listMsgText_(r);
     let found = false;
     v.forEach(function (x, i) {
       if (x[2] !== '명단 전달') return;
-      const t = String(x[4]).split('\n').filter(function (l) { return l.trim(); }).pop() || '';
-      if (!sameRunTitle_(t, r['명단 제목'])) return;
+      if (!String(x[4]).split('\n').some(function (l) { return l.trim() && sameRunTitle_(l, r['명단 제목']); })) return;
       found = true;
       if (x[5] === '대기' && String(x[4]) !== want) ob.getRange(i + 2, 5).setValue(want);
     });
@@ -4729,6 +4753,15 @@ function reopenAndSunnyOnce_(runs) {
   try { if (r['폼ID']) { const f = FormApp.openById(r['폼ID']); f.setTitle('#택10.21 써니마켓 부유단감'); f.setAcceptingResponses(true); } } catch (e) { note_('부유단감 폼 이름 실패: ' + e); }
   try { if (r['시트ID']) SpreadsheetApp.openById(r['시트ID']).rename('#택10.21 써니마켓 부유단감'); } catch (e) { note_('부유단감 시트 이름 실패: ' + e); }
   note_('✓ 부유단감 → #택10.21 써니마켓 부유단감 5');
+}
+// (한 번, 10/21) 하루로 끝나는 부유단감인데 생긴 10/22 1명 진행·남은 일정 지우기 (생성기가 '1일간 진행'을 하루 1건으로 읽었던 것)
+function dropSunnyExtraOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('SUNNY_DROP_V1')) return;
+  props.setProperty('SUNNY_DROP_V1', '1');
+  runs.filter(function (x) { return /부유단감/.test(String(x['명단 제목'])) && /10\.2[2-9]/.test(String(x['명단 제목'])); }).sort(function (a, b) { return b.row - a.row; })
+    .forEach(function (x) { note_('부유단감 추가 진행 지움: ' + bareTitle_(x['명단 제목']) + ' → ' + (deleteRun_(x) || 'OK')); });
+  try { const ps = planSheet_(), pl = ps.getLastRow(); if (pl >= 2) { const v = ps.getRange(2, 1, pl - 1, 9).getValues(); for (let i = v.length - 1; i >= 0; i--) if (/부유단감/.test(String(v[i][1]) + String(v[i][4])) && String(v[i][8]) === '대기') ps.deleteRow(i + 2); } } catch (e) {}
 }
 function fixOzneOnce_(runs) {
   const props = PropertiesService.getScriptProperties();
