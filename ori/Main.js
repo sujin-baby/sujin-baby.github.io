@@ -2370,6 +2370,7 @@ function checkFullInner_() {
   try { fixPlatOnce_(readRuns_()); } catch (e) { note_('플랫폼 바로잡기 실패: ' + e); }
   try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
   try { fixOzneDay2Once_(readRuns_()); } catch (e) { note_('10.22 오즈네즈 공지 실패: ' + e); }
+  try { fixOmegaOnce_(readRuns_()); } catch (e) { note_('오메가3 날짜 실패: ' + e); }
   try { fixOptDigitsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 단일옵션 실패: ' + e); }
   const runs = readRuns_(), times = {};
   step_('알림');
@@ -4468,7 +4469,7 @@ function rvZip_(f, name, props, sid) {
 }
 
 /* ---------------- 사용법 탭 (맨 앞, 사용자 요청 10/20). 글을 바꾸면 USAGE_VER를 올림 → 다시 씀 ---------------- */
-const USAGE_TAB = '사용법', USAGE_VER = '4';
+const USAGE_TAB = '사용법', USAGE_VER = '5';
 const USAGE_ROWS = [
   ['체험단 관리 시트 사용법', '(스크립트가 쓰는 탭이라 여기 고친 글은 다음 업데이트 때 다시 써져요)'],
   ['', ''],
@@ -4490,6 +4491,7 @@ const USAGE_ROWS = [
   ['', ''],
   ['■ 이럴 땐', ''],
   ['날짜 바꾸기', '예) 목요일 건너뛰고 금요일에: 진행목록에서 그 진행 "진행일"을 새 날짜(10/23)로 고치기 → 방제·카톡방 이름·보낼메시지·월급시트·뒤 일차까지 같이 바뀜 (오른쪽 아래 알림). 이미 만든 카톡방 이름은 직접 바꾸기. 아직 안 만든 일차는 "일정" 탭 진행일을 고치기'],
+  ['하루 건너뛰기 (예: 오메가3)', '예) 오늘(목)은 그대로 2시 전까지 받고, 내일(금)만 쉬고 월요일에: 진행목록에서 "내일" 진행의 "진행일"을 월요일(10/26)로 고치기 → 그 뒤 일차·일정·방제·보낼메시지 날짜가 같이 밀림. 내일 진행이 진행목록에 아직 없으면 "일정" 탭에서 그 줄 진행일을 월요일로 (그 뒤 줄도 하루씩 직접). 오늘 진행은 건드리지 않기. 카톡방 이름이 이미 있으면 직접 바꾸기'],
   ['안 산 사람 (인원 모자람)', '그대로 두면 됨. 의뢰 마지막 날이면 그날 오후 2시 이후 다음 진행일에 모자란 만큼 진행이 자동으로 생김(보낼메시지에 방 공지). 그날 방제는 산 인원으로 바뀜(10→8, 월급시트 캠페인명도) → 보낼메시지 "할 일"대로 카톡방 이름·오리명단방 명단 메시지를 수정. 중간 날 모자란 건 마지막 날 끝난 뒤 한꺼번에. 바로 더 받으려면 폼수정 탭 I2에 인원 숫자'],
   ['잘못 산 사람·방 나간 사람', '폼수정 탭 B1에서 진행 고르기 → 그 응답 체크 → 삭제 실행. 그날 안이면 폼이 다시 열려 다른 사람을 받음'],
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
@@ -4946,6 +4948,34 @@ function fixFormOptsOnce_(runs) {
       setOptionChoices_(fo, want.join('\n'));
       note_('✓ 폼 옵션 되돌림: ' + bareTitle_(r['명단 제목']) + ' (' + cur.join(', ') + ' → ' + want.join(', ') + ')');
     } catch (e) { note_('폼 옵션 되돌리기 실패 ' + bareTitle_(r['명단 제목']) + ': ' + e); }
+  });
+}
+// 오메가3(10/22 사용자 요청): 10/22는 그대로 진행(2시 전 5명), 10/23(금)은 건너뛰고 10/26(월)로. 뒤 일차도 밀림
+function fixOmegaOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('OMEGA_V1')) return;
+  props.setProperty('OMEGA_V1', '1');
+  const D = function (m, d) { return new Date(2026, m - 1, d); }, day = function (x) { return x instanceof Date ? dayStart_(x) : 0; };
+  const om = runs.filter(function (r) { return /오메가/.test(String(r['명단 제목']) + String(r['캠페인'] || '')) && r['진행 상태'] !== '종료'; });
+  const on = function (rs, d) { return rs.filter(function (r) { return day(r['진행일']) === dayStart_(d); })[0]; };
+  // 10/22 진행이 10/23으로 밀려 있으면 10/22로 되돌림
+  if (!on(om, D(10, 22)) && on(om, D(10, 23))) note_(moveRunDate_(on(om, D(10, 23)), D(10, 22)));
+  const om2 = readRuns_().filter(function (r) { return /오메가/.test(String(r['명단 제목']) + String(r['캠페인'] || '')) && r['진행 상태'] !== '종료'; });
+  const r23 = on(om2, D(10, 23));
+  if (r23) { note_(moveRunDate_(r23, D(10, 26))); return; }
+  // 10/23이 아직 일정 탭(대기)이면 일정만 밀기
+  const ps = planSheet_(), pl = ps.getLastRow();
+  if (pl < 2) return;
+  const rows = ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().map(function (x, i) { return { x: x, i: i }; })
+    .filter(function (o) { return o.x[8] === '대기' && /오메가/.test(String(o.x[1]) + String(o.x[5])) && day(o.x[3]) >= dayStart_(D(10, 23)); })
+    .sort(function (a, b) { return a.x[3] - b.x[3]; });
+  if (!rows.length || day(rows[0].x[3]) !== dayStart_(D(10, 23))) return;
+  let prev = D(10, 23);
+  rows.forEach(function (o, k) {
+    if (k > 0 && day(o.x[3]) > dayStart_(prev)) { prev = o.x[3]; return; }
+    const nd = k === 0 ? D(10, 26) : nextWorkday_(prev);
+    ps.getRange(o.i + 2, 4, 1, 3).setValues([[nd, retitleDate_(o.x[4], nd), retitleDate_(o.x[5], nd)]]);
+    note_('(일정) ' + bareTitle_(o.x[5]) + ' → ' + bareTitle_(retitleDate_(o.x[5], nd))); prev = nd;
   });
 }
 function fixPlatOnce_(runs) {
