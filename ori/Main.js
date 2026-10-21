@@ -2362,6 +2362,7 @@ function checkFullInner_() {
   try { fixOzneSunny3Once_(readRuns_()); } catch (e) { note_('오즈네즈·부유단감 3차 실패: ' + e); }
   try { fixOzne4Once_(readRuns_()); } catch (e) { note_('오즈네즈 4차 실패: ' + e); }
   try { fixSunny5Once_(readRuns_()); } catch (e) { note_('부유단감 5차 실패: ' + e); }
+  try { fixFormOptsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 확인 실패: ' + e); }
   try { fixPlatOnce_(readRuns_()); } catch (e) { note_('플랫폼 바로잡기 실패: ' + e); }
   try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
   try { fixOzneDay2Once_(readRuns_()); } catch (e) { note_('10.22 오즈네즈 공지 실패: ' + e); }
@@ -4901,6 +4902,37 @@ function fixOzneDay2Once_(runs) {
   note_('✓ 10.22 오즈네즈 공지: 양말 2명, 담요 3명(브라운·블랙·민트 1명씩)으로 고침 (폼 설명은 그대로라 공지만 보세요)');
 }
 // (한 번, 10/21) 플랫폼 칸 바로잡기: 부유단감 = 토스, 속눈썹영양제 = 올리브영 (생성기에 플랫폼이 없던 때 만든 것)
+// 폼 옵션 보기가 그 진행 자기 공지(같은 폼 링크)의 옵션과 다르면 공지대로 되돌림 (한 번, 10/21 속눈썹영양제 폼에 색상이 들어간 것)
+function fixFormOptsOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FORMOPTS_V1')) return;
+  props.setProperty('FORMOPTS_V1', '1');
+  const ob = outboxSheet_(), ol = ob.getLastRow();
+  const msgs = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues() : [];
+  const seen = {};
+  runs.forEach(function (r) {
+    const fid = String(r['폼ID'] || '');
+    if (!fid || seen[fid] || r['진행 상태'] === '종료' || !(r['진행일'] instanceof Date) || dayStart_(r['진행일']) < today_().getTime() - 86400000 || !r['폼 링크']) return;
+    seen[fid] = 1;
+    const own = msgs.filter(function (v) { return v[2] === '방 공지' && String(v[4]).indexOf(String(r['폼 링크'])) >= 0; })[0];
+    if (!own) return;
+    const text = String(own[4]);
+    let want = optionLabels_(text);
+    if (want.length < 2) {
+      const ol1 = (text.match(/🐥\s*옵션\s*[:：]\s*([^\n]+)/) || [])[1], pr = (text.match(/🐥\s*가격\s*[:：]\s*([\d,]+)/) || [])[1];
+      if (!ol1 || /\(\s*\d*\s*명\s*\)/.test(ol1)) return;
+      want = [optDigits_(ol1.trim()) + (pr ? ' (' + pr + '원)' : '')];
+    }
+    try {
+      const fo = FormApp.openById(fid), cur = formChoices_(fo);
+      if (cur.join('\n') === want.join('\n')) return;
+      const k = function (x) { return String(x).replace(/\s*\([\d,\s]+원\)\s*$/, '').replace(/\s+/g, ''); };
+      if (cur.length === want.length && cur.every(function (c, i) { return k(c) === k(want[i]); })) return;
+      setOptionChoices_(fo, want.join('\n'));
+      note_('✓ 폼 옵션 되돌림: ' + bareTitle_(r['명단 제목']) + ' (' + cur.join(', ') + ' → ' + want.join(', ') + ')');
+    } catch (e) { note_('폼 옵션 되돌리기 실패 ' + bareTitle_(r['명단 제목']) + ': ' + e); }
+  });
+}
 function fixPlatOnce_(runs) {
   const props = PropertiesService.getScriptProperties();
   if (props.getProperty('PLATFIX_V1')) return;
@@ -5046,10 +5078,7 @@ function fixStyleOnce_() {
     try {
       const fo = FormApp.openById(r['폼ID']);
       try { fixReviewOptions_(fo, r); } catch (e) { note_(room + ' 폼 옵션 되돌리기 실패: ' + e.message); }
-      if (formChoices_(fo).length <= 1) {
-        const labs = optionLabels_(mine.length ? String(mine[0].v[4]) : (fo.getDescription() || ''));
-        if (labs.length >= 2) { setOptionChoices_(fo, labs.join('\n')); note_('✓ ' + room + ' 폼 옵션 ' + labs.length + '개로 나눔'); }
-      }
+      // (예전: 폼 옵션이 하나면 보낼메시지 공지의 옵션으로 나눴는데, 공지가 다른 방 줄에 잘못 들어가 있으면 엉뚱한 옵션(색상)이 들어가서 뺌, 10/21 속눈썹영양제)
     } catch (e) { note_(room + ' 폼 옵션 나누기 실패: ' + e.message); }
     // 폼 설명 = 그 진행 공지 (아직 시작 안 한 진행만, 같은 폼으로 오늘 받는 중이면 그대로)
     const busyToday = runs.some(function (x) { return x !== r && String(x['폼ID']) === String(r['폼ID']) && x['진행일'] instanceof Date && Utilities.formatDate(x['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd') === Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd') && !x['마감 시각']; });
