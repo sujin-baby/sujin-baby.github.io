@@ -2362,6 +2362,7 @@ function checkFullInner_() {
   try { fixOzneSunny3Once_(readRuns_()); } catch (e) { note_('오즈네즈·부유단감 3차 실패: ' + e); }
   try { fixOzne4Once_(readRuns_()); } catch (e) { note_('오즈네즈 4차 실패: ' + e); }
   try { fixSunny5Once_(readRuns_()); } catch (e) { note_('부유단감 5차 실패: ' + e); }
+  try { fixOzAssignOnce_(readRuns_()); } catch (e) { note_('오즈네즈 배정 실패: ' + e); }
   try { fixFormOptsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 확인 실패: ' + e); }
   try { fixPlatOnce_(readRuns_()); } catch (e) { note_('플랫폼 바로잡기 실패: ' + e); }
   try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
@@ -4903,6 +4904,17 @@ function fixOzneDay2Once_(runs) {
 }
 // (한 번, 10/21) 플랫폼 칸 바로잡기: 부유단감 = 토스, 속눈썹영양제 = 올리브영 (생성기에 플랫폼이 없던 때 만든 것)
 // 폼 옵션 보기가 그 진행 자기 공지(같은 폼 링크)의 옵션과 다르면 공지대로 되돌림 (한 번, 10/21 속눈썹영양제 폼에 색상이 들어간 것)
+// (한 번, 10/22) 10.22 오즈네즈 배정: 처음 붙여넣을 때 구분선(————)과 '1) 2명 - 이름'을 못 읽어 담요 3명만 들어갔던 것 → 다시
+function fixOzAssignOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('OZ_ASSIGN_V1')) return;
+  const r = runs.filter(function (x) { return /오즈네즈/.test(String(x['명단 제목'])) && /10\.22/.test(String(x['명단 제목'])); })[0];
+  if (!r || !r['폼ID']) return;
+  props.setProperty('OZ_ASSIGN_V1', '1');
+  const text = '1) 2명 - 임수진 이혜미(타)\n🐥옵션 : 혼합10결레\n🐥가격 : 18,900\n\n————————————————————————\n\n2) 3명 - 임수진(타) 김은지 윤회선\n🐥옵션 : 브라운체크 (1명) 윤회선\n블랙체크 (1명) 김은지\n민트체크 (1명) 임수진(타)\n\n🐥가격 : 16,800';
+  const rows = parseAssign_(text, formChoices_(FormApp.openById(r['폼ID'])));
+  if (rows.length) { writeAssign_(r, rows); note_('✓ 10.22 오즈네즈 배정 다시: ' + rows.map(function (x) { return x[0] + '-' + x[1]; }).join(', ')); }
+}
 function fixFormOptsOnce_(runs) {
   const props = PropertiesService.getScriptProperties();
   if (props.getProperty('FORMOPTS_V1')) return;
