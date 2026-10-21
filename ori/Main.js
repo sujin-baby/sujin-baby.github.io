@@ -250,6 +250,8 @@ function renameRun_(r, title) {
   const oldRoom = String(r['카톡방'] || bareTitle_(r['명단 제목']));
   const oldTitle = String(r['명단 제목']);
   setRun_(r.row, '명단 제목', title + nick); r['명단 제목'] = title + nick;
+  // 월급시트 캠페인명도 바로 같이 (안 하면 새 이름 줄이 하나 더 생겨 같은 진행이 두 줄이 됨, 10/21 써니마켓)
+  try { payRename_(bareTitle_(oldTitle), title); } catch (e) { note_('월급시트 이름 바꾸기 실패: ' + e); }
   // 배정 탭의 명단 제목도 새 이름으로
   try {
     const as = assignSheet_(), al = as.getLastRow();
@@ -5826,6 +5828,7 @@ function updatePay_() {
   const all = readRuns_().filter(function (r) { return r['시트ID'] && r['진행일'] instanceof Date; });
   const runs = all.filter(function (r) { return r['진행 상태'] !== '종료'; });
   // 스토어 왼쪽에 '진행일' 칸 (사용자 요청 10/19). 탭마다 한 번 (있으면 그대로)
+  try { fixPaySunnyOnce_(); } catch (e) { note_('월급시트 써니마켓 정리 실패: ' + e); }
   try { payTabsNow_().forEach(payDateCol_); } catch (e) { note_('월급시트 진행일 칸 만들기 실패: ' + e); }
   const nameOf = function (r) { return String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, '').trim(); };
   // 같은 캠페인 묶기: 캠페인 칸, 없으면 방제에서 #, 택, 날짜, 건수, 띄어쓰기를 뺀 이름이 앞부분까지 같으면 같은 캠페인
@@ -5854,6 +5857,7 @@ function updatePay_() {
     writePayRow_(r, nameOf(r), total, prev, siblings_(all, r).length > 1,
       { store: pick('업체'), time: fruit ? '자정 ~ 오전 7시' : payTime_(runSlot_(r)), photo: pick('포토'), earlier: earlier });
   });
+  try { payDedupe_(all); } catch (e) { note_('월급시트 중복 줄 확인 실패: ' + e); }
   try { payStatusAll_(all); } catch (e) { note_('월급시트 상태 잇기 실패: ' + e); }
   // 진행일 칸 채우고 진행일 순서로 줄 정렬 (이번 달, 있으면 다음 달 탭)
   try { payTabsNow_().forEach(payOrder_); } catch (e) { note_('월급시트 날짜순 정렬 실패: ' + e); }
@@ -5994,6 +5998,61 @@ function payTime_(t) {
   return /오전|오후/.test(x) && !/자정/.test(x) ? '시간지정' : x;
 }
 
+// 월급시트에서 옛 캠페인명 줄을 새 이름으로 (이번 달·다음 달 탭)
+function payRename_(oldName, newName) {
+  const o = String(oldName).replace(/\s+/g, ''), n = String(newName).replace(/\s+/g, '');
+  if (!o || o === n) return;
+  payTabsNow_().forEach(function (sh) {
+    const L = payLayout_(sh); if (!L) return;
+    const last = sh.getLastRow(); if (last <= L.head) return;
+    const rg = sh.getRange(L.head + 1, L.name, last - L.head, 1), v = rg.getValues(), f = rg.getFormulas();
+    const hasNew = v.some(function (x) { return String(x[0]).replace(/\s+/g, '') === n; });
+    v.forEach(function (x, i) { if (!f[i][0] && !hasNew && String(x[0]).replace(/\s+/g, '') === o) { sh.getRange(L.head + 1 + i, L.name).setValue(newName); note_('✓ 월급시트 이름 바꿈: ' + oldName + ' → ' + newName); } });
+  });
+}
+// (한 번, 10/21) 써니마켓 중복 줄: 옛 '(업체명)' 줄은 새 이름으로 바꾸고(직접 넣은 체크 등이 있는 줄이라 남김), 나중에 생긴 '써니마켓' 줄은 지움.
+//  지운 10/22 '(업체명) 부유단감 1' 진행 줄도 지움
+function fixPaySunnyOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('PAYSUNNY_V1')) return;
+  props.setProperty('PAYSUNNY_V1', '1');
+  payTabsNow_().forEach(function (sh) {
+    const L = payLayout_(sh); if (!L) return;
+    const last = sh.getLastRow(); if (last <= L.head) return;
+    const v = sh.getRange(L.head + 1, L.name, last - L.head, 1).getValues().map(function (x) { return String(x[0]).replace(/\s+/g, ''); });
+    const oldI = v.findIndex(function (x) { return /10\.21/.test(x) && /\(업체명\)부유단감/.test(x); });
+    const newI = v.findIndex(function (x) { return /10\.21/.test(x) && /써니마켓부유단감/.test(x); });
+    const del = [];
+    if (oldI >= 0 && newI >= 0) { sh.getRange(L.head + 1 + oldI, L.name).setValue('#택10.21 써니마켓 부유단감 5'); del.push(newI); }
+    else if (oldI >= 0) sh.getRange(L.head + 1 + oldI, L.name).setValue('#택10.21 써니마켓 부유단감 5');
+    v.forEach(function (x, i) { if (/10\.2[2-9]/.test(x) && /부유단감/.test(x)) del.push(i); });
+    del.sort(function (a, b) { return b - a; }).forEach(function (i) { note_('✓ 월급시트 중복 줄 지움: ' + v[i]); sh.deleteRow(L.head + 1 + i); });
+  });
+}
+// 같은 명단 시트(계약 수량 링크) + 같은 날짜 줄이 둘 이상이면 한 진행이 두 줄이 된 것 (방제를 바꿔서 새 줄이 생김).
+//  먼저 있던 줄(직접 넣은 체크 등이 있을 수 있음)을 남기고 이름은 지금 방제로, 나중 줄은 지움. 매번 확인 (돈 관련이라 사용자 요청 10/21)
+function payDedupe_(runs) {
+  payTabsNow_().forEach(function (sh) {
+    const L = payLayout_(sh); if (!L || !L.qty) return;
+    const last = sh.getLastRow(); if (last <= L.head) return;
+    const n = last - L.head;
+    const names = sh.getRange(L.head + 1, L.name, n, 1).getValues().map(function (x) { return String(x[0]).trim(); });
+    const linkOf = function (rt) { try { if (rt.getLinkUrl()) return rt.getLinkUrl(); const rr = rt.getRuns(); for (let i = 0; i < rr.length; i++) if (rr[i].getLinkUrl()) return rr[i].getLinkUrl(); } catch (e) {} return ''; };
+    const sids = sh.getRange(L.head + 1, L.qty, n, 1).getRichTextValues().map(function (x) { const u = x[0] ? linkOf(x[0]) : ''; return (u.match(/\/d\/([-\w]{25,})/) || [])[1] || ''; });
+    const seen = {}, del = [];
+    names.forEach(function (nm, i) {
+      if (!nm || !sids[i] || !dateTok_(nm)) return;
+      const k = sids[i] + '|' + dateTok_(nm);
+      if (seen[k] === undefined) { seen[k] = i; return; }
+      const keep = seen[k];
+      const cur = runs.filter(function (r) { return String(r['시트ID']) === sids[i] && dateTok_(r['명단 제목']) === dateTok_(nm); })[0];
+      if (cur) sh.getRange(L.head + 1 + keep, L.name).setValue(bareTitle_(cur['명단 제목']));
+      del.push(i);
+      note_('⚠ 월급시트 같은 진행 두 줄 → 하나로: ' + names[keep] + ' / ' + nm);
+    });
+    del.sort(function (a, b) { return b - a; }).forEach(function (i) { sh.deleteRow(L.head + 1 + i); });
+  });
+}
 function writePayRow_(r, name, remain, prevMonth, shared, ex) {
   ex = ex || { store: r['업체'], time: payTime_(r['구매시간']), photo: r['포토'] };
   const day = r['진행일'];
