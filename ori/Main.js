@@ -1750,7 +1750,8 @@ const CHECK_HEAD = '옵션 확인';
 const ASSIGN_TAB = '배정';
 const ASSIGN_HEAD = ['명단 제목', '닉네임', '공지 옵션', '계정수', '산 수', '확인', '시트ID', '폼 옵션', '가격'];
 const CHECK_ROWS = 500;
-const NORM = function (r) { return 'LOWER(REGEXREPLACE(TO_TEXT(' + r + '),"\\s",""))'; };
+// 옵션 비교는 띄어쓰기·대소문자와 끝의 가격 '(16,800원)'은 무시 (폼 보기에 가격이 붙기 전·후 응답이 섞여서 옵션 틀림으로 나온 것, 10/22 오즈네즈)
+const NORM = function (r) { return 'LOWER(REGEXREPLACE(TO_TEXT(' + r + '),"\\(\\s*[0-9,]+\\s*원\\s*\\)|\\s",""))'; };
 
 // 옵션 확인 수식 (한눈에 탭 명단 옆 칸). nkR, okR: 닉네임, 옵션 칸 범위, rows: 줄 수, sid: 명단 시트ID
 //  관리 시트 '배정' 탭에서 같은 명단 시트 줄만 가져와 비교. 닉네임과 옵션은 띄어쓰기, 대소문자 무시
@@ -6251,7 +6252,7 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '22';
+const DASH_VER = '23';
 const DASH_LIST_DAYS = 2;   // 아래 명단 덩어리를 보여 줄 지난 날 수   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
