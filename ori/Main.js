@@ -2330,6 +2330,7 @@ function checkFullInner_() {
   try { ensureMidnightTrigger_(); } catch (e) { note_('0시 확인 예약 실패: ' + e); }
   step_('공지 모양');
   try { fixStyleOnce_(); } catch (e) { note_('공지 모양 정리 실패: ' + e); }
+  try { fixOzneOnce_(readRuns_()); } catch (e) { note_('오즈네즈 폼 제목 실패: ' + e); }
   try { fixOptDigitsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 단일옵션 실패: ' + e); }
   const runs = readRuns_(), times = {};
   step_('알림');
@@ -4705,6 +4706,16 @@ function noticeStyle_(text, fruit) {
 //  - 포토대기 줄, 과일 '자정 ~ 오전 7시까지 구매' 줄, 맨 아래 어제 이름 줄 (보낸 공지도 글은 고쳐 둠, 링크는 안 바꿈)
 const FORM_LINK_RE = /https?:\/\/(?:forms\.gle\/[\w-]+|docs\.google\.com\/forms\/[^\s]+)/g;
 // (한 번, 10/20) 이미 만든 폼의 옵션 보기가 '1 (21,800원)'처럼 숫자만이면 '단일옵션 (21,800원)'으로 (최근 7일 진행)
+// (한 번, 10/21) 오즈네즈 폼 제목 '# 실 발목무압박기모양말외' → '#10.21 실 오즈네즈 양말 담요' (사용자 요청)
+function fixOzneOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('OZNE_TITLE_V1')) return;
+  const r = runs.filter(function (x) { return x['폼ID'] && /발목무압박기모양말/.test(String(x['명단 제목'])); })[0];
+  if (!r) return;
+  props.setProperty('OZNE_TITLE_V1', '1');
+  FormApp.openById(r['폼ID']).setTitle('#10.21 실 오즈네즈 양말 담요');
+  note_('✓ 폼 제목 바꿈: #10.21 실 오즈네즈 양말 담요');
+}
 function fixOptDigitsOnce_(runs) {
   const props = PropertiesService.getScriptProperties();
   if (props.getProperty('OPTDIGIT_V1')) return;
