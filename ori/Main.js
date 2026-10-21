@@ -2343,12 +2343,14 @@ function checkFullInner_() {
   try { fixOzneOnce_(readRuns_()); } catch (e) { note_('오즈네즈 폼 제목 실패: ' + e); }
   try { fixOzneSunny2Once_(readRuns_()); } catch (e) { note_('오즈네즈·부유단감 정리 실패: ' + e); }
   try { fixOzneSunny3Once_(readRuns_()); } catch (e) { note_('오즈네즈·부유단감 3차 실패: ' + e); }
+  try { fixOzne4Once_(readRuns_()); } catch (e) { note_('오즈네즈 4차 실패: ' + e); }
   try { fixOptDigitsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 단일옵션 실패: ' + e); }
   const runs = readRuns_(), times = {};
   step_('알림');
   try { fruitCheck_(runs); } catch (e) { note_('안 산 사람 확인 실패: ' + e); }
   try { takbaeCheck_(runs); } catch (e) { note_('택배시트 알림 실패: ' + e); }
   try { photoWaitCheck_(runs); } catch (e) { note_('포토대기 알림 실패: ' + e); }
+  try { photoAskCheck_(runs); } catch (e) { note_('포토 요청 알림 실패: ' + e); }
   try { fixOct16Once_(); } catch (e) { note_('10.16 정리 실패: ' + e); }
   try { fixNamesOnce_(); } catch (e) { note_('공지 이름 정리 실패: ' + e); }
   try { fixTaOnce_(); } catch (e) { note_('배정 (타) 정리 실패: ' + e); }
@@ -2482,6 +2484,7 @@ function checkFullInner_() {
     }
     // 목표보다 많이 들어오면 한눈에 '확인 필요' 칸에만 표시 (폼은 안 닫음, 사용자 요청 10/21)
     if (r['목표인원'] && n > Number(r['목표인원'])) errs[r['명단 제목']] = (errs[r['명단 제목']] ? errs[r['명단 제목']] + ' / ' : '') + '초과 ' + (n - Number(r['목표인원'])) + '명 (목표 ' + r['목표인원'] + ', 받은 ' + n + ')';
+    try { if (photoLate_(r, props)) errs[r['명단 제목']] = (errs[r['명단 제목']] ? errs[r['명단 제목']] + ' / ' : '') + '📷 업체 포토 아직 (사장님께 요청)'; } catch (e) {}
     if (!r['목표인원'] || r['마감 시각'] || n < Number(r['목표인원'])) return;
     // 폼은 안 닫음 (사용자 요청 10/21) → 인원이 차면 마감 시각만 적고 명단·리뷰 가이드 메시지
     setRun_(r.row, '마감 시각', new Date());
@@ -2584,20 +2587,47 @@ function reviewGuideMsg_(rv, ppl, counts, k) {
   const pretty = function (l) { return String(l).replace(/포토\s*리뷰\s*\(\s*(1|한)\s*줄\s*리뷰\s*\)/, '포토+한줄리뷰').replace(/별점만/, '별점').replace(/글씨리뷰/, '텍스트리뷰'); };
   const nm = function (p) { return p.n > 1 ? p.nm + p.n : p.nm; };
   const lines = [], queue = ppl.slice();
+  let pw = [];   // 업체 사진을 기다리는 몫(포토대기): 리뷰 가이드 대신 ⭐️포토대기⭐️
+  const ask = [];
+  // 가이드: 상품마다 '상품 : 줄 / 줄 / …' (한 줄이면 상품 하나). 줄은 원래대로 한 줄씩
+  const prods = String(rv.guide || '').split('\n').map(function (x) { return x.replace(/[^:：\s/][^:：/]{0,30}(예시|요청|참고)\s*[:：]\s*/g, ' ').trim(); }).filter(Boolean).map(function (x) {
+    const m = x.match(/^([^:：/]{1,20})\s*[:：]\s*(.+)$/);
+    const body = m ? m[2] : x;
+    return { name: m ? m[1].trim() : '', lines: body.split(/\s*\/\s*/).map(function (y) { return y.trim(); }).filter(Boolean) };
+  });
+  const multi = prods.length > 1 && prods.every(function (p) { return p.name; });
+  const used = [];
   totals.forEach(function (t, i) {
     let need = today[i]; const who = [];
-    while (need > 0 && queue.length) { const p = queue.shift(); who.push(nm(p)); need -= p.n; }
-    if (today[i] > 0) lines.push(pretty(t.label) + '(' + today[i] + '명) : ' + who.join(' '));
+    while (need > 0 && queue.length) { const p = queue.shift(); who.push(p); need -= p.n; }
+    if (today[i] <= 0) return;
+    if (/포토\s*대기/.test(t.label)) { pw = pw.concat(who); return; }
+    lines.push(pretty(t.label) + '(' + today[i] + '명) : ' + who.map(nm).join(' '));
+    used.push.apply(used, who);
   });
-  const ask = [];
-  // 가이드 전부 (상품이 여럿이면 줄마다 '상품 : 가이드'). '키워드 조합 참고 가이드 문구 예시:' 같은 머리말은 뺌 (사용자 요청 10/21)
-  const g = String(rv.guide || '').split(/\n|\s+\/\s+(?=\S+\s*:)/).map(function (x) { return x.replace(/[^:：\s][^:：]{0,30}(예시|요청|참고)\s*[:：]\s*/g, ' ').replace(/\s+/g, ' ').trim(); }).filter(Boolean).join('\n');
-  // 리뷰 종류를 안 나눈 의뢰(전원 같은 리뷰): 한 줄로 전원. 가이드에 사진·촬영·컷이 있으면 포토리뷰 (10/21 속눈썹영양제)
-  if (!totals.length) { if (queue.length) lines.push((rv.kind === 'self' || /사진|촬영|컷|포토/.test(g) ? '포토리뷰' : '텍스트리뷰') + '(' + queue.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + queue.map(nm).join(' ')); }
-  else if (queue.length) { lines.push('리뷰 종류 확인 필요(' + queue.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + queue.map(nm).join(' ')); ask.push('리뷰 종류·개수'); }
-  if (!g) ask.push('리뷰내용 가이드');
-  const msg = ['⭐️리뷰내용 가이드⭐️'].concat(lines, ['', g ? '⭐️⭐️⭐️⭐️⭐️' + g + ' ⭐️⭐️⭐️⭐️⭐️' : '⭐️⭐️⭐️⭐️⭐️(리뷰 가이드: 사장님께 물어보고 채우기)⭐️⭐️⭐️⭐️⭐️']).join('\n');
-  return { msg: msg, ask: ask };
+  if (!totals.length) { if (queue.length) { lines.push((rv.kind === 'self' || /사진|촬영|컷|포토/.test(rv.guide || '') ? '포토리뷰' : '텍스트리뷰') + '(' + queue.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + queue.map(nm).join(' ')); used.push.apply(used, queue); } }
+  else if (queue.length) { lines.push('리뷰 종류 확인 필요(' + queue.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + queue.map(nm).join(' ')); ask.push('리뷰 종류·개수'); used.push.apply(used, queue); }
+  if (!prods.length) ask.push('리뷰내용 가이드');
+  // 상품이 여럿이면 상품마다 [그 상품 산 사람] + 가이드 (옵션 글에 상품 이름 끝말이 있으면 그 상품)
+  const EMO = function (n) { return /양말/.test(n) ? '🧦' : /담요|이불|블랭킷/.test(n) ? '🧶' : '🐥'; };
+  const suf2 = function (a) { return String(a).replace(/\s+/g, '').slice(-2); };
+  const body = [];
+  if (multi) {
+    prods.forEach(function (p, i) {
+      const who = used.filter(function (x) { return x.opt && x.opt.replace(/\s+/g, '').indexOf(suf2(p.name)) >= 0; });
+      body.push(EMO(p.name) + p.name + ' 리뷰내용 가이드 : ', who.length ? '[' + who.map(nm).join(' ') + ']' : '', '');
+      body.push.apply(body, p.lines); body.push('');
+    });
+  } else if (prods.length) {
+    const ls = prods[0].lines.slice();
+    // 맨 앞 짧은 부탁 문장(최대한 티안나게 깔끔하게 해주세요)은 '하단 내용 참고하셔서 …!'로
+    if (ls.length > 1 && /해\s*주세요\s*[.!]*$/.test(ls[0]) && ls[0].length <= 30) body.push('하단 내용 참고하셔서 ' + ls.shift().replace(/[.!\s]+$/, '') + '!', '');
+    body.push.apply(body, ls); body.push('');
+  }
+  const days = rv.days || 7;
+  const foot = ['🐥🐥🐥🐥🐥🐥🐥🐥🐥🐥', '배송완료 후 ' + days + '일이내로 작성해주시되', '몰리지 않게 리뷰 부탁드려요!', '감사합니다 🫶🏻', '🐥🐥🐥🐥🐥🐥🐥🐥🐥🐥'];
+  const msg = lines.length ? ['🐥리뷰내용 가이드🐥'].concat(lines, [''], prods.length ? body : ['(리뷰 가이드: 사장님께 물어보고 채우기)', ''], foot).join('\n') : '';
+  return { msg: msg, ask: ask, photoWait: pw.length > 0 };
 }
 // 그날 응답의 수령인(계정) 이름 순서대로 [{nm, n:1}] (한 사람이 두 계정이면 계정마다 따로). 수령인 칸: 수령인·수취인·이름·성함
 function receivers_(r, w) {
@@ -2607,15 +2637,16 @@ function receivers_(r, w) {
   if (c < 0) c = head.findIndex(function (h) { return /^이름$|^성함$|^이름\s*\(|^성함\s*\(/.test(h); });
   if (c < 0) c = head.findIndex(function (h) { return /이름|성함/.test(h) && !MATCH.nick.test(h) && !MATCH.account.test(h) && !/쿠팡|닉네임/.test(h); });
   if (c < 0 || lr < st) return [];
+  const co = head.findIndex(function (h) { return MATCH.opt.test(h); });   // 고른 옵션 (상품이 여럿이면 어느 상품인지)
   const rows = [];
   src.getRange(st, 1, lr - st + 1, head.length).getValues().forEach(function (x) {
     const t = tsMs_(x[0]);
     if (!isFinite(t) || t < w.from || t >= w.to) return;
     const nm = String(x[c]).replace(/\s+/g, '');
-    if (nm) rows.push({ t: t, nm: nm, n: 1 });
+    if (nm) rows.push({ t: t, nm: nm, n: 1, opt: co >= 0 ? String(x[co]) : '' });
   });
   rows.sort(function (a, b) { return a.t - b.t; });
-  return rows.map(function (x) { return { nm: x.nm, n: 1 }; });
+  return rows.map(function (x) { return { nm: x.nm, n: 1, opt: x.opt }; });
 }
 function ensureReviewGuideMsgs_(runs) {
   const props = PropertiesService.getScriptProperties(), now = Date.now();
@@ -2663,6 +2694,7 @@ function ensureReviewGuideMsgs_(runs) {
         const p = d === k ? ppl : namesOf(x);
         return p.length ? p.reduce(function (a, y) { return a + y.n; }, 0) : (Number(x['인원']) || Number(x['목표인원']) || 0);
       });
+      rv.days = !r['플랫폼'] || /쿠팡|네이버/.test(String(r['플랫폼'])) ? 7 : 10;
       const res = reviewGuideMsg_(rv, ppl, counts, k);
       const room = String(r['카톡방'] || bareTitle_(r['명단 제목']));
       if (old) {
@@ -2674,7 +2706,8 @@ function ensureReviewGuideMsgs_(runs) {
         note_('✓ 리뷰 가이드 메시지를 수령인 이름으로 바꿈: ' + room);
         return;
       }
-      queueMsg_(room, res.msg, '방 공지');
+      if (res.photoWait) queueMsg_(room, '⭐️포토대기⭐️', '방 공지');   // 그날 몫이 업체 사진 대기면 (10/21 실링팬 하루 포토·하루 텍스트)
+      if (res.msg) queueMsg_(room, res.msg, '방 공지');
       if (res.ask.length) queueMsg_('사장님', '[' + room + '] 의뢰서에 ' + res.ask.join(', ') + '이(가) 없어요. 사장님께 물어보고 리뷰 가이드 공지를 고쳐서 보내기', '할 일');
       note_('✓ 리뷰 가이드 메시지 넣음: ' + room + (res.ask.length ? ' (사장님께 물어볼 것: ' + res.ask.join(', ') + ')' : ''));
     });
@@ -4776,6 +4809,19 @@ function dropSunnyExtraOnce_(runs) {
 //  오즈네즈 가이드는 상품별 전체 문장으로 (사용자가 준 글 그대로)
 const OZ_GUIDE = '기모양말 : 일반 양말보다 훨씬 두껍다 / 왠만한 수면양말급이다 / 기모가 두툼하다 / 발가락까지 따뜻해서 좋다 / 다른양말들하고는 차원이 다르다 / 한켤레 더 줘서 좋다 / 하나 더 사서 동생줬다 / 깔별로 다있어서 좋다 / 귀여운 선물용봉투까지 센스있다 / 일단 발목이 확 조이지않아서 편하다 / 돌돌 말려 내려가지않아서 좋다\n' +
   '무릎담요 : 운전할때 무릎 덮으려고 샀는데 따뜻하다 / 속 안감이 부들부들하다 / 묶을필요없이 똑딱이 단추있어서 편하다 / 똑딱이가 단단해서 잘 안풀린다 / 등부터 어깨 목까지 다 따숩다 / 회사일할때 허리 감싸고 있으니 다리까지 따셔서 좋다 / 점심시간에 잘때 이불처럼 덮기 좋다 / 캠핑갈때 챙겨가니까 딱이다 / 옆으로 길어서 뭐 어디둘러도 거의 다 덮힌다';
+// (한 번, 10/21 4차) 오즈네즈 리뷰 가이드를 새 모양(🐥, 상품별 [이름] + 줄마다)으로 다시: 안 보낸 옛 가이드 지우고 다시 넣음
+function fixOzne4Once_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('OZNE4_V1')) return;
+  props.setProperty('OZNE4_V1', '1');
+  const oz = runs.filter(function (x) { return /발목무압박기모양말|오즈네즈/.test(String(x['명단 제목'])); });
+  const rooms = {}; oz.forEach(function (r) { rooms[String(r['카톡방'] || bareTitle_(r['명단 제목']))] = 1; });
+  try { const ob = outboxSheet_(), last = ob.getLastRow(); if (last >= 2) { const v = ob.getRange(2, 1, last - 1, 6).getValues(); for (let i = v.length - 1; i >= 0; i--) if (v[i][5] !== '보냄' && rooms[String(v[i][3])] && /^⭐️리뷰내용 가이드⭐️/.test(String(v[i][4]))) ob.deleteRow(i + 2); } } catch (e) {}
+  oz.forEach(function (r) {
+    props.deleteProperty('RVMSG2_' + String(r['명단 제목']).replace(/\s+/g, ''));
+    if (r['진행일'] instanceof Date) props.deleteProperty('RVMSGD_' + r['시트ID'] + '_' + Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd'));
+  });
+}
 function fixOzneSunny3Once_(runs) {
   const props = PropertiesService.getScriptProperties();
   if (props.getProperty('OZNE_SUNNY3_V1')) return;
@@ -5086,6 +5132,27 @@ function fruitCheck_(runs) {
 
 // 택배시트는 2시 전까지: 오늘 택대 진행 중 '택배 옮김' 체크가 안 된 것을 12시 30분, 1시 30분에 메일로 알림
 // 포토대기 진행: 리뷰 기한(배송완료 후 7일)이 있어서 사진을 오래 기다리면 리뷰가 몰림 → 진행 2일 뒤부터 매일 한 번 '업체 사진 왔는지 사장님께 물어보세요' 메일
+// 포토대기 진행: 진행일부터 2일이 지나도 업체 포토(리뷰 가이드 보냄 표시)가 없으면 사장님께 '업체에 포토 요청' 부탁 메시지 (한 번, 사용자 요청 10/21)
+//  리뷰 기한이 수령 후 7일이라 사진이 늦으면 리뷰가 몰림. 한눈에 탭 '확인 필요' 칸에도 (checkFull errs)
+function photoLate_(r, props) {
+  if (!(r['진행일'] instanceof Date) || !(Number(r['인원']) > 0) || r['진행 상태'] === '종료') return false;
+  let rv = null; try { rv = JSON.parse(props.getProperty('RV_' + r['시트ID']) || 'null'); } catch (e) {}
+  const wait = /^\s*(유|y)/i.test(String(r['포토'] || '')) && !(rv && rv.kind === 'self') || (rv && (rv.kind === 'photo' || /포토\s*대기/.test(String(rv.mix || ''))));
+  if (!wait) return false;
+  const days = Math.round((today_().getTime() - dayStart_(r['진행일'])) / 86400000);
+  return days >= 2 && days <= 9 && !props.getProperty('RVSENT_' + campKey_(r['명단 제목']) + '_' + dateTok_(r['명단 제목']));
+}
+function photoAskCheck_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  runs.forEach(function (r) {
+    if (!photoLate_(r, props)) return;
+    const k = 'PHOTOASK_' + String(r['명단 제목']).replace(/\s+/g, '');
+    if (props.getProperty(k)) return;
+    props.setProperty(k, '1');
+    queueMsg_('사장님', '[' + bareTitle_(r['명단 제목']) + '] 진행 2일 지났는데 업체 포토를 아직 못 받았어요. 업체에 포토 요청 부탁드립니다!', '할 일');
+    note_('포토 요청 메시지 넣음: ' + bareTitle_(r['명단 제목']));
+  });
+}
 function photoWaitCheck_(runs) {
   const hm = Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'HHmm'));
   if (hm < 1000) return;
