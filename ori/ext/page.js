@@ -73,14 +73,15 @@
       let seller = "";
       const sm = txt.match(/판매자\s*[:：]?\s*([^\n]{1,60})/);
       if (sm) seller = sm[1].replace(/\s*(판매자\s*)?(상품\s*)?보러\s*가기.*$/, "").replace(/\s*판매자\s*평가.*$/, "").trim();
-      if (!seller || seller.length > 30 || /가입|보러가기|평가|정보/.test(seller)) { const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/); seller = s2 ? s2[1].trim() : ""; }
+      { const vm = html.match(/"vendorName"\s*:\s*"([^"]{2,60})"/); if (vm) seller = vm[1]; }   // '판매자 특가' 같은 배지 글자 말고 실제 판매자 (10/21)
+      if (!seller || seller.length > 30 || /가입|보러가기|평가|정보|^특가|로켓|할인|쿠폰|무료|배송|와우/.test(seller)) { const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/); seller = s2 ? s2[1].trim() : ""; }
       let opt = readOption();
       if (!opt) { const oe = document.querySelector('.prod-option__selected .value, .prod-option__selected-container .value'); if (oe) opt = oe.textContent.replace(/\s+/g, " ").trim().slice(0, 60); }
       let price = 0;
       const pe = document.querySelector('.prod-sale-price .total-price strong, .total-price strong, [class*="final-price"] [class*="amount"], .price-amount.final-price-amount, [class*="finalPrice"]');
       if (pe) price = num(pe.textContent);
       if (!price) price = priceAfter(txt, name);
-      return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, opt: opt || "단일옵션", price: price, ship: shipOf(txt, name, price), rocket: /로켓\s*(배송|그로스|직구|프레시)|판매자\s*로켓/.test(txt.slice(0, 6000)), img: img };
+      return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, opt: opt || "단일옵션", price: price, ship: /로켓\s*(배송|와우|그로스|직구|프레시)|판매자\s*로켓/.test(txt.slice(0, 8000)) ? "무료 (로켓배송)" : shipOf(txt, name, price), rocket: /로켓\s*(배송|와우|그로스|직구|프레시)|판매자\s*로켓/.test(txt.slice(0, 8000)), img: img };
     }
     const pm = L.pathname.match(/products\/(\d+)/);
     if (!pm) return { err: "네이버는 스마트스토어(또는 브랜드스토어) 상품 페이지에서 눌러 주세요." };

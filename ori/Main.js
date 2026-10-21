@@ -81,7 +81,7 @@ function report_(name, ok) {
       // 왼쪽(위 표 바로 아래 줄)에도 같은 한 줄 + 자세한 건 메모(마우스 올리면 보임)
       const bar = Number(PropertiesService.getScriptProperties().getProperty('DASH_BAR_ROW')) || 0;
       PropertiesService.getScriptProperties().setProperty('LAST_REPORT', head);
-      if (bar) d.getRange(bar, 8).setValue(head).setNote(lines.join('\n')).setFontColor(notes.length || ok === false ? '#b91c1c' : '#2f7a2f').setFontWeight('bold').setWrap(false).setHorizontalAlignment('left');
+      if (bar) d.getRange(bar, 8).setValue(head).clearNote().setFontColor(notes.length || ok === false ? '#b91c1c' : '#2f7a2f').setFontWeight('bold').setWrap(false).setHorizontalAlignment('left');
       d.getRange(2, 17, 12, 1).clearContent();
       if (lines.length) d.getRange(2, 17, Math.min(lines.length, 12), 1).setValues(lines.slice(0, 12).map(function (x) { return [x.slice(0, 120)]; }))
         .setFontColor('#555555').setFontWeight('normal').setWrap(false).setHorizontalAlignment('left');
@@ -1303,6 +1303,8 @@ function createRunInner_(d) {
   sortList_();
 
   // 생성기가 넘긴 리뷰 정보(상품별 리뷰 종류·개수, 리뷰 안내, 공지 종류)를 의뢰(명단 시트)마다 저장 → 리뷰 배정 페이지가 씀
+  // 상품 페이지 주소 (한눈에 탭 '상품' 칸 링크)
+  if (d.urls) { try { PropertiesService.getScriptProperties().setProperty('PURL_' + ss.getId(), String(d.urls).slice(0, 2000)); } catch (e) {} }
   if (d.rv) { try { const pk = 'RV_' + ss.getId(), pr = PropertiesService.getScriptProperties(); if (!pr.getProperty(pk)) pr.setProperty(pk, String(d.rv).slice(0, 8000)); } catch (e) {} }
   return { notice: notice, formUrl: formUrl, sheetUrl: ss.getUrl(), folderUrl: folder.getUrl() };
 }
@@ -2374,6 +2376,8 @@ function checkFullInner_() {
   try { ensureReviewGuideMsgs_(runs); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
   try { adoptOrphanForms_(runs); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
   const errs = {}, listed = {};
+  // 보낼메시지 점검용 (방 공지가 방마다 하나씩, 그 진행 폼 링크로 맞게 있는지, 사용자 요청 10/21)
+  let obAll = []; try { const ob0 = outboxSheet_(), ol0 = ob0.getLastRow(); if (ol0 >= 2) obAll = ob0.getRange(2, 1, ol0 - 1, 6).getValues(); } catch (e) {}
   step_('폼 인원');
   try { ensureSubmitTriggers_(runs); } catch (e) { note_('응답 트리거 실패: ' + e); }
   runs.forEach(function (r) {
@@ -2487,6 +2491,16 @@ function checkFullInner_() {
     }
     // 목표보다 많이 들어오면 한눈에 '확인 필요' 칸에만 표시 (폼은 안 닫음, 사용자 요청 10/21)
     if (r['목표인원'] && n > Number(r['목표인원'])) errs[r['명단 제목']] = (errs[r['명단 제목']] ? errs[r['명단 제목']] + ' / ' : '') + '초과 ' + (n - Number(r['목표인원'])) + '명 (목표 ' + r['목표인원'] + ', 받은 ' + n + ')';
+    try {
+      if (r['진행일'] instanceof Date && dayStart_(r['진행일']) >= today_().getTime() && r['폼 링크']) {
+        const room = String(r['카톡방'] || bareTitle_(r['명단 제목']));
+        const notices = obAll.filter(function (v) { return String(v[3]) === room && /양식 작성 폼/.test(String(v[4])); });
+        const wrong = notices.filter(function (v) { return String(v[4]).indexOf(String(r['폼 링크'])) === -1; });
+        const pend = notices.filter(function (v) { return v[5] !== '보냄'; });
+        const msg = !notices.length ? '📭 보낼메시지에 방 공지 없음' : wrong.length ? '🔀 방 공지 ' + wrong.length + '개가 다른 진행 내용 (폼 링크 다름)' : pend.length > 1 ? '📑 방 공지가 ' + pend.length + '개 (하나만 보내기)' : '';
+        if (msg) errs[r['명단 제목']] = (errs[r['명단 제목']] ? errs[r['명단 제목']] + ' / ' : '') + msg;
+      }
+    } catch (e) {}
     try { if (photoLate_(r, props)) errs[r['명단 제목']] = (errs[r['명단 제목']] ? errs[r['명단 제목']] + ' / ' : '') + '📷 업체 포토 아직 (사장님께 요청)'; } catch (e) {}
     if (!r['목표인원'] || r['마감 시각'] || n < Number(r['목표인원'])) return;
     // 폼은 안 닫음 (사용자 요청 10/21) → 인원이 차면 마감 시각만 적고 명단·리뷰 가이드 메시지
@@ -6089,7 +6103,7 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '20';
+const DASH_VER = '21';
 const DASH_LIST_DAYS = 2;   // 아래 명단 덩어리를 보여 줄 지난 날 수   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
@@ -6199,7 +6213,10 @@ function buildDashboard_(force) {
   sh.setFrozenRows(1);
   const q = function (t) { return '"' + String(t).replace(/"/g, '""') + '"'; };
   // D = 의뢰서 총 구매 건수, E = 그날 목표 (그날 하루 받을 인원)
-  const head = ['진행일', '방제', '상태', '의뢰 총건수', '그날 목표', '신청', '남은', '마감 시각', '명단', '폼', '택배시트', '틀린 옵션', '택배 옮김', '확인 필요'];
+  // K = 상품 페이지 링크(글자는 플랫폼: 쿠팡·네이버·올리브영·토스 …). 택배시트 링크는 아래 줄 월급시트 옆에 하나만 (사용자 요청 10/21)
+  const head = ['진행일', '방제', '상태', '의뢰 총건수', '그날 목표', '신청', '남은', '마감 시각', '명단', '폼', '상품', '틀린 옵션', '택배 옮김', '확인 필요'];
+  // 칸마다 남아 있던 메모(clear로는 안 지워져서 줄이 바뀌면 엉뚱한 칸에 보임)는 다 지움
+  try { sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).clearNote(); } catch (e) {}
   let errs = {};
   try { errs = JSON.parse(props.getProperty('RUN_ERRORS') || '{}'); } catch (e) {}
   sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold').setBackground('#efe6f7');
@@ -6248,7 +6265,8 @@ function buildDashboard_(force) {
     sh.getRange(rr, 8).setValue(r['마감 시각']);
     sh.getRange(rr, 9).setFormula('=HYPERLINK(' + q(x.url) + ',"명단")');
     if (r['폼 링크']) sh.getRange(rr, 10).setFormula('=HYPERLINK(' + q(r['폼 링크']) + ',"폼")');
-    if (r['택대'] === 'Y' && CONFIG.TAKBAE_SHEET_URL) sh.getRange(rr, 11).setFormula('=HYPERLINK(' + q(CONFIG.TAKBAE_SHEET_URL) + ',"택배")');
+    { const pu = String(props.getProperty('PURL_' + r['시트ID']) || '').split('\n')[0], pl = String(r['플랫폼'] || '');
+      if (pu) sh.getRange(rr, 11).setFormula('=HYPERLINK(' + q(pu) + ',' + q(pl || '상품') + ')'); else if (pl) sh.getRange(rr, 11).setValue(pl); }
     // 택대면 '택배 옮김' 체크 (명단을 택배시트에 옮겨 적었으면 체크, 2시 전까지). 체크하면 진행목록에도 저장
     if (r['택대'] === 'Y') sh.getRange(rr, 13).insertCheckboxes().setValue(r['택배 옮김'] === true);
     if (errs[r['명단 제목']]) sh.getRange(rr, 14).setValue('⚠ ' + errs[r['명단 제목']]).setFontColor('#b91c1c');
@@ -6265,6 +6283,7 @@ function buildDashboard_(force) {
   sh.getRange(bar, 2).setValue('◀ 체크하면 진행 도우미가 시트 오른쪽에 열려요').setFontWeight('bold').setFontColor('#5b2a86').setHorizontalAlignment('left');
   if (CONFIG.WEBAPP_URL) sh.getRange(bar, 4).setFormula('=HYPERLINK(' + q(toolsUrl_()) + ',"휴대폰: ▶ 진행 도우미")').setFontWeight('bold').setHorizontalAlignment('left');
   if (payUrl) sh.getRange(bar, 6).setFormula('=HYPERLINK(' + q(payUrl) + ',"▶ 월급시트")').setFontWeight('bold').setHorizontalAlignment('left');
+  if (CONFIG.TAKBAE_SHEET_URL) sh.getRange(bar, 7).setFormula('=HYPERLINK(' + q(CONFIG.TAKBAE_SHEET_URL) + ',"▶ 택배시트")').setFontWeight('bold').setHorizontalAlignment('left');
   try { sh.getRange(bar, 8).setValue(String(props.getProperty('LAST_REPORT') || '')).setFontWeight('bold').setHorizontalAlignment('left').setWrap(false); } catch (e) {}
   // 월급시트·진행 도우미 링크는 위 표 바로 아래 줄에만 (O1, P1은 비움)
   if (runs.length) {
@@ -6311,7 +6330,6 @@ function buildDashboard_(force) {
     const inWin = '(INDEX(d,0,1)<>"")*(INDEX(d,0,1)>=' + dt(x.from) + ')*(INDEX(d,0,1)<' + dt(x.to) + ')';
     sh.getRange(top + 2, 1).setFormula('=IFERROR(LET(d,' + imp + ',IF(COUNTA(INDEX(d,0,1))=0,"",IFERROR(LET(e,FILTER(d,' + inWin + '),HSTACK(' + parts.join(',') + ')),""))),"이 칸을 눌러 액세스 허용을 한 번 눌러 주세요")');
     sh.getRange(top + 1, 1, 1, Math.max(width2, 6)).setFontWeight('bold').setBackground('#faf7fd');
-    if (x.tak) sh.getRange(top + 1, 11).setNote('택배시트 K열에 그대로 붙여넣는 칸 (업체명 + 판매 상품). A~K를 한 번에 복사하면 택배시트 칸 순서와 같아요.');
     // 보기 좋게: 가운데 맞춤, 제목 줄은 왼쪽, 머리글 굵게, 테두리
     // 머리글 줄은 가운데, 명단 줄은 왼쪽 맞춤
     sh.getRange(top + 1, 1, n + 1, Math.max(width2, 6)).setHorizontalAlignment('left').setVerticalAlignment('middle')
@@ -6324,7 +6342,7 @@ function buildDashboard_(force) {
     const colRange = function (k) { return sh.getRange(r0, k, n, 1); };
     if (x.chk) {
       const L = function (k) { return colLetter_(k) + r0 + ':' + colLetter_(k) + r1; };
-      sh.getRange(top + 1, x.chk).setValue(CHECK_HEAD).setNote('관리 시트 배정 탭과 비교. ✔ 맞음 / 옵션 틀림 / 초과 구매 / 닉네임 확인(배정에 없음) / 취소한 사람. 배정이 없으면 빈칸');
+      sh.getRange(top + 1, x.chk).setValue(CHECK_HEAD); void('관리 시트 배정 탭과 비교. ✔ 맞음 / 옵션 틀림 / 초과 구매 / 닉네임 확인(배정에 없음) / 취소한 사람. 배정이 없으면 빈칸');
       sh.getRange(r0, x.chk).setFormula(checkFormula_(L(x.nick), L(x.opt), n, x.sid, String(x.runs[0]['명단 제목'])));
       const X = colLetter_(x.chk);
       const rg = [x.nick, x.opt, x.chk].map(colRange);
@@ -6364,7 +6382,6 @@ function buildDashboard_(force) {
     const top = sh.getRange(2, 1, runs.length, head.length);
     rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=INT($A2)=TODAY()').setBackground('#d9ead3').setRanges([top]).build());
     rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=INT($A2)=WORKDAY(TODAY(),1,{' + holidaySerials_().join(',') + '})').setBackground('#cfe2f3').setRanges([top]).build());
-    sh.getRange(1, 1).setNote('연두 = 오늘 진행, 하늘색 = 다음 진행일(금요일이면 월요일, 공휴일 건너뜀)');
   }
   // 명단 줄 번갈아 연한 색 (읽기 쉽게, 다른 표시보다 약하게 맨 뒤에)
   show.forEach(function (id) {

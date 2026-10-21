@@ -167,6 +167,8 @@
           const go = document.createElement("a"); go.href = u.href; go.textContent = "가격 " + won(T.pr) + "원 넣고 다시 검색 (열리면 북마크 한 번 더)";
           go.style.cssText = "display:block;margin-top:8px;padding:10px;border-radius:6px;background:#03c75a;color:#fff;text-align:center;font-weight:700;text-decoration:none";
           nb.appendChild(go);
+          /* 휴대폰은 바로 가격 넣은 화면으로 넘어감 (단추 누를 필요 없이). 열리면 북마크만 한 번 더 */
+          if (mobN) { go.textContent = "가격 " + won(T.pr) + "원 넣은 화면으로 넘어가는 중… 열리면 북마크 한 번 더"; setTimeout(() => { L.href = u.href; }, 1500); }
         }
       }
       return;
@@ -291,13 +293,18 @@
   const mask = s => s && s.length > 8 ? s.slice(0, 6) + "***" + s.slice(-2) : s;
   /* 상품명: 화면에 보이는 제목. og:title은 ' - 일반거치대' 같은 분류가 붙어서 마지막에 */
   const og = document.querySelector('meta[property="og:title"]');
+  const jv = k => { const m = document.documentElement.innerHTML.match(new RegExp('"' + k + '"\\s*:\\s*"([^"]{2,120})"')); return m ? m[1] : ""; };
   let name = [...document.querySelectorAll("h1, h2, h3")].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).find(t => t.length >= 6 && t.length <= 200 && !/쿠팡|coupang|장바구니|카테고리/i.test(t)) || "";
+  if (!name) name = jv("itemName") || jv("productName");
   if (!name) name = ((og && og.content) || document.title).replace(/\s*[-|]\s*쿠팡!?\s*$/, "").replace(/\s+-\s+[^-]{1,20}$/, "").trim();
   const txt = document.body.innerText;
   let seller = "";
   const sm = txt.match(/판매자\s*[:：]?\s*([^\n]{1,60})/);
   if (sm) seller = sm[1].replace(/\s*(판매자\s*)?(상품\s*)?보러\s*가기.*$/, "").replace(/\s*판매자\s*평가.*$/, "").trim();
-  if (!seller || seller.length > 30 || /가입|보러가기|평가|정보/.test(seller)) {
+  /* '판매자 특가', '판매자로켓' 같은 배지 글자는 판매처가 아님 → 페이지 데이터의 판매자 이름 먼저 (10/21 아이폰 '특가') */
+  const vn = jv("vendorName");
+  if (vn) seller = vn;
+  if (!seller || seller.length > 30 || /가입|보러가기|평가|정보|^특가|로켓|할인|쿠폰|무료|배송|와우/.test(seller)) {
     const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/);
     seller = s2 ? s2[1].trim() : "";
   }
@@ -317,7 +324,10 @@
     let cb = "";
     try { cb = ((await navigator.clipboard.readText()) || "").trim(); } catch (e) {}
     const nmN = name.replace(/\s+/g, "");
-    if (cb && cb.length <= 30 && !/[\n\r]|http|[:：]/.test(cb) && cb.split(/\s+/).some(w => w.length >= 2 && nmN.indexOf(w) !== -1)) { kwIn = [cb].concat(sugKw(name).filter(x => x !== cb)).join("|"); kwFrom = "복사해 둔 의뢰서 키워드"; }
+    /* 생성기 [상품 페이지 열기]가 복사한 상품 주소(#kw=…)에서 키워드 (아이폰: 쿠팡이 모바일 주소로 넘어가며 #을 버림) */
+    const ck = (cb.match(/[#&]kw=([^&\s]+)/) || [])[1];
+    if (ck) { kwIn = decodeURIComponent(ck); kwFrom = "생성기"; }
+    else if (cb && cb.length <= 30 && !/[\n\r]|http|[:：]/.test(cb) && cb.split(/\s+/).some(w => w.length >= 2 && nmN.indexOf(w) !== -1)) { kwIn = [cb].concat(sugKw(name).filter(x => x !== cb)).join("|"); kwFrom = "복사해 둔 의뢰서 키워드"; }
   }
   if (!kwIn) { kwIn = sugKw(name).join("|"); kwFrom = "상품명으로 추천 (의뢰서 키워드로 찾으려면 생성기 [상품 페이지 열기]로 열어 주세요)"; }
   if (!kwIn) kwIn = (prompt("검색 키워드 (대표 | 서브1 | 서브2 …)", qs.get("q") || "") || "").trim();
@@ -381,7 +391,8 @@
     "상품번호 : " + pid + (item ? " - " + mask(item) : ""),
     opt ? "옵션 : " + opt : "",
     price ? "가격 : " + price.toLocaleString("ko-KR") + "원" : "",
-    "배송비 : " + shipOf(txt, name, price),
+    /로켓\s*(배송|와우|프레시|그로스|직구)|판매자\s*로켓/.test(txt.slice(0, 8000)) ? "배송비 : 무료 (로켓배송)" : "배송비 : " + shipOf(txt, name, price),
+    /로켓\s*(배송|와우|프레시|그로스|직구)|판매자\s*로켓/.test(txt.slice(0, 8000)) ? "배송 : 로켓배송" : "",
     foundKw ? "찾은 키워드 : " + foundKw : "",
     filtLine ? "필터 : " + filtLine : "",
     kw ? (mob ? "모바일 위치 : " : "PC 위치 : ") + pageLine : "",
