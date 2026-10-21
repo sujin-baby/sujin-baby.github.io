@@ -345,6 +345,16 @@
     c.el.scrollIntoView({ block: "center" });
     return true;
   }
+  /* 찾은 칸을 빨간 테두리로 표시하고 화면 안 위치를 돌려줌 (상품 위치 캡처 저장용, 사용자 요청 10/21) */
+  async function markRect(i) {
+    const el = FOUND_EL || (cardList()[i] || {}).el;
+    if (!el) return null;
+    el.style.outline = "4px solid #e00000"; el.style.outlineOffset = "2px";
+    el.scrollIntoView({ block: "center" });
+    await sleep(700);
+    const r = el.getBoundingClientRect();
+    return { x: r.left, y: r.top, w: r.width, h: r.height, vw: innerWidth, vh: innerHeight, dpr: devicePixelRatio || 1 };
+  }
   /* 지금 화면의 검색어, 가격 필터, 페이지 */
   function here() {
     const qp = new URL(location.href).searchParams;
@@ -367,5 +377,5 @@
     if (!b) { b = document.createElement("div"); b.id = "__pl_banner"; b.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:2147483647;background:#5b2a86;color:#fff;font:bold 15px/1.5 sans-serif;padding:10px 14px;text-align:center"; document.documentElement.appendChild(b); }
     b.textContent = t; return true;
   }
-  window.__PL = { mark: mark, here: here, state: state, banner: banner, readProduct: readProduct, scan: scan, priceUI: priceUI, clickPage: clickPage, box: box, copy: copy };
+  window.__PL = { markRect: markRect, mark: mark, here: here, state: state, banner: banner, readProduct: readProduct, scan: scan, priceUI: priceUI, clickPage: clickPage, box: box, copy: copy };
 })();

@@ -64,7 +64,7 @@
     bx.appendChild(b1); bx.appendChild(b2); document.body.appendChild(bx);
     try { navigator.clipboard.writeText(out).then(() => { b1.textContent = "복사됨 (생성기에 붙여넣기)"; }, () => {}); } catch (e) {}
     /* 확장 프로그램이 돌릴 때(oy.js)는 결과를 생성기로 바로 보냄. 북마크로 돌릴 때는 chrome.runtime이 없어서 건너뜀 */
-    try { if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id) chrome.runtime.sendMessage(/상품번호\s*[:：]|위치\s*[:：]/.test(out) ? { type: "plResult", text: out } : { type: "plStatus", text: [out, note].filter(Boolean).join(" · ") }); } catch (e) {}
+    try { if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id) chrome.runtime.sendMessage(/상품번호\s*[:：]|위치\s*[:：]/.test(out) ? { type: "plResult", text: out, shot: true } : { type: "plStatus", text: [out, note].filter(Boolean).join(" · ") }); } catch (e) {}
     return bx;
   };
   /* ---------- 네이버: 스마트스토어 상품 페이지 = 상품 정보, 네이버 쇼핑 검색 화면 = 찾은 페이지 ---------- */
@@ -177,6 +177,7 @@
     const seller = ((txt.match(/판매자\s*\n?\s*([^\n>]{1,30})/) || [])[1] || "").trim();
     const pm = txt.match(/(\d{1,3}(?:,\d{3})+)\s*원/), price = pm ? Number(pm[1].replace(/,/g, "")) : 0;
     let img = og("image"); if (img.indexOf("//") === 0) img = "https:" + img;
+    try { if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id) { const sel = [...document.querySelectorAll("div,span,dd,p")].find(e => e.children.length === 0 && (e.textContent || "").trim() === seller); const bottom = sel ? sel.getBoundingClientRect().bottom + 10 : innerHeight; const top = Math.max(0, bottom - Math.min(innerHeight, 900)); const im = document.querySelector("img"); const ir = im ? im.getBoundingClientRect() : { left: 0, width: innerWidth }; chrome.runtime.sendMessage({ type: "plShot", rc: { x: ir.left, y: top, w: ir.width || innerWidth, h: bottom - top, vw: innerWidth, vh: innerHeight }, name: name, pid: id }); } } catch (e) {}
     show(["상품명 : " + name, "판매처 : " + seller, "상품번호 : " + id, "옵션 : " + (readOpt() || "단일옵션"), price ? "가격 : " + price.toLocaleString("ko-KR") + "원" : "", price ? "배송비 : " + shipOf(txt, name, price) : "", img ? "썸네일 : " + img : ""].filter(Boolean).join("\n"), "토스는 검색 순위를 못 찾아요 (앱 안 검색). 위치는 직접 넣어 주세요.", "#3182f6");
     return;
   }
@@ -255,7 +256,9 @@
     const pg = curP && /^\d{1,2}$/.test((curP.innerText || "").trim()) ? Number(curP.innerText.trim()) : 1;
     bx.remove();
     if (f.el) {
-      f.el.style.outline = "4px solid #e5397a"; f.el.style.outlineOffset = "2px"; f.el.scrollIntoView({ block: "center" });
+      f.el.style.outline = "4px solid #e00000"; f.el.style.outlineOffset = "2px"; f.el.scrollIntoView({ block: "center" });
+      /* 확장 프로그램이면 이 칸을 캡처해서 저장 (빨간 테두리, 상품명·가격 보이게) */
+      try { if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id) { await sleep(600); const rr = f.el.getBoundingClientRect(); chrome.runtime.sendMessage({ type: "plShot", rc: { x: rr.left, y: rr.top, w: rr.width, h: rr.height, vw: innerWidth, vh: innerHeight }, name: T.nm, pid: T.gno }); } } catch (e) {}
       /* 상품 페이지를 안 거치고 왔으면 찾은 칸에서 상품명·브랜드·가격·사진 */
       const cq = sel => { const e = f.el.querySelector(sel); return e ? (e.innerText || e.textContent || "").replace(/\s+/g, " ").trim() : ""; };
       if (!T.nm) T.nm = cq(".tx_name, [class*=name]");

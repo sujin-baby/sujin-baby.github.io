@@ -22,7 +22,8 @@ const setGen = sender => { genT = { tabId: sender.tab.id, frameId: sender.frameI
 chrome.runtime.onMessage.addListener((m, sender) => {
   if (!m || !sender.tab) return;
   if (m.type === "plGenHere") setGen(sender);
-  else if (m.type === "plResult") { pushGen({ text: m.text }); oyThumb(m.text); }
+  else if (m.type === "plResult") { pushGen({ text: m.text }); if (!m.shot) oyThumb(m.text); }
+  else if (m.type === "plShot") shotRect(sender.tab.id, m.rc, { name: m.name, pid: m.pid }).then(r => r && pushGen({ status: r.t })).catch(e => { self.__shotErr = String((e && e.message) || e); pushGen({ status: "캡처 저장 실패: " + self.__shotErr }); });
   else if (m.type === "plStatus") pushGen({ status: m.text });
   else if (m.type === "plAuto" && m.url) { setGen(sender); autoRun(m.url, sender.tab).catch(e => pushGen({ status: "멈췄어요: " + ((e && e.message) || e) })); }
 });
@@ -295,7 +296,7 @@ async function look(ctx, dev, k, f) {
   if (s.n === 0) return { page: 0, seen: 0, empty: true, snip: s.noResult ? "" : s.snip };
   const base = s.url;
   if (dev === "mo") {
-    if (s.hit >= 0) return { pos: s.hit + 1, org: s.org, how: s.how, scroll: true };
+    if (s.hit >= 0) { if (!ctx.shot) ctx.shot = await shotHit(work.tabId, s.hit, info); return { pos: s.hit + 1, org: s.org, how: s.how, scroll: true }; }
     /* 계속 내려가지 않고 페이지로 나뉘는 화면이면 다음 페이지 */
     let seen = s.n, prev = s.keys;
     for (let p = 2; p <= MAXP && s.n <= 60; p++) {
@@ -303,7 +304,7 @@ async function look(ctx, dev, k, f) {
       await nav(pageOf(base, site, dev, p));
       s = await scanW(o);
       if (!s || s.blocked || s.n === 0 || sameKeys(s.keys, prev)) break;
-      if (s.hit >= 0) return { page: p, pos: s.hit + 1, org: s.org, how: s.how, scroll: false };
+      if (s.hit >= 0) { if (!ctx.shot) ctx.shot = await shotHit(work.tabId, s.hit, info); return { page: p, pos: s.hit + 1, org: s.org, how: s.how, scroll: false }; }
       seen += s.n; prev = s.keys;
     }
     return { page: 0, seen: seen, adOnly: s && s.adHit >= 0 };
@@ -311,7 +312,7 @@ async function look(ctx, dev, k, f) {
   let seen = 0, mode = "url";
   for (let p = 1; p <= MAXP; p++) {
     await prog(lab + " " + p + "/" + MAXP + "페이지 확인 중… (상품 " + (seen + s.n) + "개째)");
-    if (s.hit >= 0) return { page: p, pos: s.hit + 1, org: s.org, how: s.how };
+    if (s.hit >= 0) { if (!ctx.shot) ctx.shot = await shotHit(work.tabId, s.hit, info); return { page: p, pos: s.hit + 1, org: s.org, how: s.how }; }
     seen += s.n;
     if (p === MAXP) break;
     const prev = s.keys;
@@ -360,6 +361,35 @@ let PER = 36;
 const posText = r => !r ? "" : r.scroll ? Math.max(1, Math.ceil((r.org || r.pos) / PER)) + "페이지" : r.page + "페이지";
 /* 가격 필터는 '가검40000' (가검 = 가격검색) */
 const gageom = (lo, hi) => "가검" + (lo === hi ? lo : lo + "~" + hi);
+
+/* ---------- 상품 위치 캡처 저장: 검색 화면에서 찾은 칸을 빨간 테두리로, 상품명·가격이 보이게 잘라서 다운로드 폴더에 (사용자 요청 10/21) ---------- */
+const b64 = buf => { let s = ""; const a = new Uint8Array(buf); for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode.apply(null, a.subarray(i, i + 0x8000)); return btoa(s); };
+async function shotRect(tabId, rc, info) {
+  if (!rc || !(rc.w > 0)) return null;
+  const tab = await chrome.tabs.get(tabId);
+  const back = tab.active ? 0 : (await chrome.tabs.query({ active: true, windowId: tab.windowId }))[0];
+  if (!tab.active) { await chrome.tabs.update(tabId, { active: true }); await sleep(600); }
+  let url = "";
+  try { url = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" }); }
+  finally { if (back) chrome.tabs.update(back.id, { active: true }).catch(() => {}); }
+  const bmp = await createImageBitmap(await (await fetch(url)).blob());
+  const k = bmp.width / rc.vw, m = 10;
+  const x = Math.max(0, (rc.x - m) * k), y = Math.max(0, (rc.y - m) * k);
+  const w = Math.min(bmp.width - x, (rc.w + 2 * m) * k), h = Math.min(bmp.height - y, (rc.h + 2 * m) * k);
+  const cv = new OffscreenCanvas(Math.round(w), Math.round(h));
+  cv.getContext("2d").drawImage(bmp, x, y, w, h, 0, 0, w, h);
+  const png = await cv.convertToBlob({ type: "image/png" });
+  const safe = (info.name || "").replace(/[\\/:*?"<>|~#%&{}$!'@+`=^]/g, " ").replace(/\s+/g, " ").trim().slice(0, 30).replace(/[.\s]+$/, "");
+  const fn = "체험단_썸네일/" + (safe ? safe + "_" : "") + (info.pid || "상품") + "_위치.png";
+  const data = "data:image/png;base64," + b64(await png.arrayBuffer());
+  let fn2 = fn, id = null;
+  try { id = await chrome.downloads.download({ url: data, filename: fn, conflictAction: "overwrite", saveAs: false }); }
+  catch (e) { fn2 = "position_" + String(info.pid || "item").replace(/[^\w-]/g, "") + ".png"; id = await chrome.downloads.download({ url: data, filename: fn2, conflictAction: "overwrite", saveAs: false }); }   /* 폴더 이름이 안 되는 컴퓨터 */
+  return id ? { t: "상품 위치 캡처 저장됨: 다운로드 폴더 › " + fn2 } : null;
+}
+async function shotHit(tabId, hit, info) {
+  try { const rc = await call(tabId, "markRect", [hit]); return await shotRect(tabId, rc, info); } catch (e) { self.__shotErr = String((e && e.message) || e); return null; }
+}
 
 /* ---------- 썸네일 저장 ---------- */
 async function saveThumb(info) {
@@ -421,7 +451,7 @@ async function run(tab) {
   const prog = curProg = t => ui(tid, { title: "상품 위치 찾는 중… (창을 닫지 마세요)", msg: head + "\n\n" + t });
   if (!kws.length) { await ui(tid, { title: "상품 위치 찾기", msg: "상품명을 못 읽어서 키워드를 못 만들었어요." }); return; }
   await prog("시작");
-  const thumbP = saveThumb(info);
+  const thumbP = null;   // 썸네일 대신 찾은 칸 캡처 (못 찾으면 썸네일)
   const verP = newer();
   const ctx = { site: site, info: info, P: P, prog: prog, plain: {} };
   await openWork();
@@ -451,7 +481,7 @@ async function run(tab) {
   if (!pc.found && pc.log.length) notes.push({ t: "PC 확인한 것: " + pc.log.join(" / "), warn: true });
   if (!mo.found && mo.log.length) notes.push({ t: "모바일 확인한 것: " + mo.log.join(" / "), warn: true });
   [pc.found, mo.found].forEach((r, i) => { if (r && r.how === "상품명") notes.push({ t: (i ? "모바일" : "PC") + ": 상품명으로 찾았어요 (스토어 이름은 화면에 없었음)" }); });
-  notes.push(await thumbP);
+  notes.push(ctx.shot || await saveThumb(info));
   const nv = await verP;
   if (nv) notes.push({ t: "새 버전(" + nv + ")이 있어요. 생성기에서 확장 프로그램을 다시 받아 바꿔 주세요.", warn: true });
   if (autoTab !== tid) { try { await chrome.windows.update(tab.windowId, { focused: true }); await chrome.tabs.update(tid, { active: true }); } catch (e) {} }
@@ -474,7 +504,7 @@ async function naverProduct(tab, info) {
   const price = hp || info.price || 0;
   const t = Object.assign({}, info, { kws: kws, price: price, at: Date.now() });
   await chrome.storage.local.set({ nvTarget: t });
-  const thumb = await saveThumb(info);
+  const thumb = { t: "썸네일 대신: 검색 화면에서 찾으면 그 칸을 캡처해서 저장해요." };
   const out = infoLines(t).join("\n");
   const copied = await copyText(out, tab.id);
   await ui(tab.id, { title: "상품 정보 " + (copied ? "복사됨" : "") + " · 네이버 검색 탭을 열었어요", out: out, copied: copied, img: info.img,
@@ -504,7 +534,7 @@ async function naverHere(tab) {
   t.kws.forEach(k => { plan.push([k, false]); if (t.price) plan.push([k, true]); });
   const filtered = !!(h.lo && h.hi);
   if (s.hit >= 0) {
-    await call(tid, "mark", [s.hit]);
+    const shot = await shotHit(tid, s.hit, t);
     const pos = mob ? Math.max(1, Math.ceil(s.org / 40)) + "페이지" : h.page + "페이지";
     const out = infoLines(t).concat([h.query ? "찾은 키워드 : " + h.query : "", filtered ? "필터 : " + gageom(h.lo, h.hi) : "", s.similar ? "주의 : 비슷한 상품 많음" : "", (mob ? "모바일 위치 : " : "PC 위치 : ") + pos]).filter(Boolean).join("\n");
     const copied = await copyText(out, tid);
