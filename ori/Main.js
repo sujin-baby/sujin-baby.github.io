@@ -2341,6 +2341,7 @@ function checkFullInner_() {
   try { reopenAndSunnyOnce_(readRuns_()); } catch (e) { note_('폼 다시 열기 실패: ' + e); }
   try { dropSunnyExtraOnce_(readRuns_()); } catch (e) { note_('부유단감 추가 진행 지우기 실패: ' + e); }
   try { fixOzneOnce_(readRuns_()); } catch (e) { note_('오즈네즈 폼 제목 실패: ' + e); }
+  try { fixOzneSunny2Once_(readRuns_()); } catch (e) { note_('오즈네즈·부유단감 정리 실패: ' + e); }
   try { fixOptDigitsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 단일옵션 실패: ' + e); }
   const runs = readRuns_(), times = {};
   step_('알림');
@@ -2588,12 +2589,13 @@ function reviewGuideMsg_(rv, ppl, counts, k) {
     if (today[i] > 0) lines.push(pretty(t.label) + '(' + today[i] + '명) : ' + who.join(' '));
   });
   const ask = [];
-  const g = String(rv.guide || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean)[0] || '';
+  // 가이드 전부 (상품이 여럿이면 줄마다 '상품 : 가이드'). '키워드 조합 참고 가이드 문구 예시:' 같은 머리말은 뺌 (사용자 요청 10/21)
+  const g = String(rv.guide || '').split(/\n|\s+\/\s+(?=\S+\s*:)/).map(function (x) { return x.replace(/[^:：\s][^:：]{0,30}(예시|요청|참고)\s*[:：]\s*/g, ' ').replace(/\s+/g, ' ').trim(); }).filter(Boolean).join('\n');
   // 리뷰 종류를 안 나눈 의뢰(전원 같은 리뷰): 한 줄로 전원. 가이드에 사진·촬영·컷이 있으면 포토리뷰 (10/21 속눈썹영양제)
-  if (!totals.length) { if (queue.length) lines.push((rv.kind === 'self' || /사진|촬영|컷|포토/.test(g) ? '포토리뷰' : '리뷰') + '(' + queue.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + queue.map(nm).join(' ')); }
+  if (!totals.length) { if (queue.length) lines.push((rv.kind === 'self' || /사진|촬영|컷|포토/.test(g) ? '포토리뷰' : '텍스트리뷰') + '(' + queue.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + queue.map(nm).join(' ')); }
   else if (queue.length) { lines.push('리뷰 종류 확인 필요(' + queue.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + queue.map(nm).join(' ')); ask.push('리뷰 종류·개수'); }
   if (!g) ask.push('리뷰내용 가이드');
-  const msg = ['⭐️리뷰내용 가이드⭐️'].concat(lines, ['', g ? '⭐️⭐️⭐️⭐️⭐️' + g.replace(/[.。!\s]+$/, '') + ' !!!!!⭐️⭐️⭐️⭐️⭐️' : '⭐️⭐️⭐️⭐️⭐️(리뷰 가이드: 사장님께 물어보고 채우기)⭐️⭐️⭐️⭐️⭐️']).join('\n');
+  const msg = ['⭐️리뷰내용 가이드⭐️'].concat(lines, ['', g ? '⭐️⭐️⭐️⭐️⭐️' + g + ' ⭐️⭐️⭐️⭐️⭐️' : '⭐️⭐️⭐️⭐️⭐️(리뷰 가이드: 사장님께 물어보고 채우기)⭐️⭐️⭐️⭐️⭐️']).join('\n');
   return { msg: msg, ask: ask };
 }
 // 그날 응답의 수령인(계정) 이름 순서대로 [{nm, n:1}] (한 사람이 두 계정이면 계정마다 따로). 수령인 칸: 수령인·수취인·이름·성함
@@ -2629,6 +2631,10 @@ function ensureReviewGuideMsgs_(runs) {
       // V2(10/19): 카톡 이름 대신 수령인(계정) 이름으로. 예전(카톡 이름) 메시지가 아직 대기면 새 글로 바꿈, 보냈으면 그대로
       const key0 = 'RVMSG_' + String(r['명단 제목']).replace(/\s+/g, ''), key = 'RVMSG2_' + String(r['명단 제목']).replace(/\s+/g, '');
       if (props.getProperty(key)) return;
+      // 방제를 바꿔도 같은 날 같은 명단이면 한 번만 (10/21 부유단감 두 번 들어간 것)
+      const keyD = 'RVMSGD_' + r['시트ID'] + '_' + Utilities.formatDate(r['진행일'] instanceof Date ? r['진행일'] : new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
+      if (props.getProperty(keyD)) { props.setProperty(key, '1'); return; }
+      props.setProperty(keyD, '1');
       const first = c.runs.filter(function (x) { return x['시트ID']; })[0] || r;
       let rv = null; try { rv = JSON.parse(props.getProperty('RV_' + first['시트ID']) || 'null'); } catch (e) {}
       // 포토제공(사진 받은 뒤 진행 도우미로 세트 배정)·구매확정만은 리뷰 가이드 없음. 리뷰 정보가 없는 예전 진행도 이름은 넣고 가이드는 '사장님께 물어보기'로 (10/21)
@@ -4762,6 +4768,50 @@ function dropSunnyExtraOnce_(runs) {
   runs.filter(function (x) { return /부유단감/.test(String(x['명단 제목'])) && /10\.2[2-9]/.test(String(x['명단 제목'])); }).sort(function (a, b) { return b.row - a.row; })
     .forEach(function (x) { note_('부유단감 추가 진행 지움: ' + bareTitle_(x['명단 제목']) + ' → ' + (deleteRun_(x) || 'OK')); });
   try { const ps = planSheet_(), pl = ps.getLastRow(); if (pl >= 2) { const v = ps.getRange(2, 1, pl - 1, 9).getValues(); for (let i = v.length - 1; i >= 0; i--) if (/부유단감/.test(String(v[i][1]) + String(v[i][4])) && String(v[i][8]) === '대기') ps.deleteRow(i + 2); } } catch (e) {}
+}
+// (한 번, 10/21 2차) 오즈네즈: 이름 '#10.21 실 오즈네즈 양말 담요5', 폼·명단 시트 '# 실 오즈네즈 양말 담요', 로켓배송이라 포토대기 → 포토리뷰 + 상품별 가이드.
+//  부유단감: 리뷰 가이드 새 모양(텍스트리뷰, 머리말 빼기)으로 다시. 안 보낸 잘못된 메시지(포토대기, 옛 가이드, (업체명) 명단 전달)는 지우고 다시 넣음
+function fixOzneSunny2Once_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('OZNE_SUNNY2_V1')) return;
+  props.setProperty('OZNE_SUNNY2_V1', '1');
+  const oz = runs.filter(function (x) { return /발목무압박기모양말|오즈네즈/.test(String(x['명단 제목'])); });
+  const sunny = runs.filter(function (x) { return /부유단감/.test(String(x['명단 제목'])); });
+  const rooms = {};
+  oz.forEach(function (r) { rooms[String(r['카톡방'] || bareTitle_(r['명단 제목']))] = 1; });
+  sunny.forEach(function (r) { rooms[String(r['카톡방'] || bareTitle_(r['명단 제목']))] = 1; });
+  // 1) 안 보낸 잘못된 메시지 지우기
+  try {
+    const ob = outboxSheet_(), last = ob.getLastRow();
+    if (last >= 2) { const v = ob.getRange(2, 1, last - 1, 6).getValues(); for (let i = v.length - 1; i >= 0; i--) {
+      if (v[i][5] === '보냄') continue;
+      const m = String(v[i][4]);
+      if ((rooms[String(v[i][3])] && /^⭐️(포토대기|리뷰내용 가이드)⭐️/.test(m)) || (v[i][2] === '명단 전달' && /\(업체명\)\s*부유단감/.test(m))) ob.deleteRow(i + 2);
+    } }
+  } catch (e) { note_('오즈네즈·부유단감 메시지 정리 실패: ' + e); }
+  // 2) 오즈네즈 이름·리뷰 정보
+  oz.forEach(function (r) {
+    const d = r['진행일'] instanceof Date ? (r['진행일'].getMonth() + 1) + '.' + r['진행일'].getDate() : dateTok_(r['명단 제목']);
+    renameRun_(r, '#' + d + ' 실 오즈네즈 양말 담요' + (Number(r['목표인원']) || ''));
+  });
+  const oz0 = oz[0];
+  if (oz0) {
+    try { if (oz0['폼ID']) FormApp.openById(oz0['폼ID']).setTitle('# 실 오즈네즈 양말 담요'); } catch (e) {}
+    try { if (oz0['시트ID']) SpreadsheetApp.openById(oz0['시트ID']).rename('# 실 오즈네즈 양말 담요'); } catch (e) {}
+    try {
+      const k = 'RV_' + oz0['시트ID'], rv = JSON.parse(props.getProperty(k) || '{}'), parts = String(rv.guide || '').split(/\s+\/\s+/);
+      rv.kind = 'self';
+      if (parts.length === 2) rv.guide = '기모양말 : ' + parts[0].trim() + '\n무릎담요 : ' + parts[1].trim();
+      props.setProperty(k, JSON.stringify(rv));
+    } catch (e) {}
+  }
+  // 3) 리뷰 가이드 다시 넣게 기억 지우기
+  oz.concat(sunny).forEach(function (r) {
+    props.deleteProperty('RVMSG2_' + String(r['명단 제목']).replace(/\s+/g, ''));
+    if (r['진행일'] instanceof Date) props.deleteProperty('RVMSGD_' + r['시트ID'] + '_' + Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd'));
+  });
+  Object.keys(props.getProperties()).forEach(function (k) { if (/^RVMSG2_.*(부유단감|발목무압박|오즈네즈)/.test(k)) props.deleteProperty(k); });
+  note_('✓ 오즈네즈 이름·포토리뷰 가이드, 부유단감 가이드 다시');
 }
 function fixOzneOnce_(runs) {
   const props = PropertiesService.getScriptProperties();
