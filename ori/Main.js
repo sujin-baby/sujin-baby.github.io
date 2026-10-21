@@ -2338,6 +2338,8 @@ function checkFullInner_() {
   step_('진행목록');
   try { removeOldUpdateTrigger_(); } catch (e) {}
   try { normalizeRuns_(); } catch (e) { note_('진행목록 정리 실패: ' + e); }
+  // 월급시트 중복 줄 합치기·날짜순 정렬은 맨 앞에서 (맨 끝 월급시트 단계는 자동 확인이 5분 넘게 걸리면 시간이 모자라 정렬을 건너뜀, 10/22)
+  try { if (CONFIG.PAY_SHEET_ID) { step_('월급시트 정렬'); payDedupe_(readRuns_()); payTabsNow_().forEach(payOrder_); } } catch (e) { if (e && e.yieldLock) throw e; note_('월급시트 정렬 실패: ' + e); }
   try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
   try { fixWeekendOnce_(); } catch (e) { note_('주말 진행 정리 실패: ' + e); }
   try { autoNextDay_(); } catch (e) { note_('다음 날 진행 만들기 실패: ' + e); }
