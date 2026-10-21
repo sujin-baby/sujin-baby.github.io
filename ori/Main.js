@@ -2342,6 +2342,7 @@ function checkFullInner_() {
   try { dropSunnyExtraOnce_(readRuns_()); } catch (e) { note_('부유단감 추가 진행 지우기 실패: ' + e); }
   try { fixOzneOnce_(readRuns_()); } catch (e) { note_('오즈네즈 폼 제목 실패: ' + e); }
   try { fixOzneSunny2Once_(readRuns_()); } catch (e) { note_('오즈네즈·부유단감 정리 실패: ' + e); }
+  try { fixOzneSunny3Once_(readRuns_()); } catch (e) { note_('오즈네즈·부유단감 3차 실패: ' + e); }
   try { fixOptDigitsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 단일옵션 실패: ' + e); }
   const runs = readRuns_(), times = {};
   step_('알림');
@@ -4771,6 +4772,31 @@ function dropSunnyExtraOnce_(runs) {
 }
 // (한 번, 10/21 2차) 오즈네즈: 이름 '#10.21 실 오즈네즈 양말 담요5', 폼·명단 시트 '# 실 오즈네즈 양말 담요', 로켓배송이라 포토대기 → 포토리뷰 + 상품별 가이드.
 //  부유단감: 리뷰 가이드 새 모양(텍스트리뷰, 머리말 빼기)으로 다시. 안 보낸 잘못된 메시지(포토대기, 옛 가이드, (업체명) 명단 전달)는 지우고 다시 넣음
+// (한 번, 10/21 3차) 부유단감은 포토제공(Y) → 리뷰 가이드 대신 ⭐️포토대기⭐️ (가이드는 사진 전달 뒤 마지막에 직접).
+//  오즈네즈 가이드는 상품별 전체 문장으로 (사용자가 준 글 그대로)
+const OZ_GUIDE = '기모양말 : 일반 양말보다 훨씬 두껍다 / 왠만한 수면양말급이다 / 기모가 두툼하다 / 발가락까지 따뜻해서 좋다 / 다른양말들하고는 차원이 다르다 / 한켤레 더 줘서 좋다 / 하나 더 사서 동생줬다 / 깔별로 다있어서 좋다 / 귀여운 선물용봉투까지 센스있다 / 일단 발목이 확 조이지않아서 편하다 / 돌돌 말려 내려가지않아서 좋다\n' +
+  '무릎담요 : 운전할때 무릎 덮으려고 샀는데 따뜻하다 / 속 안감이 부들부들하다 / 묶을필요없이 똑딱이 단추있어서 편하다 / 똑딱이가 단단해서 잘 안풀린다 / 등부터 어깨 목까지 다 따숩다 / 회사일할때 허리 감싸고 있으니 다리까지 따셔서 좋다 / 점심시간에 잘때 이불처럼 덮기 좋다 / 캠핑갈때 챙겨가니까 딱이다 / 옆으로 길어서 뭐 어디둘러도 거의 다 덮힌다';
+function fixOzneSunny3Once_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('OZNE_SUNNY3_V1')) return;
+  props.setProperty('OZNE_SUNNY3_V1', '1');
+  const oz = runs.filter(function (x) { return /발목무압박기모양말|오즈네즈/.test(String(x['명단 제목'])); });
+  const sunny = runs.filter(function (x) { return /부유단감/.test(String(x['명단 제목'])); });
+  const rooms = {};
+  oz.concat(sunny).forEach(function (r) { rooms[String(r['카톡방'] || bareTitle_(r['명단 제목']))] = 1; });
+  try {
+    const ob = outboxSheet_(), last = ob.getLastRow();
+    if (last >= 2) { const v = ob.getRange(2, 1, last - 1, 6).getValues(); for (let i = v.length - 1; i >= 0; i--) if (v[i][5] !== '보냄' && rooms[String(v[i][3])] && /^⭐️(포토대기|리뷰내용 가이드)⭐️/.test(String(v[i][4]))) ob.deleteRow(i + 2); }
+  } catch (e) {}
+  const setRv = function (r, f) { if (!r || !r['시트ID']) return; const k = 'RV_' + r['시트ID']; let rv = {}; try { rv = JSON.parse(props.getProperty(k) || '{}'); } catch (e) {} f(rv); props.setProperty(k, JSON.stringify(rv)); };
+  setRv(oz[0], function (rv) { rv.kind = 'self'; rv.mix = ''; rv.guide = OZ_GUIDE; });
+  setRv(sunny[0], function (rv) { rv.kind = 'photo'; });
+  oz.concat(sunny).forEach(function (r) {
+    props.deleteProperty('RVMSG2_' + String(r['명단 제목']).replace(/\s+/g, ''));
+    if (r['진행일'] instanceof Date) props.deleteProperty('RVMSGD_' + r['시트ID'] + '_' + Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd'));
+  });
+  note_('✓ 부유단감 포토대기, 오즈네즈 상품별 가이드로 다시');
+}
 function fixOzneSunny2Once_(runs) {
   const props = PropertiesService.getScriptProperties();
   if (props.getProperty('OZNE_SUNNY2_V1')) return;
