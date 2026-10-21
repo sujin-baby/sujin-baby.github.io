@@ -43,10 +43,11 @@ async function autoRun(url, gt) {
   try {
     /* 단축 링크(link.coupang.com 등)가 상품 페이지로 넘어갈 때까지 (최대 40초) */
     let tab = t;
-    for (let i = 0; i < 80; i++) { await sleep(500); tab = await chrome.tabs.get(t.id); if (tab.status === "complete" && /\/products\/\d+|goodsNo=/i.test(tab.url || "")) break; }
+    for (let i = 0; i < 80; i++) { await sleep(500); tab = await chrome.tabs.get(t.id); if (tab.status === "complete" && /\/products\/\d+|goodsNo=|toss\.shopping\/i\/|shopping-discovery/i.test(tab.url || "")) break; }
     await sleep(1500);
     tab = await chrome.tabs.get(t.id);
     if (/oliveyoung\.co\.kr/.test(tab.url || "")) return await autoOy(tab);
+    if (/toss\.(shopping|im)/.test(tab.url || "")) { await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["oy.js"] }); return; }   // 토스: 상품 정보만 (검색 순위는 토스 앱 안이라 못 찾음)
     if (!/\/products\/\d+/.test(tab.url || "")) { pushGen({ status: "상품 페이지가 안 열렸어요. 열린 탭을 확인해 주세요." }); await chrome.tabs.update(t.id, { active: true }); return; }
     const isNv = /naver\.com/.test(tab.url || "");
     const out = await start(tab);
@@ -401,7 +402,7 @@ async function run(tab) {
   const tid = tab.id;
   if (/^https:\/\/(m?search)\.shopping\.naver\.com\//.test(tab.url || "")) return naverHere(tab);
   /* 올리브영: 상품 페이지·검색 화면 모두 북마크와 같은 코드(oy.js)로 */
-  if (/^https?:\/\/([a-z]+\.)?oliveyoung\.co\.kr\//.test(tab.url || "")) { await chrome.scripting.executeScript({ target: { tabId: tid }, files: ["oy.js"] }); return; }
+  if (/^https?:\/\/([a-z]+\.)?(oliveyoung\.co\.kr|toss\.shopping|toss\.im)\//.test(tab.url || "")) { await chrome.scripting.executeScript({ target: { tabId: tid }, files: ["oy.js"] }); return; }
   const info = await call(tid, "readProduct").catch(() => null);
   if (!info) { await ui(tid, { title: "상품 위치 찾기", msg: "이 화면은 읽을 수 없어요. 쿠팡·네이버·올리브영 상품 페이지에서 눌러 주세요." }); return; }
   if (info.err) { await ui(tid, { title: "상품 위치 찾기", msg: info.err }); return; }
@@ -439,6 +440,7 @@ async function run(tab) {
     info.opt ? "옵션 : " + info.opt : "",
     price ? "가격 : " + price.toLocaleString("ko-KR") + "원" : "",
     info.ship ? "배송비 : " + info.ship : "",
+    info.rocket ? "배송 : 로켓배송" : "",
     F ? "찾은 키워드 : " + F.k : "",
     filt ? "필터 : " + filt : "",
     "PC 위치 : " + (pc.found ? posText(pc.found) : "못 찾음"),

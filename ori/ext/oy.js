@@ -1,4 +1,4 @@
-/* 올리브영: 생성기 북마크와 같은 코드 (생성기 bm-src에서 복사). 상품 페이지 = 상품 정보, 검색 화면 = 몇 번째 */
+/* 올리브영·토스: 생성기 북마크와 같은 코드 (생성기 bm-src에서 복사) */
 (async () => {
   const L = location;
   /* 고른 옵션: '색상 × 수량' 같은 이름표 바로 옆 값 (콜론은 화면 꾸밈이라 글에 없을 때가 있음). 없으면 단일옵션 */
@@ -165,6 +165,19 @@
       return;
     }
     alert("네이버는 스마트스토어 상품 페이지나 네이버 쇼핑 검색 화면에서 눌러 주세요.");
+    return;
+  }
+  /* ---------- 토스쇼핑: 상품 정보만 (상품명, 판매자, 상품번호, 가격, 썸네일). 검색 순위는 토스 앱 안이라 못 찾음 ---------- */
+  if (/(^|\.)toss\.(shopping|im)$/.test(L.hostname)) {
+    const og = n => { const m = document.querySelector('meta[property="og:' + n + '"]'); return m ? (m.content || "") : ""; };
+    const txt = document.body.innerText;
+    const id = (L.pathname.match(/\/(?:i|c|p|products?)\/(\d{5,})/) || [])[1] || (L.href.match(/(\d{8,})/) || [])[1] || "";
+    let name = (og("title") || document.title).replace(/\s*[|\-]\s*토스.*$/, "").trim();
+    if (!name || /토스쇼핑/.test(name)) { const i0 = txt.search(/배송\s*일정|판매자/); name = i0 > 0 ? txt.slice(0, i0).split("\n").map(x => x.trim()).filter(x => x && !/토스쇼핑|QR|가격을/.test(x)).pop() || "" : ""; }
+    const seller = ((txt.match(/판매자\s*\n?\s*([^\n>]{1,30})/) || [])[1] || "").trim();
+    const pm = txt.match(/(\d{1,3}(?:,\d{3})+)\s*원/), price = pm ? Number(pm[1].replace(/,/g, "")) : 0;
+    let img = og("image"); if (img.indexOf("//") === 0) img = "https:" + img;
+    show(["상품명 : " + name, "판매처 : " + seller, "상품번호 : " + id, "옵션 : " + (readOpt() || "단일옵션"), price ? "가격 : " + price.toLocaleString("ko-KR") + "원" : "", price ? "배송비 : " + shipOf(txt, name, price) : "", img ? "썸네일 : " + img : ""].filter(Boolean).join("\n"), "토스는 검색 순위를 못 찾아요 (앱 안 검색). 위치는 직접 넣어 주세요.", "#3182f6");
     return;
   }
   /* ---------- 올리브영: 상품 페이지 = 상품 정보, 검색 화면 = 몇 번째 (확장 프로그램은 올리브영을 못 읽어서 북마크로) ---------- */

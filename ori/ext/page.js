@@ -80,7 +80,7 @@
       const pe = document.querySelector('.prod-sale-price .total-price strong, .total-price strong, [class*="final-price"] [class*="amount"], .price-amount.final-price-amount, [class*="finalPrice"]');
       if (pe) price = num(pe.textContent);
       if (!price) price = priceAfter(txt, name);
-      return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, opt: opt || "단일옵션", price: price, ship: shipOf(txt, name, price), img: img };
+      return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, opt: opt || "단일옵션", price: price, ship: shipOf(txt, name, price), rocket: /로켓\s*(배송|그로스|직구|프레시)|판매자\s*로켓/.test(txt.slice(0, 6000)), img: img };
     }
     const pm = L.pathname.match(/products\/(\d+)/);
     if (!pm) return { err: "네이버는 스마트스토어(또는 브랜드스토어) 상품 페이지에서 눌러 주세요." };
