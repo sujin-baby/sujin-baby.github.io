@@ -181,8 +181,8 @@ function moveRunDate_(r, d) {
       if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v, i) {
         if (v[5] === '보냄' || String(v[3]) !== nb) return;
         const m2 = String(v[4]).split(ob0).join(nb);
-        if (m2 !== String(v[4])) ob.getRange(i + 2, 5).setValue(m2);
-        ob.getRange(i + 2, 2).setValue(sendDate_(v[3], m2, v[2]));
+        if (m2 !== String(v[4])) obSet_(ob, v[0], 5, m2);
+        obSet_(ob, v[0], 2, sendDate_(v[3], m2, v[2]));
       });
     } catch (e) {}
     // 월급시트 줄 이름·진행일
@@ -258,8 +258,8 @@ function renameRun_(r, title) {
   setRun_(r.row, '카톡방', title); r['카톡방'] = title;
   try {
     const ob = outboxSheet_(), last = ob.getLastRow();
-    if (last >= 2) ob.getRange(2, 4, last - 1, 3).getValues().forEach(function (v, i) {
-      if (String(v[0]) === oldRoom && (v[2] === '대기' || v[2] === '방 못 찾음')) ob.getRange(i + 2, 4).setValue(title);
+    if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) {
+      if (String(v[3]) === oldRoom && (v[5] === '대기' || v[5] === '방 못 찾음')) obSet_(ob, v[0], 4, title);
     });
   } catch (e) {}
   return true;
@@ -1186,7 +1186,7 @@ function refreshNotice_(r, d) {
   const notice = withSlotLine_(String(d.desc).split('(구글폼 링크)').join(r['폼 링크']), d.slot, d.fruit || chainFruit_(r));
   FormApp.openById(r['폼ID']).setDescription(formDesc_(notice));
   const room = String(r['카톡방'] || bareTitle_(r['명단 제목'])), ob = outboxSheet_(), last = ob.getLastRow();
-  if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) { if (String(v[3]) === room && v[2] === '방 공지' && v[5] !== '보냄') ob.getRange(i + 2, 5).setValue(notice); });
+  if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) { if (String(v[3]) === room && v[2] === '방 공지' && v[5] !== '보냄') obSet_(ob, v[0], 5, notice); });
   return notice;
 }
 
@@ -2345,6 +2345,7 @@ function checkFullInner_() {
   try { fixOzneSunny3Once_(readRuns_()); } catch (e) { note_('오즈네즈·부유단감 3차 실패: ' + e); }
   try { fixOzne4Once_(readRuns_()); } catch (e) { note_('오즈네즈 4차 실패: ' + e); }
   try { fixSunny5Once_(readRuns_()); } catch (e) { note_('부유단감 5차 실패: ' + e); }
+  try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
   try { fixOzneDay2Once_(readRuns_()); } catch (e) { note_('10.22 오즈네즈 공지 실패: ' + e); }
   try { fixOptDigitsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 단일옵션 실패: ' + e); }
   const runs = readRuns_(), times = {};
@@ -2562,7 +2563,7 @@ function ensureListMsgs_(runs) {
       if (x[2] !== '명단 전달') return;
       if (!String(x[4]).split('\n').some(function (l) { return l.trim() && sameRunTitle_(l, r['명단 제목']); })) return;
       found = true;
-      if (x[5] === '대기' && String(x[4]) !== want) ob.getRange(i + 2, 5).setValue(want);
+      if (x[5] === '대기' && String(x[4]) !== want) obSet_(ob, x[0], 5, want);
     });
     if (!found) { queueListMsgs_(r, true); note_('✓ 명단 전달 메시지 넣음: ' + bareTitle_(r['명단 제목'])); }
   });
@@ -2709,7 +2710,7 @@ function ensureReviewGuideMsgs_(runs) {
         // 예전 카톡 이름 글: 아직 안 보냈으면 이 글로 바꾸고, 보냈으면 그대로 둠
         const ob = outboxSheet_(), ol = ob.getLastRow();
         if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v, i) {
-          if (String(v[3]) === room && /^⭐️리뷰내용 가이드⭐️/.test(String(v[4])) && v[5] !== '보냄') ob.getRange(i + 2, 5).setValue(res.msg);
+          if (String(v[3]) === room && /^⭐️리뷰내용 가이드⭐️/.test(String(v[4])) && v[5] !== '보냄') obSet_(ob, v[0], 5, res.msg);
         });
         note_('✓ 리뷰 가이드 메시지를 수령인 이름으로 바꿈: ' + room);
         return;
@@ -2936,6 +2937,34 @@ function sortOutbox_(sh) {
   if (sorted.some(function (x, i) { return x[0] !== v[i][0]; })) rg.setValues(sorted);
 }
 
+// 보낼메시지 줄을 번호(A열)로 찾아서 고침. 줄 위치로 고치면 사이에 새 메시지가 들어오거나 정렬돼서 다른 줄을 덮어씀
+//  (10/21 마켓담온 귤 공지가 오즈네즈 방 이름 줄로 들어간 것)
+// 방 공지인데 글 속 폼 링크가 다른 진행 것이면 카톡방 이름을 그 진행 것으로 바로잡음 (매번, 안 보낸 것만)
+function fixMisroutedNotices_(runs) {
+  const ob = outboxSheet_(), last = ob.getLastRow();
+  if (last < 2) return;
+  ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v) {
+    if (v[2] !== '방 공지' || v[5] === '보냄') return;
+    const link = (String(v[4]).match(/https:\/\/forms\.gle\/[\w-]+|https:\/\/docs\.google\.com\/forms\/[^\s]+/) || [])[0];
+    if (!link) return;
+    const mine = runs.filter(function (r) { return String(r['폼 링크'] || '') === link; });
+    if (!mine.length) return;
+    const room = String(v[3]);
+    if (mine.some(function (r) { return String(r['카톡방'] || bareTitle_(r['명단 제목'])) === room; })) return;
+    const tok = dateTok_(room), hit = mine.filter(function (r) { return dateTok_(r['명단 제목']) === tok; })[0];
+    if (!hit) return;
+    const right = String(hit['카톡방'] || bareTitle_(hit['명단 제목']));
+    obSet_(ob, v[0], 4, right);
+    note_('✓ 방 공지 카톡방 바로잡음: ' + room + ' → ' + right);
+  });
+}
+function obSet_(ob, id, col, val) {
+  const last = ob.getLastRow();
+  if (last < 2 || !id) return false;
+  const ids = ob.getRange(2, 1, last - 1, 1).getValues();
+  for (let i = 0; i < ids.length; i++) if (String(ids[i][0]) === String(id)) { ob.getRange(i + 2, col).setValue(val); return true; }
+  return false;
+}
 function queueMsg_(room, msg, kind) {
   if (!msg) return;
   try {
@@ -3629,7 +3658,7 @@ function fixOct16Once_() {
   const notice = noticeForMore_(src || String(form.getDescription() || ''), short);
   form.setDescription(notice);
   const ob = outboxSheet_(), last = ob.getLastRow(), room = String(r16['카톡방'] || bareTitle_(r16['명단 제목']));
-  if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) { if (String(v[3]) === room && v[2] === '방 공지' && v[5] !== '보냄') ob.getRange(i + 2, 5).setValue(notice); });
+  if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) { if (String(v[3]) === room && v[2] === '방 공지' && v[5] !== '보냄') obSet_(ob, v[0], 5, notice); });
 }
 
 // (한 번만) 이미 만든 추가 모집·다음 날 진행 공지에서 어제 이름 줄 지우기: 보낼메시지(보내기 전)와 폼 설명
@@ -3647,7 +3676,7 @@ function fixNamesOnce_() {
   });
   const ob = outboxSheet_(), last = ob.getLastRow();
   if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) {
-    if (v[2] === '방 공지' && v[5] !== '보냄' && rooms[String(v[3])]) { const nm = stripTrailingNames_(String(v[4])); if (nm !== String(v[4])) ob.getRange(i + 2, 5).setValue(nm); }
+    if (v[2] === '방 공지' && v[5] !== '보냄' && rooms[String(v[3])]) { const nm = stripTrailingNames_(String(v[4])); if (nm !== String(v[4])) obSet_(ob, v[0], 5, nm); }
   });
 }
 
@@ -4395,7 +4424,7 @@ function rvZip_(f, name, props, sid) {
   // 안 보낸 '할 일'이 있으면 새 링크로 바꿈
   const ob = outboxSheet_(), ol = ob.getLastRow();
   let done = false;
-  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v, i) { if (!done && v[2] === '할 일' && v[5] !== '보냄' && String(v[4]).indexOf('[' + name + '] 리뷰 이미지') === 0) { ob.getRange(i + 2, 5).setValue(msg); done = true; } });
+  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v, i) { if (!done && v[2] === '할 일' && v[5] !== '보냄' && String(v[4]).indexOf('[' + name + '] 리뷰 이미지') === 0) { obSet_(ob, v[0], 5, msg); done = true; } });
   if (!done) queueMsg_('사장님', msg, '할 일');
   note_('✓ 리뷰 이미지 압축: ' + zipName + ' (' + files.length + '장)');
 }
@@ -4566,7 +4595,7 @@ function shrinkToGot_(r) {
   // 보낼메시지에 있는 그 진행 명단 전달 글도 새 방제로 (보낸 것도 기록이 맞게)
   try {
     const ob = outboxSheet_(), ol = ob.getLastRow();
-    if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v, i) { if (v[2] === '명단 전달' && String(v[4]).indexOf(oldBare) >= 0) ob.getRange(i + 2, 5).setValue(String(v[4]).split(oldBare).join(nb)); });
+    if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v, i) { if (v[2] === '명단 전달' && String(v[4]).indexOf(oldBare) >= 0) obSet_(ob, v[0], 5, String(v[4]).split(oldBare).join(nb)); });
   } catch (e) {}
   renameTodo_(r, oldBare, nb);
   note_('✓ 인원 맞춤: ' + oldBare + ' → ' + nb);
@@ -4835,7 +4864,7 @@ function fixOzneDay2Once_(runs) {
     return adjustNotice_(t, counts, first);
   };
   const room = String(r['카톡방'] || bareTitle_(r['명단 제목']));
-  try { const ob = outboxSheet_(), last = ob.getLastRow(); if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) { if (String(v[3]) === room && v[5] !== '보냄' && /양식 작성 폼/.test(String(v[4]))) ob.getRange(i + 2, 5).setValue(fix(v[4])); }); } catch (e) { note_('10.22 오즈네즈 공지 고치기 실패: ' + e); }
+  try { const ob = outboxSheet_(), last = ob.getLastRow(); if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) { if (String(v[3]) === room && v[5] !== '보냄' && /양식 작성 폼/.test(String(v[4]))) obSet_(ob, v[0], 5, fix(v[4])); }); } catch (e) { note_('10.22 오즈네즈 공지 고치기 실패: ' + e); }
   note_('✓ 10.22 오즈네즈 공지: 양말 2명, 담요 3명(브라운·블랙·민트 1명씩)으로 고침 (폼 설명은 그대로라 공지만 보세요)');
 }
 function fixSunny5Once_(runs) {
@@ -4967,7 +4996,7 @@ function fixStyleOnce_() {
     // (예전에는 여기서 다음 날 진행을 첫 날 폼으로 바꿨는데, 이미 카톡에 올린 공지 링크와 달라져서 0시에 엉뚱한 폼이 열림 → 안 바꿈)
     mine.forEach(function (m) {
       const nm = noticeStyle_(stripTrailingNames_(String(m.v[4])), fruit);
-      if (nm !== String(m.v[4])) { ob.getRange(m.i + 2, 5).setValue(nm); m.v[4] = nm; note_('✓ ' + room + ' 공지 고침'); }
+      if (nm !== String(m.v[4])) { obSet_(ob, m.v[0], 5, nm); m.v[4] = nm; note_('✓ ' + room + ' 공지 고침'); }
     });
     // 폼 옵션 질문이 '단일옵션' 하나뿐인데 공지 옵션이 여러 개면 옵션별로 나눔 (옵션 나누기 전에 만든 폼)
     try {
@@ -4994,7 +5023,7 @@ function fixStyleOnce_() {
     } catch (e) {}
   });
   // 보내기 전인 다른 공지도 포토대기 줄은 바꿈
-  msgs.forEach(function (v, i) { if (v[2] === '방 공지' && v[5] !== '보냄') { const nm = noticeStyle_(String(v[4]), false); if (nm !== String(v[4])) ob.getRange(i + 2, 5).setValue(nm); } });
+  msgs.forEach(function (v, i) { if (v[2] === '방 공지' && v[5] !== '보냄') { const nm = noticeStyle_(String(v[4]), false); if (nm !== String(v[4])) obSet_(ob, v[0], 5, nm); } });
 }
 
 // 공지에서 옵션 보기 목록 (가이드 여럿이면 상품 이름 붙임, 옵션마다 가격이 다르면 '(17,200원)') — 옵션 줄 'X (N명)', 'X N명', 'X (  명)'
@@ -5065,7 +5094,7 @@ function fixStaleNamesOnce_(runs) {
     if (!r || !(Number(r['일차']) > 1) || assigned[String(r['명단 제목'])]) return;
     const msg = String(v[4]), clean = stripNames_(msg);
     if (clean === msg) return;
-    ob.getRange(i + 2, 5).setValue(clean); fixed.push(room);
+    obSet_(ob, v[0], 5, clean); fixed.push(room);
     const latest = runs.filter(function (x) { return String(x['폼ID']) === String(r['폼ID']) && x['진행일'] instanceof Date; }).sort(function (a, b) { return b['진행일'] - a['진행일']; })[0];
     if (latest === r && r['폼ID']) { try { FormApp.openById(r['폼ID']).setDescription(formDesc_(clean)); } catch (e) {} }
   });
