@@ -2345,6 +2345,7 @@ function checkFullInner_() {
   try { fixOzneSunny3Once_(readRuns_()); } catch (e) { note_('오즈네즈·부유단감 3차 실패: ' + e); }
   try { fixOzne4Once_(readRuns_()); } catch (e) { note_('오즈네즈 4차 실패: ' + e); }
   try { fixSunny5Once_(readRuns_()); } catch (e) { note_('부유단감 5차 실패: ' + e); }
+  try { fixOzneDay2Once_(readRuns_()); } catch (e) { note_('10.22 오즈네즈 공지 실패: ' + e); }
   try { fixOptDigitsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 단일옵션 실패: ' + e); }
   const runs = readRuns_(), times = {};
   step_('알림');
@@ -4344,6 +4345,7 @@ function reviewDone_(runs) {
         props.setProperty(k, '1');
         if (init) return;
         queueMsg_(String(r['카톡방'] || bareTitle_(r['명단 제목'])), '취완', '취완');
+        queueMsg_('내 할 일', '[' + bareTitle_(r['명단 제목']) + '] 그날 리뷰가 다 확인됐어요 → 리뷰 사진 취합하기 (명단 폴더 › 리뷰이미지에 모으면 압축까지 자동)', '할 일');   // 사용자 요청 10/21
         note_('✓ 취완 메시지 넣음: ' + bareTitle_(r['명단 제목']));
       });
       // A-2. 의뢰 전체 끝 + 전부 체크 → 사장님 보고
@@ -4820,6 +4822,22 @@ const OZ_GUIDE = '기모양말 : 일반 양말보다 훨씬 두껍다 / 왠만�
   '무릎담요 : 운전할때 무릎 덮으려고 샀는데 따뜻하다 / 속 안감이 부들부들하다 / 묶을필요없이 똑딱이 단추있어서 편하다 / 똑딱이가 단단해서 잘 안풀린다 / 등부터 어깨 목까지 다 따숩다 / 회사일할때 허리 감싸고 있으니 다리까지 따셔서 좋다 / 점심시간에 잘때 이불처럼 덮기 좋다 / 캠핑갈때 챙겨가니까 딱이다 / 옆으로 길어서 뭐 어디둘러도 거의 다 덮힌다';
 // (한 번, 10/21 4차) 오즈네즈 리뷰 가이드를 새 모양(🐥, 상품별 [이름] + 줄마다)으로 다시: 안 보낸 옛 가이드 지우고 다시 넣음
 // (한 번, 10/21 5차) 부유단감: ⭐️포토대기⭐️만 들어갔던 것 → 가이드도 '포토전달대기'로 (안 보낸 포토대기는 지우고 다시)
+// (한 번, 10/21) 10.22 오즈네즈 공지: 1일차 인원·옵션이 그대로 나온 것 → 양말 2명, 담요 3명(브라운체크 1, 블랙체크 1, 민트체크 1)
+function fixOzneDay2Once_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('OZ_D2_V1')) return;
+  const r = runs.filter(function (x) { return /오즈네즈/.test(String(x['명단 제목'])) && /10\.22/.test(String(x['명단 제목'])); })[0];
+  if (!r) return;
+  props.setProperty('OZ_D2_V1', '1');
+  const counts = [[2, []], [3, [1, 0, 1, 1], '', ['브라운체크', '화이트그레이', '블랙체크', '민트체크']]];
+  const fix = function (t) {
+    const first = String(t).split('\n')[0];
+    return adjustNotice_(t, counts, first);
+  };
+  const room = String(r['카톡방'] || bareTitle_(r['명단 제목']));
+  try { const ob = outboxSheet_(), last = ob.getLastRow(); if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) { if (String(v[3]) === room && v[5] !== '보냄' && /양식 작성 폼/.test(String(v[4]))) ob.getRange(i + 2, 5).setValue(fix(v[4])); }); } catch (e) { note_('10.22 오즈네즈 공지 고치기 실패: ' + e); }
+  note_('✓ 10.22 오즈네즈 공지: 양말 2명, 담요 3명(브라운·블랙·민트 1명씩)으로 고침 (폼 설명은 그대로라 공지만 보세요)');
+}
 function fixSunny5Once_(runs) {
   const props = PropertiesService.getScriptProperties();
   if (props.getProperty('SUNNY5_V1')) return;
@@ -5349,18 +5367,27 @@ function savePlan_(d) {
 
 // 1일차 공지(폼 링크 넣기 전)에서 맨 윗줄, 가이드 머리 인원 "1) 5명", 옵션 인원 "(3명)"만 그 일차 값으로 바꿈
 function adjustNotice_(tpl, counts, slot2) {
-  const blocks = String(tpl).split(NOTICE_SEP);
+  // 상품 구분선(---- 또는 ———)으로 나눔. 구분선 글자가 조금 달라도 (10/21 오즈네즈 2일차가 1일차 인원 그대로 나온 것)
+  const parts = String(tpl).split(/(\n\s*[-—─_]{10,}\s*\n)/);
+  const blocks = parts.filter(function (x, i) { return i % 2 === 0; }), seps = parts.filter(function (x, i) { return i % 2 === 1; });
   const multi = blocks.length > 1;
   const out = blocks.map(function (b, i) {
     const c = counts[i];
     if (!c) return b;
+    // 옵션 이름 목록이 있으면 옵션 줄을 그날 인원으로 다시 씀 (0명 옵션은 빼고, 앞 일차에 0명이라 빠진 옵션도 다시 넣음)
+    let rebuilt = false;
+    if (c[3] && c[1] && c[3].length === c[1].length) {
+      rebuilt = true;
+      const ol = c[3].map(function (l, j) { return Number(c[1][j]) > 0 ? l + ' (' + c[1][j] + '명)' : null; }).filter(Boolean).join('\n');
+      b = b.replace(/(🐥옵션 *: *)[\s\S]*?(?=\n\s*🐥가격)/, function (m0, h) { return h + ol; });
+    }
     if (multi) b = b.replace(new RegExp('^' + (i + 1) + '\\) *\\d*명?', 'm'), (i + 1) + ') ' + c[0] + '명');
     let k = 0;
-    b = b.replace(/\(\s*\d*\s*명\)/g, function () { const v = (c[1] || [])[k++]; return '(' + (v === undefined || v === null ? '  ' : v) + '명)'; });
+    if (!rebuilt) b = b.replace(/\(\s*\d*\s*명\)/g, function () { const v = (c[1] || [])[k++]; return '(' + (v === undefined || v === null ? '  ' : v) + '명)'; });
     // 리뷰 종류를 날마다 고르게 나눈 줄 (생성기가 일차마다 계산해서 넘김)
     if (c[2]) b = b.replace(/^(🐥)?리뷰 배정 *:.*$/m, function (m0, d) { return (d || '') + '리뷰 배정 : ' + c[2]; });
     return b;
-  }).join(NOTICE_SEP).split('\n');
+  }).map(function (b, i) { return b + (i < seps.length ? seps[i] : ''); }).join('').split('\n');
   out[0] = slot2;
   return out.join('\n');
 }
