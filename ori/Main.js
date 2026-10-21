@@ -2344,6 +2344,7 @@ function checkFullInner_() {
   try { fixOzneSunny2Once_(readRuns_()); } catch (e) { note_('오즈네즈·부유단감 정리 실패: ' + e); }
   try { fixOzneSunny3Once_(readRuns_()); } catch (e) { note_('오즈네즈·부유단감 3차 실패: ' + e); }
   try { fixOzne4Once_(readRuns_()); } catch (e) { note_('오즈네즈 4차 실패: ' + e); }
+  try { fixSunny5Once_(readRuns_()); } catch (e) { note_('부유단감 5차 실패: ' + e); }
   try { fixOptDigitsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 단일옵션 실패: ' + e); }
   const runs = readRuns_(), times = {};
   step_('알림');
@@ -2605,12 +2606,13 @@ function reviewGuideMsg_(rv, ppl, counts, k) {
     lines.push(pretty(t.label) + '(' + today[i] + '명) : ' + who.map(nm).join(' '));
     used.push.apply(used, who);
   });
-  if (!totals.length) { if (queue.length) { lines.push((rv.kind === 'self' || /사진|촬영|컷|포토/.test(rv.guide || '') ? '포토리뷰' : '텍스트리뷰') + '(' + queue.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + queue.map(nm).join(' ')); used.push.apply(used, queue); } }
+  if (!totals.length) { if (queue.length) { lines.push((rv.kind === 'self' || rv.kind === 'photo' || /사진|촬영|컷|포토/.test(rv.guide || '') ? '포토리뷰' : '텍스트리뷰') + '(' + queue.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + queue.map(nm).join(' ')); used.push.apply(used, queue); } }
   else if (queue.length) { lines.push('리뷰 종류 확인 필요(' + queue.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + queue.map(nm).join(' ')); ask.push('리뷰 종류·개수'); used.push.apply(used, queue); }
   if (!prods.length) ask.push('리뷰내용 가이드');
   // 상품이 여럿이면 상품마다 [그 상품 산 사람] + 가이드 (옵션 글에 상품 이름 끝말이 있으면 그 상품)
   const EMO = function (n) { return /양말/.test(n) ? '🧦' : /담요|이불|블랭킷/.test(n) ? '🧶' : '🐥'; };
   const suf2 = function (a) { return String(a).replace(/\s+/g, '').slice(-2); };
+  const mkBody = function (used) {
   const body = [];
   if (multi) {
     prods.forEach(function (p, i) {
@@ -2624,10 +2626,15 @@ function reviewGuideMsg_(rv, ppl, counts, k) {
     if (ls.length > 1 && /해\s*주세요\s*[.!]*$/.test(ls[0]) && ls[0].length <= 30) body.push('하단 내용 참고하셔서 ' + ls.shift().replace(/[.!\s]+$/, '') + '!', '');
     body.push.apply(body, ls); body.push('');
   }
-  const days = rv.days || 7;
+  return body;
+  };
+  const days = 7;   // 맺음말은 모든 플랫폼 '7일이내' (사용자 요청 10/21)
   const foot = ['🐥🐥🐥🐥🐥🐥🐥🐥🐥🐥', '배송완료 후 ' + days + '일이내로 작성해주시되', '몰리지 않게 리뷰 부탁드려요!', '감사합니다 🫶🏻', '🐥🐥🐥🐥🐥🐥🐥🐥🐥🐥'];
-  const msg = lines.length ? ['🐥리뷰내용 가이드🐥'].concat(lines, [''], prods.length ? body : ['(리뷰 가이드: 사장님께 물어보고 채우기)', ''], foot).join('\n') : '';
-  return { msg: msg, ask: ask, photoWait: pw.length > 0 };
+  const guideOf = function (head, people) { return ['🐥리뷰내용 가이드🐥'].concat(head, [''], prods.length ? mkBody(people) : ['(리뷰 가이드: 사장님께 물어보고 채우기)', ''], foot).join('\n'); };
+  const msg = lines.length ? guideOf(lines, used) : '';
+  // 업체 사진을 기다리는 사람 몫도 가이드는 미리 만들어 둠 (사진 전달 뒤 보냄, 사용자 요청 10/21)
+  const pwMsg = pw.length ? guideOf(['포토리뷰(' + pw.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + pw.map(nm).join(' ')], pw) : '';
+  return { msg: msg, ask: ask, photoWait: pw.length > 0, pwMsg: pwMsg };
 }
 // 그날 응답의 수령인(계정) 이름 순서대로 [{nm, n:1}] (한 사람이 두 계정이면 계정마다 따로). 수령인 칸: 수령인·수취인·이름·성함
 function receivers_(r, w) {
@@ -2673,7 +2680,7 @@ function ensureReviewGuideMsgs_(runs) {
       if (!rv) rv = { kind: 'text', mix: '', guide: '' };
       if (rv.kind === 'confirm') return;
       // 포토제공 의뢰: 폼이 차면 그 방에 '⭐️포토대기⭐️' (사진은 받은 뒤 따로, 사용자 요청 10/21)
-      if (rv.kind === 'photo') { props.setProperty(key, '1'); queueMsg_(String(r['카톡방'] || bareTitle_(r['명단 제목'])), '⭐️포토대기⭐️', '방 공지'); return; }
+      const photoAll = rv.kind === 'photo';   // 포토제공: ⭐️포토대기⭐️ + 가이드는 '포토전달대기'로 미리
       props.setProperty(key, '1');
       const old = !!props.getProperty(key0);
       props.setProperty(key0, '1');
@@ -2706,8 +2713,9 @@ function ensureReviewGuideMsgs_(runs) {
         note_('✓ 리뷰 가이드 메시지를 수령인 이름으로 바꿈: ' + room);
         return;
       }
-      if (res.photoWait) queueMsg_(room, '⭐️포토대기⭐️', '방 공지');   // 그날 몫이 업체 사진 대기면 (10/21 실링팬 하루 포토·하루 텍스트)
-      if (res.msg) queueMsg_(room, res.msg, '방 공지');
+      if (res.photoWait) { queueMsg_(room, '⭐️포토대기⭐️', '방 공지'); queueMsg_(room, res.pwMsg, '포토 가이드'); }   // 그날 몫이 업체 사진 대기면 (10/21 실링팬 하루 포토·하루 텍스트)
+      if (photoAll) { queueMsg_(room, '⭐️포토대기⭐️', '방 공지'); if (res.msg) queueMsg_(room, res.msg, '포토 가이드'); }
+      else if (res.msg) queueMsg_(room, res.msg, '방 공지');
       if (res.ask.length) queueMsg_('사장님', '[' + room + '] 의뢰서에 ' + res.ask.join(', ') + '이(가) 없어요. 사장님께 물어보고 리뷰 가이드 공지를 고쳐서 보내기', '할 일');
       note_('✓ 리뷰 가이드 메시지 넣음: ' + room + (res.ask.length ? ' (사장님께 물어볼 것: ' + res.ask.join(', ') + ')' : ''));
     });
@@ -2933,7 +2941,8 @@ function queueMsg_(room, msg, kind) {
     // 최신 메시지가 맨 위
     const ob = outboxSheet_();
     ob.insertRowBefore(2);
-    ob.getRange(2, 1, 1, 6).setValues([[Utilities.getUuid().replace(/-/g, '').slice(0, 10), sendDate_(room, msg, kind), kind || '', String(room || ''), String(msg), '대기']]);
+    // 포토 가이드: 보낼 날짜 대신 '포토전달대기' (사진 받은 뒤 보냄, 맨 위에 보이게)
+    ob.getRange(2, 1, 1, 6).setValues([[Utilities.getUuid().replace(/-/g, '').slice(0, 10), kind === '포토 가이드' ? '포토전달대기' : sendDate_(room, msg, kind), kind || '', String(room || ''), String(msg), '대기']]);
     ob.getRange(2, 6).setDataValidation(obCheck_());
     ob.getRange(2, 1, 1, 6).setWrap(false).setVerticalAlignment('middle').setFontWeight('normal').setBackground(null);
     ob.getRange(2, 5).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
@@ -4810,6 +4819,19 @@ function dropSunnyExtraOnce_(runs) {
 const OZ_GUIDE = '기모양말 : 일반 양말보다 훨씬 두껍다 / 왠만한 수면양말급이다 / 기모가 두툼하다 / 발가락까지 따뜻해서 좋다 / 다른양말들하고는 차원이 다르다 / 한켤레 더 줘서 좋다 / 하나 더 사서 동생줬다 / 깔별로 다있어서 좋다 / 귀여운 선물용봉투까지 센스있다 / 일단 발목이 확 조이지않아서 편하다 / 돌돌 말려 내려가지않아서 좋다\n' +
   '무릎담요 : 운전할때 무릎 덮으려고 샀는데 따뜻하다 / 속 안감이 부들부들하다 / 묶을필요없이 똑딱이 단추있어서 편하다 / 똑딱이가 단단해서 잘 안풀린다 / 등부터 어깨 목까지 다 따숩다 / 회사일할때 허리 감싸고 있으니 다리까지 따셔서 좋다 / 점심시간에 잘때 이불처럼 덮기 좋다 / 캠핑갈때 챙겨가니까 딱이다 / 옆으로 길어서 뭐 어디둘러도 거의 다 덮힌다';
 // (한 번, 10/21 4차) 오즈네즈 리뷰 가이드를 새 모양(🐥, 상품별 [이름] + 줄마다)으로 다시: 안 보낸 옛 가이드 지우고 다시 넣음
+// (한 번, 10/21 5차) 부유단감: ⭐️포토대기⭐️만 들어갔던 것 → 가이드도 '포토전달대기'로 (안 보낸 포토대기는 지우고 다시)
+function fixSunny5Once_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('SUNNY5_V1')) return;
+  props.setProperty('SUNNY5_V1', '1');
+  const sunny = runs.filter(function (x) { return /부유단감/.test(String(x['명단 제목'])); });
+  const rooms = {}; sunny.forEach(function (r) { rooms[String(r['카톡방'] || bareTitle_(r['명단 제목']))] = 1; });
+  try { const ob = outboxSheet_(), last = ob.getLastRow(); if (last >= 2) { const v = ob.getRange(2, 1, last - 1, 6).getValues(); for (let i = v.length - 1; i >= 0; i--) if (v[i][5] !== '보냄' && rooms[String(v[i][3])] && /^⭐️포토대기⭐️/.test(String(v[i][4]))) ob.deleteRow(i + 2); } } catch (e) {}
+  sunny.forEach(function (r) {
+    props.deleteProperty('RVMSG2_' + String(r['명단 제목']).replace(/\s+/g, ''));
+    if (r['진행일'] instanceof Date) props.deleteProperty('RVMSGD_' + r['시트ID'] + '_' + Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd'));
+  });
+}
 function fixOzne4Once_(runs) {
   const props = PropertiesService.getScriptProperties();
   if (props.getProperty('OZNE4_V1')) return;
