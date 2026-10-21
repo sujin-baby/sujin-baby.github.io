@@ -1,4 +1,4 @@
-/* 올리브영·토스: 생성기 북마크와 같은 코드 (생성기 bm-src에서 복사) */
+/* 올리브영·토스 + 휴대폰 북마크: 생성기 북마크와 같은 코드 (생성기 bm-src에서 복사) */
 (async () => {
   const L = location;
   /* 고른 옵션: '색상 × 수량' 같은 이름표 바로 옆 값 (콜론은 화면 꾸밈이라 글에 없을 때가 있음). 없으면 단일옵션 */
@@ -160,7 +160,14 @@
         show([q ? "찾은 키워드 : " + q.trim() : "", gg ? "필터 : " + gg : "", sim ? "주의 : 비슷한 상품 많음" : "", (mobN ? "모바일 위치 : " : "PC 위치 : ") + pos].filter(Boolean).join("\n"), "찾았어요 (분홍 테두리). 복사해서 생성기 '상품 정보 붙여넣기' 칸에." + (f.how === "상품명" ? " 상품명으로 찾음(스토어 이름은 화면에 없었음)." : ""));
       } else {
         const ks = String(T.kw || "").split("|").filter(Boolean);
-        show("이 화면에는 없어요", "검색어 '" + q + "'" + (filt ? ", " + filt : "") + (mobN ? "" : ", " + pg + "페이지") + ", 상품 " + f.n + "개 확인" + (f.ad ? " (광고 자리에만 있어요)" : "") + ".\n" + (mobN ? "" : "다음 페이지를 누르고 북마크를 다시 눌러 주세요. 5페이지까지 없으면 ") + (T.pr ? "가격 직접입력에 " + won(T.pr) + " ~ " + won(T.pr) + " 넣고 검색 → 북마크, " : "") + (ks.length > 1 ? "그다음 키워드: " + ks.slice(1).join(" → ") : ""));
+        const nb = show("이 화면에는 없어요", "검색어 '" + q + "'" + (filt ? ", " + filt : "") + (mobN ? "" : ", " + pg + "페이지") + ", 상품 " + f.n + "개 확인" + (f.ad ? " (광고 자리에만 있어요)" : "") + ".\n" + (mobN ? "" : "다음 페이지를 누르고 북마크를 다시 눌러 주세요. ") + (ks.length > 1 ? "그다음 키워드: " + ks.slice(1).join(" → ") : ""));
+        /* 가격 필터가 아직이면 단추 하나로 가격 넣은 검색 화면을 엶 (모바일은 가격 직접입력이 번거로워서, 10/21 실링팬) → 열리면 북마크 한 번 더 */
+        if (T.pr && !filt) {
+          const u = new URL(L.href); u.searchParams.set("minPrice", T.pr); u.searchParams.set("maxPrice", T.pr); u.searchParams.delete("pagingIndex");
+          const go = document.createElement("a"); go.href = u.href; go.textContent = "가격 " + won(T.pr) + "원 넣고 다시 검색 (열리면 북마크 한 번 더)";
+          go.style.cssText = "display:block;margin-top:8px;padding:10px;border-radius:6px;background:#03c75a;color:#fff;text-align:center;font-weight:700;text-decoration:none";
+          nb.appendChild(go);
+        }
       }
       return;
     }
