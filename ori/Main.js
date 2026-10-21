@@ -821,7 +821,6 @@ function adoptOrphanForms_(runs) {
       SpreadsheetApp.flush();
       const ok = 'ORPHANS_' + sid, list = String(props.getProperty(ok) || '').split(',').filter(Boolean);
       if (list.indexOf(fid) === -1) { list.push(fid); props.setProperty(ok, list.join(',')); }
-      try { if (hit.r['마감 시각']) form.setAcceptingResponses(false); } catch (e) {}
       note_('✓ 옛 폼 \'' + form.getTitle() + '\' 응답 ' + cnt + '개를 ' + bareTitle_(hit.r['명단 제목']) + ' 명단 시트로 가져옴');
       MailApp.sendEmail(me, '[체험단] 옛 폼 응답을 새 명단 시트로 가져왔어요: ' + bareTitle_(hit.r['명단 제목']),
         '카톡방에 옛 공지(옛 폼 링크)가 나가 있었던 것 같아요.\n옛 폼 \'' + form.getTitle() + '\'에 들어온 응답 ' + cnt + '개를 ' + bareTitle_(hit.r['명단 제목']) + ' 명단 시트로 연결했어요. 앞으로 옛 링크로 들어오는 응답도 이 명단 시트에 들어가고, 명단이 다 차면 같이 닫혀요.\n카톡방 공지는 새 공지(새 폼 링크)로 바꿔 두는 게 좋아요.');
@@ -2281,6 +2280,7 @@ function ensureMidnightTrigger_() {
 // 지금 받는 진행이 없는 폼은 닫아 둠 (같은 폼을 쓰는 다음 진행은 그 진행일 0시에 다시 열림)
 //  받는 진행 = 기간(진행일 0시 ~ 같은 명단 다음 진행일 0시) 안이고 아직 마감 안 된 것
 function closeIdleForms_(runs, msgs) {
+  return;   // 폼 자동으로 닫기 안 함 (사용자 요청 10/21). 초과 응답은 한눈에 '확인 필요' 칸에 표시
   const forms = {}, now = Date.now(), live = {};
   runs.forEach(function (r) { if (r['진행 상태'] !== '종료' && r['폼ID']) (forms[r['폼ID']] = forms[r['폼ID']] || []).push(r); });
   // 받는 중인 진행의 폼 + 그 진행 공지에 들어간 폼은 열어 둠
@@ -2330,6 +2330,7 @@ function checkFullInner_() {
   try { ensureMidnightTrigger_(); } catch (e) { note_('0시 확인 예약 실패: ' + e); }
   step_('공지 모양');
   try { fixStyleOnce_(); } catch (e) { note_('공지 모양 정리 실패: ' + e); }
+  try { reopenAndSunnyOnce_(readRuns_()); } catch (e) { note_('폼 다시 열기 실패: ' + e); }
   try { fixOzneOnce_(readRuns_()); } catch (e) { note_('오즈네즈 폼 제목 실패: ' + e); }
   try { fixOptDigitsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 단일옵션 실패: ' + e); }
   const runs = readRuns_(), times = {};
@@ -2468,10 +2469,10 @@ function checkFullInner_() {
         if (sheetN !== n || listN !== n) errs[r['명단 제목']] = '응답 수가 안 맞아요: 폼 ' + n + ' / 응답 탭 ' + sheetN + ' / 합본 ' + listN + (lt ? ' (합본 A3: ' + String(lt.getRange('A3').getFormula()).slice(0, 60) + ')' : ' (합본 탭 없음)');
       } catch (e) { if (!e || !e.quiet) errs[r['명단 제목']] = '응답 수 확인 실패: ' + (e && e.message); }
     }
+    // 목표보다 많이 들어오면 한눈에 '확인 필요' 칸에만 표시 (폼은 안 닫음, 사용자 요청 10/21)
+    if (r['목표인원'] && n > Number(r['목표인원'])) errs[r['명단 제목']] = (errs[r['명단 제목']] ? errs[r['명단 제목']] + ' / ' : '') + '초과 ' + (n - Number(r['목표인원'])) + '명 (목표 ' + r['목표인원'] + ', 받은 ' + n + ')';
     if (!r['목표인원'] || r['마감 시각'] || n < Number(r['목표인원'])) return;
-    form.setAcceptingResponses(false);
-    // 옛 공지 링크로 받던 폼(가져온 폼)도 같이 닫음
-    String(props.getProperty('ORPHANS_' + r['시트ID']) || '').split(',').filter(Boolean).forEach(function (fid) { try { FormApp.openById(fid).setAcceptingResponses(false); } catch (e) {} });
+    // 폼은 안 닫음 (사용자 요청 10/21) → 인원이 차면 마감 시각만 적고 명단·리뷰 가이드 메시지
     setRun_(r.row, '마감 시각', new Date());
     changed = true;
     const listMsg = queueListMsgs_(r);
@@ -4707,6 +4708,28 @@ function noticeStyle_(text, fruit) {
 const FORM_LINK_RE = /https?:\/\/(?:forms\.gle\/[\w-]+|docs\.google\.com\/forms\/[^\s]+)/g;
 // (한 번, 10/20) 이미 만든 폼의 옵션 보기가 '1 (21,800원)'처럼 숫자만이면 '단일옵션 (21,800원)'으로 (최근 7일 진행)
 // (한 번, 10/21) 오즈네즈 폼 제목 '# 실 발목무압박기모양말외' → '#10.21 실 오즈네즈 양말 담요' (사용자 요청)
+// (한 번, 10/21) 자동으로 닫았던 폼 다시 열기 + 토스 부유단감 이름을 '#택10.21 써니마켓 부유단감 5'로 (사용자 요청)
+function reopenAndSunnyOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('REOPEN_SUNNY_V1')) return;
+  props.setProperty('REOPEN_SUNNY_V1', '1');
+  const seen = {};
+  runs.forEach(function (r) {
+    const fid = String(r['폼ID'] || '');
+    if (!fid || seen[fid] || r['진행 상태'] === '종료' || !(r['진행일'] instanceof Date) || dayStart_(r['진행일']) < today_().getTime()) return;
+    seen[fid] = 1;
+    try { const f = FormApp.openById(fid); if (!f.isAcceptingResponses()) { f.setAcceptingResponses(true); note_('✓ 폼 다시 열음: ' + bareTitle_(r['명단 제목'])); } } catch (e) {}
+  });
+  const r = runs.filter(function (x) { return /부유단감/.test(String(x['명단 제목'])); }).pop();
+  if (!r) return;
+  const day = new Date(2026, 9, 21);
+  if (!(r['진행일'] instanceof Date) || dayStart_(r['진행일']) !== day.getTime()) setRun_(r.row, '진행일', day);
+  setRun_(r.row, '업체', '써니마켓');
+  renameRun_(r, '#택10.21 써니마켓 부유단감 5');
+  try { if (r['폼ID']) { const f = FormApp.openById(r['폼ID']); f.setTitle('#택10.21 써니마켓 부유단감'); f.setAcceptingResponses(true); } } catch (e) { note_('부유단감 폼 이름 실패: ' + e); }
+  try { if (r['시트ID']) SpreadsheetApp.openById(r['시트ID']).rename('#택10.21 써니마켓 부유단감'); } catch (e) { note_('부유단감 시트 이름 실패: ' + e); }
+  note_('✓ 부유단감 → #택10.21 써니마켓 부유단감 5');
+}
 function fixOzneOnce_(runs) {
   const props = PropertiesService.getScriptProperties();
   if (props.getProperty('OZNE_TITLE_V1')) return;
