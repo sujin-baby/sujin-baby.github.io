@@ -1999,7 +1999,8 @@ function parseAssign_(text, choices) {
   text = String(text || '').replace(/\[([^\]\n]{1,20})\]/g, function (m, g) { return g.trim().replace(/\s+/g, '\u2060'); });
   const k = function (x) { return String(x || '').toLowerCase().replace(/[\s\u2060]+/g, ''); };
   const bare = function (c) { return k(String(c).replace(/\s*\([\d,\s]+원\)\s*$/, '')); };
-  const blocks = String(text || '').split(/\n-{5,}\s*\n?/);
+  // 상품 구분선: ---- 또는 ———— (카톡에서 긴 줄로 바뀜, 10/21 오즈네즈)
+  const blocks = String(text || '').split(/\n\s*[-—─_]{5,}\s*\n?/);
   const multi = noticeProducts_(text).length > 1 || blocks.length > 1;
   const junk = /http|★|☆|▶|▼|※|🐥|[:!?]|\d\s*원|\d{1,3},\d{3}|구매|리뷰|링크|가격|배송|검색|사업자|입금|참고|안내/;
   const rows = [], at = {}, priceMemo = {};
@@ -2087,6 +2088,18 @@ function parseAssign_(text, choices) {
       const m = t.match(/^(.*?)\(?\s*(\d+)\s*명\s*\)?(.*)$/);
       if (m) {
         const opt = m[1].replace(/^\d+\)\s*/, '').replace(/^🐥\s*옵션\s*[:：]?\s*/, '').trim();
+        // '1) 2명 - 임수진 이혜미(타)': 옵션이 하나인 상품은 머리줄에 이름 (옵션 줄에 (N명)이 없을 때만)
+        if (!opt && /^\d+\)/.test(t) && m[3].replace(/^[\s\-–—:]+/, '').trim()) {
+          const oi = lines.findIndex(function (l) { return /🐥\s*옵션\s*[:：]/.test(l); });
+          const ol = oi >= 0 ? lines[oi] : '';
+          if (ol && !/\(\s*\d*\s*명\s*\)/.test(ol)) {
+            const o2 = ol.replace(/^.*?옵션\s*[:：]\s*/, '').trim(), label2 = [prod, o2].filter(Boolean).join(' ');
+            add(m[3].replace(/^[\s\-–—:]+/, ''), label2, toChoice(label2, o2));
+            const pr2 = priceOf(o2, oi);
+            rows.forEach(function (x) { if (x[1] === label2 && !x[4]) x[4] = pr2; });
+          }
+          cur = null; return;
+        }
         if (!opt || /가격|원$/.test(opt)) { cur = null; return; }
         const label = [prod, opt].filter(Boolean).join(' ');
         cur = { label: label, choice: toChoice(label, opt) };
@@ -2332,7 +2345,7 @@ function checkFullInner_() {
   // 새로 만든 진행이 한눈에 탭에 아직 없으면 먼저 다시 그림 (맨 끝 '한눈에' 단계까지 5분 넘게 걸려서, 10/20)
   try {
     const shown = JSON.parse(PropertiesService.getScriptProperties().getProperty('DASH_TITLES') || '[]');
-    if (readRuns_().some(function (r) { return r['진행 상태'] !== '종료' && r['시트ID'] && shown.indexOf(bareTitle_(r['명단 제목'])) === -1; })) { step_('한눈에(새 진행)'); buildDashboard_(false); }
+    if (readRuns_().some(function (r) { return r['진행 상태'] !== '종료' && r['시트ID'] && !dashHidden_(r) && shown.indexOf(bareTitle_(r['명단 제목'])) === -1; })) { step_('한눈에(새 진행)'); buildDashboard_(false); }
   } catch (e) { note_('한눈에 탭(새 진행) 실패: ' + e); }
   step_('보낼메시지, 폼 닫기');
   try { tidyOutbox_(); } catch (e) { note_('보낼메시지 정리 실패: ' + e); }
@@ -2347,6 +2360,7 @@ function checkFullInner_() {
   try { fixOzneSunny3Once_(readRuns_()); } catch (e) { note_('오즈네즈·부유단감 3차 실패: ' + e); }
   try { fixOzne4Once_(readRuns_()); } catch (e) { note_('오즈네즈 4차 실패: ' + e); }
   try { fixSunny5Once_(readRuns_()); } catch (e) { note_('부유단감 5차 실패: ' + e); }
+  try { fixPlatOnce_(readRuns_()); } catch (e) { note_('플랫폼 바로잡기 실패: ' + e); }
   try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
   try { fixOzneDay2Once_(readRuns_()); } catch (e) { note_('10.22 오즈네즈 공지 실패: ' + e); }
   try { fixOptDigitsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 단일옵션 실패: ' + e); }
@@ -4039,7 +4053,10 @@ function ensureEditTab_() {
     sh.setColumnWidth(5, 220);
   }
   ensureDupControl_(sh);
-  const titles = readRuns_().filter(function (r) { return r['진행 상태'] !== '종료' && r['시트ID']; }).map(function (r) { return String(r['명단 제목']); }).reverse();
+  // 어제 진행부터 앞으로 진행만, 날짜순 (사용자 요청 10/21)
+  const yd = today_().getTime() - 86400000;
+  const titles = readRuns_().filter(function (r) { return r['진행 상태'] !== '종료' && r['시트ID'] && r['진행일'] instanceof Date && dayStart_(r['진행일']) >= yd; })
+    .sort(function (a, b) { return (a['진행일'] - b['진행일']) || (a.row - b.row); }).map(function (r) { return String(r['명단 제목']); });
   sh.getRange('B1').setDataValidation(titles.length ? SpreadsheetApp.newDataValidation().requireValueInList(titles, true).setAllowInvalid(true).build() : null);
   const has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'onAdminEdit'; });
   if (!has) ScriptApp.newTrigger('onAdminEdit').forSpreadsheet(ss).onEdit().create();
@@ -4880,6 +4897,17 @@ function fixOzneDay2Once_(runs) {
   const room = String(r['카톡방'] || bareTitle_(r['명단 제목']));
   try { const ob = outboxSheet_(), last = ob.getLastRow(); if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) { if (String(v[3]) === room && v[5] !== '보냄' && /양식 작성 폼/.test(String(v[4]))) obSet_(ob, v[0], 5, fix(v[4])); }); } catch (e) { note_('10.22 오즈네즈 공지 고치기 실패: ' + e); }
   note_('✓ 10.22 오즈네즈 공지: 양말 2명, 담요 3명(브라운·블랙·민트 1명씩)으로 고침 (폼 설명은 그대로라 공지만 보세요)');
+}
+// (한 번, 10/21) 플랫폼 칸 바로잡기: 부유단감 = 토스, 속눈썹영양제 = 올리브영 (생성기에 플랫폼이 없던 때 만든 것)
+function fixPlatOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('PLATFIX_V1')) return;
+  props.setProperty('PLATFIX_V1', '1');
+  runs.forEach(function (r) {
+    const t = String(r['명단 제목']);
+    if (/부유단감/.test(t) && r['플랫폼'] !== '토스') setRun_(r.row, '플랫폼', '토스');
+    if (/속눈썹영양제/.test(t) && r['플랫폼'] !== '올리브영') setRun_(r.row, '플랫폼', '올리브영');
+  });
 }
 function fixSunny5Once_(runs) {
   const props = PropertiesService.getScriptProperties();
@@ -6096,6 +6124,26 @@ function putFileChip_(sh, row, col, url) {
 
 const DASH_TAB = '한눈에';
 // 한눈에 '상태' 칸 (진행목록 '진행 상태'는 그대로 둠): 앞으로 = 진행예정, 오늘 받는 중 = 진행중, 오늘 마감했거나 지난 날 = 진행완료 (사용자 요청 10/20)
+// 한눈에 '상품' 칸: 상품 페이지 주소와 플랫폼. 생성기가 넘긴 주소(PURL_)가 없으면 방 공지의 상품번호로 만듦 (예전 진행, 10/21)
+function purlOf_(r, props, obNotices) {
+  let url = String(props.getProperty('PURL_' + r['시트ID']) || '').split('\n')[0];
+  let plat = String(r['플랫폼'] || '').trim();
+  const room = String(r['카톡방'] || bareTitle_(r['명단 제목']));
+  const n = (obNotices || []).filter(function (v) { return String(v[0]) === room; })[0] || (obNotices || []).filter(function (v) { return campKey_(v[0]) === campKey_(room); })[0];
+  const pno = n ? ((String(n[1]).match(/🐥\s*상품번호\s*[:：]\s*([^\n]+)/) || [])[1] || '').trim() : '';
+  if (/^A\d{9,}/.test(pno) && (!plat || plat === '기타')) plat = '올리브영';
+  if (!url && pno) {
+    const id = (pno.match(/A?\d{6,}/) || [''])[0];
+    if (plat === '올리브영') url = 'https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=' + id;
+    else if (plat === '토스') url = 'https://toss.shopping/i/' + id;
+    else if (plat === '네이버') url = 'https://smartstore.naver.com/main/products/' + id;
+    else if (id && (plat === '쿠팡' || / - /.test(pno))) url = 'https://www.coupang.com/vp/products/' + id;
+    if (url) props.setProperty('PURL_' + r['시트ID'], url);
+  }
+  return { url: url, plat: plat };
+}
+// 한눈에 탭에서 빼는 진행: 진행완료이고 진행일이 3일 넘게 지난 것 (쌓이면 느려져서, 사용자 요청 10/21)
+function dashHidden_(r) { return dashStatus_(r) === '진행완료' && r['진행일'] instanceof Date && dayStart_(r['진행일']) < today_().getTime() - 3 * 86400000; }
 function dashStatus_(r) {
   if (!(r['진행일'] instanceof Date)) return r['진행 상태'];
   const d = dayStart_(r['진행일']), t = today_().getTime();
@@ -6103,7 +6151,7 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '21';
+const DASH_VER = '22';
 const DASH_LIST_DAYS = 2;   // 아래 명단 덩어리를 보여 줄 지난 날 수   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
@@ -6125,7 +6173,7 @@ function grantImport_(destId, srcId) {
 
 function buildDashboard_(force) {
   const allRuns = readRuns_();
-  const runs = allRuns.filter(function (r) { return r['진행 상태'] !== '종료' && r['시트ID']; })
+  const runs = allRuns.filter(function (r) { return r['진행 상태'] !== '종료' && r['시트ID'] && !dashHidden_(r); })
     // 오늘 할 것 맨 위 → 내일, 모레… (가까운 날부터) → 지난 진행(최근 것부터) (사용자 요청 10/19, 보낼메시지와 같게)
     .sort(function (a, b) {
       const t0 = dayStart_(new Date()), key = function (r) { const d = r['진행일'] instanceof Date ? Math.round((dayStart_(r['진행일']) - t0) / 86400000) : -9999; return d >= 0 ? [d === 0 ? 0 : 1, d] : [2, -d]; };
@@ -6215,6 +6263,7 @@ function buildDashboard_(force) {
   // D = 의뢰서 총 구매 건수, E = 그날 목표 (그날 하루 받을 인원)
   // K = 상품 페이지 링크(글자는 플랫폼: 쿠팡·네이버·올리브영·토스 …). 택배시트 링크는 아래 줄 월급시트 옆에 하나만 (사용자 요청 10/21)
   const head = ['진행일', '방제', '상태', '의뢰 총건수', '그날 목표', '신청', '남은', '마감 시각', '명단', '폼', '상품', '틀린 옵션', '택배 옮김', '확인 필요'];
+  let obNotices = []; try { const ob0 = outboxSheet_(), ol0 = ob0.getLastRow(); if (ol0 >= 2) obNotices = ob0.getRange(2, 4, ol0 - 1, 2).getValues().filter(function (v) { return /🐥\s*상품번호/.test(String(v[1])); }); } catch (e) {}
   // 칸마다 남아 있던 메모(clear로는 안 지워져서 줄이 바뀌면 엉뚱한 칸에 보임)는 다 지움
   try { sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).clearNote(); } catch (e) {}
   let errs = {};
@@ -6265,7 +6314,7 @@ function buildDashboard_(force) {
     sh.getRange(rr, 8).setValue(r['마감 시각']);
     sh.getRange(rr, 9).setFormula('=HYPERLINK(' + q(x.url) + ',"명단")');
     if (r['폼 링크']) sh.getRange(rr, 10).setFormula('=HYPERLINK(' + q(r['폼 링크']) + ',"폼")');
-    { const pu = String(props.getProperty('PURL_' + r['시트ID']) || '').split('\n')[0], pl = String(r['플랫폼'] || '');
+    { const pp = purlOf_(r, props, obNotices), pu = pp.url, pl = pp.plat;
       if (pu) sh.getRange(rr, 11).setFormula('=HYPERLINK(' + q(pu) + ',' + q(pl || '상품') + ')'); else if (pl) sh.getRange(rr, 11).setValue(pl); }
     // 택대면 '택배 옮김' 체크 (명단을 택배시트에 옮겨 적었으면 체크, 2시 전까지). 체크하면 진행목록에도 저장
     if (r['택대'] === 'Y') sh.getRange(rr, 13).insertCheckboxes().setValue(r['택배 옮김'] === true);
@@ -6371,10 +6420,17 @@ function buildDashboard_(force) {
         .setBackground('#f9cb9c').setFontColor('#7a3a00').setRanges([colRange(7)]).build());
     }
   });
-  [[1, 95], [2, 240], [3, 170], [4, 120], [5, 220], [6, 100], [7, 100]].forEach(function (w) { sh.setColumnWidth(w[0], w[1]); });
+  // 상태·숫자 칸은 좁게 (아래 명단 덩어리 C·D·F·G 칸은 글자가 잘리면 칸을 늘려 보세요, 사용자 요청 10/21)
+  [[1, 95], [2, 240], [3, 80], [4, 70], [5, 220], [6, 55], [7, 55]].forEach(function (w) { sh.setColumnWidth(w[0], w[1]); });
   if (runs.length) {
     // 남은이 0이 아니면 빨간 굵은 글씨
     rules.unshift(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER(G2),G2<>0)').setFontColor('#d00000').setBold(true).setRanges([sh.getRange(2, 7, runs.length, 1)]).build());
+    // 빨간 글씨인 '남은' 칸도 오늘·다음 진행일 색은 칠함 (규칙은 먼저 맞는 하나만 적용돼서 합친 규칙을 앞에, 10/21)
+    const gR = sh.getRange(2, 7, runs.length, 1), hs = '{' + holidaySerials_().join(',') + '}';
+    rules.unshift(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER(G2),G2<>0,INT($A2)=WORKDAY(TODAY(),1,' + hs + '))').setFontColor('#d00000').setBold(true).setBackground('#cfe2f3').setRanges([gR]).build());
+    rules.unshift(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER(G2),G2<>0,INT($A2)=TODAY())').setFontColor('#d00000').setBold(true).setBackground('#d9ead3').setRanges([gR]).build());
+    // 상태가 진행완료면 회색
+    rules.unshift(SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('진행완료').setBackground('#d9d9d9').setFontColor('#666666').setRanges([sh.getRange(2, 3, runs.length, 1)]).build());
     rules.push(SpreadsheetApp.newConditionalFormatRule().whenNumberGreaterThan(0).setBackground('#ea9999').setFontColor('#7f0000').setBold(true).setRanges([sh.getRange(2, 12, runs.length, 1)]).build());
     rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISLOGICAL(M2),M2=FALSE)').setBackground('#ea9999').setRanges([sh.getRange(2, 13, runs.length, 1)]).build());
     // 오늘 진행 = 연두, 다음 진행일(금요일이면 월요일, 공휴일도 건너뜀) = 하늘색. 수식이라 날이 바뀌면 저절로 바뀜 (사용자 요청 10/20). 위 빨간 표시가 먼저
@@ -6395,7 +6451,7 @@ function buildDashboard_(force) {
     note_('한눈에 색 규칙 공휴일 빼고 다시: ' + e.message);
     sh.setConditionalFormatRules(rules.map(function (r) {
       const c = r.getBooleanCondition(), f = c ? String((c.getCriteriaValues() || [])[0] || '') : '';
-      return /WORKDAY\(TODAY\(\),1,\{/.test(f) ? SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=INT($A2)=WORKDAY(TODAY(),1)').setBackground('#cfe2f3').setRanges(r.getRanges()).build() : r;
+      return /WORKDAY\(TODAY\(\),1,\{/.test(f) ? SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(f.replace(/,\{[^}]*\}/, '')).setBackground('#cfe2f3').setRanges(r.getRanges()).build() : r;
     }));
   }
   props.setProperty('DASH_SIG', sig);
