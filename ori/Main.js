@@ -2525,6 +2525,12 @@ function checkFullInner_() {
     } catch (e) {}
     try { if (photoLate_(r, props)) errs[r['명단 제목']] = (errs[r['명단 제목']] ? errs[r['명단 제목']] + ' / ' : '') + '📷 업체 포토 아직 (사장님께 요청)'; } catch (e) {}
     if (!r['목표인원'] || r['마감 시각'] || n < Number(r['목표인원'])) return;
+    // 명단 시트(합본)에 실제로 다 들어왔을 때만 명단 전달 (폼→시트가 늦게 옮겨질 때 4명인데 명단 보내라고 뜬 문제, 10/22)
+    try {
+      const lt2 = SpreadsheetApp.openById(r['시트ID']).getSheetByName(MERGE_TAB);
+      const got2 = lt2 && lt2.getLastRow() >= 3 ? lt2.getRange(3, 1, lt2.getLastRow() - 2, 1).getValues().filter(function (x) { const t = tsMs_(x[0]); return isFinite(t) && t >= w.from && t < w.to; }).length : 0;
+      if (got2 < Number(r['목표인원'])) { try { syncList_(SpreadsheetApp.openById(r['시트ID'])); } catch (e) {} try { soonCheck_(); } catch (e) {} return; }
+    } catch (e) { return; }
     // 폼은 안 닫음 (사용자 요청 10/21) → 인원이 차면 마감 시각만 적고 명단·리뷰 가이드 메시지
     setRun_(r.row, '마감 시각', new Date());
     changed = true;
@@ -4230,7 +4236,13 @@ function onRunSubmit_(e) {
       if (r['목표인원'] && !r['마감 시각'] && n >= Number(r['목표인원'])) full = true;
     });
     // 명단 탭(값)에 새 응답 줄을 바로 (15분 기다리지 않게, 사용자 요청 10/20). 몇 초면 됨
-    Object.keys(sids).forEach(function (sid) { try { syncList_(SpreadsheetApp.openById(sid)); } catch (err) {} });
+    // 폼 → 응답 탭 옮겨지는 게 몇 초 늦을 수 있어서, 응답 탭 수가 폼 수만큼 될 때까지 최대 30초 기다렸다 명단 탭에 (10/22)
+    Object.keys(sids).forEach(function (sid) {
+      for (let k = 0; k < 7; k++) {
+        try { if (allRespTimes_(sid).length >= ft.length || k === 6) { syncList_(SpreadsheetApp.openById(sid)); break; } } catch (err) { break; }
+        Utilities.sleep(5000);
+      }
+    });
     // 월급시트·한눈에 탭은 오래 걸려서(합쳐 몇 분) 응답마다 하면 6분 제한에 걸려 한눈에 탭이 비워진 채 멈출 수 있음 (10/20)
     //  → 1분 뒤 자동 확인 한 번이 둘 다 갱신 (응답이 몰려도 한 번만)
     try { soonCheck_(); } catch (err) {}
