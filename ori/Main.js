@@ -838,6 +838,35 @@ function adoptOrphanForms_(runs) {
   }
 }
 
+// (10/22 한 번만) 양모볼 폼: '목보호대 소프트그레이 L 남성용, M 여성용 리뷰어 선택' → 옵션 2개로, '리뷰어 선택' 빼기 (폼 + 안 보낸 방 공지)
+function fixNeckOptOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('NECKOPT_V1')) return;
+  props.setProperty('NECKOPT_V1', '1');
+  const bad = /리뷰어\s*선택/;
+  runs.filter(function (r) { return r['폼ID'] && /양모볼/.test(String(r['명단 제목'])) && r['진행 상태'] !== '종료'; }).forEach(function (r) {
+    try {
+      FormApp.openById(r['폼ID']).getItems(FormApp.ItemType.MULTIPLE_CHOICE).forEach(function (it) {
+        const mc = it.asMultipleChoiceItem(), ch = mc.getChoices().map(function (c) { return c.getValue(); });
+        if (!ch.some(function (c) { return bad.test(c); })) return;
+        const out = [];
+        ch.forEach(function (c) {
+          if (!bad.test(c)) { out.push(c); return; }
+          const pr = (c.match(/\s*\([0-9,]+\s*원\)\s*$/) || [''])[0];
+          out.push('목보호대 소프트그레이 L 남성용' + pr, '목보호대 소프트그레이 M 여성용' + pr);
+        });
+        mc.setChoiceValues(out);
+        note_('✓ 양모볼 폼 옵션 나눔: ' + out.join(' / '));
+      });
+    } catch (e) { note_('양모볼 폼 옵션 실패: ' + e); }
+  });
+  try {
+    const ob = outboxSheet_(), ol = ob.getLastRow();
+    if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
+      if (v[5] !== '보냄' && /소프트그레이 L 남성용, M 여성용 리뷰어 선택/.test(String(v[4]))) obSet_(ob, v[0], 5, String(v[4]).split('소프트그레이 L 남성용, M 여성용 리뷰어 선택').join('소프트그레이 L 남성용 / 소프트그레이 M 여성용'));
+    });
+  } catch (e) {}
+}
 // (10/22 한 번만) 과일 방제에 업체명: '#택10.22 대봉감 30' → '#택10.22 노티아 대봉감 30'. 진행목록·배정·보낼메시지·월급시트·일정·명단 시트·폼·폴더 이름. 카톡방은 사용자가 바꿈
 function fixDaebongOnce_(runs) {
   const props = PropertiesService.getScriptProperties();
@@ -2393,6 +2422,7 @@ function checkFullInner_() {
   try { fixPlatOnce_(readRuns_()); } catch (e) { note_('플랫폼 바로잡기 실패: ' + e); }
   try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
   try { fixOzneDay2Once_(readRuns_()); } catch (e) { note_('10.22 오즈네즈 공지 실패: ' + e); }
+  try { fixNeckOptOnce_(readRuns_()); } catch (e) { note_('목보호대 옵션 실패: ' + e); }
   try { fixDaebongOnce_(readRuns_()); } catch (e) { note_('대봉감 이름 실패: ' + e); }
   try { fixOmegaOnce_(readRuns_()); } catch (e) { note_('오메가3 날짜 실패: ' + e); }
   try { fixOptDigitsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 단일옵션 실패: ' + e); }
