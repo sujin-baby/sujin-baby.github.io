@@ -838,6 +838,29 @@ function adoptOrphanForms_(runs) {
   }
 }
 
+// (10/22 한 번만) 과일 방제에 업체명: '#택10.22 대봉감 30' → '#택10.22 노티아 대봉감 30'. 진행목록·배정·보낼메시지·월급시트·일정·명단 시트·폼·폴더 이름. 카톡방은 사용자가 바꿈
+function fixDaebongOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('DAEBONG_V1')) return;
+  props.setProperty('DAEBONG_V1', '1');
+  const fix = function (t) { return String(t).replace(/(^|\s)대봉감/, '$1노티아 대봉감'); }, done = {};
+  runs.filter(function (r) { const b = bareTitle_(r['명단 제목']); return r['진행 상태'] !== '종료' && /대봉감/.test(b) && !/노티아/.test(b); }).forEach(function (r) {
+    const nt = fix(bareTitle_(r['명단 제목']));
+    try { renameRun_(r, nt); note_('✓ 이름 바꿈: ' + nt); } catch (e) { note_('대봉감 이름 실패: ' + e); }
+    const nm = sheetName_(nt);
+    const ren = function (get, set) { try { if (String(get()) !== nm) set(nm); } catch (e) {} };
+    const sid = String(r['시트ID'] || ''), fid = String(r['폼ID'] || ''), fo = (String(r['폴더 링크'] || '').match(/[-\w]{25,}/) || [])[0];
+    if (sid && !done[sid]) { done[sid] = 1; const f = DriveApp.getFileById(sid); ren(function () { return f.getName(); }, function (n) { f.setName(n); }); }
+    if (fid && !done[fid]) { done[fid] = 1; const fm = FormApp.openById(fid), ff = DriveApp.getFileById(fid); ren(function () { return fm.getTitle(); }, function (n) { fm.setTitle(n); }); ren(function () { return ff.getName(); }, function (n) { ff.setName(n); }); }
+    if (fo && !done[fo]) { done[fo] = 1; const d = DriveApp.getFolderById(fo); ren(function () { return d.getName(); }, function (n) { d.setName(n); }); }
+  });
+  try {
+    const ps = planSheet_(), pl = ps.getLastRow();
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, 6).getValues().forEach(function (v, i) {
+      if (/대봉감/.test(String(v[5])) && !/노티아/.test(String(v[5]))) ps.getRange(i + 2, 2, 1, 5).setValues([[fix(v[1]), v[2], v[3], fix(v[4]), fix(v[5])]]);
+    });
+  } catch (e) {}
+}
 // (10/19 한 번만) 진행 중인 실배송 진행의 이름을 새 모양으로: '#10.19 런치버스 텀블러 실 7' → '#10.19 실 런치버스 텀블러 7'
 //  진행목록 명단 제목·카톡방, 배정 탭, 보낼메시지(대기) 방 이름, 일정 탭(대기), 명단 시트·폼·폴더 이름. 이미 만든 카톡방 이름은 사용자가 바꿈
 function fixSilOnce_(runs) {
@@ -2370,6 +2393,7 @@ function checkFullInner_() {
   try { fixPlatOnce_(readRuns_()); } catch (e) { note_('플랫폼 바로잡기 실패: ' + e); }
   try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
   try { fixOzneDay2Once_(readRuns_()); } catch (e) { note_('10.22 오즈네즈 공지 실패: ' + e); }
+  try { fixDaebongOnce_(readRuns_()); } catch (e) { note_('대봉감 이름 실패: ' + e); }
   try { fixOmegaOnce_(readRuns_()); } catch (e) { note_('오메가3 날짜 실패: ' + e); }
   try { fixOptDigitsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 단일옵션 실패: ' + e); }
   const runs = readRuns_(), times = {};
