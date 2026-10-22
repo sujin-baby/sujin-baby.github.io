@@ -4260,13 +4260,8 @@ function onRunSubmit_(e) {
       if (r['목표인원'] && !r['마감 시각'] && n >= Number(r['목표인원'])) full = true;
     });
     // 명단 탭(값)에 새 응답 줄을 바로 (15분 기다리지 않게, 사용자 요청 10/20). 몇 초면 됨
-    // 폼 → 응답 탭 옮겨지는 게 몇 초 늦을 수 있어서, 응답 탭 수가 폼 수만큼 될 때까지 최대 30초 기다렸다 명단 탭에 (10/22)
-    Object.keys(sids).forEach(function (sid) {
-      for (let k = 0; k < 7; k++) {
-        try { if (allRespTimes_(sid).length >= ft.length || k === 6) { syncList_(SpreadsheetApp.openById(sid)); break; } } catch (err) { break; }
-        Utilities.sleep(5000);
-      }
-    });
+    // 명단 탭에 바로 (기다리지 않음: 10/22 30초 기다리기가 자동 확인을 막아서 뺌)
+    Object.keys(sids).forEach(function (sid) { try { syncList_(SpreadsheetApp.openById(sid)); } catch (err) {} });
     // 월급시트·한눈에 탭은 오래 걸려서(합쳐 몇 분) 응답마다 하면 6분 제한에 걸려 한눈에 탭이 비워진 채 멈출 수 있음 (10/20)
     //  → 1분 뒤 자동 확인 한 번이 둘 다 갱신 (응답이 몰려도 한 번만)
     try { soonCheck_(); } catch (err) {}
