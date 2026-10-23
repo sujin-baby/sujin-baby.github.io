@@ -231,6 +231,65 @@ function moveRunDate_(r, d) {
   return '✓ 진행일 바꿈: ' + done.join(', ');
 }
 
+// 하루 인원 바꾸기 (10/23): from 날짜부터 이 의뢰의 진행(아직 안 끝난 것)·일정(대기)을 하루 n명씩. 총건수에서 앞 날짜 인원을 뺀 만큼만,
+//  남는 일차는 진행 '종료'·일정 '취소', 모자라면 마지막 일정 줄을 복사해 다음 진행일로 추가. 방제 끝 숫자·폼 설명·안 보낸 방 공지 '(N명)'도 같이
+function changeDaily_(anchor, from, n) {
+  const runs = readRuns_(), ck = campKey_(anchor['캠페인'] || anchor['명단 제목']), fd = dayStart_(from);
+  const chain = chainsOf_(runs).filter(function (c) { return c.runs.some(function (x) { return x.row === anchor.row; }); })[0];
+  if (!chain || !chain.total) return '총건수를 몰라서 못 바꿨어요 (진행목록 총건수 칸 확인)';
+  const before = chain.runs.filter(function (x) { return x['진행일'] instanceof Date && dayStart_(x['진행일']) < fd; })
+    .reduce(function (a, x) { return a + (dayStart_(x['진행일']) < today_().getTime() ? (Number(x['인원']) || 0) : (Number(x['목표인원']) || 0)); }, 0);
+  let left = chain.total - before;
+  const items = chain.runs.filter(function (x) { return x['진행일'] instanceof Date && dayStart_(x['진행일']) >= fd && x['진행 상태'] !== '종료'; })
+    .map(function (x) { return { run: x, d: x['진행일'] }; });
+  const ps = planSheet_(), pl = ps.getLastRow();
+  const prow = pl >= 2 ? ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues() : [];
+  prow.forEach(function (x, i) { if (x[8] === '대기' && campKey_(x[1]) === ck && x[3] instanceof Date && dayStart_(x[3]) >= fd) items.push({ plan: i, x: x, d: x[3] }); });
+  items.sort(function (a, b) { return a.d - b.d; });
+  const cnt = function (t, c) { return String(t).replace(/\d+(\s*(\([^)]*\))?\s*)$/, c + '$1'); };
+  const one = function (t, c) { const m = String(t).match(/\(\s*\d+\s*명\)/g); return m && m.length === 1 ? String(t).replace(/\(\s*\d+\s*명\)/, '(' + c + '명)') : String(t); };
+  const done = [];
+  items.forEach(function (it) {
+    const c = Math.max(0, Math.min(n, left)); left -= c;
+    if (it.run) {
+      const r = it.run, old = bareTitle_(r['명단 제목']);
+      if (c > 0) {
+        if (Number(r['목표인원']) === c && /\d+\s*$/.test(old) && Number(old.match(/(\d+)\s*$/)[1]) === c) return;
+        const room = String(r['카톡방'] || old);
+        renameRun_(r, cnt(old, c)); setRun_(r.row, '목표인원', c);
+        try { if (r['폼ID']) { const f = FormApp.openById(r['폼ID']); f.setDescription(one(f.getDescription(), c)); } } catch (e) {}
+        try { const ob = outboxSheet_(), ol = ob.getLastRow(); if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if ((String(v[3]) === room || String(v[3]) === cnt(old, c)) && v[2] === '방 공지' && v[5] !== '보냄') obSet_(ob, v[0], 5, one(v[4], c)); }); } catch (e) {}
+        done.push(old + ' → ' + cnt(old, c));
+      } else {
+        setRun_(r.row, '진행 상태', '종료');
+        try { if (r['폼ID']) FormApp.openById(r['폼ID']).setAcceptingResponses(false); } catch (e) {}
+        try { const room = String(r['카톡방'] || old), ob = outboxSheet_(), ol = ob.getLastRow(); if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (String(v[3]) === room && v[5] !== '보냄') obSet_(ob, v[0], 6, '취소'); }); } catch (e) {}
+        done.push(old + ' 취소(종료)');
+      }
+    } else {
+      const x = it.x, row = it.plan + 2;
+      if (c > 0) {
+        let cc = []; try { cc = JSON.parse(x[7]); } catch (e) {}
+        cc = (cc || []).map(function (g) { g = (g || []).slice(); g[0] = c; if (g[1] && g[1].length === 1) g[1] = [c]; return g; });
+        ps.getRange(row, 5, 1, 4).setValues([[cnt(x[4], c), cnt(x[5], c), c, JSON.stringify(cc)]]);
+        done.push('(일정) ' + bareTitle_(x[5]) + ' → ' + bareTitle_(cnt(x[5], c)));
+      } else { ps.getRange(row, 9).setValue('취소 (하루 인원 바꿈)'); done.push('(일정) ' + bareTitle_(x[5]) + ' 취소'); }
+    }
+  });
+  // 모자라면 마지막 일정 줄을 복사해서 다음 진행일로
+  const lastPlan = items.filter(function (it) { return it.x; }).pop();
+  let prevD = items.length ? items[items.length - 1].d : from, k0 = lastPlan ? Number(lastPlan.x[2]) : 0, add = 0;
+  while (left > 0 && lastPlan && add < 30) {
+    const c = Math.min(n, left); left -= c; add++;
+    const nd = nextWorkday_(prevD); prevD = nd; k0++;
+    let cc = []; try { cc = JSON.parse(lastPlan.x[7]); } catch (e) {}
+    cc = (cc || []).map(function (g) { g = (g || []).slice(); g[0] = c; if (g[1] && g[1].length === 1) g[1] = [c]; return g; });
+    ps.appendRow([String(lastPlan.x[0]).replace(/-\d+$/, '') + '-' + k0, lastPlan.x[1], k0, nd, cnt(retitleDate_(lastPlan.x[4], nd), c), cnt(retitleDate_(lastPlan.x[5], nd), c), c, JSON.stringify(cc), '대기', lastPlan.x[9]]);
+    done.push('(일정 추가) ' + bareTitle_(cnt(retitleDate_(lastPlan.x[5], nd), c)));
+  }
+  return '✓ 하루 ' + n + '명으로: ' + (done.join(', ') || '바뀐 것 없음') + (left > 0 ? ' / ⚠ ' + left + '건이 남아요 (일정 탭에 줄이 없어서 못 늘림)' : '');
+}
+
 // 스크립트가 방제를 바꿨을 때(인원 줄임, 날짜 옮김) 보낼메시지 '할 일': 카톡방 이름 바꾸기 + (명단을 이미 보냈으면) 오리명단방 명단 메시지 고치기. 그날 할 일
 function renameTodo_(r, oldBare, newBare) {
   if (!oldBare || oldBare === newBare) return;
@@ -838,6 +897,39 @@ function adoptOrphanForms_(runs) {
   }
 }
 
+// (10/23 한 번만) 옛 이름 '#10.22 실 발목무압박기모양말외5' 진행이 진행목록에 남아서 월급시트에 줄이 다시 생김 (같은 날 '#10.22 실 오즈네즈 양말 담요5'가 진짜).
+//  옛 이름 진행만 '종료'(폼·명단 시트는 그대로) + 월급시트 그 줄 지움
+function fixAnkleDupOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('ANKLEDUP_V1')) return;
+  props.setProperty('ANKLEDUP_V1', '1');
+  const md = function (r) { return r['진행일'] instanceof Date ? Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'MMdd') : ''; };
+  const good = runs.filter(function (r) { return /오즈네즈/.test(String(r['명단 제목'])) && r['진행 상태'] !== '종료'; });
+  runs.filter(function (r) { return /발목무압박/.test(String(r['명단 제목'])) && r['진행 상태'] !== '종료'; }).forEach(function (r) {
+    if (!good.some(function (g) { return md(g) === md(r); })) return;
+    setRun_(r.row, '진행 상태', '종료');
+    note_('✓ 옛 이름 진행 종료: ' + bareTitle_(r['명단 제목']));
+  });
+  try {
+    payTabsNow_().forEach(function (sh) {
+      const L = payLayout_(sh); if (!L) return;
+      const last = sh.getLastRow(); if (last <= L.head) return;
+      const v = sh.getRange(L.head + 1, L.name, last - L.head, 1).getValues().map(function (x) { return String(x[0]).replace(/\s+/g, ''); });
+      const has = function (d) { return v.some(function (x) { return x.indexOf(d) >= 0 && /오즈네즈/.test(x); }); };
+      v.map(function (x, i) { return { x: x, i: i }; }).filter(function (o) { const d = (o.x.match(/\d{1,2}\.\d{1,2}/) || [''])[0]; return /발목무압박/.test(o.x) && d && has(d); })
+        .reverse().forEach(function (o) { note_('✓ 월급시트 옛 이름 줄 지움: ' + o.x); sh.deleteRow(L.head + 1 + o.i); });
+    });
+  } catch (e) { note_('월급시트 옛 이름 줄 지우기 실패: ' + e); }
+}
+// (10/23 한 번만) 실링팬: 10/26(월)부터 하루 2명 (사용자 요청)
+function fixCeilingOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('CEIL2_V1')) return;
+  const rs = runs.filter(function (r) { return /실링팬/.test(String(r['명단 제목'])) && r['진행일'] instanceof Date; }).sort(function (a, b) { return a['진행일'] - b['진행일']; });
+  if (!rs.length) return;
+  props.setProperty('CEIL2_V1', '1');
+  note_(changeDaily_(rs[rs.length - 1], new Date(2026, 9, 26), 2));
+}
 // (10/22 한 번만) 양모볼 폼: '목보호대 소프트그레이 L 남성용, M 여성용 리뷰어 선택' → 옵션 2개로, '리뷰어 선택' 빼기 (폼 + 안 보낸 방 공지)
 function fixNeckOptOnce_(runs) {
   const props = PropertiesService.getScriptProperties();
@@ -1347,7 +1439,7 @@ function createRunInner_(d) {
   const fruit0 = d.fruit || (reuse && chainFruit_(reuse));
   const notice = withSlotLine_(String(d.desc || '').split('(구글폼 링크)').join(formUrl), d.slot, fruit0);
   if (notice) form.setDescription(formDesc_(notice));
-  try { fixFormQuestions_(form); } catch (e) { note_('폼 질문 필수/선택 실패: ' + e.message); }
+  try { fixFormQuestions_(form, !!d.realship); } catch (e) { note_('폼 질문 필수/선택 실패: ' + e.message); }
   if (notice && d.room) queueMsg_(d.room, notice, '방 공지');
   // 여러 날 진행이면 다음 일차 계획 저장 (공지는 폼 링크 넣기 전 원본을 템플릿으로)
   if (d.plan) { try { savePlan_(d); } catch (e) { note_('일정 저장 실패: ' + e); } }
@@ -2420,8 +2512,11 @@ function checkFullInner_() {
   try { fixOzAssignOnce_(readRuns_()); } catch (e) { note_('오즈네즈 배정 실패: ' + e); }
   try { fixFormOptsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 확인 실패: ' + e); }
   try { fixPlatOnce_(readRuns_()); } catch (e) { note_('플랫폼 바로잡기 실패: ' + e); }
+  try { ensureRunNotices_(readRuns_()); } catch (e) { note_('방 공지 확인 실패: ' + e); }
   try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
   try { fixOzneDay2Once_(readRuns_()); } catch (e) { note_('10.22 오즈네즈 공지 실패: ' + e); }
+  try { fixAnkleDupOnce_(readRuns_()); } catch (e) { note_('발목무압박 중복 정리 실패: ' + e); }
+  try { fixCeilingOnce_(readRuns_()); } catch (e) { note_('실링팬 하루 인원 실패: ' + e); }
   try { fixNeckOptOnce_(readRuns_()); } catch (e) { note_('목보호대 옵션 실패: ' + e); }
   try { fixDaebongOnce_(readRuns_()); } catch (e) { note_('대봉감 이름 실패: ' + e); }
   try { fixOmegaOnce_(readRuns_()); } catch (e) { note_('오메가3 날짜 실패: ' + e); }
@@ -2524,10 +2619,10 @@ function checkFullInner_() {
         try {
           const f = String(fid) === String(r['폼ID']) ? form : FormApp.openById(fid);
           if (ensureNickQuestion_(f)) note_('✓ ' + bareTitle_(r['명단 제목']) + ' 폼에 닉네임 질문 넣음' + (f === form ? '' : ' (공지 속 다른 폼)'));
-          if (f !== form) fixFormQuestions_(f);
+          if (f !== form) fixFormQuestions_(f, r['실배송'] === 'Y');
         } catch (e) { note_(bareTitle_(r['명단 제목']) + ' 닉네임 질문 실패: ' + e.message); }
       });
-      try { fixFormQuestions_(form); } catch (e) {}
+      try { fixFormQuestions_(form, r['실배송'] === 'Y'); } catch (e) {}
     }
     const w = windowOf_(runs, r);
     if (Date.now() < w.from) return;   // 아직 시작 전인 다음 일차
@@ -2670,6 +2765,17 @@ function ensureListMsgs_(runs) {
 //  리뷰 종류·개수와 가이드는 생성기가 넘긴 RV_<명단시트ID>(의뢰서 전체). 그날 몫은 남은 개수 비율대로. 이름은 배정 탭(공지 이름) 순서, 없으면 폼 카톡 닉네임
 //  가이드나 리뷰 종류가 의뢰서에 없으면 메시지에 표시 + '사장님께 물어보기' 할 일도 넣음. 포토대기(업체 사진)·구확건 의뢰는 리뷰 배정 페이지로
 function reviewGuideMsg_(rv, ppl, counts, k) {
+  // 의뢰서 가이드 칸 정리 (10/23): '별점 13개 사진 7개 텍스트 10개'처럼 리뷰 개수가 가이드 칸에 들어갔으면 개수로 옮기고,
+  //  '없음', '대표님을 믿습니다'처럼 가이드가 아닌 말은 뺌 (가이드 없음 = 사장님께 물어보지 않음)
+  rv = Object.assign({}, rv);
+  const NOG = /^(없음|없어요|없습니다|x|-|무|자율|자유|알아서.*|대표님(을|께)?\s*믿습니다\.?!?|믿습니다\.?)$/i;
+  let noGuide = false;
+  const gl = String(rv.guide || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean).filter(function (x) {
+    if (NOG.test(x.replace(/[.!~\s]+$/, '').trim()) || NOG.test(x)) { noGuide = true; return false; }
+    if (/^((별점|사진|포토|텍스트|글씨|한\s*줄|1줄)\S*\s*\d+\s*(개|건|명)?[\s,/]*)+$/.test(x)) { if (!String(rv.mix || '').trim()) rv.mix = x; return false; }
+    return true;
+  });
+  rv.guide = gl.join('\n');
   const totals = [];
   parseRvMix_(rv.mix || '').forEach(function (p) { p.mix.forEach(function (m) { const t = totals.filter(function (x) { return x.label === m.label; })[0]; if (t) t.n += m.n; else totals.push({ label: m.label, n: m.n }); }); });
   const left = totals.map(function (t) { return t.n; });
@@ -2683,7 +2789,7 @@ function reviewGuideMsg_(rv, ppl, counts, k) {
       today[bi]++; left[bi]--; n--;
     }
   }
-  const pretty = function (l) { return String(l).replace(/포토\s*리뷰\s*\(\s*(1|한)\s*줄\s*리뷰\s*\)/, '포토+한줄리뷰').replace(/별점만/, '별점').replace(/글씨리뷰/, '텍스트리뷰'); };
+  const pretty = function (l) { return String(l).replace(/포토\s*리뷰\s*\(\s*(1|한)\s*줄\s*리뷰\s*\)/, '포토+한줄리뷰').replace(/별점만/, '별점').replace(/글씨리뷰/, '텍스트리뷰').replace(/^사진$/, '포토'); };
   const nm = function (p) { return p.n > 1 ? p.nm + p.n : p.nm; };
   const lines = [], queue = ppl.slice();
   let pw = [];   // 업체 사진을 기다리는 몫(포토대기): 리뷰 가이드 대신 ⭐️포토대기⭐️
@@ -2706,7 +2812,7 @@ function reviewGuideMsg_(rv, ppl, counts, k) {
   });
   if (!totals.length) { if (queue.length) { lines.push((rv.kind === 'self' || rv.kind === 'photo' || /사진|촬영|컷|포토/.test(rv.guide || '') ? '포토리뷰' : '텍스트리뷰') + '(' + queue.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + queue.map(nm).join(' ')); used.push.apply(used, queue); } }
   else if (queue.length) { lines.push('리뷰 종류 확인 필요(' + queue.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + queue.map(nm).join(' ')); ask.push('리뷰 종류·개수'); used.push.apply(used, queue); }
-  if (!prods.length) ask.push('리뷰내용 가이드');
+  if (!prods.length && !noGuide) ask.push('리뷰내용 가이드');
   // 상품이 여럿이면 상품마다 [그 상품 산 사람] + 가이드 (옵션 글에 상품 이름 끝말이 있으면 그 상품)
   const EMO = function (n) { return /양말/.test(n) ? '🧦' : /담요|이불|블랭킷/.test(n) ? '🧶' : '🐥'; };
   const suf2 = function (a) { return String(a).replace(/\s+/g, '').slice(-2); };
@@ -2727,8 +2833,13 @@ function reviewGuideMsg_(rv, ppl, counts, k) {
   return body;
   };
   const days = 7;   // 맺음말은 모든 플랫폼 '7일이내' (사용자 요청 10/21)
-  const foot = ['🐥🐥🐥🐥🐥🐥🐥🐥🐥🐥', '배송완료 후 ' + days + '일이내로 작성해주시되', '몰리지 않게 리뷰 부탁드려요!', '감사합니다 🫶🏻', '🐥🐥🐥🐥🐥🐥🐥🐥🐥🐥'];
-  const guideOf = function (head, people) { return ['🐥리뷰내용 가이드🐥'].concat(head, [''], prods.length ? mkBody(people) : ['(리뷰 가이드: 사장님께 물어보고 채우기)', ''], foot).join('\n'); };
+  // 맨 밑 고정 (10/23): … 🐥 / 빈 줄 / 전체 리뷰완료 후 @회오리 태그걸어주세요! / 0/(그 방 인원) / 빈 줄 / 🐥
+  const BAR = '🐥🐥🐥🐥🐥🐥🐥🐥🐥🐥';
+  const foot = function (n) { return [BAR, '배송완료 후 ' + days + '일이내로 작성해주시되', '몰리지 않게 리뷰 부탁드려요!', '감사합니다 🫶🏻', BAR, '', '전체 리뷰완료 후 @회오리 태그걸어주세요!', '0/' + n, '', BAR]; };
+  const sumN = function (people) { return people.reduce(function (a, y) { return a + (y.n || 1); }, 0); };
+  // 리뷰 종류 줄 사이는 빈 줄 (별점(13명) : … / 빈 줄 / 텍스트(10명) : …)
+  const spread = function (head) { const o = []; head.forEach(function (h, i) { if (i) o.push(''); o.push(h); }); return o; };
+  const guideOf = function (head, people) { return ['🐥리뷰내용 가이드🐥', ''].concat(spread(head), [''], prods.length ? mkBody(people) : noGuide ? [] : ['(리뷰 가이드: 사장님께 물어보고 채우기)', ''], foot(sumN(people))).join('\n'); };
   const msg = lines.length ? guideOf(lines, used) : '';
   // 업체 사진을 기다리는 사람 몫도 가이드는 미리 만들어 둠 (사진 전달 뒤 보냄, 사용자 요청 10/21)
   const pwMsg = pw.length ? guideOf(['포토리뷰(' + pw.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + pw.map(nm).join(' ')], pw) : '';
@@ -3052,6 +3163,37 @@ function fixMisroutedNotices_(runs) {
     const right = String(hit['카톡방'] || bareTitle_(hit['명단 제목']));
     obSet_(ob, v[0], 4, right);
     note_('✓ 방 공지 카톡방 바로잡음: ' + room + ' → ' + right);
+  });
+}
+// (10/23) 오늘·다음 진행일 진행마다 방 공지가 보낼메시지에 꼭 하나: 없으면(10.23 속눈썹영양제 빠진 것) 폼 설명으로 다시 만들어 넣고,
+//  같은 방에 글자까지 똑같은 방 공지가 둘이면(10.23 텀블러 두 번) 나중 것(안 보낸 것)만 지움
+function ensureRunNotices_(runs) {
+  const ob = outboxSheet_(), last = ob.getLastRow();
+  const v = last >= 2 ? ob.getRange(2, 1, last - 1, 6).getValues() : [];
+  const t1 = nextWorkday_(today_()).getTime();
+  // 똑같은 방 공지 두 개
+  const seen = {}, del = [];
+  v.map(function (x, i) { return { x: x, i: i }; }).reverse().forEach(function (o) {
+    if (o.x[2] !== '방 공지') return;
+    const k = String(o.x[3]) + '\u0001' + String(o.x[4]);
+    if (seen[k] && o.x[5] !== '보냄') del.push(o.i); else seen[k] = 1;
+  });
+  del.sort(function (a, b) { return b - a; }).forEach(function (i) { note_('✓ 똑같은 방 공지 하나 지움: ' + v[i][3]); ob.deleteRow(i + 2); v.splice(i, 1); });
+  runs.forEach(function (r) {
+    if (r['진행 상태'] === '종료' || !(r['진행일'] instanceof Date) || !r['폼ID'] || !r['폼 링크']) return;
+    const d = dayStart_(r['진행일']); if (d !== t1) return;   // 다음 진행일 것만 (폼을 같이 쓰는 여러 날 진행은 폼 설명이 가장 늦은 날 공지라)
+    if (runs.some(function (x) { return x !== r && String(x['폼ID']) === String(r['폼ID']) && x['진행일'] instanceof Date && dayStart_(x['진행일']) > d && x['진행 상태'] !== '종료'; })) return;
+    const room = String(r['카톡방'] || bareTitle_(r['명단 제목'])), link = String(r['폼 링크']);
+    // 같은 날짜 방(방 이름이 바뀌었어도 날짜는 같음)에 이 폼 링크 공지가 있으면 있는 것 (여러 날 진행은 폼을 같이 써서 날짜로 구분)
+    if (v.some(function (x) { return x[2] === '방 공지' && String(x[4]).indexOf(link) >= 0 && (String(x[3]) === room || dateTok_(String(x[3])) === dateTok_(room)); })) return;
+    const props = PropertiesService.getScriptProperties(), pk = 'NOTICEFIX_' + r['폼ID'] + '_' + Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd');
+    if (props.getProperty(pk)) return;   // 한 번만 (사용자가 지웠으면 다시 안 넣음)
+    let desc = '';
+    try { desc = FormApp.openById(r['폼ID']).getDescription(); } catch (e) { return; }
+    if (!desc || desc.indexOf(link) < 0) return;
+    props.setProperty(pk, '1');
+    queueMsg_(room, withSlotLine_(desc, runSlot_(r), chainFruit_(r)), '방 공지');
+    note_('✓ 빠진 방 공지 넣음: ' + room);
   });
 }
 function obSet_(ob, id, col, val) {
@@ -4174,6 +4316,18 @@ function onAdminEditInner_(e) {
     note_(msg);
     return;
   }
+  // 진행목록 '목표인원'을 고치면 그날부터 하루 인원을 그 숫자로 (뒤 일차·일정도, 남는 일차는 취소, 모자라면 일정 추가) (사용자 요청 10/23 실링팬)
+  if (sh.getName() === CONFIG.LIST_SHEET && e.range.getColumn() === lc_('목표인원') && e.range.getRow() >= 2 && e.range.getNumRows() === 1) {
+    const n = Number(e.range.getValue());
+    if (!(n > 0) || Math.floor(n) !== n) { try { e.source.toast('목표인원은 숫자로 적어 주세요 (예: 2)', '하루 인원', 8); } catch (err) {} return; }
+    const r = readRuns_().filter(function (x) { return x.row === e.range.getRow(); })[0];
+    if (!r || !(r['진행일'] instanceof Date)) return;
+    let msg = '';
+    try { msg = changeDaily_(r, r['진행일'], n); } catch (err) { msg = '하루 인원 바꾸기 실패: ' + err.message; }
+    try { e.source.toast(msg, '하루 인원 바꿈', 20); } catch (err) {}
+    note_(msg);
+    return;
+  }
   if (sh.getName() === DASH_TAB && e.range.getColumn() === 2 && e.range.getRow() >= 2 && e.oldValue && e.value) {
     // 한눈에 탭 방제를 고치면 진행목록, 카톡방, 보낼 메시지함, 월급시트까지 같이
     const r = readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']) === String(e.oldValue).trim() || sameRunTitle_(x['명단 제목'], e.oldValue); }).pop();
@@ -4530,7 +4684,7 @@ function rvZip_(f, name, props, sid) {
 }
 
 /* ---------------- 사용법 탭 (맨 앞, 사용자 요청 10/20). 글을 바꾸면 USAGE_VER를 올림 → 다시 씀 ---------------- */
-const USAGE_TAB = '사용법', USAGE_VER = '5';
+const USAGE_TAB = '사용법', USAGE_VER = '6';
 const USAGE_ROWS = [
   ['체험단 관리 시트 사용법', '(스크립트가 쓰는 탭이라 여기 고친 글은 다음 업데이트 때 다시 써져요)'],
   ['', ''],
@@ -4553,6 +4707,7 @@ const USAGE_ROWS = [
   ['■ 이럴 땐', ''],
   ['날짜 바꾸기', '예) 목요일 건너뛰고 금요일에: 진행목록에서 그 진행 "진행일"을 새 날짜(10/23)로 고치기 → 방제·카톡방 이름·보낼메시지·월급시트·뒤 일차까지 같이 바뀜 (오른쪽 아래 알림). 이미 만든 카톡방 이름은 직접 바꾸기. 아직 안 만든 일차는 "일정" 탭 진행일을 고치기'],
   ['하루 건너뛰기 (예: 오메가3)', '예) 오늘(목)은 그대로 2시 전까지 받고, 내일(금)만 쉬고 월요일에: 진행목록에서 "내일" 진행의 "진행일"을 월요일(10/26)로 고치기 → 그 뒤 일차·일정·방제·보낼메시지 날짜가 같이 밀림. 내일 진행이 진행목록에 아직 없으면 "일정" 탭에서 그 줄 진행일을 월요일로 (그 뒤 줄도 하루씩 직접). 오늘 진행은 건드리지 않기. 카톡방 이름이 이미 있으면 직접 바꾸기'],
+  ['하루 인원 바꾸기 (예: 실링팬 하루 2명)', '진행목록에서 바꾸기 시작할 날 진행의 "목표인원"을 새 숫자(2)로 고치기 → 그날부터 뒤 일차·일정 탭까지 하루 2명으로 바뀜 (방제 끝 숫자·폼 설명·안 보낸 방 공지 "(N명)"도). 총건수를 넘는 남는 날은 취소, 모자라면 일정 줄이 추가됨 (오른쪽 아래 알림으로 결과). 그날 진행이 진행목록에 아직 없으면 일정 탭 "건수" 칸과 방제·명단 제목 끝 숫자를 직접 고치기. 이미 만든 카톡방 이름은 직접 바꾸기'],
   ['안 산 사람 (인원 모자람)', '그대로 두면 됨. 의뢰 마지막 날이면 그날 오후 2시 이후 다음 진행일에 모자란 만큼 진행이 자동으로 생김(보낼메시지에 방 공지). 그날 방제는 산 인원으로 바뀜(10→8, 월급시트 캠페인명도) → 보낼메시지 "할 일"대로 카톡방 이름·오리명단방 명단 메시지를 수정. 중간 날 모자란 건 마지막 날 끝난 뒤 한꺼번에. 바로 더 받으려면 폼수정 탭 I2에 인원 숫자'],
   ['잘못 산 사람·방 나간 사람', '폼수정 탭 B1에서 진행 고르기 → 그 응답 체크 → 삭제 실행. 그날 안이면 폼이 다시 열려 다른 사람을 받음'],
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
@@ -4861,9 +5016,11 @@ function withSlotLine_(text, slot, fruit) {
 
 // 구글폼 질문 필수/선택 (사용자 요청): 방에 참여한 카카오톡 닉네임·쿠팡닉네임 = 필수, 리뷰비 계좌 다를 시 작성 = 선택
 const ACCOUNT_Q = '계정명(수령인)';
-function fixFormQuestions_(form) {
+function fixFormQuestions_(form, real) {
   const T = FormApp.ItemType;
   let n = 0;
+  // 실배송은 리뷰비를 따로 안 보내서 '리뷰비 계좌 다를 시 작성' 질문을 뺌 (사용자 요청 10/23)
+  if (real) form.getItems().filter(function (it) { return /리뷰비계좌.*다를/.test(String(it.getTitle() || '').replace(/\s+/g, '')); }).forEach(function (it) { form.deleteItem(it); n++; });
   form.getItems().forEach(function (it) {
     // '이름' 질문 → '계정명(수령인)' (사용자 요청 10/20. 리뷰 가이드·택배시트가 이 칸을 수령인으로 씀)
     if (String(it.getTitle() || '').trim() === '이름') { it.setTitle(ACCOUNT_Q); n++; }
