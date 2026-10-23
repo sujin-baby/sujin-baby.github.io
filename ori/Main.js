@@ -2199,7 +2199,7 @@ function parseAssign_(text, choices) {
       tok = tok.replace(/^@+/, '').trim();
       if (!tok) return;
       if (/^[2-9]$/.test(tok) && lastKey) { rows[at[lastKey]][2] = Number(tok); return; }   // '송기주 2'
-      if (!/[A-Za-z가-힣]/.test(tok) || /^\d+명$/.test(tok)) return;
+      if (!/[A-Za-z가-힣ㄱ-ㅎㅏ-ㅣ]/.test(tok) || /^\d+명$/.test(tok)) return;   // 'ㅁㅈ'처럼 자음만인 닉네임도 (10/23)
       const cancel = /#취소$/.test(tok);
       tok = tok.replace(/#취소$/, '');
       let n = 1;
@@ -2224,7 +2224,7 @@ function parseAssign_(text, choices) {
     const birdAt = all.findIndex(function (l) { return /🐥/.test(l); });
     const formAt = all.findIndex(function (l) { return /forms\.gle|docs\.google\.com\/forms|구글폼\s*링크/.test(l); });
     const firstBird = formAt >= 0 && (birdAt < 0 || formAt < birdAt) ? formAt + 1 : birdAt;
-    const nameTok = /^@?[A-Za-z가-힣][^\s\d:!?~]{0,11}\d?$/;
+    const nameTok = /^@?[A-Za-z가-힣ㄱ-ㅎㅏ-ㅣ][^\s\d:!?~]{0,11}\d?$/;
     all.forEach(function (l, i) {
       const t = l.trim();
       if (!t || i < firstBird || junk.test(t)) return;
