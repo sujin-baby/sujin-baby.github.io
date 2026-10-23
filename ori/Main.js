@@ -304,9 +304,13 @@ function renameTodo_(r, oldBare, newBare) {
 }
 
 // 방제(명단 제목) 바꾸기: 진행목록 명단 제목·카톡방, 보낼 메시지함의 대기 중인 방 이름. 월급시트 캠페인명은 15분 갱신 때 같은 날짜·캠페인 줄을 찾아 바꿈
-function renameRun_(r, title) {
+function renameRun_(r, title, why) {
   title = bareTitle_(title);
   if (!title || title === bareTitle_(r['명단 제목'])) return false;
+  // 다른 진행(다른 상품)의 방제로는 절대 안 바꿈 (10/23: 한눈에 탭 방제 칸에 속눈썹영양제 방제가 들어가 기대평 진행 이름·보낼메시지 방이 속눈썹으로 바뀐 것)
+  const other = readRuns_().filter(function (x) { return x.row !== r.row && x['진행 상태'] !== '종료' && (bareTitle_(x['명단 제목']) === title || sameRunTitle_(x['명단 제목'], title)) && campKey_(x['명단 제목']) !== campKey_(r['명단 제목']); })[0];
+  if (other) { note_('⛔ 방제 안 바꿈: ' + bareTitle_(r['명단 제목']) + ' → ' + title + ' (다른 진행 ' + bareTitle_(other['명단 제목']) + '의 방제라서)' + (why ? ' [' + why + ']' : '')); return false; }
+  note_('방제 바꿈' + (why ? '(' + why + ')' : '') + ': ' + bareTitle_(r['명단 제목']) + ' → ' + title);
   const cm = title.match(/(\d+)\s*$/);
   if (cm && Number(cm[1]) > 0 && !isExpect_(r)) { setRun_(r.row, '목표인원', Number(cm[1])); r['목표인원'] = Number(cm[1]); }   // 기대평은 방제 끝이 건수(사람 × 27)
   const nick = (String(r['명단 제목']).match(/\s*\([^)]*\)\s*$/) || [''])[0];
@@ -1087,7 +1091,7 @@ function normalizeRuns_() {
     if (!String(r['캠페인']).trim() && r['명단 제목']) { r['캠페인'] = campOf_(r['명단 제목']); setRun_(r.row, '캠페인', r['캠페인']); }
     // 방제 끝 숫자 = 그날 목표 인원 (끝 숫자를 고치면 목표도 같이. 다 찼으면 조용히 마감 표시)
     const tm = bareTitle_(r['명단 제목']).match(/(\d+)\s*$/);
-    if (tm && Number(tm[1]) > 0 && Number(r['목표인원']) !== Number(tm[1]) && r['진행 상태'] !== '종료') {
+    if (tm && Number(tm[1]) > 0 && Number(r['목표인원']) !== Number(tm[1]) && r['진행 상태'] !== '종료' && !isExpect_(r)) {   // 기대평은 방제 끝이 건수
       r['목표인원'] = Number(tm[1]); setRun_(r.row, '목표인원', r['목표인원']);
       if (!r['마감 시각'] && Number(r['인원']) >= r['목표인원'] && pastEnd_(r)) setRun_(r.row, '마감 시각', new Date());
     }
@@ -2556,6 +2560,7 @@ function checkFullInner_() {
   try { fixExpect5Once_(); } catch (e) { note_('기대평 다시 나누기 실패: ' + e); }
   try { fixWongoOnce_(); } catch (e) { note_('원고 가이드 고치기 실패: ' + e); }
   try { fixExpect6Once_(); } catch (e) { note_('기대평 하루 3명 실패: ' + e); }
+  try { fixExpect7Once_(); } catch (e) { note_('기대평 이름 되돌리기 실패: ' + e); }
   try { talkdealDateOnce_(); } catch (e) { note_('톡딜 진행일 실패: ' + e); }
   try { talkdealOnce_(); } catch (e) { note_('톡딜 넣기 실패: ' + e); }
   try { fixAnkleDupOnce_(readRuns_()); } catch (e) { note_('발목무압박 중복 정리 실패: ' + e); }
@@ -4378,7 +4383,14 @@ function onAdminEditInner_(e) {
   if (sh.getName() === DASH_TAB && e.range.getColumn() === 2 && e.range.getRow() >= 2 && e.oldValue && e.value) {
     // 한눈에 탭 방제를 고치면 진행목록, 카톡방, 보낼 메시지함, 월급시트까지 같이
     const r = readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']) === String(e.oldValue).trim() || sameRunTitle_(x['명단 제목'], e.oldValue); }).pop();
-    if (r && renameRun_(r, e.value)) { try { updatePay_(); } catch (err) {} }
+    if (!r) return;
+    // 같은 상품(같은 날짜·캠페인)의 숫자만 바꾸는 것만 받음. 다른 진행 방제가 들어오면(붙여넣기 실수 등) 칸을 되돌리고 안 바꿈 (10/23)
+    if (campKey_(String(e.value)) !== campKey_(r['명단 제목']) || !renameRun_(r, e.value, '한눈에 탭에서 고침')) {
+      try { e.range.setValue(e.oldValue); e.source.toast('한눈에 탭 방제 칸에 다른 진행 이름이 들어와서 되돌렸어요. 방제는 같은 상품의 숫자만 여기서 바꿀 수 있어요.', '방제', 15); } catch (err) {}
+      if (campKey_(String(e.value)) !== campKey_(r['명단 제목'])) note_('⛔ 한눈에 탭 방제 칸 되돌림: ' + e.oldValue + ' 자리에 ' + e.value + ' (다른 상품)');
+      return;
+    }
+    try { updatePay_(); } catch (err) {}
     return;
   }
   if (sh.getName() === DASH_TAB && e.range.getColumn() === 13 && e.range.getRow() >= 2) {
@@ -4946,7 +4958,9 @@ function autoNextDay_() {
     const n = left > daily && left - daily < daily / 2 ? left : Math.min(daily, left);
     note_('✓ 다음 날 진행: ' + addMoreRun_(last, n, { next: true }));
     // 오늘 진행은 실제 산 인원으로 방제·목표를 줄임 (# 10.20 고구마말랭이 10 → 8, 사용자 요청 10/20) + 카톡방 이름·명단 메시지 고치기 할 일
-    shrinkToGot_(last);
+    // 위에서 다음 날 진행을 만들면 진행목록이 다시 정렬돼서 줄 번호가 바뀜 → 이 진행을 다시 읽어서 (옛 줄 번호로 다른 진행 이름을 고치던 것, 10/23)
+    const cur = readRuns_().filter(function (x) { return String(x['명단 제목']) === String(last['명단 제목']) && String(x['시트ID']) === String(last['시트ID']); })[0];
+    if (cur) shrinkToGot_(cur);
   });
 }
 
@@ -6351,6 +6365,7 @@ function payTime_(t) {
 function payRename_(oldName, newName) {
   const o = String(oldName).replace(/\s+/g, ''), n = String(newName).replace(/\s+/g, '');
   if (!o || o === n) return;
+  if (campKey_(oldName) !== campKey_(newName)) { note_('⛔ 월급시트 이름 안 바꿈 (다른 상품): ' + oldName + ' → ' + newName); return; }   // 다른 진행 줄 이름을 바꾸지 않게 (10/23)
   payTabsNow_().forEach(function (sh) {
     const L = payLayout_(sh); if (!L) return;
     const last = sh.getLastRow(); if (last <= L.head) return;
@@ -6649,9 +6664,9 @@ function buildDashboard_(force) {
     let changed = false;
     sh.getRange(2, 2, Math.min(sh.getLastRow() - 1, 60), 1).getValues().forEach(function (v, i) {
       const t = String(v[0]).trim();
-      if (!t || t.charAt(0) === '■' || t === written[i]) return;
+      if (!t || t.charAt(0) === '■' || t === written[i] || written.indexOf(t) >= 0) return;   // 지난번에 스크립트가 쓴 값이 자리만 밀린 것은 고친 게 아님 (예전 이름으로 되돌리던 것)
       const r = runs.filter(function (x) { return sameRunTitle_(x['명단 제목'], t) && bareTitle_(x['명단 제목']) !== t; })[0];
-      if (r && renameRun_(r, t)) changed = true;
+      if (r && renameRun_(r, t, '한눈에 탭 값')) changed = true;
     });
     if (changed) { force = true; try { updatePay_(); } catch (e) {} }
   }
@@ -7194,4 +7209,32 @@ function talkdealDateOnce_() {
     });
     payOrder_(sh);
   });
+}
+
+// (10/23 한 번) 기대평 진행(exp-100-4) 이름이 다른 진행(속눈썹영양제 등) 방제로 바뀌어 있으면 되돌림: 진행목록 명단 제목·카톡방, 기대평 공지(폼 링크로 찾음) 방 이름, 배정 탭
+function fixExpect7Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('EXPECT_V7')) return;
+  const r = readRuns_().filter(function (x) { return String(x['요청ID']) === 'exp-100-4' && x['진행 상태'] !== '종료'; })[0];
+  if (!r) return;
+  props.setProperty('EXPECT_V7', '1');
+  const title = expTitle_(new Date(2026, 9, 26), 3, 'A'), cur = bareTitle_(r['명단 제목']), sid = String(r['시트ID']), link = String(r['폼 링크']);
+  if (cur !== title) {
+    setRun_(r.row, '명단 제목', title); setRun_(r.row, '카톡방', title); setRun_(r.row, '캠페인', campOf_(title)); setRun_(r.row, '목표인원', 3);
+    note_('✓ 기대평 진행 이름 되돌림: ' + cur + ' → ' + title);
+  } else if (Number(r['목표인원']) !== 3) setRun_(r.row, '목표인원', 3);
+  // 기대평 공지(이 폼 링크)는 기대평 방으로
+  try {
+    const ob = outboxSheet_(), ol = ob.getLastRow();
+    if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
+      if (v[5] !== '보냄' && String(v[4]).indexOf(link) >= 0 && String(v[3]) !== title) { obSet_(ob, v[0], 4, title); note_('✓ 기대평 공지 방 되돌림: ' + v[3] + ' → ' + title); }
+    });
+  } catch (e) {}
+  // 배정 탭: 이 명단 시트 줄인데 기대평 이름이 아닌 것 → 10/26 기대평 (10/27 줄은 그대로)
+  try {
+    const as = assignSheet_(), al = as.getLastRow(), t27 = expTitle_(new Date(2026, 9, 27), 3, 'A');
+    if (al >= 2) as.getRange(2, 1, al - 1, 7).getValues().forEach(function (v, i) {
+      if (String(v[6]) === sid && String(v[0]) !== t27 && bareTitle_(v[0]) !== title) as.getRange(i + 2, 1).setValue(title);
+    });
+  } catch (e) {}
 }
