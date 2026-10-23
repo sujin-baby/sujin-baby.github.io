@@ -271,7 +271,8 @@ function changeDaily_(anchor, from, n) {
       if (c > 0) {
         let cc = []; try { cc = JSON.parse(x[7]); } catch (e) {}
         cc = (cc || []).map(function (g) { g = (g || []).slice(); g[0] = c; if (g[1] && g[1].length === 1) g[1] = [c]; return g; });
-        const tc = titleCount_(anchor, c);
+        let tc = titleCount_(anchor, c);
+        if (isExpect_(anchor)) { try { tc = c * Math.round(Number(JSON.parse(x[9]).prices) / 1000); } catch (e) {} }
         ps.getRange(row, 5, 1, 4).setValues([[cnt(x[4], tc), cnt(x[5], tc), c, JSON.stringify(cc)]]);
         done.push('(일정) ' + bareTitle_(x[5]) + ' → ' + bareTitle_(cnt(x[5], tc)));
       } else { ps.getRange(row, 9).setValue('취소 (하루 인원 바꿈)'); done.push('(일정) ' + bareTitle_(x[5]) + ' 취소'); }
@@ -285,7 +286,8 @@ function changeDaily_(anchor, from, n) {
     const nd = nextWorkday_(prevD); prevD = nd; k0++;
     let cc = []; try { cc = JSON.parse(lastPlan.x[7]); } catch (e) {}
     cc = (cc || []).map(function (g) { g = (g || []).slice(); g[0] = c; if (g[1] && g[1].length === 1) g[1] = [c]; return g; });
-    const tc2 = titleCount_(anchor, c);
+    let tc2 = titleCount_(anchor, c);
+    if (isExpect_(anchor)) { try { tc2 = c * Math.round(Number(JSON.parse(lastPlan.x[9]).prices) / 1000); } catch (e) {} }
     ps.appendRow([String(lastPlan.x[0]).replace(/-\d+$/, '') + '-' + k0, lastPlan.x[1], k0, nd, cnt(retitleDate_(lastPlan.x[4], nd), tc2), cnt(retitleDate_(lastPlan.x[5], nd), tc2), c, JSON.stringify(cc), '대기', lastPlan.x[9]]);
     done.push('(일정 추가) ' + bareTitle_(cnt(retitleDate_(lastPlan.x[5], nd), tc2)));
   }
@@ -2763,7 +2765,7 @@ function listMsgText_(r) {
     const got = sib.reduce(function (a, x) { return a + (Number(x['인원']) || 0); }, 0);
     if (total && sib.length && sib[sib.length - 1].row === me.row && got >= total) {
       const md = function (x) { return (x['진행일'].getMonth() + 1) + '.' + String(x['진행일'].getDate()).padStart(2, '0'); };
-      tail = sib.length === 1 ? '마지막' : md(sib[0]) + '~ ' + md(me) + '  ' + titleCount_(me, total) + (isExpect_(me) ? '건 작성완료' : '건 구매완료');
+      tail = sib.length === 1 ? '마지막' : md(sib[0]) + '~ ' + md(me) + '  ' + (isExpect_(me) ? EXP_LINKS.length * 15 + '건 작성완료' : total + '건 구매완료');
     }
   } catch (e) {}
   return r['시트 링크'] + '\n\n' + t + (tail ? '\n' + tail : '');
@@ -4722,7 +4724,7 @@ function rvZip_(f, name, props, sid) {
 }
 
 /* ---------------- 사용법 탭 (맨 앞, 사용자 요청 10/20). 글을 바꾸면 USAGE_VER를 올림 → 다시 씀 ---------------- */
-const USAGE_TAB = '사용법', USAGE_VER = '9';
+const USAGE_TAB = '사용법', USAGE_VER = '10';
 const USAGE_ROWS = [
   ['체험단 관리 시트 사용법', '(스크립트가 쓰는 탭이라 여기 고친 글은 다음 업데이트 때 다시 써져요)'],
   ['', ''],
@@ -4746,7 +4748,7 @@ const USAGE_ROWS = [
   ['날짜 바꾸기', '예) 목요일 건너뛰고 금요일에: 진행목록에서 그 진행 "진행일"을 새 날짜(10/23)로 고치기 → 방제·카톡방 이름·보낼메시지·월급시트·뒤 일차까지 같이 바뀜 (오른쪽 아래 알림). 이미 만든 카톡방 이름은 직접 바꾸기. 아직 안 만든 일차는 "일정" 탭 진행일을 고치기'],
   ['하루 건너뛰기 (예: 오메가3)', '예) 오늘(목)은 그대로 2시 전까지 받고, 내일(금)만 쉬고 월요일에: 진행목록에서 "내일" 진행의 "진행일"을 월요일(10/26)로 고치기 → 그 뒤 일차·일정·방제·보낼메시지 날짜가 같이 밀림. 내일 진행이 진행목록에 아직 없으면 "일정" 탭에서 그 줄 진행일을 월요일로 (그 뒤 줄도 하루씩 직접). 오늘 진행은 건드리지 않기. 카톡방 이름이 이미 있으면 직접 바꾸기'],
   ['하루 인원 바꾸기 (예: 실링팬 하루 2명)', '진행목록에서 바꾸기 시작할 날 진행의 "목표인원"을 새 숫자(2)로 고치기 → 그날부터 뒤 일차·일정 탭까지 하루 2명으로 바뀜 (방제 끝 숫자·폼 설명·안 보낸 방 공지 "(N명)"도). 총건수를 넘는 남는 날은 취소, 모자라면 일정 줄이 추가됨 (오른쪽 아래 알림으로 결과). 그날 진행이 진행목록에 아직 없으면 일정 탭 "건수" 칸과 방제·명단 제목 끝 숫자를 직접 고치기. 이미 만든 카톡방 이름은 직접 바꾸기'],
-  ['기대평 진행 (백발백중 도서)', '구매 없이 27개 링크에 기대평만 (1명 = 27건). 10/26~11/8 매일(주말 포함) 1명, 11/8만 2명 = 15명·405건 (진행목록·일정에 자동, 자정 ~ 오전 8시 20분 작성). 방제 끝은 건수(1명 27, 2명 54), 진행목록 목표인원은 사람 수. 월급시트 수량도 건수(1명 27건 × 500원). 캡처는 카톡방으로 받기. 결제금액·리뷰 가이드·리뷰 확인 자동은 안 함. 하루 인원 바꾸기는 진행목록 "목표인원"에 사람 수'],
+  ['기대평 진행 (백발백중 도서)', '구매 없이 링크에 기대평만. 업체 요청(매주 개인당 13~14건)대로 한 사람이 두 번: 1주차(10/26~11/1) 14건·14,000원, 2주차(11/2~11/8) 나머지 13건·13,000원. 주마다 15명(하루 3·2·2·2·2·2·2명, 주말 포함) = 405건. 자정 ~ 오전 8시 20분 작성. 방제 끝은 건수(사람 × 14 또는 13), 진행목록 목표인원은 사람 수. 월급시트 수량도 건수(× 500원). 캡처는 카톡방으로. 하루 인원 바꾸기는 진행목록 "목표인원"에 사람 수'],
   ['안 산 사람 (인원 모자람)', '그대로 두면 됨. 의뢰 마지막 날이면 그날 오후 2시 이후 다음 진행일에 모자란 만큼 진행이 자동으로 생김(보낼메시지에 방 공지). 그날 방제는 산 인원으로 바뀜(10→8, 월급시트 캠페인명도) → 보낼메시지 "할 일"대로 카톡방 이름·오리명단방 명단 메시지를 수정. 중간 날 모자란 건 마지막 날 끝난 뒤 한꺼번에. 바로 더 받으려면 폼수정 탭 I2에 인원 숫자'],
   ['잘못 산 사람·방 나간 사람', '폼수정 탭 B1에서 진행 고르기 → 그 응답 체크 → 삭제 실행. 그날 안이면 폼이 다시 열려 다른 사람을 받음'],
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
@@ -6184,10 +6186,17 @@ function updatePay_() {
     const pick = function (h) { return r[h] || (mine.filter(function (x) { return x[h]; })[0] || {})[h] || ''; };
     // 총액 = 의뢰서 총 구매 건수(날마다 같음). 남은 = 총액 - 전월 - 그날 수량 - 이번 달 앞 날들 수량 (남은 칸 수식에 앞 날들 수를 빼 줌)
     const earlier = mine.filter(function (x) { return x['진행일'] < r['진행일'] && ym(x['진행일']) === ym(r['진행일']); }).reduce(function (a, x) { return a + got(x); }, 0);
-    // 기대평은 1명 = 27건 (건당 500원): 총액·전월·앞 날·그날 수량을 건수로 (사용자 요청 10/23)
-    const mult = isExpect_(r) ? EXP_PER : 1;
-    writePayRow_(r, nameOf(r), total * mult, prev * mult, siblings_(all, r).length > 1,
-      { store: pick('업체'), time: fruit ? '자정 ~ 오전 7시' : payTime_(runSlot_(r)), photo: pick('포토'), earlier: earlier * mult, mult: mult });
+    // 기대평은 사람 × 건수(1주차 14, 2주차 13, 건당 500원): 총액 405건, 전월·앞 날·그날 수량도 건수로 (사용자 요청 10/23)
+    if (isExpect_(r)) {
+      const gw = function (x) { return got(x) * expPer_(x); };
+      const prevW = mine.filter(function (x) { return ym(x['진행일']) < ym(r['진행일']); }).reduce(function (a, x) { return a + gw(x); }, 0);
+      const earlierW = mine.filter(function (x) { return x['진행일'] < r['진행일'] && ym(x['진행일']) === ym(r['진행일']); }).reduce(function (a, x) { return a + gw(x); }, 0);
+      writePayRow_(r, nameOf(r), EXP_LINKS.length * 15, prevW, siblings_(all, r).length > 1,
+        { store: pick('업체'), time: payTime_(runSlot_(r)), photo: '', earlier: earlierW, mult: expPer_(r) });
+      return;
+    }
+    writePayRow_(r, nameOf(r), total, prev, siblings_(all, r).length > 1,
+      { store: pick('업체'), time: fruit ? '자정 ~ 오전 7시' : payTime_(runSlot_(r)), photo: pick('포토'), earlier: earlier });
   });
   try { payDedupe_(all); } catch (e) { note_('월급시트 중복 줄 확인 실패: ' + e); }
   try { payStatusAll_(all); } catch (e) { note_('월급시트 상태 잇기 실패: ' + e); }
@@ -6934,42 +6943,53 @@ const EXP_LINKS = [
   ['교보문고', '짱 개념연산 3-1', 'https://product.kyobobook.co.kr/detail/S000221237983']
 ];
 const EXP_SLOT = '★★★자정 ~ 오전 8시 20분 작성·제출★★★';   // 사용자 요청 10/23
-const EXP_FEE = '총 27건, 27,000원';
-function expNotice_() {
-  const L = [EXP_SLOT, '', '※구매 아님! 아래 링크 ' + EXP_LINKS.length + '개에 기대평 댓글만 작성※', '',
+// 업체 요청 '매주 개인당 13~14건' (10/23): 한 사람이 두 번에 나눠 씀. 1주차(10/26~11/1) A묶음 14건, 2주차(11/2~11/8) B묶음 13건
+//  묶음은 플랫폼·교재가 고르게: A = 예스24 1~5, 알라딘 1~5, 교보문고 1~4 / B = 예스24 6~9, 알라딘 6~9, 교보문고 5~9. 건당 1,000원
+const EXP_SETS = {
+  A: EXP_LINKS.filter(function (x) { const i = EXP_LINKS.filter(function (y) { return y[0] === x[0]; }).indexOf(x); return x[0] === '교보문고' ? i < 4 : i < 5; }),
+  B: EXP_LINKS.filter(function (x) { const i = EXP_LINKS.filter(function (y) { return y[0] === x[0]; }).indexOf(x); return x[0] === '교보문고' ? i >= 4 : i >= 5; })
+};
+function expFee_(set) { const n = EXP_SETS[set].length; return '총 ' + n + '건, ' + (n * 1000).toLocaleString('en-US') + '원'; }
+function expNotice_(set) {
+  const links = EXP_SETS[set], wk = set === 'A' ? '1주차' : '2주차';
+  const L = [EXP_SLOT, '', '※구매 아님! 아래 링크 ' + links.length + '개에 기대평 댓글만 작성 (' + wk + ')※', '',
     '▶ 공백 제외 100~150자 이상, 긍정적인 기대평', '▶ "구매했다"는 내용 X → 구매하고 싶다·기대된다는 내용으로', '▶ 짧은 기대평·복붙 같은 글 X (교재마다 다르게)',
-    '▶ ' + EXP_LINKS.length + '개 다 쓰면 캡처해서 이 카톡방에 올리고 → 폼 작성', '▶ 리뷰비 ' + EXP_FEE, '★사업자 4971201389 ★', '',
+    '▶ ' + links.length + '개 다 쓰면 캡처해서 이 카톡방에 올리고 → 폼 작성', '▶ 리뷰비 ' + expFee_(set), '★사업자 4971201389 ★', '',
     '☆★☆★ 양식 작성 폼 ☆★☆★', '(구글폼 링크)', '',
     '🐥교재별로 넣을 내용🐥',
     '[짱 개념연산] 시험에 자주 나오는 연산 유형 집중 대비 / 개념 문제로 내신 대비·연산 실력 향상 / 빠르고 정확한 연산 연습에 좋을 것 같아 써 보고 싶다',
     '[짱 수학서술형] 서술형 기출·내신·수행평가 대비 / 기본 서술형부터 변형문제, 쌍둥이 문제로 반복 학습 / 서술형 대비에 유용할 것 같아 풀어 보고 싶다',
     '[짱 개념수학] 시험에 필요한 개념과 유형을 체계적으로 / 개념북 세분화 학습 + 익힘북 반복·복습 / 개념부터 유형까지 확실히 대비할 것 같아 풀어 보고 싶다'];
   ['예스24', '알라딘', '교보문고'].forEach(function (pl) {
+    const xs = links.filter(function (x) { return x[0] === pl; });
+    if (!xs.length) return;
     L.push('', '🐥' + pl);
-    EXP_LINKS.filter(function (x) { return x[0] === pl; }).forEach(function (x, i) { L.push((i + 1) + '. ' + x[1] + ' ' + x[2]); });
+    xs.forEach(function (x, i) { L.push((i + 1) + '. ' + x[1] + ' ' + x[2]); });
   });
   return L.join('\n');
 }
 function expDays_() {
-  // 10/26~11/8 매일(주말 포함, 구매·배송이 없어서) 1명씩 = 14일, 마지막 날만 2명 → 15명 (사용자 요청 10/23: 10.26은 27건)
-  const out = [];
-  for (let k = 0; k < 14; k++) { const d = new Date(2026, 9, 26 + k); out.push({ d: d, n: k === 13 ? 2 : 1 }); }
+  // 주마다 15명 (7일: 3·2·2·2·2·2·2), 1주차 A묶음, 2주차 B묶음 = 30번
+  const out = [], per = [3, 2, 2, 2, 2, 2, 2];
+  for (let k = 0; k < 14; k++) out.push({ d: new Date(2026, 9, 26 + k), n: per[k % 7], set: k < 7 ? 'A' : 'B' });
   return out;
 }
-function expTitle_(d, n) { return (d.getMonth() + 1) + '.' + String(d.getDate()).padStart(2, '0') + ' 백발백중 도서 기대평 ' + (n * EXP_PER); }
-// 방제 끝 숫자: 기대평은 사람 × 27건, 나머지는 사람 수 (월급시트 수량·총액도 기대평은 건수)
-function titleCount_(r, n) { return isExpect_(r) ? n * EXP_PER : n; }
+function expTitle_(d, n, set) { return (d.getMonth() + 1) + '.' + String(d.getDate()).padStart(2, '0') + ' 백발백중 도서 기대평 ' + (n * EXP_SETS[set].length); }
+// 기대평 한 사람 건수 = 그 진행 가격(리뷰비) / 1,000 (1주차 14, 2주차 13)
+function expPer_(r) { return Math.round((Number(String(r && r['가격'] || '').replace(/[^0-9]/g, '')) || EXP_PER * 1000) / 1000); }
+// 방제 끝 숫자: 기대평은 사람 × 건수, 나머지는 사람 수 (월급시트 수량·총액도 기대평은 건수)
+function titleCount_(r, n) { return isExpect_(r) ? n * expPer_(r) : n; }
 function setupExpectOnce_() {
   const props = PropertiesService.getScriptProperties();
-  if (props.getProperty('EXPECT_V3')) return;
+  if (props.getProperty('EXPECT_V4')) return;
   if (today_().getTime() > new Date(2026, 9, 26).getTime()) return;
   // 앞서 만든 것(1차: 캡처 올리기, 2차: 2·1명 번갈아)은 응답이 없으면 치우고 다시 만듦
   const runs = readRuns_();
-  const olds = runs.filter(function (r) { return /^exp-100-[12]$/.test(String(r['요청ID'])) && r['진행 상태'] !== '종료'; });
+  const olds = runs.filter(function (r) { return /^exp-100-[123]$/.test(String(r['요청ID'])) && r['진행 상태'] !== '종료'; });
   for (let oi = 0; oi < olds.length; oi++) { const old = olds[oi];
     let n = 0;
     try { SpreadsheetApp.openById(old['시트ID']).getSheets().forEach(function (t) { if (t.getFormUrl()) n += Math.max(t.getLastRow() - 1, 0); }); } catch (e) {}
-    if (n > 0) { props.setProperty('EXPECT_V3', 'skip'); note_('⚠ 기대평 폼(' + bareTitle_(old['명단 제목']) + ')에 응답이 있어서 다시 만들지 않았어요'); return; }
+    if (n > 0) { props.setProperty('EXPECT_V4', 'skip'); note_('⚠ 기대평 폼(' + bareTitle_(old['명단 제목']) + ')에 응답이 있어서 다시 만들지 않았어요'); return; }
     setRun_(old.row, '진행 상태', '종료');
     try { const ps = planSheet_(), pl = ps.getLastRow(); if (pl >= 2) ps.getRange(2, 1, pl - 1, 1).getValues().forEach(function (v, i) { if (String(v[0]).indexOf(String(old['요청ID']) + '-') === 0) ps.getRange(i + 2, 9).setValue('취소 (다시 만듦)'); }); } catch (e) {}
     try { const ob = outboxSheet_(), ol = ob.getLastRow(); if (ol >= 2) { const v = ob.getRange(2, 1, ol - 1, 6).getValues(); for (let i = v.length - 1; i >= 0; i--) if (String(v[i][3]) === bareTitle_(old['명단 제목']) && v[i][5] !== '보냄') ob.deleteRow(i + 2); } } catch (e) {}
@@ -6977,8 +6997,8 @@ function setupExpectOnce_() {
     Object.keys(props.getProperties()).forEach(function (k) { if (k.indexOf('UP_') === 0) props.deleteProperty(k); });
     note_('✓ 기대평 예전 것(응답 없음) 치움: ' + bareTitle_(old['명단 제목']) + ' 진행 종료, 일정 취소, 안 보낸 공지 지움, 폴더 휴지통');
   }
-  props.setProperty('EXPECT_V3', '1');
-  const days = expDays_(), d0 = days[0], title = expTitle_(d0.d, d0.n), fname = sheetName_(title);
+  props.setProperty('EXPECT_V4', '1');
+  const days = expDays_(), d0 = days[0], title = expTitle_(d0.d, d0.n, d0.set), fname = sheetName_(title);
   const folder = rootFolder_().createFolder(fname);
   const form = FormApp.create(fname);
   DriveApp.getFileById(form.getId()).moveTo(folder);
@@ -6986,7 +7006,7 @@ function setupExpectOnce_() {
   form.addTextItem().setTitle('계정명(이름)').setRequired(true);
   ['예스24', '알라딘', '교보문고'].forEach(function (pl) { form.addTextItem().setTitle(pl + ' 아이디').setRequired(true); });
   form.addTextItem().setTitle('리뷰비 계좌').setHelpText('은행 / 계좌번호 / 예금주').setRequired(true);
-  form.addMultipleChoiceItem().setTitle('기대평 댓글 리뷰비').setChoiceValues([EXP_FEE]).setRequired(true);
+  form.addMultipleChoiceItem().setTitle('기대평 댓글 리뷰비').setChoiceValues(['1주차 ' + expFee_('A'), '2주차 ' + expFee_('B')]).setRequired(true);
   const ss = SpreadsheetApp.create(fname);
   ss.setSpreadsheetTimeZone(CONFIG.TIMEZONE);
   DriveApp.getFileById(ss.getId()).moveTo(folder);
@@ -6998,28 +7018,29 @@ function setupExpectOnce_() {
   formatResponseSheet_(SpreadsheetApp.openById(ss.getId()), { type: '입대', takdae: false, realship: false, platform: '기대평', target: 15, prices: '27000' });
   let formUrl = form.getPublishedUrl();
   try { formUrl = form.shortenFormUrl(formUrl); } catch (e) {}
-  const tpl = expNotice_();
+  const tpl = expNotice_('A');
   const notice = tpl.split('(구글폼 링크)').join(formUrl);
   form.setDescription(formDesc_(notice));
   const list = ensureListSheet_();
-  const reqId = 'exp-100-3';
+  const reqId = 'exp-100-4';
   const rec = {
     '등록일': new Date(), '진행일': d0.d, '명단 제목': title, '유형': '', '택대': '', '실배송': '', '플랫폼': '기대평',
     '목표인원': d0.n, '인원': 0, '진행 상태': statusFor_(d0.d), '마감 시각': '', '캠페인': campOf_(title), '업체': '백발백중', '구매시간': EXP_SLOT.replace(/★/g, ''),
-    '포토': '', '일차': 1, '총건수': 15, '가격': '27000', '카톡방': title, '업체방': '',
+    '포토': '', '일차': 1, '총건수': 30, '가격': String(EXP_SETS.A.length * 1000), '카톡방': title, '업체방': '',
     '폼 링크': formUrl, '시트 링크': ss.getUrl(), '폴더 링크': folder.getUrl(), '시트ID': ss.getId(), '폼ID': form.getId(), '요청ID': reqId
   };
   list.appendRow(LIST_HEADER.map(function (h) { return rec[h]; }));
   formatList_(list);
   queueMsg_(title, notice, '방 공지');
   // 다음 일차는 일정 탭 (진행일 0시에 만들어짐, 같은 폼·명단 시트). 일정 '건수'는 사람 수, 방제 끝은 건수
-  const cfg = JSON.stringify({ type: '', takdae: false, realship: false, platform: '기대평', prices: '27000', croom: '', shop: '백발백중', photo: '', opts: '',
-    desc: tpl, slot2: EXP_SLOT, total: 15, camp: campOf_(title), base: reqId });
+  //  일정 '건수'는 사람 수, 방제 끝은 건수. 주마다 공지(링크 묶음)·리뷰비가 다름
+  const cfgOf = function (set) { return JSON.stringify({ type: '', takdae: false, realship: false, platform: '기대평', prices: String(EXP_SETS[set].length * 1000), croom: '', shop: '백발백중', photo: '', opts: '',
+    desc: expNotice_(set), slot2: EXP_SLOT, total: 30, camp: campOf_(title), base: reqId }); };
   const ps = planSheet_();
   days.slice(1).forEach(function (x, i) {
-    const t = expTitle_(x.d, x.n);
-    ps.appendRow([reqId + '-' + (i + 2), campOf_(title), i + 2, x.d, t, t, x.n, JSON.stringify([[x.n, [x.n]]]), '대기', cfg]);
+    const t = expTitle_(x.d, x.n, x.set);
+    ps.appendRow([reqId + '-' + (i + 2), campOf_(title), i + 2, x.d, t, t, x.n, JSON.stringify([[x.n, [x.n]]]), '대기', cfgOf(x.set)]);
   });
   try { sortList_(); } catch (e) {}
-  note_('✓ 기대평 진행 만듦: ' + title + ' + 일정 ' + (days.length - 1) + '일 (15명 × 27건 = 405건)');
+  note_('✓ 기대평 진행 만듦: ' + title + ' + 일정 ' + (days.length - 1) + '일 (15명 × 2번 = 405건)');
 }
