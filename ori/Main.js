@@ -4722,7 +4722,7 @@ function rvZip_(f, name, props, sid) {
 }
 
 /* ---------------- 사용법 탭 (맨 앞, 사용자 요청 10/20). 글을 바꾸면 USAGE_VER를 올림 → 다시 씀 ---------------- */
-const USAGE_TAB = '사용법', USAGE_VER = '8';
+const USAGE_TAB = '사용법', USAGE_VER = '9';
 const USAGE_ROWS = [
   ['체험단 관리 시트 사용법', '(스크립트가 쓰는 탭이라 여기 고친 글은 다음 업데이트 때 다시 써져요)'],
   ['', ''],
@@ -4746,7 +4746,7 @@ const USAGE_ROWS = [
   ['날짜 바꾸기', '예) 목요일 건너뛰고 금요일에: 진행목록에서 그 진행 "진행일"을 새 날짜(10/23)로 고치기 → 방제·카톡방 이름·보낼메시지·월급시트·뒤 일차까지 같이 바뀜 (오른쪽 아래 알림). 이미 만든 카톡방 이름은 직접 바꾸기. 아직 안 만든 일차는 "일정" 탭 진행일을 고치기'],
   ['하루 건너뛰기 (예: 오메가3)', '예) 오늘(목)은 그대로 2시 전까지 받고, 내일(금)만 쉬고 월요일에: 진행목록에서 "내일" 진행의 "진행일"을 월요일(10/26)로 고치기 → 그 뒤 일차·일정·방제·보낼메시지 날짜가 같이 밀림. 내일 진행이 진행목록에 아직 없으면 "일정" 탭에서 그 줄 진행일을 월요일로 (그 뒤 줄도 하루씩 직접). 오늘 진행은 건드리지 않기. 카톡방 이름이 이미 있으면 직접 바꾸기'],
   ['하루 인원 바꾸기 (예: 실링팬 하루 2명)', '진행목록에서 바꾸기 시작할 날 진행의 "목표인원"을 새 숫자(2)로 고치기 → 그날부터 뒤 일차·일정 탭까지 하루 2명으로 바뀜 (방제 끝 숫자·폼 설명·안 보낸 방 공지 "(N명)"도). 총건수를 넘는 남는 날은 취소, 모자라면 일정 줄이 추가됨 (오른쪽 아래 알림으로 결과). 그날 진행이 진행목록에 아직 없으면 일정 탭 "건수" 칸과 방제·명단 제목 끝 숫자를 직접 고치기. 이미 만든 카톡방 이름은 직접 바꾸기'],
-  ['기대평 진행 (백발백중 도서)', '구매 없이 27개 링크에 기대평만 (1명 = 27건). 10/26~11/6 하루 2·1명 번갈아 15명 = 405건 (진행목록·일정에 자동). 방제 끝은 건수(2명이면 54), 진행목록 목표인원은 사람 수. 캡처는 카톡방으로 받기. 결제금액·리뷰 가이드·리뷰 확인·월급시트 자동은 안 함. 하루 인원 바꾸기는 진행목록 "목표인원"에 사람 수'],
+  ['기대평 진행 (백발백중 도서)', '구매 없이 27개 링크에 기대평만 (1명 = 27건). 10/26~11/8 매일(주말 포함) 1명, 11/8만 2명 = 15명·405건 (진행목록·일정에 자동, 자정 ~ 오전 8시 20분 작성). 방제 끝은 건수(1명 27, 2명 54), 진행목록 목표인원은 사람 수. 월급시트 수량도 건수(1명 27건 × 500원). 캡처는 카톡방으로 받기. 결제금액·리뷰 가이드·리뷰 확인 자동은 안 함. 하루 인원 바꾸기는 진행목록 "목표인원"에 사람 수'],
   ['안 산 사람 (인원 모자람)', '그대로 두면 됨. 의뢰 마지막 날이면 그날 오후 2시 이후 다음 진행일에 모자란 만큼 진행이 자동으로 생김(보낼메시지에 방 공지). 그날 방제는 산 인원으로 바뀜(10→8, 월급시트 캠페인명도) → 보낼메시지 "할 일"대로 카톡방 이름·오리명단방 명단 메시지를 수정. 중간 날 모자란 건 마지막 날 끝난 뒤 한꺼번에. 바로 더 받으려면 폼수정 탭 I2에 인원 숫자'],
   ['잘못 산 사람·방 나간 사람', '폼수정 탭 B1에서 진행 고르기 → 그 응답 체크 → 삭제 실행. 그날 안이면 폼이 다시 열려 다른 사람을 받음'],
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
@@ -5822,7 +5822,7 @@ function makeDueDays_() {
     if (clash) { let nd = nextWorkday_(new Date(x[3])); while (sameDay(nd)) nd = nextWorkday_(nd); x[3] = nd; sh.getRange(i + 2, 4).setValue(nd); }
     const prev = chain ? chain.runs[chain.runs.length - 1] : null;
     // 계획 날짜가 주말·공휴일이면 다음 진행일로 미룸 (방제·명단 제목 날짜도)
-    const day0 = new Date(x[3]), dayW = workdayOnOrAfter_(day0);
+    const day0 = new Date(x[3]), dayW = cfg.platform === '기대평' ? new Date(dayStart_(day0)) : workdayOnOrAfter_(day0);   // 기대평은 주말에도 (구매·배송 없음)
     if (dayW.getTime() !== dayStart_(day0) || (dateTok_(x[5]) && dateTok_(x[5]) !== (dayW.getMonth() + 1) + '.' + dayW.getDate())) {   // 주말이라 미뤘거나 일정 탭에서 날짜를 직접 고침
       x[3] = dayW; x[4] = retitleDate_(x[4], dayW); x[5] = retitleDate_(x[5], dayW);
       sh.getRange(i + 2, 4, 1, 3).setValues([[dayW, x[4], x[5]]]);
@@ -6156,14 +6156,13 @@ function payLayout_(sh) {
 function updatePay_() {
   if (!CONFIG.PAY_SHEET_ID) return;
   const all = readRuns_().filter(function (r) { return r['시트ID'] && r['진행일'] instanceof Date; });
-  // 기대평은 월급시트에 어떻게 넣을지(건수·금액) 아직 안 정해서 빼 둠 (10/23, 사용자 확인 뒤)
-  const runs = all.filter(function (r) { return r['진행 상태'] !== '종료' && !isExpect_(r); });
+  const runs = all.filter(function (r) { return r['진행 상태'] !== '종료'; });
   // 스토어 왼쪽에 '진행일' 칸 (사용자 요청 10/19). 탭마다 한 번 (있으면 그대로)
   try { fixPaySunnyOnce_(); } catch (e) { note_('월급시트 써니마켓 정리 실패: ' + e); }
   try { payTabsNow_().forEach(payDateCol_); } catch (e) { note_('월급시트 진행일 칸 만들기 실패: ' + e); }
   const nameOf = function (r) { return String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, '').trim(); };
   // 같은 캠페인 묶기: 캠페인 칸, 없으면 방제에서 #, 택, 날짜, 건수, 띄어쓰기를 뺀 이름이 앞부분까지 같으면 같은 캠페인
-  const keyOf = function (r) { return String(r['캠페인'] || nameOf(r)).replace(/^[#업택\s]+\d{1,2}\.\d{1,2}/, '').replace(/\d+\s*$/, '').replace(/\s+/g, ''); };
+  const keyOf = function (r) { return String(r['캠페인'] || nameOf(r)).replace(/^[#업택\s]*\d{1,2}\.\d{1,2}/, '').replace(/\d+\s*$/, '').replace(/\s+/g, ''); };
   const same = function (a, b) { return a && b && (a.indexOf(b) === 0 || b.indexOf(a) === 0); };
   // 같은 상품이 다시 의뢰돼도 섞이지 않게: 이 진행 직전의 '1일차'부터를 한 의뢰로 봄
   runs.forEach(function (r) {
@@ -6185,8 +6184,10 @@ function updatePay_() {
     const pick = function (h) { return r[h] || (mine.filter(function (x) { return x[h]; })[0] || {})[h] || ''; };
     // 총액 = 의뢰서 총 구매 건수(날마다 같음). 남은 = 총액 - 전월 - 그날 수량 - 이번 달 앞 날들 수량 (남은 칸 수식에 앞 날들 수를 빼 줌)
     const earlier = mine.filter(function (x) { return x['진행일'] < r['진행일'] && ym(x['진행일']) === ym(r['진행일']); }).reduce(function (a, x) { return a + got(x); }, 0);
-    writePayRow_(r, nameOf(r), total, prev, siblings_(all, r).length > 1,
-      { store: pick('업체'), time: fruit ? '자정 ~ 오전 7시' : payTime_(runSlot_(r)), photo: pick('포토'), earlier: earlier });
+    // 기대평은 1명 = 27건 (건당 500원): 총액·전월·앞 날·그날 수량을 건수로 (사용자 요청 10/23)
+    const mult = isExpect_(r) ? EXP_PER : 1;
+    writePayRow_(r, nameOf(r), total * mult, prev * mult, siblings_(all, r).length > 1,
+      { store: pick('업체'), time: fruit ? '자정 ~ 오전 7시' : payTime_(runSlot_(r)), photo: pick('포토'), earlier: earlier * mult, mult: mult });
   });
   try { payDedupe_(all); } catch (e) { note_('월급시트 중복 줄 확인 실패: ' + e); }
   try { payStatusAll_(all); } catch (e) { note_('월급시트 상태 잇기 실패: ' + e); }
@@ -6456,7 +6457,7 @@ function writePayRow_(r, name, remain, prevMonth, shared, ex) {
   }
   putIfEmpty(L.note, [r['택대'] === 'Y' ? '택대' : '', r['실배송'] === 'Y' ? '실배송' : '', Number(r['일차']) ? r['일차'] + '일차' : '', /유/.test(String(ex.photo || '')) ? '포토' : ''].filter(Boolean).join(' / '));
   const col = L.days[(day.getMonth() + 1) + '-' + day.getDate()] || L.days[String(day.getDate())];
-  put(col, Number(r['인원']) || 0);
+  put(col, (Number(r['인원']) || 0) * (ex.mult || 1));
   if (L.date) { const dc = sh.getRange(row, L.date), dv = dc.getValue(); if (!dc.getFormula() && !(dv instanceof Date && dv.getTime() === day.getTime())) dc.setValue(day).setNumberFormat('M/d'); }
   return { sh: sh, row: row, L: L };
 }
@@ -6932,7 +6933,7 @@ const EXP_LINKS = [
   ['교보문고', '짱 개념연산 2-1', 'https://product.kyobobook.co.kr/detail/S000221237576'],
   ['교보문고', '짱 개념연산 3-1', 'https://product.kyobobook.co.kr/detail/S000221237983']
 ];
-const EXP_SLOT = '★★★당일 오후 6시까지 작성·제출★★★';
+const EXP_SLOT = '★★★자정 ~ 오전 8시 20분 작성·제출★★★';   // 사용자 요청 10/23
 const EXP_FEE = '총 27건, 27,000원';
 function expNotice_() {
   const L = [EXP_SLOT, '', '※구매 아님! 아래 링크 ' + EXP_LINKS.length + '개에 기대평 댓글만 작성※', '',
@@ -6950,33 +6951,33 @@ function expNotice_() {
   return L.join('\n');
 }
 function expDays_() {
-  // 10/26(월)~11/6(금) 진행일 10일, 2·1명 번갈아 = 15명 (11/7·8은 주말)
-  const out = []; let d = new Date(2026, 9, 26), left = 15, k = 0;
-  if (!isWorkday_(d)) d = nextWorkday_(d);
-  while (left > 0 && k < 20) { const n = Math.min(left, k % 2 === 0 ? 2 : 1); out.push({ d: new Date(d), n: n }); left -= n; k++; d = nextWorkday_(d); }
+  // 10/26~11/8 매일(주말 포함, 구매·배송이 없어서) 1명씩 = 14일, 마지막 날만 2명 → 15명 (사용자 요청 10/23: 10.26은 27건)
+  const out = [];
+  for (let k = 0; k < 14; k++) { const d = new Date(2026, 9, 26 + k); out.push({ d: d, n: k === 13 ? 2 : 1 }); }
   return out;
 }
 function expTitle_(d, n) { return (d.getMonth() + 1) + '.' + String(d.getDate()).padStart(2, '0') + ' 백발백중 도서 기대평 ' + (n * EXP_PER); }
-// 방제 끝 숫자: 기대평은 사람 × 27건, 나머지는 사람 수
+// 방제 끝 숫자: 기대평은 사람 × 27건, 나머지는 사람 수 (월급시트 수량·총액도 기대평은 건수)
 function titleCount_(r, n) { return isExpect_(r) ? n * EXP_PER : n; }
 function setupExpectOnce_() {
   const props = PropertiesService.getScriptProperties();
-  if (props.getProperty('EXPECT_V2')) return;
+  if (props.getProperty('EXPECT_V3')) return;
   if (today_().getTime() > new Date(2026, 9, 26).getTime()) return;
-  // 1차(10/23 처음 만든 것: 캡처 올리기·인원 방제)는 응답이 없으면 치우고 다시 만듦
-  const runs = readRuns_(), old = runs.filter(function (r) { return String(r['요청ID']) === 'exp-100-1'; })[0];
-  if (old) {
+  // 앞서 만든 것(1차: 캡처 올리기, 2차: 2·1명 번갈아)은 응답이 없으면 치우고 다시 만듦
+  const runs = readRuns_();
+  const olds = runs.filter(function (r) { return /^exp-100-[12]$/.test(String(r['요청ID'])) && r['진행 상태'] !== '종료'; });
+  for (let oi = 0; oi < olds.length; oi++) { const old = olds[oi];
     let n = 0;
     try { SpreadsheetApp.openById(old['시트ID']).getSheets().forEach(function (t) { if (t.getFormUrl()) n += Math.max(t.getLastRow() - 1, 0); }); } catch (e) {}
-    if (n > 0) { props.setProperty('EXPECT_V2', 'skip'); note_('⚠ 기대평 1차 폼에 응답이 있어서 다시 만들지 않았어요'); return; }
+    if (n > 0) { props.setProperty('EXPECT_V3', 'skip'); note_('⚠ 기대평 폼(' + bareTitle_(old['명단 제목']) + ')에 응답이 있어서 다시 만들지 않았어요'); return; }
     setRun_(old.row, '진행 상태', '종료');
-    try { const ps = planSheet_(), pl = ps.getLastRow(); if (pl >= 2) ps.getRange(2, 1, pl - 1, 1).getValues().forEach(function (v, i) { if (/^exp-100-1-/.test(String(v[0]))) ps.getRange(i + 2, 9).setValue('취소 (다시 만듦)'); }); } catch (e) {}
+    try { const ps = planSheet_(), pl = ps.getLastRow(); if (pl >= 2) ps.getRange(2, 1, pl - 1, 1).getValues().forEach(function (v, i) { if (String(v[0]).indexOf(String(old['요청ID']) + '-') === 0) ps.getRange(i + 2, 9).setValue('취소 (다시 만듦)'); }); } catch (e) {}
     try { const ob = outboxSheet_(), ol = ob.getLastRow(); if (ol >= 2) { const v = ob.getRange(2, 1, ol - 1, 6).getValues(); for (let i = v.length - 1; i >= 0; i--) if (String(v[i][3]) === bareTitle_(old['명단 제목']) && v[i][5] !== '보냄') ob.deleteRow(i + 2); } } catch (e) {}
     try { DriveApp.getFolderById(String(old['폴더 링크']).match(/[-\w]{25,}/)[0]).setTrashed(true); } catch (e) {}
     Object.keys(props.getProperties()).forEach(function (k) { if (k.indexOf('UP_') === 0) props.deleteProperty(k); });
-    note_('✓ 기대평 1차(응답 없음) 치움: 진행 종료, 일정 취소, 안 보낸 공지 지움, 폴더 휴지통');
+    note_('✓ 기대평 예전 것(응답 없음) 치움: ' + bareTitle_(old['명단 제목']) + ' 진행 종료, 일정 취소, 안 보낸 공지 지움, 폴더 휴지통');
   }
-  props.setProperty('EXPECT_V2', '1');
+  props.setProperty('EXPECT_V3', '1');
   const days = expDays_(), d0 = days[0], title = expTitle_(d0.d, d0.n), fname = sheetName_(title);
   const folder = rootFolder_().createFolder(fname);
   const form = FormApp.create(fname);
@@ -7001,7 +7002,7 @@ function setupExpectOnce_() {
   const notice = tpl.split('(구글폼 링크)').join(formUrl);
   form.setDescription(formDesc_(notice));
   const list = ensureListSheet_();
-  const reqId = 'exp-100-2';
+  const reqId = 'exp-100-3';
   const rec = {
     '등록일': new Date(), '진행일': d0.d, '명단 제목': title, '유형': '', '택대': '', '실배송': '', '플랫폼': '기대평',
     '목표인원': d0.n, '인원': 0, '진행 상태': statusFor_(d0.d), '마감 시각': '', '캠페인': campOf_(title), '업체': '백발백중', '구매시간': EXP_SLOT.replace(/★/g, ''),
