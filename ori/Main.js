@@ -1103,8 +1103,12 @@ function normalizeRuns_() {
     if (m && m[1] !== String(r['시트ID'])) { r['시트ID'] = m[1]; setRun_(r.row, '시트ID', m[1]); }
   });
   // 업체, 구매시간, 포토가 비었으면 폼 공지(설명)에서 채움 → 월급시트 스토어, 진행시간, 특이사항에 씀
+  // (10/23 정리) 폼을 여는 건 느려서 같은 진행은 6시간에 한 번만 (포토 칸처럼 공지에서 못 찾는 칸이 있으면 매번 폼을 열었음)
+  const fcache = CacheService.getScriptCache();
   runs.forEach(function (r) {
     if (!r['폼ID'] || r['진행 상태'] === '종료' || (String(r['업체']).trim() && String(r['구매시간']).trim() && String(r['포토']).trim())) return;
+    if (fcache.get('NF_' + r['폼ID'] + '_' + r.row)) return;
+    fcache.put('NF_' + r['폼ID'] + '_' + r.row, '1', 21600);
     let desc = '';
     try { desc = FormApp.openById(r['폼ID']).getDescription() || ''; } catch (e) { return; }
     if (!String(r['업체']).trim()) {
@@ -1149,7 +1153,8 @@ function normalizeRuns_() {
       if (t) setRun_(r.row, '총건수', t);
     }
     const pv = String(r['가격']);
-    if (r['폼ID'] && (!/^\d{3,}(\s*,\s*\d{3,})*$/.test(pv) || /e\+/i.test(pv))) {
+    if (r['폼ID'] && r['진행 상태'] !== '종료' && (!/^\d{3,}(\s*,\s*\d{3,})*$/.test(pv) || /e\+/i.test(pv)) && !fcache.get('NP_' + r['폼ID'] + '_' + r.row)) {
+      fcache.put('NP_' + r['폼ID'] + '_' + r.row, '1', 21600);
       try {
         const ps = pricesFromNotice_(FormApp.openById(r['폼ID']).getDescription());
         if (ps.length) setRun_(r.row, '가격', ps.join(', '));
@@ -2523,10 +2528,9 @@ function checkFullInner_() {
   step_('진행목록');
   try { removeOldUpdateTrigger_(); } catch (e) {}
   try { normalizeRuns_(); } catch (e) { note_('진행목록 정리 실패: ' + e); }
-  // 월급시트 중복 줄 합치기·날짜순 정렬은 맨 앞에서 (맨 끝 월급시트 단계는 자동 확인이 5분 넘게 걸리면 시간이 모자라 정렬을 건너뜀, 10/22)
-  try { if (CONFIG.PAY_SHEET_ID) { step_('월급시트 정렬'); payDedupe_(readRuns_()); payTabsNow_().forEach(payOrder_); } } catch (e) { if (e && e.yieldLock) throw e; note_('월급시트 정렬 실패: ' + e); }
+  // 지난 확인에서 시간이 모자라 월급시트를 못 했으면 맨 앞에서 (10/23 정리: 월급시트는 바뀐 게 있을 때만)
+  try { if (CONFIG.PAY_SHEET_ID && PropertiesService.getScriptProperties().getProperty('PAY_PENDING')) { step_('월급시트'); updatePay_(); PropertiesService.getScriptProperties().deleteProperty('PAY_PENDING'); } } catch (e) { if (e && e.yieldLock) throw e; note_('월급시트 갱신 실패: ' + e); }
   try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
-  try { fixWeekendOnce_(); } catch (e) { note_('주말 진행 정리 실패: ' + e); }
   try { autoNextDay_(); } catch (e) { note_('다음 날 진행 만들기 실패: ' + e); }
   const me = Session.getEffectiveUser().getEmail();
   const props = PropertiesService.getScriptProperties();
@@ -2542,56 +2546,28 @@ function checkFullInner_() {
   try { const rr = readRuns_(), mm = outboxRows_(); closeIdleForms_(rr, mm); openStartingForms_(rr, mm); } catch (e) { note_('폼 열고 닫기 실패: ' + e); }
   try { ensureMidnightTrigger_(); } catch (e) { note_('0시 확인 예약 실패: ' + e); }
   step_('공지 모양');
-  try { fixStyleOnce_(); } catch (e) { note_('공지 모양 정리 실패: ' + e); }
-  try { reopenAndSunnyOnce_(readRuns_()); } catch (e) { note_('폼 다시 열기 실패: ' + e); }
-  try { dropSunnyExtraOnce_(readRuns_()); } catch (e) { note_('부유단감 추가 진행 지우기 실패: ' + e); }
-  try { fixOzneOnce_(readRuns_()); } catch (e) { note_('오즈네즈 폼 제목 실패: ' + e); }
-  try { fixOzneSunny2Once_(readRuns_()); } catch (e) { note_('오즈네즈·부유단감 정리 실패: ' + e); }
-  try { fixOzneSunny3Once_(readRuns_()); } catch (e) { note_('오즈네즈·부유단감 3차 실패: ' + e); }
-  try { fixOzne4Once_(readRuns_()); } catch (e) { note_('오즈네즈 4차 실패: ' + e); }
-  try { fixSunny5Once_(readRuns_()); } catch (e) { note_('부유단감 5차 실패: ' + e); }
-  try { fixOzAssignOnce_(readRuns_()); } catch (e) { note_('오즈네즈 배정 실패: ' + e); }
-  try { fixFormOptsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 확인 실패: ' + e); }
-  try { fixPlatOnce_(readRuns_()); } catch (e) { note_('플랫폼 바로잡기 실패: ' + e); }
   try { ensureRunNotices_(readRuns_()); } catch (e) { note_('방 공지 확인 실패: ' + e); }
   try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
-  try { fixOzneDay2Once_(readRuns_()); } catch (e) { note_('10.22 오즈네즈 공지 실패: ' + e); }
-  try { setupExpectOnce_(); } catch (e) { note_('기대평 진행 만들기 실패: ' + e); }
-  try { fixExpect5Once_(); } catch (e) { note_('기대평 다시 나누기 실패: ' + e); }
-  try { fixWongoOnce_(); } catch (e) { note_('원고 가이드 고치기 실패: ' + e); }
-  try { fixExpect6Once_(); } catch (e) { note_('기대평 하루 3명 실패: ' + e); }
-  try { fixExpect7Once_(); } catch (e) { note_('기대평 이름 되돌리기 실패: ' + e); }
-  try { talkdealDateOnce_(); } catch (e) { note_('톡딜 진행일 실패: ' + e); }
-  try { talkdealOnce_(); } catch (e) { note_('톡딜 넣기 실패: ' + e); }
-  try { fixAnkleDupOnce_(readRuns_()); } catch (e) { note_('발목무압박 중복 정리 실패: ' + e); }
-  try { fixCeilingOnce_(readRuns_()); } catch (e) { note_('실링팬 하루 인원 실패: ' + e); }
-  try { fixOrangeOnce_(readRuns_()); } catch (e) { note_('오렌지 오타 실패: ' + e); }
-  try { fixNeckOptOnce_(readRuns_()); } catch (e) { note_('목보호대 옵션 실패: ' + e); }
-  try { fixDaebongOnce_(readRuns_()); } catch (e) { note_('대봉감 이름 실패: ' + e); }
-  try { fixOmegaOnce_(readRuns_()); } catch (e) { note_('오메가3 날짜 실패: ' + e); }
-  try { fixOptDigitsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 단일옵션 실패: ' + e); }
+  if (!props.getProperty('EXPECT_V4')) try { setupExpectOnce_(); } catch (e) { note_('기대평 진행 만들기 실패: ' + e); }
+  if (!props.getProperty('EXPECT_V5')) try { fixExpect5Once_(); } catch (e) { note_('기대평 다시 나누기 실패: ' + e); }
+  if (!props.getProperty('WONGO_V1')) try { fixWongoOnce_(); } catch (e) { note_('원고 가이드 고치기 실패: ' + e); }
+  if (!props.getProperty('EXPECT_V6')) try { fixExpect6Once_(); } catch (e) { note_('기대평 하루 3명 실패: ' + e); }
+  if (!props.getProperty('EXPECT_V7')) try { fixExpect7Once_(); } catch (e) { note_('기대평 이름 되돌리기 실패: ' + e); }
+  if (!props.getProperty('TALKDEAL_DATE_V1')) try { talkdealDateOnce_(); } catch (e) { note_('톡딜 진행일 실패: ' + e); }
+  if (!props.getProperty('TALKDEAL_V1')) try { talkdealOnce_(); } catch (e) { note_('톡딜 넣기 실패: ' + e); }
+  if (!props.getProperty('ANKLEDUP_V1')) try { fixAnkleDupOnce_(readRuns_()); } catch (e) { note_('발목무압박 중복 정리 실패: ' + e); }
+  if (!props.getProperty('CEIL2_V1')) try { fixCeilingOnce_(readRuns_()); } catch (e) { note_('실링팬 하루 인원 실패: ' + e); }
+  if (!props.getProperty('ORANGE_V1')) try { fixOrangeOnce_(readRuns_()); } catch (e) { note_('오렌지 오타 실패: ' + e); }
+  if (!props.getProperty('NECKOPT_V1')) try { fixNeckOptOnce_(readRuns_()); } catch (e) { note_('목보호대 옵션 실패: ' + e); }
+  if (!props.getProperty('DAEBONG_V1')) try { fixDaebongOnce_(readRuns_()); } catch (e) { note_('대봉감 이름 실패: ' + e); }
+  if (!props.getProperty('OMEGA_V1')) try { fixOmegaOnce_(readRuns_()); } catch (e) { note_('오메가3 날짜 실패: ' + e); }
+  if (!props.getProperty('OPTDIGIT_V1')) try { fixOptDigitsOnce_(readRuns_()); } catch (e) { note_('폼 옵션 단일옵션 실패: ' + e); }
   const runs = readRuns_(), times = {};
   step_('알림');
   try { fruitCheck_(runs); } catch (e) { note_('안 산 사람 확인 실패: ' + e); }
   try { takbaeCheck_(runs); } catch (e) { note_('택배시트 알림 실패: ' + e); }
   try { photoWaitCheck_(runs); } catch (e) { note_('포토대기 알림 실패: ' + e); }
   try { photoAskCheck_(runs); } catch (e) { note_('포토 요청 알림 실패: ' + e); }
-  try { fixOct16Once_(); } catch (e) { note_('10.16 정리 실패: ' + e); }
-  try { fixNamesOnce_(); } catch (e) { note_('공지 이름 정리 실패: ' + e); }
-  try { fixTaOnce_(); } catch (e) { note_('배정 (타) 정리 실패: ' + e); }
-  try { fixGogumaAssignOnce_(); } catch (e) { note_('고구마말랭이 배정 옮기기 실패: ' + e); }
-  try { fixGoguma1019Once_(); } catch (e) { note_('10.19 고구마말랭이 배정 이름 고치기 실패: ' + e); }
-  try { reloadEditTabOnce_(); } catch (e) { note_('폼수정 탭 다시 불러오기 실패: ' + e); }
-  try { fixModuAssignOnce_(); } catch (e) { note_('모두의농수산 배정 옮기기 실패: ' + e); }
-  try { fixTemplateOnce_(); } catch (e) { note_('템플릿 폼 질문 고치기 실패: ' + e); }
-  try { fixTemplateNameOnce_(); } catch (e) { note_('템플릿 폼 이름 질문 바꾸기 실패: ' + e); }
-  try { blackSheet_(); } catch (e) { note_('블랙리스트 탭 만들기 실패: ' + e); }
-  try { ensureUsageTab_(); } catch (e) { note_('사용법 탭 만들기 실패: ' + e); }
-  try { fixNoCountNamesOnce_(runs); } catch (e) { note_('이름 인원 수 빼기 실패: ' + e); }
-  try { fixSilOnce_(runs); } catch (e) { note_('실 위치 바꾸기 실패: ' + e); }
-  try { fixStaleNamesOnce_(runs); } catch (e) { note_('다음 일차 공지 이름 빼기 실패: ' + e); }
-  try { fixShrinkOnce_(runs); } catch (e) { note_('인원 맞춤 실패: ' + e); }
-  try { dropManualColsOnce_(runs); } catch (e) { note_('송장번호·실배송 칸 지우기 실패: ' + e); }
   try { ensureListMsgs_(runs); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { ensureReviewGuideMsgs_(runs); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
   try { adoptOrphanForms_(runs); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
@@ -2624,11 +2600,6 @@ function checkFullInner_() {
   });
   props.setProperty('RUN_ERRORS', JSON.stringify(errs));
   // 리뷰체크 탭은 사용자 요청으로 없앰(10/19). 만들어 둔 탭은 한 번 지움
-  try { dropReviewTabsOnce_(runs); } catch (e) { note_('리뷰체크 탭 지우기 실패: ' + e); }
-  step_('리뷰 완료');
-  if (!late_(200)) { try { reviewDone_(readRuns_()); } catch (e) { note_('리뷰 완료 확인 실패: ' + e); } }
-  step_('명단 탭(지난 의뢰)');
-  try { listTabsRecent_(runs, listed); } catch (e) { note_('지난 명단 탭 실패: ' + e); }
   try { refreshEditTab_(); } catch (e) { note_('폼수정 탭 새로고침 실패: ' + e); }
   function checkRun_(r) {
     let form;
@@ -2665,13 +2636,17 @@ function checkFullInner_() {
       if (!globalThis.__OBROWS) { try { globalThis.__OBROWS = outboxRows_(); } catch (e) { globalThis.__OBROWS = []; } }
       const fids = runFormIds_(r, runs, globalThis.__OBROWS).concat(String(props.getProperty('ORPHANS_' + r['시트ID']) || '').split(',').filter(Boolean));
       fids.filter(function (x, i, a) { return a.indexOf(x) === i; }).forEach(function (fid) {
+        // 폼 질문 확인은 폼마다 6시간에 한 번 (10/23 정리: 15분마다 폼 질문을 다 훑어서 느렸음)
+        const qk = 'NQ_' + fid + '_' + (r['실배송'] === 'Y' ? 1 : 0), qc = CacheService.getScriptCache();
+        if (qc.get(qk)) return;
+        qc.put(qk, '1', 21600);
         try {
           const f = String(fid) === String(r['폼ID']) ? form : FormApp.openById(fid);
           if (ensureNickQuestion_(f)) note_('✓ ' + bareTitle_(r['명단 제목']) + ' 폼에 닉네임 질문 넣음' + (f === form ? '' : ' (공지 속 다른 폼)'));
           if (f !== form) fixFormQuestions_(f, r['실배송'] === 'Y');
         } catch (e) { note_(bareTitle_(r['명단 제목']) + ' 닉네임 질문 실패: ' + e.message); }
       });
-      try { fixFormQuestions_(form, r['실배송'] === 'Y'); } catch (e) {}
+      try { const qc = CacheService.getScriptCache(), qk = 'NQF_' + r['폼ID'] + '_' + (r['실배송'] === 'Y' ? 1 : 0); if (!qc.get(qk)) { qc.put(qk, '1', 21600); fixFormQuestions_(form, r['실배송'] === 'Y'); } } catch (e) {}
     }
     const w = windowOf_(runs, r);
     if (Date.now() < w.from) return;   // 아직 시작 전인 다음 일차
@@ -2750,14 +2725,29 @@ function checkFullInner_() {
   }
   step_('한눈에');
   try { buildDashboard_(false); } catch (e) { note_('한눈에 탭 실패: ' + e); }
-  // 월급시트도 15분마다 같이 갱신 (계약 수량 링크, 총액, 그날 수량)
-  step_('월급시트');
-  try { updatePay_(); } catch (e) { note_('월급시트 갱신 실패: ' + e); }
-  // 급하지 않은 정리는 시간이 남을 때만 (6분 넘으면 구글이 중간에 끊음)
-  if (late_(240)) { note_('✓ 시간이 모자라 시트 정리는 다음 확인 때'); return; }
+  // 월급시트·배정 수식은 진행이 바뀌었을 때(인원·방제·날짜·상태) 또는 30분마다만 (10/23 정리: 매번 하면 확인이 5분 넘게 걸려 명단이 늦게 뜸)
+  const rr = readRuns_(), sigOf = function (o) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(o), Utilities.Charset.UTF_8)); };
+  const live = rr.filter(function (r) { return r['진행 상태'] !== '종료'; });
+  const runSig = sigOf([Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd'), live.map(function (r) { return [r['명단 제목'], String(r['진행일']), r['시트ID'], r['폼ID'], r['진행 상태']]; })]);
+  const paySig = sigOf([runSig, live.map(function (r) { return [r['인원'], r['목표인원'], r['가격'], r['총건수'], r['업체'], r['구매시간']]; })]);
+  const slow = Date.now() - Number(props.getProperty('SLOW_AT') || 0) > 30 * 60000;
+  if (CONFIG.PAY_SHEET_ID && (slow || props.getProperty('PAY_SIG') !== paySig)) {
+    if (late_(250)) props.setProperty('PAY_PENDING', '1');   // 시간이 모자라면 다음 확인 맨 앞에서
+    else { step_('월급시트'); try { updatePay_(); props.setProperty('PAY_SIG', paySig); props.deleteProperty('PAY_PENDING'); } catch (e) { note_('월급시트 갱신 실패: ' + e); } }
+  }
+  if (slow || props.getProperty('RUN_SIG') !== runSig) {
+    if (!late_(270)) { step_('배정 수식'); try { refreshAssignFormulasOnce_(rr); props.setProperty('RUN_SIG', runSig); } catch (e) { note_('배정 수식 갱신 실패: ' + e); } }
+  }
+  // 급하지 않은 정리는 30분마다, 시간이 남을 때만 (6분 넘으면 구글이 중간에 끊음)
+  if (!slow || late_(240)) return;
   step_('정리');
-  try { cleanListSheetsOnce_(readRuns_()); } catch (e) { note_('명단 시트 표시 정리 실패: ' + e); }
-  try { refreshAssignFormulasOnce_(readRuns_()); } catch (e) { note_('배정 수식 갱신 실패: ' + e); }
+  props.setProperty('SLOW_AT', String(Date.now()));
+  try { reviewDone_(readRuns_()); } catch (e) { note_('리뷰 완료 확인 실패: ' + e); }
+  if (late_(270)) return;
+  try { listTabsRecent_(rr, listed); } catch (e) { note_('지난 명단 탭 실패: ' + e); }
+  try { blackSheet_(); } catch (e) { note_('블랙리스트 탭 만들기 실패: ' + e); }
+  try { ensureUsageTab_(); } catch (e) { note_('사용법 탭 만들기 실패: ' + e); }
+  try { cleanListSheetsOnce_(rr); } catch (e) { note_('명단 시트 표시 정리 실패: ' + e); }
   try { ensureEditTab_(); } catch (e) { note_('폼수정 탭 만들기 실패: ' + e); }
 }
 
@@ -4482,9 +4472,13 @@ function ensureSubmitTriggers_(runs) {
 
 // 폼이 제출되면: 그 폼 진행들의 인원 → 월급시트, 한눈에 탭. 다 찼으면 마감 확인까지
 function onRunSubmit_(e) {
-  // 다른 작업 중이면 20초 기다리고, 그래도 바쁘면 1분 뒤 확인이 이어서 함
+  // 폼 응답은 바로 명단에 (10/23 정리): 15분 확인이 돌고 있으면 그 확인이 다음 단계에서 멈추고 잠금을 넘김(1분 뒤 이어서). 최대 60초 기다림
   let ran = false;
-  const out = locked_(function () {
+  const props0 = PropertiesService.getScriptProperties();
+  props0.setProperty('WANT_LOCK', String(Date.now()));
+  let out;
+  try { out = locked_(function () {
+    props0.deleteProperty('WANT_LOCK');
     ran = true;
     const formId = e.source.getId();
     const runs = readRuns_();
@@ -4507,9 +4501,9 @@ function onRunSubmit_(e) {
     Object.keys(sids).forEach(function (sid) { try { syncList_(SpreadsheetApp.openById(sid)); } catch (err) {} });
     // 월급시트·한눈에 탭은 오래 걸려서(합쳐 몇 분) 응답마다 하면 6분 제한에 걸려 한눈에 탭이 비워진 채 멈출 수 있음 (10/20)
     //  → 1분 뒤 자동 확인 한 번이 둘 다 갱신 (응답이 몰려도 한 번만)
+    // 인원이 다 찼으면(마감·명단 전달) 1분 뒤 확인이 함. 여기서 전체 확인을 돌리면 몇 분 동안 잠금을 잡아 다른 사람 응답이 명단에 늦게 떴음 (10/23)
     try { soonCheck_(); } catch (err) {}
-    if (full) checkFull();
-  }, 20000);
+  }, 60000); } finally { props0.deleteProperty('WANT_LOCK'); }
   if (!ran) { try { soonCheck_(); } catch (err) {} }
   return out;
 }
