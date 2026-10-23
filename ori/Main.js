@@ -2553,6 +2553,9 @@ function checkFullInner_() {
   try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
   try { fixOzneDay2Once_(readRuns_()); } catch (e) { note_('10.22 오즈네즈 공지 실패: ' + e); }
   try { setupExpectOnce_(); } catch (e) { note_('기대평 진행 만들기 실패: ' + e); }
+  try { fixExpect5Once_(); } catch (e) { note_('기대평 다시 나누기 실패: ' + e); }
+  try { fixWongoOnce_(); } catch (e) { note_('원고 가이드 고치기 실패: ' + e); }
+  try { talkdealOnce_(); } catch (e) { note_('톡딜 넣기 실패: ' + e); }
   try { fixAnkleDupOnce_(readRuns_()); } catch (e) { note_('발목무압박 중복 정리 실패: ' + e); }
   try { fixCeilingOnce_(readRuns_()); } catch (e) { note_('실링팬 하루 인원 실패: ' + e); }
   try { fixOrangeOnce_(readRuns_()); } catch (e) { note_('오렌지 오타 실패: ' + e); }
@@ -2928,6 +2931,8 @@ function ensureReviewGuideMsgs_(runs) {
       // 포토제공(사진 받은 뒤 진행 도우미로 세트 배정)·구매확정만은 리뷰 가이드 없음. 리뷰 정보가 없는 예전 진행도 이름은 넣고 가이드는 '사장님께 물어보기'로 (10/21)
       if (!rv) rv = { kind: 'text', mix: '', guide: '' };
       if (rv.kind === 'confirm') return;
+      // 원고제공·자율 의뢰는 사용자 원고 가이드 글 (전체 포토리뷰, 10/23)
+      if (isWongo_(rv)) { queueMsg_(String(r['카톡방'] || bareTitle_(r['명단 제목'])), WONGO_GUIDE, '방 공지'); note_('✓ 원고 리뷰 가이드 넣음: ' + bareTitle_(r['명단 제목'])); return; }
       // 포토제공 의뢰: 폼이 차면 그 방에 '⭐️포토대기⭐️' (사진은 받은 뒤 따로, 사용자 요청 10/21)
       const photoAll = rv.kind === 'photo';   // 포토제공: ⭐️포토대기⭐️ + 가이드는 '포토전달대기'로 미리
       props.setProperty(key, '1');
@@ -3232,7 +3237,7 @@ function ensureRunNotices_(runs) {
     try { desc = FormApp.openById(r['폼ID']).getDescription(); } catch (e) { return; }
     if (!desc || desc.indexOf(link) < 0) return;
     props.setProperty(pk, '1');
-    queueMsg_(room, withSlotLine_(desc, runSlot_(r), chainFruit_(r)), '방 공지');
+    queueMsg_(room, isExpect_(r) ? desc : withSlotLine_(desc, runSlot_(r), chainFruit_(r)), '방 공지');
     note_('✓ 빠진 방 공지 넣음: ' + room);
   });
 }
@@ -4724,7 +4729,7 @@ function rvZip_(f, name, props, sid) {
 }
 
 /* ---------------- 사용법 탭 (맨 앞, 사용자 요청 10/20). 글을 바꾸면 USAGE_VER를 올림 → 다시 씀 ---------------- */
-const USAGE_TAB = '사용법', USAGE_VER = '10';
+const USAGE_TAB = '사용법', USAGE_VER = '11';
 const USAGE_ROWS = [
   ['체험단 관리 시트 사용법', '(스크립트가 쓰는 탭이라 여기 고친 글은 다음 업데이트 때 다시 써져요)'],
   ['', ''],
@@ -4748,7 +4753,7 @@ const USAGE_ROWS = [
   ['날짜 바꾸기', '예) 목요일 건너뛰고 금요일에: 진행목록에서 그 진행 "진행일"을 새 날짜(10/23)로 고치기 → 방제·카톡방 이름·보낼메시지·월급시트·뒤 일차까지 같이 바뀜 (오른쪽 아래 알림). 이미 만든 카톡방 이름은 직접 바꾸기. 아직 안 만든 일차는 "일정" 탭 진행일을 고치기'],
   ['하루 건너뛰기 (예: 오메가3)', '예) 오늘(목)은 그대로 2시 전까지 받고, 내일(금)만 쉬고 월요일에: 진행목록에서 "내일" 진행의 "진행일"을 월요일(10/26)로 고치기 → 그 뒤 일차·일정·방제·보낼메시지 날짜가 같이 밀림. 내일 진행이 진행목록에 아직 없으면 "일정" 탭에서 그 줄 진행일을 월요일로 (그 뒤 줄도 하루씩 직접). 오늘 진행은 건드리지 않기. 카톡방 이름이 이미 있으면 직접 바꾸기'],
   ['하루 인원 바꾸기 (예: 실링팬 하루 2명)', '진행목록에서 바꾸기 시작할 날 진행의 "목표인원"을 새 숫자(2)로 고치기 → 그날부터 뒤 일차·일정 탭까지 하루 2명으로 바뀜 (방제 끝 숫자·폼 설명·안 보낸 방 공지 "(N명)"도). 총건수를 넘는 남는 날은 취소, 모자라면 일정 줄이 추가됨 (오른쪽 아래 알림으로 결과). 그날 진행이 진행목록에 아직 없으면 일정 탭 "건수" 칸과 방제·명단 제목 끝 숫자를 직접 고치기. 이미 만든 카톡방 이름은 직접 바꾸기'],
-  ['기대평 진행 (백발백중 도서)', '구매 없이 링크에 기대평만. 업체 요청(매주 개인당 13~14건)대로 한 사람이 두 번: 1주차(10/26~11/1) 14건·14,000원, 2주차(11/2~11/8) 나머지 13건·13,000원. 주마다 15명(하루 3·2·2·2·2·2·2명, 주말 포함) = 405건. 자정 ~ 오전 8시 20분 작성. 방제 끝은 건수(사람 × 14 또는 13), 진행목록 목표인원은 사람 수. 월급시트 수량도 건수(× 500원). 캡처는 카톡방으로. 하루 인원 바꾸기는 진행목록 "목표인원"에 사람 수'],
+  ['기대평 진행 (백발백중 도서)', '구매 없이 링크에 기대평만. 업체 요청(매주 개인당 13~14건)대로 한 사람이 두 번: 1주차(10/26~10/30) 14건·14,000원, 2주차(11/2~11/6) 나머지 13건·13,000원. 주마다 15명(월~금 5·3·3·2·2명, 주말 빼고. 월요일 5명 = 윤주영 5계정) = 405건. 자정 ~ 오전 8시 20분 작성. 방제 끝은 건수(사람 × 14 또는 13), 진행목록 목표인원은 사람 수. 월급시트 수량도 건수(× 500원). 캡처는 카톡방으로. 하루 인원 바꾸기는 진행목록 "목표인원"에 사람 수'],
   ['안 산 사람 (인원 모자람)', '그대로 두면 됨. 의뢰 마지막 날이면 그날 오후 2시 이후 다음 진행일에 모자란 만큼 진행이 자동으로 생김(보낼메시지에 방 공지). 그날 방제는 산 인원으로 바뀜(10→8, 월급시트 캠페인명도) → 보낼메시지 "할 일"대로 카톡방 이름·오리명단방 명단 메시지를 수정. 중간 날 모자란 건 마지막 날 끝난 뒤 한꺼번에. 바로 더 받으려면 폼수정 탭 I2에 인원 숫자'],
   ['잘못 산 사람·방 나간 사람', '폼수정 탭 B1에서 진행 고르기 → 그 응답 체크 → 삭제 실행. 그날 안이면 폼이 다시 열려 다른 사람을 받음'],
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
@@ -5835,11 +5840,12 @@ function makeDueDays_() {
     locked_(function () {
       if (findRunByRequest_(x[0])) { sh.getRange(i + 2, 9).setValue('생성됨'); return; }
       const dateIso = Utilities.formatDate(new Date(x[3]), CONFIG.TIMEZONE, 'yyyy-MM-dd');
-      const desc = adjustNotice_(stripNames_(cfg.desc), JSON.parse(x[7]), cfg.slot2);   // 예전에 저장한 틀에 이름이 남아 있어도 빼고
+      const exp = cfg.platform === '기대평';   // 기대평 공지는 시간 줄·인원 줄 없이 그대로
+      const desc = exp ? cfg.desc : adjustNotice_(stripNames_(cfg.desc), JSON.parse(x[7]), cfg.slot2);   // 예전에 저장한 틀에 이름이 남아 있어도 빼고
       const res = createRunInner_({
         k: CONFIG.KEY, n: x[0], title: x[5], room: x[4], fname: x[4], camp: cfg.camp, day: k, total: cfg.total,
         daily: String(x[6]), date: dateIso, desc: desc, type: cfg.type, takdae: cfg.takdae, realship: cfg.realship,
-        platform: cfg.platform, prices: cfg.prices, croom: cfg.croom, opts: cfg.opts, shop: cfg.shop, photo: cfg.photo, slot: cfg.slot2,
+        platform: cfg.platform, prices: cfg.prices, croom: cfg.croom, opts: cfg.opts, shop: cfg.shop, photo: cfg.photo, slot: exp ? '' : cfg.slot2,
         reuse: baseRun && baseRun['폼ID'] ? baseRun : undefined, sheetId: baseRun ? baseRun['시트ID'] : undefined
       });
       sh.getRange(i + 2, 9).setValue('생성됨');
@@ -6951,10 +6957,14 @@ const EXP_SETS = {
 };
 function expFee_(set) { const n = EXP_SETS[set].length; return '총 ' + n + '건, ' + (n * 1000).toLocaleString('en-US') + '원'; }
 function expNotice_(set) {
-  const links = EXP_SETS[set], wk = set === 'A' ? '1주차' : '2주차';
-  const L = [EXP_SLOT, '', '※구매 아님! 아래 링크 ' + links.length + '개에 기대평 댓글만 작성 (' + wk + ')※', '',
-    '▶ 공백 제외 100~150자 이상, 긍정적인 기대평', '▶ "구매했다"는 내용 X → 구매하고 싶다·기대된다는 내용으로', '▶ 짧은 기대평·복붙 같은 글 X (교재마다 다르게)',
-    '▶ ' + links.length + '개 다 쓰면 캡처해서 이 카톡방에 올리고 → 폼 작성', '▶ 리뷰비 ' + expFee_(set), '★사업자 4971201389 ★', '',
+  // 사용자가 고친 글 그대로 (10/23). 맨 위 시간 줄·사업자 줄 없음
+  const links = EXP_SETS[set], wk = set === 'A' ? '1주차' : '2주차', n = links.length;
+  const L = ['※구매 아님! 아래 링크 ' + n + '개에 기대평 댓글만 작성해주세요 (' + wk + ')※', '',
+    '▶ 공백 제외 100~150자 이상, 긍정적인 기대평',
+    '▶ "구매했다"는 내용 금지 금지 금지 !!!!! → 구매하고 싶다 or 기대된다는 내용으로 부탁드려요',
+    '▶ 짧은 기대평 or 복붙 같은 글 금지 금지 금지 !!!!! (교재마다 다르게)',
+    '▶ ' + n + '개 다 작성 후 캡처해서 [당일 바로] 카톡방에 올려주세요!',
+    '▶ [' + wk + '] 리뷰비는 ' + expFee_(set) + ' 입니다.', '',
     '☆★☆★ 양식 작성 폼 ☆★☆★', '(구글폼 링크)', '',
     '🐥교재별로 넣을 내용🐥',
     '[짱 개념연산] 시험에 자주 나오는 연산 유형 집중 대비 / 개념 문제로 내신 대비·연산 실력 향상 / 빠르고 정확한 연산 연습에 좋을 것 같아 써 보고 싶다',
@@ -6969,9 +6979,12 @@ function expNotice_(set) {
   return L.join('\n');
 }
 function expDays_() {
-  // 주마다 15명 (7일: 3·2·2·2·2·2·2), 1주차 A묶음, 2주차 B묶음 = 30번
-  const out = [], per = [3, 2, 2, 2, 2, 2, 2];
-  for (let k = 0; k < 14; k++) out.push({ d: new Date(2026, 9, 26 + k), n: per[k % 7], set: k < 7 ? 'A' : 'B' });
+  // 주말 빼고 (사용자 요청 10/23): 1주차 10/26~10/30 A묶음, 2주차 11/2~11/6 B묶음. 주마다 15명 = 5·3·3·2·2
+  //  월요일 5명 = 윤주영 (계정이 플랫폼마다 5개)
+  const out = [], per = [5, 3, 3, 2, 2];
+  [[new Date(2026, 9, 26), 'A'], [new Date(2026, 10, 2), 'B']].forEach(function (w) {
+    per.forEach(function (n, k) { out.push({ d: new Date(w[0].getFullYear(), w[0].getMonth(), w[0].getDate() + k), n: n, set: w[1] }); });
+  });
   return out;
 }
 function expTitle_(d, n, set) { return (d.getMonth() + 1) + '.' + String(d.getDate()).padStart(2, '0') + ' 백발백중 도서 기대평 ' + (n * EXP_SETS[set].length); }
@@ -6998,6 +7011,7 @@ function setupExpectOnce_() {
     note_('✓ 기대평 예전 것(응답 없음) 치움: ' + bareTitle_(old['명단 제목']) + ' 진행 종료, 일정 취소, 안 보낸 공지 지움, 폴더 휴지통');
   }
   props.setProperty('EXPECT_V4', '1');
+  props.setProperty('EXPECT_V5', '1');   // 새로 만들면 아래 고치기(fixExpect5Once_)는 필요 없음
   const days = expDays_(), d0 = days[0], title = expTitle_(d0.d, d0.n, d0.set), fname = sheetName_(title);
   const folder = rootFolder_().createFolder(fname);
   const form = FormApp.create(fname);
@@ -7025,7 +7039,7 @@ function setupExpectOnce_() {
   const reqId = 'exp-100-4';
   const rec = {
     '등록일': new Date(), '진행일': d0.d, '명단 제목': title, '유형': '', '택대': '', '실배송': '', '플랫폼': '기대평',
-    '목표인원': d0.n, '인원': 0, '진행 상태': statusFor_(d0.d), '마감 시각': '', '캠페인': campOf_(title), '업체': '백발백중', '구매시간': EXP_SLOT.replace(/★/g, ''),
+    '목표인원': d0.n, '인원': 0, '진행 상태': statusFor_(d0.d), '마감 시각': '', '캠페인': campOf_(title), '업체': '백발백중', '구매시간': '자정 ~ 오전 8시 20분',
     '포토': '', '일차': 1, '총건수': 30, '가격': String(EXP_SETS.A.length * 1000), '카톡방': title, '업체방': '',
     '폼 링크': formUrl, '시트 링크': ss.getUrl(), '폴더 링크': folder.getUrl(), '시트ID': ss.getId(), '폼ID': form.getId(), '요청ID': reqId
   };
@@ -7035,7 +7049,7 @@ function setupExpectOnce_() {
   // 다음 일차는 일정 탭 (진행일 0시에 만들어짐, 같은 폼·명단 시트). 일정 '건수'는 사람 수, 방제 끝은 건수
   //  일정 '건수'는 사람 수, 방제 끝은 건수. 주마다 공지(링크 묶음)·리뷰비가 다름
   const cfgOf = function (set) { return JSON.stringify({ type: '', takdae: false, realship: false, platform: '기대평', prices: String(EXP_SETS[set].length * 1000), croom: '', shop: '백발백중', photo: '', opts: '',
-    desc: expNotice_(set), slot2: EXP_SLOT, total: 30, camp: campOf_(title), base: reqId }); };
+    desc: expNotice_(set), slot2: '', total: 30, camp: campOf_(title), base: reqId }); };
   const ps = planSheet_();
   days.slice(1).forEach(function (x, i) {
     const t = expTitle_(x.d, x.n, x.set);
@@ -7043,4 +7057,97 @@ function setupExpectOnce_() {
   });
   try { sortList_(); } catch (e) {}
   note_('✓ 기대평 진행 만듦: ' + title + ' + 일정 ' + (days.length - 1) + '일 (15명 × 2번 = 405건)');
+}
+
+// (10/23 한 번) 이미 만든 기대평(exp-100-4)을 그대로 두고 고침: 주말 빼고 다시 나눔(5·3·3·2·2), 공지 글, 폼 설명, 일정, 보낼메시지(기대평 공지 하나만), 윤주영 5계정 배정
+function fixExpect5Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('EXPECT_V5')) return;
+  const r = readRuns_().filter(function (x) { return String(x['요청ID']) === 'exp-100-4' && x['진행 상태'] !== '종료'; })[0];
+  if (!r) return;
+  props.setProperty('EXPECT_V5', '1');
+  const days = expDays_(), d0 = days[0], title = expTitle_(d0.d, d0.n, d0.set);
+  setRun_(r.row, '목표인원', d0.n);
+  setRun_(r.row, '구매시간', '자정 ~ 오전 8시 20분');
+  renameRun_(r, title);
+  const notice = expNotice_('A').split('(구글폼 링크)').join(r['폼 링크']);
+  try { FormApp.openById(r['폼ID']).setDescription(formDesc_(notice)); } catch (e) { note_('기대평 폼 설명 실패: ' + e); }
+  // 보낼메시지: 안 보낸 기대평 공지는 다 지우고(방 이름이 틀린 것·두 개인 것 포함) 하나만
+  try {
+    const ob = outboxSheet_(), ol = ob.getLastRow();
+    if (ol >= 2) { const v = ob.getRange(2, 1, ol - 1, 6).getValues(); for (let i = v.length - 1; i >= 0; i--) if (v[i][5] !== '보냄' && /기대평 댓글만 작성/.test(String(v[i][4]))) ob.deleteRow(i + 2); }
+  } catch (e) { note_('기대평 공지 정리 실패: ' + e); }
+  queueMsg_(title, notice, '방 공지');
+  // 일정: 예전 계획 취소하고 새로
+  const ps = planSheet_(), pl = ps.getLastRow();
+  let cfg0 = null;
+  if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (v, i) {
+    if (String(v[0]).indexOf('exp-100-4-') !== 0) return;
+    if (!cfg0) { try { cfg0 = JSON.parse(v[9]); } catch (e) {} }
+    if (v[8] === '대기') ps.getRange(i + 2, 9).setValue('취소 (다시 나눔)');
+  });
+  const cfgOf = function (set) { return JSON.stringify(Object.assign({}, cfg0 || {}, { type: '', takdae: false, realship: false, platform: '기대평', prices: String(EXP_SETS[set].length * 1000), croom: '', shop: '백발백중', photo: '', opts: '',
+    desc: expNotice_(set), slot2: '', total: 30, camp: campOf_(title), base: 'exp-100-4' })); };
+  days.slice(1).forEach(function (x, i) {
+    const t = expTitle_(x.d, x.n, x.set);
+    ps.appendRow(['exp-100-4-v5-' + (i + 2), campOf_(title), i + 2, x.d, t, t, x.n, JSON.stringify([[x.n, [x.n]]]), '대기', cfgOf(x.set)]);
+  });
+  // 윤주영 (계정 5개) 배정
+  try {
+    const as = assignSheet_(), row = as.getLastRow() + 1;
+    as.getRange(row, 1, 1, 9).setValues([[readRuns_().filter(function (x) { return x.row === r.row; })[0]['명단 제목'], '윤주영', '', 5, '', '', String(r['시트ID']), '', '']]);
+    as.getRange(row, 6).setFormula(needFormula_(row));
+  } catch (e) { note_('윤주영 배정 실패: ' + e); }
+  note_('✓ 기대평 다시 나눔: ' + days.map(function (x) { return expTitle_(x.d, x.n, x.set); }).join(', ') + ' / 윤주영 5계정 배정');
+}
+
+// 원고제공·자율 의뢰 리뷰 가이드 (사용자가 단체방에 보낸 글 그대로, 10/23). 원고는 사용자가 업체에서 받아 직접 나눠 줌
+const WONGO_GUIDE = ['🐥리뷰내용 가이드🐥 : 전체 포토리뷰!', '', '원고 언급 안되신 나머지 분들은 포토+원고자율작성 부탁드려요 :)', '',
+  '원고제공되신 분들은 상황연출은 변형되도 되어서 ', '원고는 약간 참고만 하면됩니다 !', '',
+  '그리고 포토리뷰 올릴때는 무조건 사용샷으로 뜯어서 사용해주세요 !!! 항상 감사합니다 !', '', '🐥🐥🐥🐥🐥🐥🐥🐥🐥🐥'].join('\n');
+function isWongo_(rv) { return !!rv && /원고/.test(String(rv.guide || '') + ' ' + String(rv.mix || '')); }
+// (10/23 한 번) 양모볼 리뷰 가이드: '포토전달대기·텍스트리뷰'로 잘못 들어간 것 → 원고 가이드 글로 바꾸고 보냄 (사용자가 이미 단체방에 보냄)
+function fixWongoOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('WONGO_V1')) return;
+  props.setProperty('WONGO_V1', '1');
+  const ob = outboxSheet_(), ol = ob.getLastRow();
+  if (ol < 2) return;
+  ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
+    if (v[5] === '보냄' || !/양모볼/.test(String(v[3]))) return;
+    if (!/^(🐥|⭐️)(리뷰내용 가이드|포토대기)/.test(String(v[4]))) return;
+    obSet_(ob, v[0], 2, today_()); obSet_(ob, v[0], 3, '방 공지'); obSet_(ob, v[0], 5, /포토대기⭐️$/.test(String(v[4]).trim()) ? String(v[4]) : WONGO_GUIDE); obSet_(ob, v[0], 6, '보냄');
+  });
+  note_('✓ 양모볼 리뷰 가이드를 원고 가이드로 바꿈 (이미 보내셔서 보냄 처리)');
+}
+
+// (10/23 한 번) 10/24(토) 카카오톡딜 구확건: 다른 진행자분 폼으로 진행 (우리 폼·명단 시트 없음) → 방 공지·구매확정 안내를 보낼메시지에, 월급시트에 50건 줄
+function talkdealOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('TALKDEAL_V1')) return;
+  props.setProperty('TALKDEAL_V1', '1');
+  const room = '#10.24 5시 톡딜 홍삼스틱 50';
+  const notice = ['★xxx광고(AD)절대 주문금지 xxxx ★', '★스중 상중 불가★(제가 가능하면 이야기합니다)', '▶리뷰는 7일이내 (배송문제  네이버 제외)',
+    '⛧3분 체류 스토어찜 상품찜 결제스샷은 기본입니다.', '※오리방 페이백 리뷰비 안내※', '빈박스3~5일 안으로', '리뷰비는 방전원 다 쓰셔야지 진행자가',
+    '요청완료 기준으로 3일 뒤에 입금되는 점', '참고하여 주세요!', '', '★사업자 4971201389  ★', '★사업자 4971201389 ★ ', '☆★☆★☆★☆★☆★☆★☆★', '양식 작성 폼▼',
+    'https://docs.google.com/forms/d/e/1FAIpQLSes93VRMqQFfiqSvK2wrCVRSnVXCE06dzkBCeN5doXR8Glcug/viewform', '☆★☆★☆★☆★☆★☆★☆★', '1.',
+    '링크타고 검색▼( 상번이 네이버일때 무시)', 'https://store.kakao.com/', '🐥판매처:마이픽',
+    '🐥상품명 :[환절기선물]6년근 장홍삼 에브리데이 홍삼스틱 110포(대용량)/100포(선물용)', '🐥상품번호 :316704778', '🐥★키워드 :홍삼스틱', '🐥위치:1p',
+    '🐥옵션:1. 장홍삼 110포', '🐥가격:24,900'].join('\n');
+  queueMsg_(room, notice, '방 공지');
+  queueMsg_(room, '🐥리뷰내용 가이드🐥 : 구매확정\n\n🐥🐥🐥🐥🐥🐥🐥🐥🐥🐥', '방 공지');
+  // 월급시트: 우리 명단 시트가 없어서 링크 칩 없이 직접 한 줄 (수량 50 = 계획. 실제 산 수가 다르면 날짜 칸만 고치기)
+  try {
+    const day = new Date(2026, 9, 24), sh = payTab_(10), L = payLayout_(sh);
+    if (!L) return;
+    const last = Math.max(sh.getLastRow(), L.head);
+    const names = sh.getRange(L.head + 1, L.name, Math.max(last - L.head, 1), 1).getValues().map(function (x) { return String(x[0]).replace(/\s+/g, ''); });
+    if (names.indexOf(room.replace(/\s+/g, '')) >= 0) return;
+    let row = names.indexOf(''); row = row === -1 ? last + 1 : L.head + 1 + row;
+    const put = function (c, v) { if (c && !sh.getRange(row, c).getFormula()) sh.getRange(row, c).setValue(v); };
+    put(L.name, room); put(L.store, '마이픽'); put(L.time, '오후 5시 ~ 오후 6시'); put(L.sum, 50); put(L.note, '구확 / 톡딜');
+    put(L.days[(day.getMonth() + 1) + '-' + day.getDate()] || L.days[String(day.getDate())], 50);
+    if (L.date) put(L.date, day);
+    note_('✓ 톡딜 홍삼스틱: 방 공지·구매확정 안내 넣음, 월급시트 50건 줄');
+  } catch (e) { note_('톡딜 월급시트 줄 실패: ' + e); }
 }
