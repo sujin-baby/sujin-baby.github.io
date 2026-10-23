@@ -930,6 +930,26 @@ function fixCeilingOnce_(runs) {
   props.setProperty('CEIL2_V1', '1');
   note_(changeDaily_(rs[rs.length - 1], new Date(2026, 9, 26), 2));
 }
+// (10/23 한 번만) 양모볼 폼 옵션 오타 '모던 오렍비' → '모던 오렌지' (폼 + 안 보낸 방 공지)
+function fixOrangeOnce_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('ORANGE_V1')) return;
+  props.setProperty('ORANGE_V1', '1');
+  runs.filter(function (r) { return r['폼ID'] && /양모볼/.test(String(r['명단 제목'])) && r['진행 상태'] !== '종료'; }).forEach(function (r) {
+    try {
+      const f = FormApp.openById(r['폼ID']);
+      f.getItems(FormApp.ItemType.MULTIPLE_CHOICE).forEach(function (it) {
+        const mc = it.asMultipleChoiceItem(), ch = mc.getChoices().map(function (c) { return c.getValue(); });
+        if (ch.some(function (c) { return /오렍비/.test(c); })) { mc.setChoiceValues(ch.map(function (c) { return c.replace(/오렍비/g, '오렌지'); })); note_('✓ 양모볼 폼 오타 고침: 오렍비 → 오렌지'); }
+      });
+      if (/오렍비/.test(f.getDescription())) f.setDescription(f.getDescription().replace(/오렍비/g, '오렌지'));
+    } catch (e) { note_('양모볼 폼 오타 실패: ' + e); }
+  });
+  try {
+    const ob = outboxSheet_(), ol = ob.getLastRow();
+    if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (v[5] !== '보냄' && /오렍비/.test(String(v[4]))) obSet_(ob, v[0], 5, String(v[4]).replace(/오렍비/g, '오렌지')); });
+  } catch (e) {}
+}
 // (10/22 한 번만) 양모볼 폼: '목보호대 소프트그레이 L 남성용, M 여성용 리뷰어 선택' → 옵션 2개로, '리뷰어 선택' 빼기 (폼 + 안 보낸 방 공지)
 function fixNeckOptOnce_(runs) {
   const props = PropertiesService.getScriptProperties();
@@ -2517,6 +2537,7 @@ function checkFullInner_() {
   try { fixOzneDay2Once_(readRuns_()); } catch (e) { note_('10.22 오즈네즈 공지 실패: ' + e); }
   try { fixAnkleDupOnce_(readRuns_()); } catch (e) { note_('발목무압박 중복 정리 실패: ' + e); }
   try { fixCeilingOnce_(readRuns_()); } catch (e) { note_('실링팬 하루 인원 실패: ' + e); }
+  try { fixOrangeOnce_(readRuns_()); } catch (e) { note_('오렌지 오타 실패: ' + e); }
   try { fixNeckOptOnce_(readRuns_()); } catch (e) { note_('목보호대 옵션 실패: ' + e); }
   try { fixDaebongOnce_(readRuns_()); } catch (e) { note_('대봉감 이름 실패: ' + e); }
   try { fixOmegaOnce_(readRuns_()); } catch (e) { note_('오메가3 날짜 실패: ' + e); }
