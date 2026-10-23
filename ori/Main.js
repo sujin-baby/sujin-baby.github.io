@@ -2556,6 +2556,7 @@ function checkFullInner_() {
   try { fixExpect5Once_(); } catch (e) { note_('기대평 다시 나누기 실패: ' + e); }
   try { fixWongoOnce_(); } catch (e) { note_('원고 가이드 고치기 실패: ' + e); }
   try { fixExpect6Once_(); } catch (e) { note_('기대평 하루 3명 실패: ' + e); }
+  try { talkdealDateOnce_(); } catch (e) { note_('톡딜 진행일 실패: ' + e); }
   try { talkdealOnce_(); } catch (e) { note_('톡딜 넣기 실패: ' + e); }
   try { fixAnkleDupOnce_(readRuns_()); } catch (e) { note_('발목무압박 중복 정리 실패: ' + e); }
   try { fixCeilingOnce_(readRuns_()); } catch (e) { note_('실링팬 하루 인원 실패: ' + e); }
@@ -7148,7 +7149,8 @@ function talkdealOnce_() {
     const put = function (c, v) { if (c && !sh.getRange(row, c).getFormula()) sh.getRange(row, c).setValue(v); };
     put(L.name, room); put(L.store, '마이픽'); put(L.time, '오후 5시 ~ 오후 6시'); put(L.sum, 50); put(L.note, '구확 / 톡딜');
     put(L.days[(day.getMonth() + 1) + '-' + day.getDate()] || L.days[String(day.getDate())], 50);
-    if (L.date) put(L.date, day);
+    if (L.date) { put(L.date, day); sh.getRange(row, L.date).setNumberFormat('M/d'); }
+    try { payOrder_(sh); } catch (e) {}
     note_('✓ 톡딜 홍삼스틱: 방 공지·구매확정 안내 넣음, 월급시트 50건 줄');
   } catch (e) { note_('톡딜 월급시트 줄 실패: ' + e); }
 }
@@ -7175,4 +7177,21 @@ function fixExpect6Once_() {
     }
     note_('✓ 윤주영 배정: ' + bareTitle_(me['명단 제목']) + ' 3 / ' + t27 + ' 2');
   } catch (e) { note_('윤주영 배정 나누기 실패: ' + e); }
+}
+
+// (10/23 한 번) 월급시트 톡딜 줄 진행일 칸이 비어 있던 것 → 10/24 넣고 날짜순으로
+function talkdealDateOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('TALKDEAL_DATE_V1') || !props.getProperty('TALKDEAL_V1')) return;
+  props.setProperty('TALKDEAL_DATE_V1', '1');
+  payTabsNow_().forEach(function (sh) {
+    const L = payLayout_(sh); if (!L || !L.date) return;
+    const last = sh.getLastRow(); if (last <= L.head) return;
+    sh.getRange(L.head + 1, L.name, last - L.head, 1).getValues().forEach(function (v, i) {
+      if (String(v[0]).replace(/\s+/g, '') !== '#10.245시톡딜홍삼스틱50') return;
+      const c = sh.getRange(L.head + 1 + i, L.date);
+      if (!c.getFormula() && !(c.getValue() instanceof Date)) { c.setValue(new Date(2026, 9, 24)).setNumberFormat('M/d'); note_('✓ 월급시트 톡딜 줄 진행일 10/24 넣음'); }
+    });
+    payOrder_(sh);
+  });
 }
