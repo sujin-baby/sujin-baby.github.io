@@ -2555,6 +2555,7 @@ function checkFullInner_() {
   try { setupExpectOnce_(); } catch (e) { note_('기대평 진행 만들기 실패: ' + e); }
   try { fixExpect5Once_(); } catch (e) { note_('기대평 다시 나누기 실패: ' + e); }
   try { fixWongoOnce_(); } catch (e) { note_('원고 가이드 고치기 실패: ' + e); }
+  try { fixExpect6Once_(); } catch (e) { note_('기대평 하루 3명 실패: ' + e); }
   try { talkdealOnce_(); } catch (e) { note_('톡딜 넣기 실패: ' + e); }
   try { fixAnkleDupOnce_(readRuns_()); } catch (e) { note_('발목무압박 중복 정리 실패: ' + e); }
   try { fixCeilingOnce_(readRuns_()); } catch (e) { note_('실링팬 하루 인원 실패: ' + e); }
@@ -4729,7 +4730,7 @@ function rvZip_(f, name, props, sid) {
 }
 
 /* ---------------- 사용법 탭 (맨 앞, 사용자 요청 10/20). 글을 바꾸면 USAGE_VER를 올림 → 다시 씀 ---------------- */
-const USAGE_TAB = '사용법', USAGE_VER = '11';
+const USAGE_TAB = '사용법', USAGE_VER = '12';
 const USAGE_ROWS = [
   ['체험단 관리 시트 사용법', '(스크립트가 쓰는 탭이라 여기 고친 글은 다음 업데이트 때 다시 써져요)'],
   ['', ''],
@@ -4753,7 +4754,7 @@ const USAGE_ROWS = [
   ['날짜 바꾸기', '예) 목요일 건너뛰고 금요일에: 진행목록에서 그 진행 "진행일"을 새 날짜(10/23)로 고치기 → 방제·카톡방 이름·보낼메시지·월급시트·뒤 일차까지 같이 바뀜 (오른쪽 아래 알림). 이미 만든 카톡방 이름은 직접 바꾸기. 아직 안 만든 일차는 "일정" 탭 진행일을 고치기'],
   ['하루 건너뛰기 (예: 오메가3)', '예) 오늘(목)은 그대로 2시 전까지 받고, 내일(금)만 쉬고 월요일에: 진행목록에서 "내일" 진행의 "진행일"을 월요일(10/26)로 고치기 → 그 뒤 일차·일정·방제·보낼메시지 날짜가 같이 밀림. 내일 진행이 진행목록에 아직 없으면 "일정" 탭에서 그 줄 진행일을 월요일로 (그 뒤 줄도 하루씩 직접). 오늘 진행은 건드리지 않기. 카톡방 이름이 이미 있으면 직접 바꾸기'],
   ['하루 인원 바꾸기 (예: 실링팬 하루 2명)', '진행목록에서 바꾸기 시작할 날 진행의 "목표인원"을 새 숫자(2)로 고치기 → 그날부터 뒤 일차·일정 탭까지 하루 2명으로 바뀜 (방제 끝 숫자·폼 설명·안 보낸 방 공지 "(N명)"도). 총건수를 넘는 남는 날은 취소, 모자라면 일정 줄이 추가됨 (오른쪽 아래 알림으로 결과). 그날 진행이 진행목록에 아직 없으면 일정 탭 "건수" 칸과 방제·명단 제목 끝 숫자를 직접 고치기. 이미 만든 카톡방 이름은 직접 바꾸기'],
-  ['기대평 진행 (백발백중 도서)', '구매 없이 링크에 기대평만. 업체 요청(매주 개인당 13~14건)대로 한 사람이 두 번: 1주차(10/26~10/30) 14건·14,000원, 2주차(11/2~11/6) 나머지 13건·13,000원. 주마다 15명(월~금 5·3·3·2·2명, 주말 빼고. 월요일 5명 = 윤주영 5계정) = 405건. 자정 ~ 오전 8시 20분 작성. 방제 끝은 건수(사람 × 14 또는 13), 진행목록 목표인원은 사람 수. 월급시트 수량도 건수(× 500원). 캡처는 카톡방으로. 하루 인원 바꾸기는 진행목록 "목표인원"에 사람 수'],
+  ['기대평 진행 (백발백중 도서)', '구매 없이 링크에 기대평만. 업체 요청(매주 개인당 13~14건)대로 한 사람이 두 번: 1주차(10/26~10/30) 14건·14,000원, 2주차(11/2~11/6) 나머지 13건·13,000원. 주마다 15명(월~금 하루 3명, 주말 빼고) = 405건. 하루 인원은 진행목록 "목표인원"(사람 수)으로 바꿈. 자정 ~ 오전 8시 20분 작성. 방제 끝은 건수(사람 × 14 또는 13), 진행목록 목표인원은 사람 수. 월급시트 수량도 건수(× 500원). 캡처는 카톡방으로. 하루 인원 바꾸기는 진행목록 "목표인원"에 사람 수'],
   ['안 산 사람 (인원 모자람)', '그대로 두면 됨. 의뢰 마지막 날이면 그날 오후 2시 이후 다음 진행일에 모자란 만큼 진행이 자동으로 생김(보낼메시지에 방 공지). 그날 방제는 산 인원으로 바뀜(10→8, 월급시트 캠페인명도) → 보낼메시지 "할 일"대로 카톡방 이름·오리명단방 명단 메시지를 수정. 중간 날 모자란 건 마지막 날 끝난 뒤 한꺼번에. 바로 더 받으려면 폼수정 탭 I2에 인원 숫자'],
   ['잘못 산 사람·방 나간 사람', '폼수정 탭 B1에서 진행 고르기 → 그 응답 체크 → 삭제 실행. 그날 안이면 폼이 다시 열려 다른 사람을 받음'],
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
@@ -6979,9 +6980,9 @@ function expNotice_(set) {
   return L.join('\n');
 }
 function expDays_() {
-  // 주말 빼고 (사용자 요청 10/23): 1주차 10/26~10/30 A묶음, 2주차 11/2~11/6 B묶음. 주마다 15명 = 5·3·3·2·2
-  //  월요일 5명 = 윤주영 (계정이 플랫폼마다 5개)
-  const out = [], per = [5, 3, 3, 2, 2];
+  // 주말 빼고 (사용자 요청 10/23): 1주차 10/26~10/30 A묶음, 2주차 11/2~11/6 B묶음. 주마다 15명 = 하루 3명
+  //  하루 3명씩 고르게 (10/23: 월요일만 5명은 많음 → 윤주영 5계정은 월 3 + 화 2로 나눔)
+  const out = [], per = [3, 3, 3, 3, 3];
   [[new Date(2026, 9, 26), 'A'], [new Date(2026, 10, 2), 'B']].forEach(function (w) {
     per.forEach(function (n, k) { out.push({ d: new Date(w[0].getFullYear(), w[0].getMonth(), w[0].getDate() + k), n: n, set: w[1] }); });
   });
@@ -7150,4 +7151,28 @@ function talkdealOnce_() {
     if (L.date) put(L.date, day);
     note_('✓ 톡딜 홍삼스틱: 방 공지·구매확정 안내 넣음, 월급시트 50건 줄');
   } catch (e) { note_('톡딜 월급시트 줄 실패: ' + e); }
+}
+
+// (10/23 한 번) 기대평 하루 3명씩 (월 5명은 많음). 윤주영 5계정 = 10/26 3 + 10/27 2
+function fixExpect6Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('EXPECT_V6')) return;
+  const r = readRuns_().filter(function (x) { return String(x['요청ID']) === 'exp-100-4' && x['진행 상태'] !== '종료'; })[0];
+  if (!r) return;
+  props.setProperty('EXPECT_V6', '1');
+  note_(changeDaily_(r, new Date(2026, 9, 26), 3));
+  try {
+    const me = readRuns_().filter(function (x) { return x.row === r.row; })[0], sid = String(r['시트ID']);
+    const t27 = expTitle_(new Date(2026, 9, 27), 3, 'A');
+    const as = assignSheet_(), al = as.getLastRow();
+    const v = al >= 2 ? as.getRange(2, 1, al - 1, 7).getValues() : [];
+    const i26 = v.findIndex(function (x) { return String(x[1]) === '윤주영' && String(x[6]) === sid && String(x[0]) !== t27; });
+    if (i26 >= 0) { as.getRange(i26 + 2, 1).setValue(me['명단 제목']); as.getRange(i26 + 2, 4).setValue(3); }
+    else { const row = as.getLastRow() + 1; as.getRange(row, 1, 1, 9).setValues([[me['명단 제목'], '윤주영', '', 3, '', '', sid, '', '']]); as.getRange(row, 6).setFormula(needFormula_(row)); }
+    if (!v.some(function (x) { return String(x[1]) === '윤주영' && String(x[0]) === t27; })) {
+      const row = as.getLastRow() + 1;
+      as.getRange(row, 1, 1, 9).setValues([[t27, '윤주영', '', 2, '', '', sid, '', '']]); as.getRange(row, 6).setFormula(needFormula_(row));
+    }
+    note_('✓ 윤주영 배정: ' + bareTitle_(me['명단 제목']) + ' 3 / ' + t27 + ' 2');
+  } catch (e) { note_('윤주영 배정 나누기 실패: ' + e); }
 }
