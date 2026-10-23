@@ -644,6 +644,8 @@ function repairList_(sh, rows) {
 //  칸은 2행 머리글 글자로 찾아서 넣음(지운 칸은 안 채움, 다시 안 만듦). 폼에 새로 생긴 질문만 오른쪽 끝에 칸을 더함(LISTH_)
 //  폼에서 지운 응답(취소 등)은 줄을 남기고 타임스탬프 칸 메모 + 회색 글자
 // 전화번호를 010-0000-0000 모양으로 (택배시트에 하이픈 없이 들어가면 오류, 10/23). 숫자로 들어와 앞 0이 빠진 것(1087582349)도 고침
+// 기대평 댓글 진행 (구매 없음, 10/23 100발100중): 결제금액·리뷰 가이드·리뷰 확인·포토·월급시트 자동은 안 함
+function isExpect_(r) { return String(r && r['플랫폼'] || '') === '기대평'; }
 function phoneFmt_(v) {
   if (v === '' || v === null || v === undefined) return v;
   let d = String(v).replace(/\D/g, '');
@@ -795,7 +797,7 @@ function syncList_(ss) {
 //  공지 가격: 고른 옵션 글의 '(17,200원)', 없으면 진행목록 가격(하나거나 다 같을 때만). 2~5개 산 금액(가격 × 개수)은 맞는 걸로
 function payCheck_(ss, add) {
   const sid = ss.getId(), runs = readRuns_(), mine = runs.filter(function (r) { return String(r['시트ID']) === sid && r['진행일'] instanceof Date; });
-  if (!mine.length) return;
+  if (!mine.length || mine.some(isExpect_)) return;   // 기대평은 결제가 없음
   const num = function (x) { return Number(String(x == null ? '' : x).replace(/[^0-9]/g, '')) || 0; };
   const won = function (n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '원'; };
   const bad = {};
@@ -1284,6 +1286,7 @@ function autoGo(){
 /* 아이폰 등에서 쓰는 웹 앱: 배포 링크로 열면 '새 진행 만들기' 창이 뜸 (주소 뒤 값으로 미리 채움) */
 function doGet(e) {
   const p = (e && e.parameter) || {};
+  if (p.p === 'up') return upPage_(p);   // 기대평 캡처 올리기 (진행 전용 열쇠 t로 확인, 10/23)
   if (p.k !== CONFIG.KEY) return HtmlService.createHtmlOutput('링크가 올바르지 않아요. 체험단 가이드 생성기의 버튼으로 열어 주세요.');
   if (p.p === 'queue') return ContentService.createTextOutput(queueText_());
   if (p.p === 'sent') { markMsg_(p.id, p.st === 'fail' ? '대기' : '보냄'); return ContentService.createTextOutput('ok'); }
@@ -1311,6 +1314,9 @@ function doGet(e) {
 /* ---------------- 1) 새 진행 만들기 ---------------- */
 
 function createRun(d) {
+  // 기대평 캡처 올리기 페이지 (로더에 이름이 있는 함수라 이걸로 받음. 열쇠는 진행 전용 t, 10/23)
+  if (d && d.act === 'upcap') return uploadCapture(d.t, d.name, d.i, d.b64, d.mime, d.fname);
+  if (d && d.act === 'updone') return uploadDone(d.t, d.name, d.n);
   if (!d || d.k !== CONFIG.KEY) throw new Error('권한이 없어요. 생성기 버튼이나 시트 메뉴로 열어 주세요.');
   // 진행 도우미 페이지의 버튼도 이 이름으로 받음 (로더에 이미 있는 이름이라 붙여넣기 없이 됨)
   //  보기·공지 저장은 진행목록 줄을 안 바꿔서 15분 확인이 돌고 있어도 바로 (기다리면 버튼이 안 눌리는 것처럼 보임)
@@ -1468,7 +1474,7 @@ function createRunInner_(d) {
   const fruit0 = d.fruit || (reuse && chainFruit_(reuse));
   const notice = withSlotLine_(String(d.desc || '').split('(구글폼 링크)').join(formUrl), d.slot, fruit0);
   if (notice) form.setDescription(formDesc_(notice));
-  try { fixFormQuestions_(form, !!d.realship); } catch (e) { note_('폼 질문 필수/선택 실패: ' + e.message); }
+  if (d.platform !== '기대평') try { fixFormQuestions_(form, !!d.realship); } catch (e) { note_('폼 질문 필수/선택 실패: ' + e.message); }
   if (notice && d.room) queueMsg_(d.room, notice, '방 공지');
   // 여러 날 진행이면 다음 일차 계획 저장 (공지는 폼 링크 넣기 전 원본을 템플릿으로)
   if (d.plan) { try { savePlan_(d); } catch (e) { note_('일정 저장 실패: ' + e); } }
@@ -2546,6 +2552,8 @@ function checkFullInner_() {
   try { ensureRunNotices_(readRuns_()); } catch (e) { note_('방 공지 확인 실패: ' + e); }
   try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
   try { fixOzneDay2Once_(readRuns_()); } catch (e) { note_('10.22 오즈네즈 공지 실패: ' + e); }
+  try { setupExpectOnce_(); } catch (e) { note_('기대평 진행 만들기 실패: ' + e); }
+  try { expZipAll_(); } catch (e) { note_('기대평 캡처 압축 실패: ' + e); }
   try { fixAnkleDupOnce_(readRuns_()); } catch (e) { note_('발목무압박 중복 정리 실패: ' + e); }
   try { fixCeilingOnce_(readRuns_()); } catch (e) { note_('실링팬 하루 인원 실패: ' + e); }
   try { fixOrangeOnce_(readRuns_()); } catch (e) { note_('오렌지 오타 실패: ' + e); }
@@ -2644,7 +2652,7 @@ function checkFullInner_() {
     }
     // 오늘·앞으로 진행할 폼에는 '방에 참여한 카카오톡 닉네임' 질문이 꼭 있게 (예전 폼을 이어 쓰는 의뢰도)
     //  공지에 옛 폼 링크가 남아 그 폼으로 들어오는 경우(10/19 김설하·김동욱 닉네임 빈칸)도 있어서, 이 진행 응답을 받는 폼 전부 + 필수로
-    if (r['진행일'] instanceof Date && r['진행일'] >= today_()) {
+    if (r['진행일'] instanceof Date && r['진행일'] >= today_() && !isExpect_(r)) {   // 기대평 폼은 질문이 따로라 안 건드림
       if (!globalThis.__OBROWS) { try { globalThis.__OBROWS = outboxRows_(); } catch (e) { globalThis.__OBROWS = []; } }
       const fids = runFormIds_(r, runs, globalThis.__OBROWS).concat(String(props.getProperty('ORPHANS_' + r['시트ID']) || '').split(',').filter(Boolean));
       fids.filter(function (x, i, a) { return a.indexOf(x) === i; }).forEach(function (fid) {
@@ -2907,6 +2915,7 @@ function ensureReviewGuideMsgs_(runs) {
   };
   chainsOf_(runs).forEach(function (c) {
     c.runs.forEach(function (r, k) {
+      if (isExpect_(r)) return;   // 기대평: 가이드는 방 공지에 이미
       if (r['진행 상태'] === '종료' || !(r['마감 시각'] instanceof Date) || now - r['마감 시각'].getTime() > 2 * 86400000) return;
       // V2(10/19): 카톡 이름 대신 수령인(계정) 이름으로. 예전(카톡 이름) 메시지가 아직 대기면 새 글로 바꿈, 보냈으면 그대로
       const key0 = 'RVMSG_' + String(r['명단 제목']).replace(/\s+/g, ''), key = 'RVMSG2_' + String(r['명단 제목']).replace(/\s+/g, '');
@@ -4602,7 +4611,7 @@ function reviewDone_(runs) {
   // 처음 한 번은 이미 다 체크된 예전 의뢰를 '보낸 걸로' 기억만 (예전에 직접 보낸 취완·보고가 다시 안 들어가게)
   const init = !props.getProperty('RVDONE_INIT');
   const bySheet = {};
-  runs.forEach(function (r) { if (r['시트ID'] && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut) (bySheet[r['시트ID']] = bySheet[r['시트ID']] || []).push(r); });
+  runs.forEach(function (r) { if (r['시트ID'] && !isExpect_(r) && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut) (bySheet[r['시트ID']] = bySheet[r['시트ID']] || []).push(r); });
   let pend = {};
   try { const ps = planSheet_(), pl = ps.getLastRow(); if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x) { if (x[8] === '대기') pend[campKey_(x[1])] = 1; }); } catch (e) {}
   Object.keys(bySheet).forEach(function (sid) {
@@ -4716,7 +4725,7 @@ function rvZip_(f, name, props, sid) {
 }
 
 /* ---------------- 사용법 탭 (맨 앞, 사용자 요청 10/20). 글을 바꾸면 USAGE_VER를 올림 → 다시 씀 ---------------- */
-const USAGE_TAB = '사용법', USAGE_VER = '6';
+const USAGE_TAB = '사용법', USAGE_VER = '7';
 const USAGE_ROWS = [
   ['체험단 관리 시트 사용법', '(스크립트가 쓰는 탭이라 여기 고친 글은 다음 업데이트 때 다시 써져요)'],
   ['', ''],
@@ -4740,6 +4749,7 @@ const USAGE_ROWS = [
   ['날짜 바꾸기', '예) 목요일 건너뛰고 금요일에: 진행목록에서 그 진행 "진행일"을 새 날짜(10/23)로 고치기 → 방제·카톡방 이름·보낼메시지·월급시트·뒤 일차까지 같이 바뀜 (오른쪽 아래 알림). 이미 만든 카톡방 이름은 직접 바꾸기. 아직 안 만든 일차는 "일정" 탭 진행일을 고치기'],
   ['하루 건너뛰기 (예: 오메가3)', '예) 오늘(목)은 그대로 2시 전까지 받고, 내일(금)만 쉬고 월요일에: 진행목록에서 "내일" 진행의 "진행일"을 월요일(10/26)로 고치기 → 그 뒤 일차·일정·방제·보낼메시지 날짜가 같이 밀림. 내일 진행이 진행목록에 아직 없으면 "일정" 탭에서 그 줄 진행일을 월요일로 (그 뒤 줄도 하루씩 직접). 오늘 진행은 건드리지 않기. 카톡방 이름이 이미 있으면 직접 바꾸기'],
   ['하루 인원 바꾸기 (예: 실링팬 하루 2명)', '진행목록에서 바꾸기 시작할 날 진행의 "목표인원"을 새 숫자(2)로 고치기 → 그날부터 뒤 일차·일정 탭까지 하루 2명으로 바뀜 (방제 끝 숫자·폼 설명·안 보낸 방 공지 "(N명)"도). 총건수를 넘는 남는 날은 취소, 모자라면 일정 줄이 추가됨 (오른쪽 아래 알림으로 결과). 그날 진행이 진행목록에 아직 없으면 일정 탭 "건수" 칸과 방제·명단 제목 끝 숫자를 직접 고치기. 이미 만든 카톡방 이름은 직접 바꾸기'],
+  ['기대평 진행 (100발100중)', '구매 없이 27개 링크에 기대평만. 10/26~11/6 하루 2·1명 번갈아 15명 (진행목록·일정에 자동). 사람은 폼 작성 + 방 공지의 [캡처 올리기] 링크로 캡처 올림 → 의뢰 폴더 "캡처 날짜" 폴더에 모이고 바로 압축(.zip) → 보낼메시지 "할 일"에 링크(그날 인원 다 올리면 ✅). 결제금액·리뷰 가이드·리뷰 확인·월급시트 자동은 안 함. 하루 인원 바꾸기는 위와 같이 진행목록 "목표인원"'],
   ['안 산 사람 (인원 모자람)', '그대로 두면 됨. 의뢰 마지막 날이면 그날 오후 2시 이후 다음 진행일에 모자란 만큼 진행이 자동으로 생김(보낼메시지에 방 공지). 그날 방제는 산 인원으로 바뀜(10→8, 월급시트 캠페인명도) → 보낼메시지 "할 일"대로 카톡방 이름·오리명단방 명단 메시지를 수정. 중간 날 모자란 건 마지막 날 끝난 뒤 한꺼번에. 바로 더 받으려면 폼수정 탭 I2에 인원 숫자'],
   ['잘못 산 사람·방 나간 사람', '폼수정 탭 B1에서 진행 고르기 → 그 응답 체크 → 삭제 실행. 그날 안이면 폼이 다시 열려 다른 사람을 받음'],
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
@@ -5572,6 +5582,7 @@ function fruitCheck_(runs) {
 // 포토대기 진행: 진행일부터 2일이 지나도 업체 포토(리뷰 가이드 보냄 표시)가 없으면 사장님께 '업체에 포토 요청' 부탁 메시지 (한 번, 사용자 요청 10/21)
 //  리뷰 기한이 수령 후 7일이라 사진이 늦으면 리뷰가 몰림. 한눈에 탭 '확인 필요' 칸에도 (checkFull errs)
 function photoLate_(r, props) {
+  if (isExpect_(r)) return false;
   if (!(r['진행일'] instanceof Date) || !(Number(r['인원']) > 0) || r['진행 상태'] === '종료') return false;
   let rv = null; try { rv = JSON.parse(props.getProperty('RV_' + r['시트ID']) || 'null'); } catch (e) {}
   const wait = /^\s*(유|y)/i.test(String(r['포토'] || '')) && !(rv && rv.kind === 'self') || (rv && (rv.kind === 'photo' || /포토\s*대기/.test(String(rv.mix || ''))));
@@ -6148,7 +6159,8 @@ function payLayout_(sh) {
 function updatePay_() {
   if (!CONFIG.PAY_SHEET_ID) return;
   const all = readRuns_().filter(function (r) { return r['시트ID'] && r['진행일'] instanceof Date; });
-  const runs = all.filter(function (r) { return r['진행 상태'] !== '종료'; });
+  // 기대평은 월급시트에 어떻게 넣을지(건수·금액) 아직 안 정해서 빼 둠 (10/23, 사용자 확인 뒤)
+  const runs = all.filter(function (r) { return r['진행 상태'] !== '종료' && !isExpect_(r); });
   // 스토어 왼쪽에 '진행일' 칸 (사용자 요청 10/19). 탭마다 한 번 (있으면 그대로)
   try { fixPaySunnyOnce_(); } catch (e) { note_('월급시트 써니마켓 정리 실패: ' + e); }
   try { payTabsNow_().forEach(payDateCol_); } catch (e) { note_('월급시트 진행일 칸 만들기 실패: ' + e); }
@@ -6886,4 +6898,197 @@ function archiveOld_() {
     const v = pl.getRange(2, 1, pl.getLastRow() - 1, PLAN_HEAD.length).getValues();
     for (let i = v.length - 1; i >= 0; i--) if (v[i][8] !== '대기' && v[i][3] instanceof Date && v[i][3] < cut) pl.deleteRow(i + 2);
   }
+}
+
+/* ---------------- 기대평 댓글 진행 (10/23 100발100중, 구매 없음) ----------------
+ * 한 사람이 아래 27개 링크에 기대평을 다 씀 = 하루 1~2명, 10/26~11/6(진행일 10일) 총 15명
+ * 폼: 이름, 아이디, 리뷰비 계좌, 리뷰금액(27,000원 하나), 캡처 올림 확인. 캡처는 폼이 아니라 '캡처 올리기' 페이지로 받아서
+ * 폴더(캡처 M.D)에 넣고 그날 것을 바로 압축(.zip) → 보낼메시지 '할 일'에 링크. (구글폼 파일 질문은 스크립트로 못 만들고 구글 로그인이 필요해서)
+ */
+const EXP_LINKS = [
+  ['예스24', '짱 수학서술형 1-1', 'https://www.yes24.com/product/goods/196262050'],
+  ['예스24', '짱 수학서술형 2-1', 'https://www.yes24.com/product/goods/196262218'],
+  ['예스24', '짱 수학서술형 3-1', 'https://www.yes24.com/product/goods/196262221'],
+  ['예스24', '짱 개념수학 1-1', 'https://www.yes24.com/product/goods/196346549'],
+  ['예스24', '짱 개념수학 2-1', 'https://www.yes24.com/product/goods/196346560'],
+  ['예스24', '짱 개념수학 3-1', 'https://www.yes24.com/product/goods/196346563'],
+  ['예스24', '짱 개념연산 1-1', 'https://www.yes24.com/product/goods/196217934'],
+  ['예스24', '짱 개념연산 2-1', 'https://www.yes24.com/product/goods/196218068'],
+  ['예스24', '짱 개념연산 3-1', 'https://www.yes24.com/product/goods/196218268'],
+  ['알라딘', '짱 수학서술형 1-1', 'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=401820897'],
+  ['알라딘', '짱 수학서술형 2-1', 'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=401821538'],
+  ['알라딘', '짱 수학서술형 3-1', 'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=401821289'],
+  ['알라딘', '짱 개념수학 1-1', 'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=401984016'],
+  ['알라딘', '짱 개념수학 2-1', 'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=401983343'],
+  ['알라딘', '짱 개념수학 3-1', 'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=401983620'],
+  ['알라딘', '짱 개념연산 1-1', 'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=401750548'],
+  ['알라딘', '짱 개념연산 2-1', 'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=401751607'],
+  ['알라딘', '짱 개념연산 3-1', 'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=401751748'],
+  ['교보문고', '짱 수학서술형 1-1', 'https://product.kyobobook.co.kr/detail/S000221248813'],
+  ['교보문고', '짱 수학서술형 2-1', 'https://product.kyobobook.co.kr/detail/S000221248819'],
+  ['교보문고', '짱 수학서술형 3-1', 'https://product.kyobobook.co.kr/detail/S000221248826'],
+  ['교보문고', '짱 개념수학 1-1', 'https://product.kyobobook.co.kr/detail/S000221268619'],
+  ['교보문고', '짱 개념수학 2-1', 'https://product.kyobobook.co.kr/detail/S000221268625'],
+  ['교보문고', '짱 개념수학 3-1', 'https://product.kyobobook.co.kr/detail/S000221268629'],
+  ['교보문고', '짱 개념연산 1-1', 'https://product.kyobobook.co.kr/detail/S000221237525'],
+  ['교보문고', '짱 개념연산 2-1', 'https://product.kyobobook.co.kr/detail/S000221237576'],
+  ['교보문고', '짱 개념연산 3-1', 'https://product.kyobobook.co.kr/detail/S000221237983']
+];
+const EXP_SLOT = '★★★당일 오후 6시까지 작성·제출★★★';
+const EXP_FEE = '27,000원';
+function expNotice_(n) {
+  const L = [EXP_SLOT, '', '※구매 아님! 아래 링크 ' + EXP_LINKS.length + '개에 기대평 댓글만 작성※', '오늘 인원 (' + n + '명)', '',
+    '▶ 공백 제외 100~150자 이상, 긍정적인 기대평', '▶ "구매했다"는 내용 X → 구매하고 싶다·기대된다는 내용으로', '▶ 짧은 기대평·복붙 같은 글 X (교재마다 다르게)',
+    '▶ ' + EXP_LINKS.length + '개 다 쓰면 캡처 → 아래 [캡처 올리기]에 올리고 → 폼 작성', '▶ 리뷰비 ' + EXP_FEE, '★사업자 4971201389 ★', '',
+    '☆★☆★ 양식 작성 폼 ☆★☆★', '(구글폼 링크)', '', '📷 캡처 올리기', '(캡처 링크)', '',
+    '🐥교재별로 넣을 내용🐥',
+    '[짱 개념연산] 시험에 자주 나오는 연산 유형 집중 대비 / 개념 문제로 내신 대비·연산 실력 향상 / 빠르고 정확한 연산 연습에 좋을 것 같아 써 보고 싶다',
+    '[짱 수학서술형] 서술형 기출·내신·수행평가 대비 / 기본 서술형부터 변형문제, 쌍둥이 문제로 반복 학습 / 서술형 대비에 유용할 것 같아 풀어 보고 싶다',
+    '[짱 개념수학] 시험에 필요한 개념과 유형을 체계적으로 / 개념북 세분화 학습 + 익힘북 반복·복습 / 개념부터 유형까지 확실히 대비할 것 같아 풀어 보고 싶다'];
+  ['예스24', '알라딘', '교보문고'].forEach(function (pl) {
+    L.push('', '🐥' + pl);
+    EXP_LINKS.filter(function (x) { return x[0] === pl; }).forEach(function (x, i) { L.push((i + 1) + '. ' + x[1] + ' ' + x[2]); });
+  });
+  return L.join('\n');
+}
+function expDays_() {
+  // 10/26(월)~11/6(금) 진행일 10일, 2·1명 번갈아 = 15명 (11/7·8은 주말)
+  const out = []; let d = new Date(2026, 9, 26), left = 15, k = 0;
+  if (!isWorkday_(d)) d = nextWorkday_(d);
+  while (left > 0 && k < 20) { const n = Math.min(left, k % 2 === 0 ? 2 : 1); out.push({ d: new Date(d), n: n }); left -= n; k++; d = nextWorkday_(d); }
+  return out;
+}
+function expTitle_(d, n) { return '#' + (d.getMonth() + 1) + '.' + String(d.getDate()).padStart(2, '0') + ' 100발100중 기대평 ' + n; }
+function setupExpectOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('EXPECT_V1')) return;
+  if (today_().getTime() > new Date(2026, 9, 26).getTime()) return;
+  props.setProperty('EXPECT_V1', '1');
+  const days = expDays_(), d0 = days[0], title = expTitle_(d0.d, d0.n), fname = sheetName_(title);
+  const folder = rootFolder_().createFolder(fname);
+  const form = FormApp.create(fname);
+  DriveApp.getFileById(form.getId()).moveTo(folder);
+  form.setTitle(fname);
+  form.addTextItem().setTitle('이름').setRequired(true);
+  form.addTextItem().setTitle('아이디').setHelpText('기대평 쓴 예스24·알라딘·교보문고 아이디').setRequired(true);
+  form.addTextItem().setTitle('리뷰비 계좌').setHelpText('은행 / 계좌번호 / 예금주').setRequired(true);
+  form.addMultipleChoiceItem().setTitle('리뷰금액').setChoiceValues([EXP_FEE]).setRequired(true);
+  form.addCheckboxItem().setTitle('기대평 캡처').setChoiceValues(['캡처 ' + EXP_LINKS.length + '장을 [캡처 올리기]로 올렸어요']).setRequired(true);
+  const ss = SpreadsheetApp.create(fname);
+  ss.setSpreadsheetTimeZone(CONFIG.TIMEZONE);
+  DriveApp.getFileById(ss.getId()).moveTo(folder);
+  form.setDestination(FormApp.DestinationType.SPREADSHEET, ss.getId());
+  SpreadsheetApp.flush();
+  for (let i = 0; i < 6; i++) { Utilities.sleep(2500); if (SpreadsheetApp.openById(ss.getId()).getSheets().some(function (s) { return !!s.getFormUrl(); })) break; }
+  shareFile_(ss.getId(), false, CONFIG.LIST_EDITORS);
+  shareFile_(form.getId(), true);
+  formatResponseSheet_(SpreadsheetApp.openById(ss.getId()), { type: '입대', takdae: false, realship: false, platform: '기대평', target: 15, prices: '27000' });
+  let formUrl = form.getPublishedUrl();
+  try { formUrl = form.shortenFormUrl(formUrl); } catch (e) {}
+  // 캡처 올리기 페이지 (로그인 없이). 열쇠는 이 진행 전용
+  const tok = Utilities.getUuid().replace(/-/g, '');
+  props.setProperty('UP_' + tok, JSON.stringify({ folder: folder.getId(), sid: ss.getId(), name: fname }));
+  const upUrl = (CONFIG.WEBAPP_URL || '') + '?p=up&t=' + tok;
+  const tpl = expNotice_(d0.n).split('(캡처 링크)').join(upUrl);
+  const notice = tpl.split('(구글폼 링크)').join(formUrl);
+  form.setDescription(formDesc_(notice));
+  const list = ensureListSheet_();
+  const reqId = 'exp-100-1';
+  const rec = {
+    '등록일': new Date(), '진행일': d0.d, '명단 제목': title, '유형': '입대', '택대': '', '실배송': '', '플랫폼': '기대평',
+    '목표인원': d0.n, '인원': 0, '진행 상태': statusFor_(d0.d), '마감 시각': '', '캠페인': campOf_(title), '업체': '100발100중', '구매시간': EXP_SLOT.replace(/★/g, ''),
+    '포토': '', '일차': 1, '총건수': 15, '가격': '27000', '카톡방': title, '업체방': '',
+    '폼 링크': formUrl, '시트 링크': ss.getUrl(), '폴더 링크': folder.getUrl(), '시트ID': ss.getId(), '폼ID': form.getId(), '요청ID': reqId
+  };
+  list.appendRow(LIST_HEADER.map(function (h) { return rec[h]; }));
+  formatList_(list);
+  queueMsg_(title, notice, '방 공지');
+  // 다음 일차는 일정 탭 (진행일 0시에 만들어짐, 같은 폼·명단 시트)
+  const cfg = JSON.stringify({ type: '입대', takdae: false, realship: false, platform: '기대평', prices: '27000', croom: '', shop: '100발100중', photo: '', opts: '',
+    desc: tpl, slot2: EXP_SLOT, total: 15, camp: campOf_(title), base: reqId });
+  const ps = planSheet_();
+  days.slice(1).forEach(function (x, i) {
+    const t = expTitle_(x.d, x.n);
+    ps.appendRow([reqId + '-' + (i + 2), campOf_(title), i + 2, x.d, t, t, x.n, JSON.stringify([[x.n, [x.n]]]), '대기', cfg]);
+  });
+  try { sortList_(); } catch (e) {}
+  note_('✓ 기대평 진행 만듦: ' + title + ' + 일정 ' + (days.length - 1) + '일 (총 15명)');
+  MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[체험단] 기대평 진행 만듦: ' + title, [
+    '10/26~' + Utilities.formatDate(days[days.length - 1].d, CONFIG.TIMEZONE, 'M/d') + ' 진행일 ' + days.length + '일, 하루 ' + days.map(function (x) { return x.n; }).join('·') + '명 = 15명',
+    '카톡방을 ' + title + ' 로 만들고 보낼메시지의 방 공지를 올리세요.', '', notice].join('\n'));
+}
+
+// 캡처 올리기 페이지 (?p=up&t=열쇠). 열쇠가 맞을 때만
+function upInfo_(t) { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('UP_' + String(t || '').replace(/[^0-9a-f]/g, '')) || 'null'); } catch (e) { return null; } }
+function upPage_(p) {
+  const info = upInfo_(p.t);
+  if (!info) return HtmlService.createHtmlOutput('링크가 올바르지 않아요. 방 공지의 [캡처 올리기] 링크로 열어 주세요.');
+  const html = '<!doctype html><meta charset="utf-8"><style>body{font-family:-apple-system,"Apple SD Gothic Neo",sans-serif;margin:0;padding:18px;background:#f4f4f8;color:#1d1a24}' +
+    'h1{font-size:19px}label{display:block;margin:14px 0 6px;font-weight:600}input[type=text]{width:100%;box-sizing:border-box;font-size:16px;padding:10px;border:1px solid #ccc;border-radius:8px}' +
+    'button{margin-top:16px;width:100%;font-size:17px;padding:13px;border:0;border-radius:10px;background:#7c4dbb;color:#fff}button:disabled{background:#aaa}#st{margin-top:14px;white-space:pre-wrap}</style>' +
+    '<h1>📷 기대평 캡처 올리기</h1><div>' + String(info.name).replace(/</g, '') + '</div>' +
+    '<label>이름 (폼에 쓴 이름)</label><input type="text" id="nm" autocomplete="name">' +
+    '<label>캡처 사진 (' + EXP_LINKS.length + '장, 여러 장 한 번에 고르기)</label><input type="file" id="fs" accept="image/*" multiple>' +
+    '<button id="go">올리기</button><div id="st"></div>' +
+    '<script>var T=' + JSON.stringify(String(p.t)) + ';var $=function(i){return document.getElementById(i)};' +
+    '$("go").onclick=function(){var nm=$("nm").value.trim(),fs=$("fs").files;if(!nm){alert("이름을 적어 주세요");return}if(!fs.length){alert("캡처를 골라 주세요");return}' +
+    '$("go").disabled=true;var i=0,ok=0;var next=function(){if(i>=fs.length){$("st").textContent="올리는 중… 마무리";google.script.run.withSuccessHandler(function(m){$("st").textContent="✅ "+ok+"장 올렸어요. 이제 폼을 작성해 주세요.\\n"+(m||"")}).withFailureHandler(function(e){$("st").textContent="마무리 실패: "+e.message;$("go").disabled=false}).createRun({act:"updone",t:T,name:nm,n:ok});return}' +
+    'var f=fs[i],r=new FileReader();r.onload=function(){var b=String(r.result).split(",")[1];google.script.run.withSuccessHandler(function(){ok++;i++;$("st").textContent=ok+" / "+fs.length+" 올림";next()}).withFailureHandler(function(e){$("st").textContent=(i+1)+"번째 실패: "+e.message+"\\n다시 [올리기]를 눌러 주세요 (이미 올린 건 그대로)";$("go").disabled=false}).createRun({act:"upcap",t:T,name:nm,i:i+1,b64:b,mime:f.type,fname:f.name})};r.readAsDataURL(f)};next()};</' + 'script>';
+  return HtmlService.createHtmlOutput(html).setTitle('기대평 캡처 올리기').addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+function upDayFolder_(info) {
+  const parent = DriveApp.getFolderById(info.folder), nm = '캡처 ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'M.d');
+  const it = parent.getFoldersByName(nm);
+  return it.hasNext() ? it.next() : parent.createFolder(nm);
+}
+function uploadCapture(t, name, i, b64, mime, fname) {
+  const info = upInfo_(t);
+  if (!info) throw new Error('링크가 올바르지 않아요');
+  if (!/^image\//.test(String(mime || ''))) throw new Error('사진만 올릴 수 있어요');
+  const bytes = Utilities.base64Decode(String(b64 || ''));
+  if (bytes.length > 15 * 1024 * 1024) throw new Error('사진이 너무 커요 (15MB까지)');
+  const nm = String(name || '').replace(/[\\/:*?"<>|\s]+/g, '').slice(0, 20) || '이름없음';
+  const ext = (String(fname || '').match(/\.(png|jpe?g|webp|heic|gif)$/i) || ['', String(mime).split('/')[1] || 'png'])[1].toLowerCase();
+  upDayFolder_(info).createFile(Utilities.newBlob(bytes, mime, nm + '_' + String(Number(i) || 0).padStart(2, '0') + '.' + ext));
+  return 'ok';
+}
+// 올리기 마무리가 바빠서(다른 작업 중) 압축을 못 했으면 15분 확인 때 (오늘 캡처 수가 바뀌었을 때만)
+function expZipAll_() {
+  const props = PropertiesService.getScriptProperties(), all = props.getProperties(), md = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'M.d');
+  Object.keys(all).filter(function (k) { return k.indexOf('UP_') === 0; }).forEach(function (k) {
+    let info = null; try { info = JSON.parse(all[k]); } catch (e) { return; }
+    const it = DriveApp.getFolderById(info.folder).getFoldersByName('캡처 ' + md);
+    if (!it.hasNext()) return;
+    let n = 0; const fi = it.next().getFiles(); while (fi.hasNext()) { fi.next(); n++; }
+    const sk = 'EXPZ_' + k.slice(3) + '_' + md;
+    if (String(props.getProperty(sk)) === String(n)) return;
+    expZip_(info); props.setProperty(sk, String(n));
+  });
+}
+function uploadDone(t, name, n) {
+  const info = upInfo_(t);
+  if (!info) throw new Error('링크가 올바르지 않아요');
+  return locked_(function () { return expZip_(info); }, 60000) || '';
+}
+// 그날 캡처 폴더를 압축 → 의뢰 폴더에 '#M.D … 캡처.zip' (다시 올리면 새로 만듦) + 보낼메시지 '할 일'(안 보냈으면 링크만 바꿈)
+function expZip_(info) {
+  const day = upDayFolder_(info), files = [], it = day.getFiles(), who = {};
+  while (it.hasNext()) { const x = it.next(); if (/^image\//.test(x.getMimeType())) { files.push(x); who[x.getName().replace(/_\d+\.\w+$/, '')] = (who[x.getName().replace(/_\d+\.\w+$/, '')] || 0) + 1; } }
+  if (!files.length) return '';
+  const md = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'M.d');
+  const run = readRuns_().filter(function (r) { return String(r['시트ID']) === String(info.sid) && r['진행일'] instanceof Date && Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'M.d') === md; })[0];
+  const label = run ? bareTitle_(run['명단 제목']) : '#' + md + ' 기대평';
+  const zipName = label + ' 캡처.zip', parent = DriveApp.getFolderById(info.folder);
+  const old = parent.getFilesByName(zipName);
+  while (old.hasNext()) old.next().setTrashed(true);
+  const used = {};
+  const zip = parent.createFile(Utilities.zip(files.map(function (x) { let n = x.getName(); while (used[n]) n = '_' + n; used[n] = 1; return x.getBlob().setName(n); }), zipName));
+  const people = Object.keys(who), goal = run ? Number(run['목표인원']) || 0 : 0;
+  const msg = '[' + label + '] 기대평 캡처 ' + files.length + '장 압축 (' + people.map(function (p) { return p + ' ' + who[p] + '장'; }).join(', ') + ')' +
+    (goal && people.length >= goal ? ' ✅ 오늘 ' + goal + '명 다 올림 → 업체에 보내기' : goal ? ' (오늘 ' + goal + '명 중 ' + people.length + '명)' : '') + '\n' + zip.getUrl();
+  const ob = outboxSheet_(), ol = ob.getLastRow();
+  let done = false;
+  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (!done && v[2] === '할 일' && v[5] !== '보냄' && String(v[4]).indexOf('[' + label + '] 기대평 캡처') === 0) { obSet_(ob, v[0], 5, msg); done = true; } });
+  if (!done) queueMsg_('내 할 일', msg, '할 일');
+  return '오늘 올라온 캡처 ' + files.length + '장';
 }
