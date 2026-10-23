@@ -290,7 +290,7 @@
   const qs = new URLSearchParams(L.search);
   let item = qs.get("itemId") || qs.get("itemid") || "";
   if (!item) { const m = html.match(/["']?itemId["']?\s*[:=]\s*["']?(\d{8,})/); if (m) item = m[1]; }
-  const mask = s => s && s.length > 4 ? "*".repeat(s.length - 4) + s.slice(-4) : s;
+  const mask = s => s && s.length > 8 ? s.slice(0, 4) + "***" + s.slice(-4) : s;
   /* 상품명: 화면에 보이는 제목. og:title은 ' - 일반거치대' 같은 분류가 붙어서 마지막에 */
   const og = document.querySelector('meta[property="og:title"]');
   const jv = k => { const m = document.documentElement.innerHTML.match(new RegExp('"' + k + '"\\s*:\\s*"([^"]{2,120})"')); return m ? m[1] : ""; };

@@ -643,6 +643,15 @@ function repairList_(sh, rows) {
 //  어느 응답을 넣었는지는 스크립트 속성 LISTK_<시트ID>(응답 시각)로 기억 → 지운 줄도 다시 안 생김
 //  칸은 2행 머리글 글자로 찾아서 넣음(지운 칸은 안 채움, 다시 안 만듦). 폼에 새로 생긴 질문만 오른쪽 끝에 칸을 더함(LISTH_)
 //  폼에서 지운 응답(취소 등)은 줄을 남기고 타임스탬프 칸 메모 + 회색 글자
+// 전화번호를 010-0000-0000 모양으로 (택배시트에 하이픈 없이 들어가면 오류, 10/23). 숫자로 들어와 앞 0이 빠진 것(1087582349)도 고침
+function phoneFmt_(v) {
+  if (v === '' || v === null || v === undefined) return v;
+  let d = String(v).replace(/\D/g, '');
+  if (/^1[016789]\d{7,8}$/.test(d)) d = '0' + d;
+  if (/^01\d{9}$/.test(d)) return d.slice(0, 3) + '-' + d.slice(3, 7) + '-' + d.slice(7);
+  if (/^01\d{8}$/.test(d)) return d.slice(0, 3) + '-' + d.slice(3, 6) + '-' + d.slice(6);
+  return v;
+}
 function syncList_(ss) {
   const sh = ss.getSheetByName(LIST_TAB);
   if (!sh) return 0;
@@ -659,7 +668,7 @@ function syncList_(ss) {
       if (!(x[0] instanceof Date)) return;
       // 시각만 있고 답이 하나도 없는 줄은 사람이 아니라서 명단에 안 넣음 (10/21 마켓담온 귤 8행)
       if (!x.slice(1).some(function (v) { return v !== '' && v !== null; })) return;
-      const o = {}; h.forEach(function (name, j) { o[name] = x[j]; });
+      const o = {}; h.forEach(function (name, j) { o[name] = /전화|연락처|휴대폰|핸드폰/.test(name) ? phoneFmt_(x[j]) : x[j]; });
       rows.push({ t: x[0].getTime(), o: o });
     });
   });
@@ -1915,7 +1924,8 @@ const ASSIGN_TAB = '배정';
 const ASSIGN_HEAD = ['명단 제목', '닉네임', '공지 옵션', '계정수', '산 수', '확인', '시트ID', '폼 옵션', '가격'];
 const CHECK_ROWS = 500;
 // 옵션 비교는 띄어쓰기·대소문자와 끝의 가격 '(16,800원)'은 무시 (폼 보기에 가격이 붙기 전·후 응답이 섞여서 옵션 틀림으로 나온 것, 10/22 오즈네즈)
-const NORM = function (r) { return 'LOWER(REGEXREPLACE(TO_TEXT(' + r + '),"\\(\\s*[0-9,]+\\s*원\\s*\\)|\\s",""))'; };
+//  카톡 닉네임에 숨은 글자(폭 없는 공백·한글 채움 문자 등)가 있으면 같은 닉네임인데 '닉네임 확인'으로 나와서 그것도 무시 (10/23 짜니엉아)
+const NORM = function (r) { return 'LOWER(REGEXREPLACE(TO_TEXT(' + r + '),"\\(\\s*[0-9,]+\\s*원\\s*\\)|\\s|[\\x{200B}-\\x{200F}\\x{2060}\\x{FEFF}\\x{3164}\\x{115F}\\x{1160}\\x{00A0}]",""))'; };
 
 // 옵션 확인 수식 (한눈에 탭 명단 옆 칸). nkR, okR: 닉네임, 옵션 칸 범위, rows: 줄 수, sid: 명단 시트ID
 //  관리 시트 '배정' 탭에서 같은 명단 시트 줄만 가져와 비교. 닉네임과 옵션은 띄어쓰기, 대소문자 무시
@@ -2162,6 +2172,7 @@ function noticeProducts_(text) {
 //  옵션 줄 바로 아래 줄에 이름만 있어도 읽음
 // 돌려주는 줄: [닉네임, 공지 옵션(가이드 여럿이면 상품명 붙임), 계정수, 폼 보기(맞는 게 없으면 빈칸), 가격]
 function parseAssign_(text, choices) {
+  text = String(text || '').normalize('NFC').replace(/[\u200B-\u200F\uFEFF\u3164\u115F\u1160]/g, '');   // 숨은 글자 빼기 (10/23)
   // 띄어쓰기 있는 닉네임은 대괄호로 묶어 한 사람: [시묘 심효진] (U+2060으로 잠깐 붙였다가 이름에서 다시 띄어 씀)
   text = String(text || '').replace(/\[([^\]\n]{1,20})\]/g, function (m, g) { return g.trim().replace(/\s+/g, '\u2060'); });
   const k = function (x) { return String(x || '').toLowerCase().replace(/[\s\u2060]+/g, ''); };
@@ -3202,7 +3213,7 @@ function ensureRunNotices_(runs) {
   del.sort(function (a, b) { return b - a; }).forEach(function (i) { note_('✓ 똑같은 방 공지 하나 지움: ' + v[i][3]); ob.deleteRow(i + 2); v.splice(i, 1); });
   runs.forEach(function (r) {
     if (r['진행 상태'] === '종료' || !(r['진행일'] instanceof Date) || !r['폼ID'] || !r['폼 링크']) return;
-    const d = dayStart_(r['진행일']); if (d !== t1) return;   // 다음 진행일 것만 (폼을 같이 쓰는 여러 날 진행은 폼 설명이 가장 늦은 날 공지라)
+    const d = dayStart_(r['진행일']); if (d !== t1 && d !== today_().getTime()) return;   // 오늘·다음 진행일 것만 (폼을 같이 쓰는 여러 날 진행은 폼 설명이 가장 늦은 날 공지라 아래에서 거름)
     if (runs.some(function (x) { return x !== r && String(x['폼ID']) === String(r['폼ID']) && x['진행일'] instanceof Date && dayStart_(x['진행일']) > d && x['진행 상태'] !== '종료'; })) return;
     const room = String(r['카톡방'] || bareTitle_(r['명단 제목'])), link = String(r['폼 링크']);
     // 같은 날짜 방(방 이름이 바뀌었어도 날짜는 같음)에 이 폼 링크 공지가 있으면 있는 것 (여러 날 진행은 폼을 같이 써서 날짜로 구분)
@@ -4716,7 +4727,7 @@ const USAGE_ROWS = [
   ['진행목록', '모든 진행 기록. "진행일" 칸을 고치면 그 진행 날짜가 옮겨짐 (아래 "날짜 바꾸기")'],
   ['폼수정', 'B1에서 진행 고르기 → E2 공지 붙여넣기(배정) / 응답 체크 후 삭제 실행 / I2에 숫자 = 추가 모집'],
   ['배정', '누가 어떤 옵션을 사기로 했는지 (공지 이름에서 자동). 한눈에 탭 "안 산 사람"·"옵션 확인"이 이걸로 나옴. 지우지 마세요 (중복 확인은 배정과 상관없이 한눈에 명단에서 빨간 글씨)'],
-  ['일정', '아직 안 만든 다음 일차 예약(상태 "대기"). 진행 전날 오전 10시에 자동으로 진행목록으로 넘어감(폼·방 공지 생김). 진행목록에서 날짜를 고치면 일정도 따라 밀려서 보통은 안 봐도 됨'],
+  ['일정', '아직 안 만든 다음 일차 예약(상태 "대기"). 진행일 자정(0시)에 자동으로 진행목록으로 넘어감(폼·방 공지 생김). 진행목록에서 날짜를 고치면 일정도 따라 밀려서 보통은 안 봐도 됨'],
   ['진행목록 vs 일정', '진행목록 = 이미 만든 진행(폼·명단 시트·방 공지 있음) → 날짜를 바꾸려면 여기 "진행일". 일정 = 아직 안 만든 다음 일차 → 그 날짜만 따로 바꿀 때만 일정 탭 "진행일"'],
   ['', ''],
   ['■ 매일 할 일', ''],
@@ -5705,7 +5716,7 @@ function deleteRunTimes_(r, dates) {
 
 /* ---------------- 8) 여러 날 진행: 다음 일차 자동 만들기 ---------------- */
 // 1일차를 만들 때 생성기가 보낸 계획(일차, 날짜, 건수, 옵션 인원)을 '일정' 탭에 저장
-// 15분마다(checkFull) 앞 일차 명단이 다 찼거나, 전날 CONFIG.NEXT_DAY_HOUR시가 되면 다음 일차 폼, 시트, 공지를 만듦
+// 15분마다(checkFull) 진행일 0시가 되면 그 일차 폼, 시트, 공지를 만듦 (10/23부터. 예전: 전날 10시)
 // 만들면 메일 + 보낼 메시지함(그날 방제의 카톡방)으로 공지가 감
 
 const PLAN_TAB = '일정';
@@ -5808,11 +5819,9 @@ function makeDueDays_() {
       x[3] = dayW; x[4] = retitleDate_(x[4], dayW); x[5] = retitleDate_(x[5], dayW);
       sh.getRange(i + 2, 4, 1, 3).setValues([[dayW, x[4], x[5]]]);
     }
-    // 앞 진행일 오전 10시(NEXT_DAY_HOUR)부터 만듦 (월요일 진행이면 금요일 10시)
-    const due = new Date(dayW); due.setHours(12, 0, 0, 0);
-    do { due.setDate(due.getDate() - 1); } while (!isWorkday_(due));
-    due.setHours(CONFIG.NEXT_DAY_HOUR, 0, 0, 0);
-    if (!((prev && prev['마감 시각']) || now >= due)) return;
+    // 진행일 0시에 만듦 (사용자 요청 10/23: 전날 오전 10시·앞 일차 마감 때 말고 그냥 자정에. 0시 예약 확인이 바로 만듦)
+    const due = new Date(dayW); due.setHours(0, 0, 0, 0);
+    if (now < due) return;
     locked_(function () {
       if (findRunByRequest_(x[0])) { sh.getRange(i + 2, 9).setValue('생성됨'); return; }
       const dateIso = Utilities.formatDate(new Date(x[3]), CONFIG.TIMEZONE, 'yyyy-MM-dd');
@@ -6523,7 +6532,7 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '23';
+const DASH_VER = '24';
 const DASH_LIST_DAYS = 2;   // 아래 명단 덩어리를 보여 줄 지난 날 수   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
@@ -6744,7 +6753,9 @@ function buildDashboard_(force) {
       return f;
     };
     const kcol = 'MAP(' + c(x.layout[5][1] || 1) + ',' + c(x.layout[6][1] || 1) + ',LAMBDA(oo,pp,TRIM(' + q(x.shop) + '&" "&' + prodOf() + ')))';
-    const parts = x.layout.map(function (t) { return t[1] === 'K' ? kcol : t[1] ? c(t[1]) : blank; });
+    // 전화번호는 010-0000-0000 (택배시트에 하이픈 없이 붙으면 오류, 10/23). 숫자로 들어와 앞 0이 빠진 것도
+    const phoneCol = function (k) { return 'MAP(' + c(k) + ',LAMBDA(v,LET(dg,REGEXREPLACE(TO_TEXT(v),"[^0-9]",""),dgt,IF(AND(LEN(dg)=10,LEFT(dg,1)="1"),"0"&dg,dg),IF(AND(LEN(dgt)=11,LEFT(dgt,2)="01"),LEFT(dgt,3)&"-"&MID(dgt,4,4)&"-"&RIGHT(dgt,4),IF(AND(LEN(dgt)=10,LEFT(dgt,2)="01"),LEFT(dgt,3)&"-"&MID(dgt,4,3)&"-"&RIGHT(dgt,4),v)))))'; };
+    const parts = x.layout.map(function (t) { return t[1] === 'K' ? kcol : t[0] === '전화번호' && t[1] ? phoneCol(t[1]) : t[1] ? c(t[1]) : blank; });
     const imp = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A' + x.start + ':' + colLetter_(x.cols)) + ')';   // 시트 전체를 가져와 그날 것만 거름
     sh.getRange(top + 1, 1, 1, x.layout.length).setValues([x.layout.map(function (t) { return t[0]; })]);
     const dt = function (t) { return isFinite(t) && t > 0 ? 'DATE(' + Utilities.formatDate(new Date(t), CONFIG.TIMEZONE, 'yyyy,M,d') + ')' : (t > 0 ? '99999' : '0'); };
