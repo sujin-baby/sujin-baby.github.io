@@ -3182,28 +3182,6 @@ function outboxSheet_() {
 //  같은 번호가 두 줄이면 번호로 고치는 칸(보낼 날짜 등)이 엉뚱한 줄에 써짐 → 10/24 방 공지에 '포토전달대기'가 들어간 것)
 // (10/24 원인 찾기) 보낼메시지 보낼 날짜 고침·정렬 추적 → ?p=diag 의 obTrace
 function obTrace_(t) { try { const c = CacheService.getScriptCache(); let a = []; try { a = JSON.parse(c.get('OB_TRACE') || '[]'); } catch (e) {} a.push(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'HH:mm:ss') + ' ' + t); c.put('OB_TRACE', JSON.stringify(a.slice(-80)), 21600); } catch (e) {} }
-function repairObCells_(sh, bad) {
-  const same = function (a, b) { return (a instanceof Date ? a.getTime() : String(a)) === (b instanceof Date ? b.getTime() : String(b)); };
-  const fmt = function (w) { return w instanceof Date ? 'M/d (ddd)' : '@'; };
-  let left = bad.slice();
-  // 1) 칸 서식 지우고 다시 쓰기
-  left = left.filter(function (b) { const c = sh.getRange(b.row, 2); try { c.clearFormat(); c.setNumberFormat(fmt(b.want)); c.setValue(b.want); SpreadsheetApp.flush(); } catch (e) { obTrace_('서식 지우기 실패 ' + b.row + ' ' + e); } const ok = same(c.getValue(), b.want); obTrace_('서식 지우고 씀 줄' + b.row + ' → ' + (ok ? '됨' : '안 됨: ' + c.getValue())); return !ok; });
-  // 2) 칸 비우고 다시 쓰기
-  left = left.filter(function (b) { const c = sh.getRange(b.row, 2); try { c.clear(); c.setNumberFormat(fmt(b.want)); c.setValue(b.want); SpreadsheetApp.flush(); } catch (e) { obTrace_('비우기 실패 ' + b.row + ' ' + e); } const ok = same(c.getValue(), b.want); obTrace_('비우고 씀 줄' + b.row + ' → ' + (ok ? '됨' : '안 됨: ' + c.getValue())); return !ok; });
-  if (!left.length) return;
-  // 3) 필터를 잠깐 빼고 쓰고, 같은 범위·조건으로 다시 걸기
-  const f = sh.getFilter();
-  if (!f) { obTrace_('필터 없음, 그래도 안 되는 줄: ' + left.map(function (b) { return b.row; }).join(',')); return; }
-  const a1 = f.getRange().getA1Notation(), cols = f.getRange().getNumColumns(), col0 = f.getRange().getColumn(), crit = [];
-  for (let j = 0; j < cols; j++) { try { const k = f.getColumnFilterCriteria(col0 + j); if (k) crit.push([col0 + j, k]); } catch (e) {} }
-  try {
-    f.remove(); SpreadsheetApp.flush();
-    left.forEach(function (b) { const c = sh.getRange(b.row, 2); c.setNumberFormat(fmt(b.want)); c.setValue(b.want); });
-    SpreadsheetApp.flush();
-    left.forEach(function (b) { obTrace_('필터 빼고 씀 줄' + b.row + ' → ' + (same(sh.getRange(b.row, 2).getValue(), b.want) ? '됨' : '안 됨: ' + sh.getRange(b.row, 2).getValue())); });
-  } catch (e) { obTrace_('필터 빼고 쓰기 실패 ' + e); }
-  try { const nf = sh.getRange(a1).createFilter(); crit.forEach(function (k) { nf.setColumnFilterCriteria(k[0], k[1]); }); obTrace_('필터 다시 걺 ' + a1 + ' 조건 ' + crit.length + '개'); } catch (e) { obTrace_('필터 다시 걸기 실패 ' + e); note_('⚠ 보낼메시지 필터를 다시 못 걸었어요. 종류 칸 필터를 다시 걸어 주세요'); }
-}
 function newObId_() { return 'm' + Utilities.getUuid().replace(/-/g, '').slice(0, 12); }
 function dedupeObIds_(sh) {
   const last = sh.getLastRow();
@@ -3221,10 +3199,11 @@ function redateOutbox_(sh) {
   dedupeObIds_(sh);
   const last = sh.getLastRow();
   if (last < 2) return;
-  let n = 0;
+  let n = 0, sentFix = 0;
   const odd = [];
   sh.getRange(2, 1, last - 1, 6).getValues().forEach(function (x) {
-    if (!(x[5] === '대기' || x[5] === '방 못 찾음') || !x[0]) return;
+    // 보낸·취소 줄도 '포토전달대기'로 잘못 바뀐 보낼 날짜는 날짜로 되돌림 (10/24 필터 때문에 40줄 가까이 바뀜. 날짜가 아니면 오래돼도 안 지워짐)
+    if (!(x[5] === '대기' || x[5] === '방 못 찾음') || !x[0]) { if (x[0] && x[2] !== '포토 가이드' && x[1] === '포토전달대기') { obSet_(sh, x[0], 2, sendDate_(x[3], x[4], x[2])); sentFix++; } return; }
     if (x[2] === '포토 가이드') { if (x[1] !== '포토전달대기') { obSet_(sh, x[0], 2, '포토전달대기'); odd.push(x[3] + '(포토 가이드: ' + x[1] + ')'); } return; }
     const d = sendDate_(x[3], x[4], x[2]);
     if (!(x[1] instanceof Date)) {
@@ -3236,8 +3215,9 @@ function redateOutbox_(sh) {
   });
   if (n) note_('보낼 날짜를 카톡방 날짜에 맞춤: ' + n + '줄');
   if (odd.length) note_('⚠ 보낼 날짜 칸이 종류와 안 맞아서 고침: ' + odd.join(', '));
+  if (sentFix) note_('✓ 보낸 메시지 보낼 날짜 ' + sentFix + '줄 날짜로 되돌림 (포토전달대기로 잘못 바뀐 것)');
 }
-function tidyOutbox_() {
+function tidyOutboxInner_() {
   const sh = outboxSheet_();
   let last = sh.getLastRow();
   if (last < 2) return;
@@ -3326,10 +3306,6 @@ function sortOutbox_(sh) {
       const back = sh.getRange(2, 1, sorted.length, 2).getValues(), diff = [];
       sorted.forEach(function (x, i) { const a = x[1] instanceof Date ? x[1].getTime() : String(x[1]), b = back[i][1] instanceof Date ? back[i][1].getTime() : String(back[i][1]); if (a !== b || String(back[i][0]) !== String(x[0])) diff.push((i + 2) + ':' + x[0] + ' 씀=' + (x[1] instanceof Date ? 'D' : x[1]) + ' 읽음=' + (back[i][1] instanceof Date ? 'D' : back[i][1]) + (String(back[i][0]) !== String(x[0]) ? ' 번호다름' : '')); });
       obTrace_('정렬 ' + sorted.length + '줄' + (diff.length ? ' 안 맞음: ' + diff.slice(0, 12).join(', ') : ' 맞음'));
-      // 써도 안 바뀌는 보낼 날짜 칸 고치기 (10/24: B14:B17에 날짜를 써도 '포토전달대기'로 남음). 칸 서식 지우기 → 칸 비우기 → (그래도 안 되면) 필터 잠깐 빼고 쓰기, 단계마다 기록
-      const bad = [];
-      sorted.forEach(function (x, i) { const a = x[1] instanceof Date ? x[1].getTime() : String(x[1]), b = back[i][1] instanceof Date ? back[i][1].getTime() : String(back[i][1]); if (a !== b && String(back[i][0]) === String(x[0])) bad.push({ row: i + 2, want: x[1] }); });
-      if (bad.length) repairObCells_(sh, bad);
     } catch (e) { obTrace_('정렬 추적 실패 ' + e); }
   }
 }
@@ -3337,7 +3313,7 @@ function sortOutbox_(sh) {
 // 보낼메시지 줄을 번호(A열)로 찾아서 고침. 줄 위치로 고치면 사이에 새 메시지가 들어오거나 정렬돼서 다른 줄을 덮어씀
 //  (10/21 마켓담온 귤 공지가 오즈네즈 방 이름 줄로 들어간 것)
 // 방 공지인데 글 속 폼 링크가 다른 진행 것이면 카톡방 이름을 그 진행 것으로 바로잡음 (매번, 안 보낸 것만)
-function fixMisroutedNotices_(runs) {
+function fixMisroutedNoticesInner_(runs) {
   const ob = outboxSheet_(), last = ob.getLastRow();
   if (last < 2) return;
   ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v) {
@@ -3357,7 +3333,7 @@ function fixMisroutedNotices_(runs) {
 }
 // (10/23) 오늘·다음 진행일 진행마다 방 공지가 보낼메시지에 꼭 하나: 없으면(10.23 속눈썹영양제 빠진 것) 폼 설명으로 다시 만들어 넣고,
 //  같은 방에 글자까지 똑같은 방 공지가 둘이면(10.23 텀블러 두 번) 나중 것(안 보낸 것)만 지움
-function ensureRunNotices_(runs) {
+function ensureRunNoticesInner_(runs) {
   const ob = outboxSheet_(), last = ob.getLastRow();
   const v = last >= 2 ? ob.getRange(2, 1, last - 1, 6).getValues() : [];
   const t1 = nextWorkday_(today_()).getTime();
@@ -3408,14 +3384,78 @@ function planNotice_(r, link) {
   const t = cfg.platform === '기대평' ? cfg.desc : adjustNotice_(stripNames_(cfg.desc), cnt, cfg.slot2);
   return String(t).split('(구글폼 링크)').join(link);
 }
-function obSet_(ob, id, col, val) {
+// 보낼메시지에 필터(데이터 → 필터 만들기)가 걸려 있으면 스크립트가 쓴 값이 일부 칸에 안 들어감
+//  (10/24 실제로 확인: 필터가 있을 때 B14:B17에 날짜를 써도 '포토전달대기'로 남고, 필터를 빼고 쓰면 들어감. 방 공지 보낼 날짜가 '포토전달대기'로 보이던 원인)
+//  → 보낼메시지를 고치는 동안만 필터를 빼고, 끝나면 같은 범위·조건으로 다시 검. 중간에 멈춰도 다음 실행이 다시 걸게 조건을 속성(OB_FILTER)에 적어 둠
+function withObWrite_(fn) {
+  if (globalThis.__OB_UNF) return fn();
+  let sh = null, f = null;
+  try { sh = adminSs_().getSheetByName(OUTBOX_SHEET); f = sh ? sh.getFilter() : null; } catch (e) {}
+  if (!f) {
+    const r = fn();
+    try { const j = JSON.parse(PropertiesService.getScriptProperties().getProperty('OB_FILTER') || 'null'); if (j && Date.now() - Number(j.at || 0) > 7 * 60000) obFilterRestore_(sh, null); } catch (e) {}
+    return r;
+  }
+  const saved = obFilterSave_(f);
+  try { f.remove(); } catch (e) { return fn(); }
+  globalThis.__OB_UNF = true;
+  try { return fn(); } finally { globalThis.__OB_UNF = false; obFilterRestore_(sh, saved); }
+}
+function obFilterSave_(f) {
+  const rg = f.getRange(), col0 = rg.getColumn(), live = [], json = [];
+  for (let j = 0; j < rg.getNumColumns(); j++) {
+    let k = null; try { k = f.getColumnFilterCriteria(col0 + j); } catch (e) {}
+    if (!k) continue;
+    live.push([col0 + j, k]);
+    const o = { col: col0 + j };
+    try { o.h = k.getHiddenValues() || []; } catch (e) {}
+    try { o.vis = k.getVisibleValues() || []; } catch (e) {}
+    try { const t = k.getCriteriaType(); if (t) { o.t = String(t); o.v = (k.getCriteriaValues() || []).map(function (x) { return x instanceof Date ? { d: x.getTime() } : x; }); } } catch (e) {}
+    json.push(o);
+  }
+  const saved = { a1: rg.getA1Notation(), live: live };
+  try { PropertiesService.getScriptProperties().setProperty('OB_FILTER', JSON.stringify({ a1: saved.a1, crit: json, at: Date.now() })); } catch (e) {}
+  return saved;
+}
+function obFilterRestore_(sh, saved) {
+  const props = PropertiesService.getScriptProperties();
+  try {
+    if (!sh) sh = adminSs_().getSheetByName(OUTBOX_SHEET);
+    if (!sh) return;
+    if (sh.getFilter()) { props.deleteProperty('OB_FILTER'); return; }
+    if (!saved) { const j = JSON.parse(props.getProperty('OB_FILTER') || 'null'); if (!j) return; saved = { a1: j.a1, json: j.crit }; }
+    // 범위 끝 줄은 지금 마지막 줄까지 (메시지가 늘거나 줄었을 수 있음)
+    const m = String(saved.a1).match(/^([A-Z]+)(\d+):([A-Z]+)\d+$/);
+    const a1 = m ? m[1] + m[2] + ':' + m[3] + Math.max(sh.getLastRow(), Number(m[2]) + 1) : saved.a1;
+    const nf = sh.getRange(a1).createFilter();
+    if (saved.live) saved.live.forEach(function (k) { try { nf.setColumnFilterCriteria(k[0], k[1]); } catch (e) {} });
+    else (saved.json || []).forEach(function (o) {
+      try {
+        let b = SpreadsheetApp.newFilterCriteria();
+        if (o.h && o.h.length) b = b.setHiddenValues(o.h);
+        if (o.vis && o.vis.length) b = b.setVisibleValues(o.vis);
+        if (o.t && SpreadsheetApp.BooleanCriteria[o.t]) b = b.withCriteria(SpreadsheetApp.BooleanCriteria[o.t], (o.v || []).map(function (x) { return x && x.d ? new Date(x.d) : x; }));
+        nf.setColumnFilterCriteria(o.col, b.build());
+      } catch (e) {}
+    });
+    props.deleteProperty('OB_FILTER');
+  } catch (e) { note_('⚠ 보낼메시지 필터를 다시 못 걸었어요 (' + e.message + '). 종류 칸 필터를 다시 걸어 주세요'); }
+}
+function obSet_(ob, id, col, val) { return withObWrite_(function () { return obSetInner_(ob, id, col, val); }); }
+function queueMsg_(room, msg, kind) { return withObWrite_(function () { return queueMsgInner_(room, msg, kind); }); }
+function markMsg_(id, st) { return withObWrite_(function () { return markMsgInner_(id, st); }); }
+function tidyOutbox_() { return withObWrite_(function () { return tidyOutboxInner_(); }); }
+function ensureRunNotices_(runs) { return withObWrite_(function () { return ensureRunNoticesInner_(runs); }); }
+function fixMisroutedNotices_(runs) { return withObWrite_(function () { return fixMisroutedNoticesInner_(runs); }); }
+function pruneOutbox_() { return withObWrite_(function () { return pruneOutboxInner_(); }); }
+function obSetInner_(ob, id, col, val) {
   const last = ob.getLastRow();
   if (last < 2 || !id) return false;
   const ids = ob.getRange(2, 1, last - 1, 1).getValues();
   for (let i = 0; i < ids.length; i++) if (String(ids[i][0]) === String(id)) { ob.getRange(i + 2, col).setValue(val); return true; }
   return false;
 }
-function queueMsg_(room, msg, kind) {
+function queueMsgInner_(room, msg, kind) {
   if (!msg) return;
   try {
     // 최신 메시지가 맨 위
@@ -3449,7 +3489,7 @@ function queueText_() {
 
 // 보낼메시지 상태 칸 = 체크칸 (체크 = '보냄', 빈칸 = '대기'). 값은 글자 그대로라 다른 코드는 안 바꿔도 됨. '방 못 찾음'은 없앰 (사용자 요청 10/20)
 function obCheck_() { return SpreadsheetApp.newDataValidation().requireCheckbox('보냄', '대기').build(); }
-function markMsg_(id, st) {
+function markMsgInner_(id, st) {
   if (st !== '보냄') st = '대기';
   const sh = outboxSheet_();
   const last = sh.getLastRow();
@@ -7458,7 +7498,7 @@ function fixExpect7Once_() {
 }
 
 // 보낼메시지: 보냄 체크하고 보낼 날짜가 2일 넘게 지난 줄은 지움 (탭이 너무 길어짐, 사용자 요청 10/24). 30분마다
-function pruneOutbox_() {
+function pruneOutboxInner_() {
   const ob = outboxSheet_(), last = ob.getLastRow();
   if (last < 3) return;
   const cut = today_().getTime() - 2 * 86400000;
