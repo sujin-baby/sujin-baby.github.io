@@ -1361,6 +1361,7 @@ function diag_(p) {
     out.props = keep;
   } catch (e) { out.propsErr = String(e); }
   try { out.reports = JSON.parse(CacheService.getScriptCache().get('REPORT_LOG') || '[]'); } catch (e) { out.reportsErr = String(e); }
+  try { out.obTrace = JSON.parse(CacheService.getScriptCache().get('OB_TRACE') || '[]'); } catch (e) {}
   try { const d = adminSs_().getSheetByName(DASH_TAB); if (d) out.dashQ = d.getRange(1, 17, 13, 1).getValues().map(function (x) { return String(x[0]); }).filter(Boolean); } catch (e) {}
   return out;
 }
@@ -3179,6 +3180,8 @@ function outboxSheet_() {
 //  (10/24 #10.27 실링팬·마켓담온 귤·속눈썹영양제 방 공지가 '포토전달대기'로 되어 있었음 → 날짜로 고치고 어느 줄이었는지 기록)
 // 메시지 번호(A열): 'm' + 글자 (예전 번호는 시트가 숫자로 바꾸거나(0012… → 12…) 같은 번호가 두 줄에 생길 수 있었음.
 //  같은 번호가 두 줄이면 번호로 고치는 칸(보낼 날짜 등)이 엉뚱한 줄에 써짐 → 10/24 방 공지에 '포토전달대기'가 들어간 것)
+// (10/24 원인 찾기) 보낼메시지 보낼 날짜 고침·정렬 추적 → ?p=diag 의 obTrace
+function obTrace_(t) { try { const c = CacheService.getScriptCache(); let a = []; try { a = JSON.parse(c.get('OB_TRACE') || '[]'); } catch (e) {} a.push(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'HH:mm:ss') + ' ' + t); c.put('OB_TRACE', JSON.stringify(a.slice(-80)), 21600); } catch (e) {} }
 function newObId_() { return 'm' + Utilities.getUuid().replace(/-/g, '').slice(0, 12); }
 function dedupeObIds_(sh) {
   const last = sh.getLastRow();
@@ -3202,7 +3205,11 @@ function redateOutbox_(sh) {
     if (!(x[5] === '대기' || x[5] === '방 못 찾음') || !x[0]) return;
     if (x[2] === '포토 가이드') { if (x[1] !== '포토전달대기') { obSet_(sh, x[0], 2, '포토전달대기'); odd.push(x[3] + '(포토 가이드: ' + x[1] + ')'); } return; }
     const d = sendDate_(x[3], x[4], x[2]);
-    if (!(x[1] instanceof Date)) { obSet_(sh, x[0], 2, d); odd.push(x[3] + '(' + x[2] + ': ' + (x[1] === '' ? '빈칸' : x[1]) + ')'); return; }
+    if (!(x[1] instanceof Date)) {
+      obSet_(sh, x[0], 2, d); odd.push(x[3] + '(' + x[2] + ': ' + (x[1] === '' ? '빈칸' : x[1]) + ')');
+      try { SpreadsheetApp.flush(); const ids = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().map(function (y) { return String(y[0]); }), at = ids.indexOf(String(x[0])); obTrace_('고침 ' + x[0] + ' ' + x[3] + ' 줄' + (at + 2) + ' 다시 읽음=' + (at >= 0 ? sh.getRange(at + 2, 2).getValue() : '못 찾음')); } catch (e) { obTrace_('추적 실패 ' + e); }
+      return;
+    }
     if (d.getTime() !== dayStart_(x[1])) { obSet_(sh, x[0], 2, d); n++; }
   });
   if (n) note_('보낼 날짜를 카톡방 날짜에 맞춤: ' + n + '줄');
@@ -3289,7 +3296,16 @@ function sortOutbox_(sh) {
     if (wait(a)) return (tm(a) - tm(b)) || (dk(a) - dk(b));   // 보낼 날짜(B) 이른 것 먼저
     return tm(b) - tm(a);
   });
-  if (sorted.some(function (x, i) { return x[0] !== v[i][0]; })) rg.setValues(sorted);
+  if (sorted.some(function (x, i) { return x[0] !== v[i][0]; })) {
+    rg.setValues(sorted);
+    // (10/24 원인 찾기) 쓴 값과 다시 읽은 값이 다른 보낼 날짜 칸
+    try {
+      SpreadsheetApp.flush();
+      const back = sh.getRange(2, 1, sorted.length, 2).getValues(), diff = [];
+      sorted.forEach(function (x, i) { const a = x[1] instanceof Date ? x[1].getTime() : String(x[1]), b = back[i][1] instanceof Date ? back[i][1].getTime() : String(back[i][1]); if (a !== b || String(back[i][0]) !== String(x[0])) diff.push((i + 2) + ':' + x[0] + ' 씀=' + (x[1] instanceof Date ? 'D' : x[1]) + ' 읽음=' + (back[i][1] instanceof Date ? 'D' : back[i][1]) + (String(back[i][0]) !== String(x[0]) ? ' 번호다름' : '')); });
+      obTrace_('정렬 ' + sorted.length + '줄' + (diff.length ? ' 안 맞음: ' + diff.slice(0, 12).join(', ') : ' 맞음'));
+    } catch (e) { obTrace_('정렬 추적 실패 ' + e); }
+  }
 }
 
 // 보낼메시지 줄을 번호(A열)로 찾아서 고침. 줄 위치로 고치면 사이에 새 메시지가 들어오거나 정렬돼서 다른 줄을 덮어씀
