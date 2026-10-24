@@ -1337,6 +1337,22 @@ function diag_(p) {
       bValidation: ol >= 2 ? ob.getRange(2, 2, ol - 1, 1).getDataValidations().map(function (x, i) { return x[0] ? (i + 2) + ':' + x[0].getCriteriaType() : ''; }).filter(Boolean).slice(0, 20) : [],
       bFormats: ol >= 2 ? ob.getRange(2, 2, ol - 1, 1).getNumberFormats().map(function (x) { return x[0]; }).filter(function (x, i, a) { return a.indexOf(x) === i; }) : [] };
   } catch (e) { out.outboxSheetErr = String(e); }
+  // 보낼메시지 위쪽 칸 자세히 (값·수식·표시값·서식), 보호 범위, 병합, G~Z 수식 (10/24 정렬해도 B열 몇 칸만 '포토전달대기'로 남는 원인 찾기)
+  try {
+    const ob = outboxSheet_(), n = Math.min(ob.getLastRow(), Number(p.rows || 22)), rg = ob.getRange(1, 1, n, 6);
+    const vv = rg.getValues(), ff = rg.getFormulas(), dd = rg.getDisplayValues(), nf = rg.getNumberFormats();
+    out.cells = vv.map(function (row, i) { return (i + 1) + ' | ' + row.map(function (c, j) { return (ff[i][j] ? '{' + ff[i][j] + '}' : '') + (j === 4 ? String(dd[i][j]).slice(0, 15) : dd[i][j]) + (j === 1 ? ' <' + (c instanceof Date ? 'Date' : typeof c) + ',' + nf[i][j] + '>' : ''); }).join(' | '); });
+    out.protections = ob.getProtections(SpreadsheetApp.ProtectionType.RANGE).map(function (x) { return x.getRange().getA1Notation() + (x.isWarningOnly() ? ' (경고만)' : '') + ' ' + x.getDescription(); })
+      .concat(ob.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(function (x) { return 'SHEET ' + (x.isWarningOnly() ? '(경고만)' : '') + ' ' + x.getDescription(); }));
+    out.merged = ob.getRange(1, 1, Math.min(ob.getMaxRows(), 300), 26).getMergedRanges().map(function (x) { return x.getA1Notation(); });
+    const gz = ob.getRange(1, 7, Math.min(ob.getMaxRows(), 300), 20).getFormulas(), gzl = [];
+    gz.forEach(function (row, i) { row.forEach(function (c, j) { if (c && gzl.length < 20) gzl.push(String.fromCharCode(71 + j) + (i + 1) + ':' + c.slice(0, 120)); }); });
+    out.formulasGZ = gzl;
+    const af = ob.getRange(1, 1, Math.min(ob.getMaxRows(), 300), 1).getFormulas(), afl = [];
+    af.forEach(function (row, i) { if (row[0] && afl.length < 10) afl.push('A' + (i + 1) + ':' + row[0].slice(0, 120)); });
+    out.formulasA = afl;
+    try { out.namedRanges = SpreadsheetApp.openById(CONFIG.ADMIN_SHEET_ID).getNamedRanges().map(function (x) { return x.getName() + '=' + x.getRange().getSheet().getName() + '!' + x.getRange().getA1Notation(); }); } catch (e) {}
+  } catch (e) { out.cellsErr = String(e); }
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
