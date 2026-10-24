@@ -12,6 +12,28 @@
     }
     return "";
   };
+  /* 옵션마다 가격 (쿠팡 '수량' 목록: 2개 29,200원 / 3개 41,200원 …, 10/24 옥광밤·황금향). 이름표(수량) 줄 다음 옵션 이름 줄 → 가격 줄.
+     지금 고른 옵션 가격(cur)과 같은 줄이 목록에 없으면 잘못 읽은 걸로 보고 안 씀 */
+  const readOptPrices = (txt, name, cur) => {
+    const LAB = /^(개당\s*)?(색상|옵션|사이즈|수량|구성|선택|용량|맛|종류|컬러|타입|중량|무게|개수)(\s*[×x\/·,]\s*(색상|옵션|사이즈|수량|구성|선택|용량|맛|종류|컬러|타입|중량|무게|개수))*\s*[:：]?$/;
+    const i0 = name ? txt.indexOf(name.slice(0, 12)) : -1;
+    const ls = (i0 >= 0 ? txt.slice(i0, i0 + 5000) : txt.slice(0, 8000)).split("\n").map(x => x.replace(/\s+/g, " ").trim()).filter(Boolean);
+    const out = [];
+    let nm = "", on = false;
+    for (const l of ls) {
+      if (!on) { if (LAB.test(l)) on = true; continue; }
+      if (LAB.test(l) || /^(모든\s*옵션|절약\s*금액|무료\s*배송|판매자|배송사|적립|장바구니|바로\s*구매)/.test(l)) { if (out.length) break; nm = ""; continue; }
+      const pm = l.match(/(\d{1,3}(?:,\d{3})+)\s*원/);
+      if (pm) {
+        if (/사면|절약|적립|최대/.test(l)) continue;
+        const o = l.slice(0, pm.index).trim() || nm;
+        if (o && o.length <= 40 && !out.some(x => x.o === o)) out.push({ o: o, p: Number(pm[1].replace(/,/g, "")) });
+        nm = "";
+      } else if (l.length <= 40) nm = l;
+    }
+    if (out.length < 2 || (cur && !out.some(x => x.p === cur))) return [];
+    return out;
+  };
   /* 키워드 추천 (생성기와 같은 규칙): 네추럴라이즈 플래티넘 오메가3 1100 … → 오메가3 | 플래티넘 오메가3 | 네추럴라이즈 오메가3 */
   const sugKw = nm => {
     const raw = String(nm || "").replace(/\(.*$/, "").replace(/\[[^\]]*\]/g, " "), dash = raw.split(/\s+-\s+/);
@@ -344,6 +366,8 @@
     let m0;
     while ((m0 = re0.exec(t0))) { const bf = t0.slice(Math.max(0, m0.index - 12), m0.index), af = t0.slice(m0.index, m0.index + m0[0].length + 6); if (/할인|쿠폰|적립|캐시|배송|최대|이상/.test(bf) || /할인|이상/.test(af)) continue; price = Number(m0[1].replace(/,/g, "")); break; }
   }
+  const optPrices = readOptPrices(txt, name, price);
+  if (optPrices.length && !optPrices.some(x => x.o === opt)) { const hit = optPrices.filter(x => x.p === price); if (hit.length === 1) opt = hit[0].o; }
   const lo = price ? Math.floor(price * 0.9 / 100) * 100 : 0, hi = price ? Math.ceil(price * 1.1 / 100) * 100 : 0;
   const box = document.createElement("div");
   box.style.cssText = "position:fixed;right:8px;bottom:8px;z-index:2147483647;width:340px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;box-sizing:border-box;background:#fff;color:#1d1a24;border:2px solid #5b2a86;border-radius:10px;padding:14px;font:13px/1.5 sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.2)";
@@ -395,6 +419,7 @@
     "상품번호 : " + pid + (item ? " - " + mask(item) : ""),
     opt ? "옵션 : " + opt : "",
     price ? "가격 : " + price.toLocaleString("ko-KR") + "원" : "",
+    optPrices.length ? "옵션별 가격 : " + optPrices.map(x => x.o + " " + x.p.toLocaleString("ko-KR") + "원").join(" / ") : "",
     /로켓\s*(배송|와우|프레시|그로스|직구)|판매자\s*로켓/.test(txt.slice(0, 8000)) ? "배송비 : 무료 (로켓배송)" : "배송비 : " + shipOf(txt, name, price),
     /로켓\s*(배송|와우|프레시|그로스|직구)|판매자\s*로켓/.test(txt.slice(0, 8000)) ? "배송 : 로켓배송" : "",
     foundKw ? "찾은 키워드 : " + foundKw : "",

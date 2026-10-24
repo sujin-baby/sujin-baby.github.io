@@ -7,7 +7,7 @@
   const numOf = s => Number(String(s || "").replace(/[^0-9]/g, "")) || 0;
 
   /* 고른 옵션: '색상 × 수량' 같은 이름표를 찾아 바로 옆 값 (콜론은 화면 꾸밈이라 글에 없을 때가 있음) */
-  const OPT_LAB = /^(색상|옵션|사이즈|수량|구성|선택|용량|맛|종류|컬러|타입)(\s*[×x\/·,]\s*(색상|옵션|사이즈|수량|구성|선택|용량|맛|종류|컬러|타입))*\s*[:：]?$/;
+  const OPT_LAB = /^(개당\s*)?(색상|옵션|사이즈|수량|구성|선택|용량|맛|종류|컬러|타입|중량|무게|개수)(\s*[×x\/·,]\s*(색상|옵션|사이즈|수량|구성|선택|용량|맛|종류|컬러|타입|중량|무게|개수))*\s*[:：]?$/;
   function readOption() {
     const labs = [...document.querySelectorAll("span,div,dt,th,td,strong,b,label,p,em")].filter(e => e.children.length <= 2 && OPT_LAB.test((e.innerText || "").trim()));
     for (const lab of labs) {
@@ -20,6 +20,28 @@
     const om = document.body.innerText.match(/(?:색상|옵션|구성|사이즈|수량|선택)[^\n]{0,12}[:：]\s*([^\n]{1,40})/);
     return om ? om[1].trim() : "";
   }
+  /* 옵션마다 가격 (쿠팡 '수량' 목록: 2개 29,200원 / 3개 41,200원 …, 10/24 옥광밤·황금향). 이름표(수량) 줄 다음 옵션 이름 줄 → 가격 줄.
+     지금 고른 옵션 가격(cur)과 같은 줄이 목록에 없으면 잘못 읽은 걸로 보고 안 씀 */
+  const readOptPrices = (txt, name, cur) => {
+    const LAB = /^(개당\s*)?(색상|옵션|사이즈|수량|구성|선택|용량|맛|종류|컬러|타입|중량|무게|개수)(\s*[×x\/·,]\s*(색상|옵션|사이즈|수량|구성|선택|용량|맛|종류|컬러|타입|중량|무게|개수))*\s*[:：]?$/;
+    const i0 = name ? txt.indexOf(name.slice(0, 12)) : -1;
+    const ls = (i0 >= 0 ? txt.slice(i0, i0 + 5000) : txt.slice(0, 8000)).split("\n").map(x => x.replace(/\s+/g, " ").trim()).filter(Boolean);
+    const out = [];
+    let nm = "", on = false;
+    for (const l of ls) {
+      if (!on) { if (LAB.test(l)) on = true; continue; }
+      if (LAB.test(l) || /^(모든\s*옵션|절약\s*금액|무료\s*배송|판매자|배송사|적립|장바구니|바로\s*구매)/.test(l)) { if (out.length) break; nm = ""; continue; }
+      const pm = l.match(/(\d{1,3}(?:,\d{3})+)\s*원/);
+      if (pm) {
+        if (/사면|절약|적립|최대/.test(l)) continue;
+        const o = l.slice(0, pm.index).trim() || nm;
+        if (o && o.length <= 40 && !out.some(x => x.o === o)) out.push({ o: o, p: Number(pm[1].replace(/,/g, "")) });
+        nm = "";
+      } else if (l.length <= 40) nm = l;
+    }
+    if (out.length < 2 || (cur && !out.some(x => x.p === cur))) return [];
+    return out;
+  };
   /* 상품명: 화면에 보이는 제목(h1). og:title은 쿠팡이 ' - 일반거치대' 같은 분류를 붙여서 마지막에 */
   function visibleTitle() {
     const h = [...document.querySelectorAll("h1, h2, h3")].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).find(t => t.length >= 6 && t.length <= 200 && !/쿠팡|coupang|네이버|장바구니|카테고리/i.test(t));
@@ -81,7 +103,10 @@
       const pe = document.querySelector('.prod-sale-price .total-price strong, .total-price strong, [class*="final-price"] [class*="amount"], .price-amount.final-price-amount, [class*="finalPrice"]');
       if (pe) price = num(pe.textContent);
       if (!price) price = priceAfter(txt, name);
-      return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, opt: opt || "단일옵션", price: price, ship: /로켓\s*(배송|와우|그로스|직구|프레시)|판매자\s*로켓/.test(txt.slice(0, 8000)) ? "무료 (로켓배송)" : shipOf(txt, name, price), rocket: /로켓\s*(배송|와우|그로스|직구|프레시)|판매자\s*로켓/.test(txt.slice(0, 8000)), img: img };
+      const optPrices = readOptPrices(txt, name, price);
+      /* 고른 옵션을 못 읽었으면 목록에서 지금 가격과 같은 옵션 (하나일 때만) */
+      if (optPrices.length && !optPrices.some(x => x.o === opt)) { const hit = optPrices.filter(x => x.p === price); opt = hit.length === 1 ? hit[0].o : ""; }
+      return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, opt: opt || "단일옵션", price: price, optPrices: optPrices, ship: /로켓\s*(배송|와우|그로스|직구|프레시)|판매자\s*로켓/.test(txt.slice(0, 8000)) ? "무료 (로켓배송)" : shipOf(txt, name, price), rocket: /로켓\s*(배송|와우|그로스|직구|프레시)|판매자\s*로켓/.test(txt.slice(0, 8000)), img: img };
     }
     const pm = L.pathname.match(/products\/(\d+)/);
     if (!pm) return { err: "네이버는 스마트스토어(또는 브랜드스토어) 상품 페이지에서 눌러 주세요." };

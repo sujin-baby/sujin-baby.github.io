@@ -328,7 +328,10 @@ function renameRun_(r, title, why) {
   try {
     const ob = outboxSheet_(), last = ob.getLastRow();
     if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) {
-      if (String(v[3]) === oldRoom && (v[5] === '대기' || v[5] === '방 못 찾음')) obSet_(ob, v[0], 4, title);
+      if (String(v[3]) !== oldRoom || !(v[5] === '대기' || v[5] === '방 못 찾음')) return;
+      obSet_(ob, v[0], 4, title);
+      // 보낼 날짜도 새 방 날짜로 (10/24: 주말 건너뛰기로 #10.24 → #10.27로 바뀐 공지가 보낼 날짜 10/23에 그대로 남았음)
+      if (v[1] instanceof Date) obSet_(ob, v[0], 2, sendDate_(title, v[4], v[2]));
     });
   } catch (e) {}
   return true;
@@ -3116,6 +3119,19 @@ function outboxSheet_() {
 }
 
 // 보낼메시지: 최신순, 한 줄씩(메시지 칸은 잘라 보이고 시각·종류·카톡방·상태가 위로 맞춰 보이게)
+// 안 보낸 메시지의 보낼 날짜를 매번 카톡방 날짜로 다시 맞춤 (방 이름이 바뀌어도 날짜가 옛날 그대로 남지 않게, 10/24 #10.27·#10.28 공지가 10/23).
+//  방 공지는 전 진행일(지난 날이면 오늘), 나머지는 방 날짜. '포토전달대기'처럼 날짜가 아닌 칸은 그대로
+function redateOutbox_(sh) {
+  const last = sh.getLastRow();
+  if (last < 2) return;
+  let n = 0;
+  sh.getRange(2, 1, last - 1, 6).getValues().forEach(function (x) {
+    if (!(x[5] === '대기' || x[5] === '방 못 찾음') || !(x[1] instanceof Date) || !x[0]) return;
+    const d = sendDate_(x[3], x[4], x[2]);
+    if (d.getTime() !== dayStart_(x[1])) { obSet_(sh, x[0], 2, d); n++; }
+  });
+  if (n) note_('보낼 날짜를 카톡방 날짜에 맞춤: ' + n + '줄');
+}
 function tidyOutbox_() {
   const sh = outboxSheet_();
   let last = sh.getLastRow();
@@ -3143,6 +3159,7 @@ function tidyOutbox_() {
     st.setValues(sv.map(function (x) { return [x[0] === '보냄' ? '보냄' : '대기']; })).setDataValidation(obCheck_());
     sh.getRange(1, 6).setValue('보냄 체크');
   }
+  redateOutbox_(sh);
   sortOutbox_(sh);
   sh.getRange(1, 1, last, 6).setVerticalAlignment('top').setWrap(false);
   sh.getRange(2, 5, last - 1, 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);

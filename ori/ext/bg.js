@@ -482,6 +482,7 @@ async function run(tab) {
     "상품번호 : " + info.pid + (info.item ? " - " + mask(info.item) : ""),
     info.opt ? "옵션 : " + info.opt : "",
     price ? "가격 : " + price.toLocaleString("ko-KR") + "원" : "",
+    info.optPrices && info.optPrices.length ? "옵션별 가격 : " + info.optPrices.map(x => x.o + " " + x.p.toLocaleString("ko-KR") + "원").join(" / ") : "",
     info.ship ? "배송비 : " + info.ship : "",
     info.rocket ? "배송 : 로켓배송" : "",
     F ? "찾은 키워드 : " + F.k : "",
