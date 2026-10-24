@@ -182,7 +182,7 @@ function moveRunDate_(r, d) {
         if (v[5] === '보냄' || String(v[3]) !== nb) return;
         const m2 = String(v[4]).split(ob0).join(nb);
         if (m2 !== String(v[4])) obSet_(ob, v[0], 5, m2);
-        obSet_(ob, v[0], 2, sendDate_(v[3], m2, v[2]));
+        if (v[2] !== '포토 가이드') obSet_(ob, v[0], 2, sendDate_(v[3], m2, v[2]));   // 포토 가이드는 '포토전달대기' 그대로
       });
     } catch (e) {}
     // 월급시트 줄 이름·진행일
@@ -3120,17 +3120,22 @@ function outboxSheet_() {
 
 // 보낼메시지: 최신순, 한 줄씩(메시지 칸은 잘라 보이고 시각·종류·카톡방·상태가 위로 맞춰 보이게)
 // 안 보낸 메시지의 보낼 날짜를 매번 카톡방 날짜로 다시 맞춤 (방 이름이 바뀌어도 날짜가 옛날 그대로 남지 않게, 10/24 #10.27·#10.28 공지가 10/23).
-//  방 공지는 전 진행일(지난 날이면 오늘), 나머지는 방 날짜. '포토전달대기'처럼 날짜가 아닌 칸은 그대로
+//  방 공지는 전 진행일(지난 날이면 오늘), 나머지는 방 날짜. '포토전달대기'는 포토 가이드에만
+//  (10/24 #10.27 실링팬·마켓담온 귤·속눈썹영양제 방 공지가 '포토전달대기'로 되어 있었음 → 날짜로 고치고 어느 줄이었는지 기록)
 function redateOutbox_(sh) {
   const last = sh.getLastRow();
   if (last < 2) return;
   let n = 0;
+  const odd = [];
   sh.getRange(2, 1, last - 1, 6).getValues().forEach(function (x) {
-    if (!(x[5] === '대기' || x[5] === '방 못 찾음') || !(x[1] instanceof Date) || !x[0]) return;
+    if (!(x[5] === '대기' || x[5] === '방 못 찾음') || !x[0]) return;
+    if (x[2] === '포토 가이드') { if (x[1] !== '포토전달대기') { obSet_(sh, x[0], 2, '포토전달대기'); odd.push(x[3] + '(포토 가이드: ' + x[1] + ')'); } return; }
     const d = sendDate_(x[3], x[4], x[2]);
+    if (!(x[1] instanceof Date)) { obSet_(sh, x[0], 2, d); odd.push(x[3] + '(' + x[2] + ': ' + (x[1] === '' ? '빈칸' : x[1]) + ')'); return; }
     if (d.getTime() !== dayStart_(x[1])) { obSet_(sh, x[0], 2, d); n++; }
   });
   if (n) note_('보낼 날짜를 카톡방 날짜에 맞춤: ' + n + '줄');
+  if (odd.length) note_('⚠ 보낼 날짜 칸이 종류와 안 맞아서 고침: ' + odd.join(', '));
 }
 function tidyOutbox_() {
   const sh = outboxSheet_();
