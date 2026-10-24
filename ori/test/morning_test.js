@@ -1,0 +1,14 @@
+const { makeEnv, Sheet } = require('./harness'); const vm = require('vm');
+const data = require(require('path').resolve(process.argv[3] || 'all.json')), full = require(require('path').resolve(process.argv[4] || 'full.json'));
+const env = makeEnv({ main: process.argv[2] }); const G = k => vm.runInContext(k, env); const LH = G('LIST_HEADER'), PH = G('PLAN_HEAD');
+const D = s => { const m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : s; };
+const list = [LH.slice()];
+data.runs.forEach(r => { const o = { '진행일': D(r.day), '명단 제목': r.title, '목표인원': r.target, '인원': r.got, '진행 상태': r.st, '캠페인': r.camp, '일차': r.k, '총건수': r.total, '카톡방': r.room, '폼 링크': r.form, '폼ID': r.formId, '요청ID': r.req, '시트ID': 'S' }; list.push(LH.map(h => o[h] === undefined ? '' : o[h])); });
+env.__ss.sheets['진행목록'] = new Sheet('진행목록', list);
+const ob = [['ID', '보낼 날짜', '종류', '카톡방', '메시지', '보냄 체크']]; full.outbox.forEach(o => ob.push([o.id, D(o.send), o.kind, o.room, o.head, o.st]));
+env.__ss.sheets['보낼메시지'] = new Sheet('보낼메시지', ob);
+const pl = [PH.slice()]; data.plans.forEach(x => pl.push([x.id, x.camp, x.k, D(x.day), x.room, x.title, x.n, '[]', x.st, '{}'])); env.__ss.sheets['일정'] = new Sheet('일정', pl);
+G('morningCheck_()');
+console.log((env.__ORI_NOTES || []).join('\n'));
+const r2 = env.__ss.sheets['보낼메시지'].rows[1]; console.log('맨 위 줄:', r2[2], r2[3], '\n' + r2[4]);
+console.log('MORNING_LAST', env.__props.get('MORNING_LAST'));

@@ -155,7 +155,8 @@ function chainsOf_(runs) {
       cur = c;
       if (!c.total && total) c.total = total;
       c.runs.push(r);
-      c.done += Number(r['목표인원']) || 0;
+      // 끝낸(종료) 진행은 실제 받은 인원으로 셈: 취소해서 끝낸 진행(0명)이 '다 진행함'으로 세져 다음 일차가 건너뛰어지던 것 (10/24 기대평 10/27~ 전부 건너뜀)
+      c.done += r['진행 상태'] === '종료' ? (Number(r['인원']) || 0) : (Number(r['목표인원']) || 0);
     });
   });
   return chains;
@@ -1371,7 +1372,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     out.props = keep;
   } catch (e) { out.propsErr = String(e); }
@@ -2619,8 +2620,11 @@ function checkFullInner_() {
   step_('공지 모양');
   try { ensureRunNotices_(readRuns_()); } catch (e) { note_('방 공지 확인 실패: ' + e); }
   try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
+  try { morningCheck_(); } catch (e) { note_('새벽 점검 실패: ' + e); }
   if (!props.getProperty('EXPECT_V4')) try { setupExpectOnce_(); } catch (e) { note_('기대평 진행 만들기 실패: ' + e); }
   if (!props.getProperty('EXPECT_V5')) try { fixExpect5Once_(); } catch (e) { note_('기대평 다시 나누기 실패: ' + e); }
+  if (!props.getProperty('EXPPLAN_V8')) try { expPlanRestoreOnce_(); } catch (e) { note_('기대평 일정 되살리기 실패: ' + e); }
+  if (!props.getProperty('BUYU_PHOTO_V1')) { props.setProperty('BUYU_PHOTO_V1', '1'); props.setProperty('RVSENT_' + campKey_('#택10.21 써니마켓 부유단감 5') + '_10.21', '1'); note_('✓ 부유단감 10.21 포토 전달됨으로 표시 (사용자 확인)'); }
   if (!props.getProperty('SENT1026_V1')) try { sent1026Once_(); } catch (e) { note_('10.26 공지 보냄 처리 실패: ' + e); }
   if (!props.getProperty('REOPEN_V1')) try { reopenClosedOnce_(); } catch (e) { note_('닫힌 폼 다시 열기 실패: ' + e); }
   if (!props.getProperty('WONGO_V1')) try { fixWongoOnce_(); } catch (e) { note_('원고 가이드 고치기 실패: ' + e); }
@@ -3215,8 +3219,10 @@ function redateOutbox_(sh) {
   const last = sh.getLastRow();
   if (last < 2) return;
   let n = 0, sentFix = 0;
-  const odd = [];
+  const odd = [], pprops = PropertiesService.getScriptProperties();
   sh.getRange(2, 1, last - 1, 6).getValues().forEach(function (x) {
+    // 포토 가이드를 보냄 체크 = 업체 포토를 받아 리뷰어에게 전달함 → '업체 포토 아직' 알림 끔
+    if (x[2] === '포토 가이드' && x[5] === '보냄' && x[3]) { const pk = 'RVSENT_' + campKey_(x[3]) + '_' + dateTok_(String(x[3])); if (!pprops.getProperty(pk)) pprops.setProperty(pk, '1'); }
     // 보낸·취소 줄도 '포토전달대기'로 잘못 바뀐 보낼 날짜는 날짜로 되돌림 (10/24 필터 때문에 40줄 가까이 바뀜. 날짜가 아니면 오래돼도 안 지워짐)
     if (!(x[5] === '대기' || x[5] === '방 못 찾음') || !x[0]) { if (x[0] && x[2] !== '포토 가이드' && x[1] === '포토전달대기') { obSet_(sh, x[0], 2, sendDate_(x[3], x[4], x[2])); sentFix++; } return; }
     if (x[2] === '포토 가이드') { if (x[1] !== '포토전달대기') { obSet_(sh, x[0], 2, '포토전달대기'); odd.push(x[3] + '(포토 가이드: ' + x[1] + ')'); } return; }
@@ -4903,6 +4909,14 @@ function reviewDone_(runs) {
       // 없으면 맨 오른쪽 체크칸 (값이 전부 참/거짓인 칸)
       for (let c = lc - 1; cc < 0 && c >= 0; c--) if (isChk(c)) cc = c;
       if (cc < 0) return;
+      // 포토 받음: 그날 사람 중 한 명이라도 리뷰 확인(체크)이 되면 업체 포토를 받아 전달한 것 → '업체 포토 아직' 알림 끔
+      //  (10/24 부유단감: 포토를 카톡으로 받아 카톡으로 전달해서 시스템이 몰랐음)
+      mine.forEach(function (r) {
+        const pk = 'RVSENT_' + campKey_(r['명단 제목']) + '_' + dateTok_(r['명단 제목']);
+        if (props.getProperty(pk)) return;
+        const w = windowOf_(runs, r);
+        if (live.some(function (i) { const t = v[i][cT].getTime(); return t >= w.from && t < w.to && v[i][cc] === true; })) { props.setProperty(pk, '1'); note_('✓ 포토 전달된 걸로 봄(리뷰 확인 체크 있음): ' + bareTitle_(r['명단 제목'])); }
+      });
       // C. 리뷰 독촉 (사용자 요청 10/20): 진행일부터 주말 포함 10일(쿠팡·네이버. 리뷰 기한이 10일인 다른 플랫폼은 13일) 지나도
       //  체크칸이 안 된 사람 → 그 방에 독촉 글. 3일 뒤에도 남아 있으면 한 번 더. 기한이 10일 넘게 지난 예전 진행은 건너뜀. 명단 시트에는 안 씀
       const cName = (function () { let i = hdr.findIndex(function (h) { return /수령인|계정명/.test(h); }); if (i < 0) i = hdr.findIndex(function (h) { return /이름|성함/.test(h) && !MATCH.nick.test(h); }); return i; })();
@@ -7549,6 +7563,75 @@ function redateNoticesOnce_() {
   });
   sortOutbox_(ob);
   note_('✓ 방 공지 보낼 날짜를 전 진행일로: ' + n + '줄');
+}
+// 새벽 점검 (사용자 요청 10/24: 아침 6시 전에 일어나니 매일 새벽 5시에). 5시 넘어 처음 도는 15분 확인에서 하루 한 번.
+//  이상한 게 있으면 보낼메시지 '할 일'(내 할 일)과 메일로, 없으면 한눈에 Q열에 '이상 없음'만. 고치지는 않고 알리기만 함
+function morningCheck_() {
+  const props = PropertiesService.getScriptProperties(), now = new Date(), tk = Utilities.formatDate(now, CONFIG.TIMEZONE, 'yyyyMMdd');
+  if (Number(Utilities.formatDate(now, CONFIG.TIMEZONE, 'H')) < 5 || props.getProperty('MORNING_DAY') === tk) return;
+  props.setProperty('MORNING_DAY', tk);
+  const t0 = today_().getTime(), issues = [];
+  const prevWork = function (d) { const x = new Date(d); x.setHours(12, 0, 0, 0); do { x.setDate(x.getDate() - 1); } while (!isWorkday_(x)); x.setHours(0, 0, 0, 0); return x.getTime(); };
+  const runs = readRuns_().filter(function (r) { return r['진행 상태'] !== '종료' && r['진행일'] instanceof Date; });
+  const ob = outboxSheet_(), ol = ob.getLastRow(), rows = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues() : [];
+  const roomOf = function (r) { return String(r['카톡방'] || bareTitle_(r['명단 제목'])); };
+  // 1. 앞으로 진행할 진행마다 방 공지 (보낼 날짜가 아직 안 지난 것만. 지난 건 이미 보냈을 수 있음)
+  const noNotice = runs.filter(function (r) {
+    if (!r['폼 링크'] || dayStart_(r['진행일']) < t0 || prevWork(r['진행일']) < t0) return false;
+    const link = String(r['폼 링크']), room = roomOf(r);
+    return !rows.some(function (x) { return x[2] === '방 공지' && String(x[4]).indexOf(link) >= 0 && dateTok_(String(x[3])) === dateTok_(room); });
+  }).map(roomOf);
+  if (noNotice.length) issues.push('방 공지가 보낼메시지에 없음: ' + noNotice.join(', '));
+  // 2. 보낼 날짜가 지났는데 안 보낸 메시지 (할 일·포토 가이드 빼고)
+  const late = rows.filter(function (x) { return x[5] === '대기' && x[1] instanceof Date && dayStart_(x[1]) < t0 && x[2] !== '할 일' && x[2] !== '포토 가이드'; });
+  if (late.length) issues.push('보낼 날짜가 지났는데 안 보낸 메시지 ' + late.length + '개: ' + late.slice(0, 6).map(function (x) { return x[3] + '(' + x[2] + ')'; }).join(', '));
+  // 3. 보낼 날짜 칸이 날짜가 아닌 대기 줄 (포토 가이드 빼고)
+  const odd = rows.filter(function (x) { return x[5] === '대기' && x[2] !== '포토 가이드' && !(x[1] instanceof Date); });
+  if (odd.length) issues.push('보낼 날짜 칸이 날짜가 아님: ' + odd.slice(0, 6).map(function (x) { return x[3] + '(' + x[1] + ')'; }).join(', '));
+  // 4. 오늘 진행인데 폼이 닫혀 있음
+  const seen = {};
+  runs.filter(function (r) { return dayStart_(r['진행일']) === t0 && r['폼ID'] && !(r['마감 시각'] instanceof Date); }).forEach(function (r) {
+    const fid = String(r['폼ID']); if (seen[fid]) return; seen[fid] = 1;
+    try { if (!FormApp.openById(fid).isAcceptingResponses()) issues.push('오늘 진행 폼이 닫혀 있음: ' + roomOf(r)); } catch (e) { issues.push('폼을 못 열었음: ' + roomOf(r)); }
+  });
+  // 5. 만들어졌어야 할 다음 일차가 일정 탭에 '대기'로 남아 있음
+  try {
+    const ps = planSheet_(), pl = ps.getLastRow();
+    const stuck = pl >= 2 ? ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().filter(function (x) { return x[8] === '대기' && x[3] instanceof Date && prevWork(x[3]) < t0; }) : [];
+    if (stuck.length) issues.push('만들어졌어야 할 다음 일차가 안 만들어짐: ' + stuck.slice(0, 6).map(function (x) { return bareTitle_(x[4]); }).join(', '));
+  } catch (e) {}
+  // 6. 트리거
+  try {
+    const ts = ScriptApp.getProjectTriggers();
+    if (ts.length >= 20) issues.push('트리거가 한도(20개)에 닿음');
+    if (!ts.some(function (t) { return t.getHandlerFunction() === 'checkFull'; })) issues.push('15분 자동 확인 트리거가 없음');
+  } catch (e) {}
+  // 7. 지난 12시간 확인 결과 중 문제
+  try {
+    const log = JSON.parse(CacheService.getScriptCache().get('REPORT_LOG') || '[]').filter(function (t) { return /^⚠/.test(t) && !/다른 작업 중이라 건너뜀/.test(t); });
+    if (log.length) issues.push('최근 자동 확인에서 문제 ' + log.length + '번 (한눈에 Q열/실행 기록): ' + log[0].split('\n').slice(1, 3).join(' / ').slice(0, 160));
+  } catch (e) {}
+  const when = Utilities.formatDate(now, CONFIG.TIMEZONE, 'M/d HH:mm');
+  props.setProperty('MORNING_LAST', when + ' ' + (issues.length ? issues.length + '개: ' + issues.join(' | ') : '이상 없음').slice(0, 1500));
+  if (!issues.length) { note_('✓ 새벽 점검: 이상 없음'); return; }
+  queueMsg_('내 할 일', '🌅 새벽 점검 (' + when + '): 확인할 것 ' + issues.length + '개\n' + issues.map(function (x) { return '- ' + x; }).join('\n'), '할 일');
+  try { MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[체험단] 새벽 점검: 확인할 것 ' + issues.length + '개', issues.map(function (x) { return '- ' + x; }).join('\n') + '\n\n보낼메시지 탭 할 일에도 넣었어요.'); } catch (e) {}
+  note_('⚠ 새벽 점검: 확인할 것 ' + issues.length + '개 (보낼메시지 할 일)');
+}
+// (10/24 한 번) 기대평(exp-100-4) 10/27~ 일정이 '건너뜀 (이미 다 진행)'이 된 것 → 대기로 되돌림 (취소한 예전 기대평 진행 목표인원 27·54가 '다 진행'으로 세졌던 것)
+function expPlanRestoreOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('EXPPLAN_V8')) return;
+  props.setProperty('EXPPLAN_V8', '1');
+  const ps = planSheet_(), pl = ps.getLastRow();
+  if (pl < 2) return;
+  const runs = readRuns_(), n = [];
+  ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x, i) {
+    if (String(x[0]).indexOf('exp-100-4-v5-') !== 0 || !/건너뜀/.test(String(x[8])) || !(x[3] instanceof Date) || dayStart_(x[3]) < today_().getTime()) return;
+    if (runs.some(function (r) { return isExpect_(r) && r['진행 상태'] !== '종료' && r['진행일'] instanceof Date && dayStart_(r['진행일']) === dayStart_(x[3]); })) return;
+    ps.getRange(i + 2, 9).setValue('대기'); n.push(bareTitle_(x[4]));
+  });
+  note_('✓ 기대평 일정 되살림 (전 진행일 0시에 진행·공지가 만들어짐): ' + (n.join(', ') || '없음'));
 }
 // (10/24 한 번) #10.26 방 공지(오메가3 빼고)는 보낼메시지에 안 떠서 사용자가 직접 보냄 → 다시 넣지 않고, 혹시 들어간 대기 줄은 '보냄'으로
 function sent1026Once_() {
