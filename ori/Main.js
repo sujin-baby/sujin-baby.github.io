@@ -3108,7 +3108,23 @@ function outboxSheet_() {
 // 안 보낸 메시지의 보낼 날짜를 매번 카톡방 날짜로 다시 맞춤 (방 이름이 바뀌어도 날짜가 옛날 그대로 남지 않게, 10/24 #10.27·#10.28 공지가 10/23).
 //  방 공지는 전 진행일(지난 날이면 오늘), 나머지는 방 날짜. '포토전달대기'는 포토 가이드에만
 //  (10/24 #10.27 실링팬·마켓담온 귤·속눈썹영양제 방 공지가 '포토전달대기'로 되어 있었음 → 날짜로 고치고 어느 줄이었는지 기록)
+// 메시지 번호(A열): 'm' + 글자 (예전 번호는 시트가 숫자로 바꾸거나(0012… → 12…) 같은 번호가 두 줄에 생길 수 있었음.
+//  같은 번호가 두 줄이면 번호로 고치는 칸(보낼 날짜 등)이 엉뚱한 줄에 써짐 → 10/24 방 공지에 '포토전달대기'가 들어간 것)
+function newObId_() { return 'm' + Utilities.getUuid().replace(/-/g, '').slice(0, 12); }
+function dedupeObIds_(sh) {
+  const last = sh.getLastRow();
+  if (last < 2) return;
+  const rg = sh.getRange(2, 1, last - 1, 1), ids = rg.getValues(), seen = {};
+  let n = 0;
+  const out = ids.map(function (x) {
+    const k = String(x[0]);
+    if (!k || seen[k] || /^\d/.test(k) && typeof x[0] === 'number') { n++; const id = newObId_(); seen[id] = 1; return [id]; }
+    seen[k] = 1; return [x[0]];
+  });
+  if (n) { rg.setNumberFormat('@').setValues(out); note_('⚠ 보낼메시지 번호가 겹치거나 깨진 줄 ' + n + '개 번호 새로 줌'); }
+}
 function redateOutbox_(sh) {
+  dedupeObIds_(sh);
   const last = sh.getLastRow();
   if (last < 2) return;
   let n = 0;
@@ -3273,7 +3289,7 @@ function queueMsg_(room, msg, kind) {
     const ob = outboxSheet_();
     ob.insertRowBefore(2);
     // 포토 가이드: 보낼 날짜 대신 '포토전달대기' (사진 받은 뒤 보냄, 맨 위에 보이게)
-    ob.getRange(2, 1, 1, 6).setValues([[Utilities.getUuid().replace(/-/g, '').slice(0, 10), kind === '포토 가이드' ? '포토전달대기' : sendDate_(room, msg, kind), kind || '', String(room || ''), String(msg), '대기']]);
+    ob.getRange(2, 1, 1, 6).setValues([[newObId_(), kind === '포토 가이드' ? '포토전달대기' : sendDate_(room, msg, kind), kind || '', String(room || ''), String(msg), '대기']]);
     ob.getRange(2, 6).setDataValidation(obCheck_());
     ob.getRange(2, 1, 1, 6).setWrap(false).setVerticalAlignment('middle').setFontWeight('normal').setBackground(null);
     ob.getRange(2, 5).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
