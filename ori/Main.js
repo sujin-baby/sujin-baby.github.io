@@ -248,7 +248,7 @@ function changeDaily_(anchor, from, n) {
   items.sort(function (a, b) { return a.d - b.d; });
   const cnt = function (t, c) { return String(t).replace(/\d+(\s*(\([^)]*\))?\s*)$/, c + '$1'); };
   const one = function (t, c) { const m = String(t).match(/\(\s*\d+\s*명\)/g); return m && m.length === 1 ? String(t).replace(/\(\s*\d+\s*명\)/, '(' + c + '명)') : String(t); };
-  const done = [];
+  const done = [], closeIf = [], ended = [];
   items.forEach(function (it) {
     const c = Math.max(0, Math.min(n, left)); left -= c;
     if (it.run) {
@@ -262,7 +262,9 @@ function changeDaily_(anchor, from, n) {
         done.push(old + ' → ' + cnt(old, c));
       } else {
         setRun_(r.row, '진행 상태', '종료');
-        try { if (r['폼ID']) FormApp.openById(r['폼ID']).setAcceptingResponses(false); } catch (e) {}
+        // 폼은 여기서 안 닫음: 같은 캠페인 다른 날 진행이 같은 폼을 씀 (10/24 실링팬 하루 2명으로 줄였더니 남는 날을 끝내면서 폼을 닫아 받는 날 폼까지 닫힘).
+        //  아래에서 이 폼을 쓰는 진행이 하나도 안 남았을 때만 닫음
+        if (r['폼ID']) closeIf.push(String(r['폼ID'])); ended.push(r.row);
         try { const room = String(r['카톡방'] || old), ob = outboxSheet_(), ol = ob.getLastRow(); if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (String(v[3]) === room && v[5] !== '보냄') obSet_(ob, v[0], 6, '취소'); }); } catch (e) {}
         done.push(old + ' 취소(종료)');
       }
@@ -291,6 +293,13 @@ function changeDaily_(anchor, from, n) {
     ps.appendRow([String(lastPlan.x[0]).replace(/-\d+$/, '') + '-' + k0, lastPlan.x[1], k0, nd, cnt(retitleDate_(lastPlan.x[4], nd), tc2), cnt(retitleDate_(lastPlan.x[5], nd), tc2), c, JSON.stringify(cc), '대기', lastPlan.x[9]]);
     done.push('(일정 추가) ' + bareTitle_(cnt(retitleDate_(lastPlan.x[5], nd), tc2)));
   }
+  // 끝낸 진행의 폼: 같은 폼을 쓰는 진행(끝내지 않은 것)이나 남은 일정이 하나도 없을 때만 닫음
+  const planLeft = prow.some(function (x, i) { return campKey_(x[1]) === ck && x[8] === '대기'; }) || add > 0;
+  closeIf.filter(function (f, i, a) { return a.indexOf(f) === i; }).forEach(function (fid) {
+    const used = runs.some(function (x) { return String(x['폼ID']) === fid && x['진행 상태'] !== '종료' && ended.indexOf(x.row) === -1; });
+    if (used || planLeft) return;
+    try { FormApp.openById(fid).setAcceptingResponses(false); } catch (e) {}
+  });
   return '✓ 하루 ' + n + '명으로: ' + (done.join(', ') || '바뀐 것 없음') + (left > 0 ? ' / ⚠ ' + left + '건이 남아요 (일정 탭에 줄이 없어서 못 늘림)' : '');
 }
 
@@ -2556,6 +2565,7 @@ function checkFullInner_() {
   try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
   if (!props.getProperty('EXPECT_V4')) try { setupExpectOnce_(); } catch (e) { note_('기대평 진행 만들기 실패: ' + e); }
   if (!props.getProperty('EXPECT_V5')) try { fixExpect5Once_(); } catch (e) { note_('기대평 다시 나누기 실패: ' + e); }
+  if (!props.getProperty('REOPEN_V1')) try { reopenClosedOnce_(); } catch (e) { note_('닫힌 폼 다시 열기 실패: ' + e); }
   if (!props.getProperty('WONGO_V1')) try { fixWongoOnce_(); } catch (e) { note_('원고 가이드 고치기 실패: ' + e); }
   if (!props.getProperty('EXPECT_V6')) try { fixExpect6Once_(); } catch (e) { note_('기대평 하루 3명 실패: ' + e); }
   if (!props.getProperty('EXPECT_V7')) try { fixExpect7Once_(); } catch (e) { note_('기대평 이름 되돌리기 실패: ' + e); }
@@ -7331,6 +7341,18 @@ function redateNoticesOnce_() {
   });
   sortOutbox_(ob);
   note_('✓ 방 공지 보낼 날짜를 전 진행일로: ' + n + '줄');
+}
+// (10/24 한 번) 하루 인원 바꾸기(changeDaily_)가 남는 날 진행을 끝내면서 같은 폼을 쓰는 진행 중 폼까지 닫은 것 → 받는 중(진행중, 아직 마감 전)인 진행 폼은 다시 엶
+function reopenClosedOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('REOPEN_V1')) return;
+  props.setProperty('REOPEN_V1', '1');
+  const seen = {};
+  readRuns_().forEach(function (r) {
+    if (r['진행 상태'] !== '진행중' || r['마감 시각'] || !r['폼ID'] || seen[r['폼ID']]) return;
+    seen[r['폼ID']] = 1;
+    try { const f = FormApp.openById(r['폼ID']); if (!f.isAcceptingResponses()) { f.setAcceptingResponses(true); note_('✓ 닫혀 있던 폼 다시 엶: ' + bareTitle_(r['명단 제목'])); } } catch (e) {}
+  });
 }
 // (10/24 한 번) 10/24 톡딜 방 공지가 보낼메시지에 없으면 다시 넣음
 function talkdealNoticeOnce_() {
