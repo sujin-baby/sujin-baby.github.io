@@ -2537,6 +2537,7 @@ function checkFullInner_() {
   try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
   if (!props.getProperty('EXPECT_V4')) try { setupExpectOnce_(); } catch (e) { note_('기대평 진행 만들기 실패: ' + e); }
   if (!props.getProperty('EXPECT_V5')) try { fixExpect5Once_(); } catch (e) { note_('기대평 다시 나누기 실패: ' + e); }
+  if (!props.getProperty('LASH1026_V1')) try { lash1026Once_(); } catch (e) { note_('10.26 속눈썹영양제 공지 넣기 실패: ' + e); }
   if (!props.getProperty('REOPEN_V1')) try { reopenClosedOnce_(); } catch (e) { note_('닫힌 폼 다시 열기 실패: ' + e); }
   if (!props.getProperty('WONGO_V1')) try { fixWongoOnce_(); } catch (e) { note_('원고 가이드 고치기 실패: ' + e); }
   if (!props.getProperty('EXPECT_V6')) try { fixExpect6Once_(); } catch (e) { note_('기대평 하루 3명 실패: ' + e); }
@@ -3261,19 +3262,41 @@ function ensureRunNotices_(runs) {
   runs.forEach(function (r) {
     if (r['진행 상태'] === '종료' || !(r['진행일'] instanceof Date) || !r['폼ID'] || !r['폼 링크']) return;
     const d = dayStart_(r['진행일']); if (d !== t1 && d !== today_().getTime()) return;   // 오늘·다음 진행일 것만 (폼을 같이 쓰는 여러 날 진행은 폼 설명이 가장 늦은 날 공지라 아래에서 거름)
-    if (runs.some(function (x) { return x !== r && String(x['폼ID']) === String(r['폼ID']) && x['진행일'] instanceof Date && dayStart_(x['진행일']) > d && x['진행 상태'] !== '종료'; })) return;
+    // 폼을 같이 쓰는 여러 날 진행(폼 설명은 가장 늦은 날 공지)은 일정 탭의 그날 계획으로 공지를 다시 만듦 (10/24 #10.26 속눈썹영양제 공지가 빠졌는데 여기서 건너뛰어 다시 안 생겼음)
+    const shared = runs.some(function (x) { return x !== r && String(x['폼ID']) === String(r['폼ID']) && x['진행일'] instanceof Date && dayStart_(x['진행일']) > d && x['진행 상태'] !== '종료'; });
     const room = String(r['카톡방'] || bareTitle_(r['명단 제목'])), link = String(r['폼 링크']);
     // 같은 날짜 방(방 이름이 바뀌었어도 날짜는 같음)에 이 폼 링크 공지가 있으면 있는 것 (여러 날 진행은 폼을 같이 써서 날짜로 구분)
     if (v.some(function (x) { return x[2] === '방 공지' && String(x[4]).indexOf(link) >= 0 && (String(x[3]) === room || dateTok_(String(x[3])) === dateTok_(room)); })) return;
     const props = PropertiesService.getScriptProperties(), pk = 'NOTICEFIX_' + r['폼ID'] + '_' + Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd');
     if (props.getProperty(pk)) return;   // 한 번만 (사용자가 지웠으면 다시 안 넣음)
     let desc = '';
-    try { desc = FormApp.openById(r['폼ID']).getDescription(); } catch (e) { return; }
-    if (!desc || desc.indexOf(link) < 0) return;
+    if (shared) {
+      // 보낼 날짜(전 진행일)가 이미 지난 공지는 보냈을 수 있어서 다시 안 넣음 (두 번 보내지 않게). 10.26 속눈썹영양제는 아래 한 번 고침으로
+      const sd = new Date(d); sd.setHours(12, 0, 0, 0); do { sd.setDate(sd.getDate() - 1); } while (!isWorkday_(sd)); sd.setHours(0, 0, 0, 0);
+      if (sd.getTime() < today_().getTime() && !r.__force) return;
+      desc = planNotice_(r, link);
+      if (!desc) { note_('⚠ ' + room + ' 방 공지가 보낼메시지에 없는데 일정 탭에 그날 계획이 없어 못 만들었어요. 다른 날 공지를 복사해 인원만 고쳐 보내 주세요'); props.setProperty(pk, '1'); return; }
+    } else {
+      try { desc = FormApp.openById(r['폼ID']).getDescription(); } catch (e) { return; }
+      if (!desc || desc.indexOf(link) < 0) return;
+    }
     props.setProperty(pk, '1');
     queueMsg_(room, isExpect_(r) ? desc : withSlotLine_(desc, runSlot_(r), chainFruit_(r)), '방 공지');
-    note_('✓ 빠진 방 공지 넣음: ' + room);
+    note_('✓ 빠진 방 공지 넣음: ' + room + (shared ? ' (일정 탭 그날 계획으로)' : ''));
   });
+}
+// 일정 탭에서 이 진행(같은 캠페인, 같은 날짜)의 계획 → 그날 공지 (다음 일차 만들 때와 같은 방법, 폼 링크 넣음)
+function planNotice_(r, link) {
+  const ps = planSheet_(), pl = ps.getLastRow();
+  if (pl < 2) return '';
+  const ck = campKey_(r['캠페인'] || r['명단 제목']), tk = dateTok_(r['명단 제목']);
+  const x = ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().filter(function (y) { return campKey_(y[1]) === ck && dateTok_(y[5]) === tk && !/취소/.test(String(y[8])); })[0];
+  if (!x) return '';
+  let cfg = {}, cnt = [];
+  try { cfg = JSON.parse(x[9]); cnt = JSON.parse(x[7]); } catch (e) { return ''; }
+  if (!cfg.desc) return '';
+  const t = cfg.platform === '기대평' ? cfg.desc : adjustNotice_(stripNames_(cfg.desc), cnt, cfg.slot2);
+  return String(t).split('(구글폼 링크)').join(link);
 }
 function obSet_(ob, id, col, val) {
   const last = ob.getLastRow();
@@ -7331,7 +7354,10 @@ function pruneOutbox_() {
   const cut = today_().getTime() - 2 * 86400000;
   const v = ob.getRange(2, 1, last - 1, 6).getValues();
   let n = 0;
-  for (let i = v.length - 1; i >= 0; i--) if (v[i][5] === '보냄' && v[i][1] instanceof Date && v[i][1].getTime() < cut) { ob.deleteRow(i + 2); n++; }
+  // 방 날짜가 오늘 이후인 메시지(앞으로 진행할 방 공지)는 보냈어도 안 지움 (10/24 #10.26 공지가 안 보였던 것)
+  const roomDay = function (x) { const t = dateTok_(x[3]); if (!t) return 0; const p = t.split('.'), now = new Date(); return new Date(now.getFullYear(), Number(p[0]) - 1, Number(p[1])).getTime(); };
+  const t0 = today_().getTime();
+  for (let i = v.length - 1; i >= 0; i--) if (v[i][5] === '보냄' && v[i][1] instanceof Date && v[i][1].getTime() < cut && roomDay(v[i]) < t0) { ob.deleteRow(i + 2); n++; }
   if (n) note_('✓ 보낸 지 오래된 메시지 ' + n + '줄 지움');
 }
 // (10/24 한 번) 안 보낸 방 공지의 보낼 날짜를 지금 규칙(전 진행일)으로 다시
@@ -7350,6 +7376,22 @@ function redateNoticesOnce_() {
   });
   sortOutbox_(ob);
   note_('✓ 방 공지 보낼 날짜를 전 진행일로: ' + n + '줄');
+}
+// (10/24 한 번) #10.26 실 속눈썹영양제 방 공지가 보낼메시지에 없음 (사용자 확인) → 일정 탭 그날 계획으로 다시 넣음
+function lash1026Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('LASH1026_V1')) return;
+  props.setProperty('LASH1026_V1', '1');
+  const r = readRuns_().filter(function (x) { return /속눈썹영양제/.test(String(x['명단 제목'])) && dateTok_(x['명단 제목']) === '10.26' && x['진행 상태'] !== '종료'; })[0];
+  if (!r) { note_('⚠ 진행목록에 #10.26 속눈썹영양제가 없어요'); return; }
+  const room = String(r['카톡방'] || bareTitle_(r['명단 제목'])), link = String(r['폼 링크'] || '');
+  const ob = outboxSheet_(), ol = ob.getLastRow();
+  const has = ol >= 2 && ob.getRange(2, 1, ol - 1, 6).getValues().some(function (x) { return x[2] === '방 공지' && dateTok_(String(x[3])) === '10.26' && /속눈썹영양제/.test(String(x[3])) && /양식 작성 폼/.test(String(x[4])); });
+  if (has) { note_('#10.26 속눈썹영양제 방 공지는 이미 있어요'); return; }
+  const desc = planNotice_(r, link);
+  if (!desc) { note_('⚠ #10.26 속눈썹영양제: 일정 탭 계획을 못 찾아 공지를 못 만들었어요'); return; }
+  queueMsg_(room, withSlotLine_(desc, runSlot_(r), chainFruit_(r)), '방 공지');
+  note_('✓ #10.26 속눈썹영양제 방 공지 넣음 (일정 탭 계획으로)');
 }
 // (10/24 한 번) 하루 인원 바꾸기(changeDaily_)가 남는 날 진행을 끝내면서 같은 폼을 쓰는 진행 중 폼까지 닫은 것 → 받는 중(진행중, 아직 마감 전)인 진행 폼은 다시 엶
 function reopenClosedOnce_() {
