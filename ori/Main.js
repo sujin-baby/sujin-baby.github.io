@@ -39,7 +39,7 @@ const NICK_Q = '방에 참여한 카카오톡 닉네임';
 //  시트ID: 응답 시트를 찾아 인원 세기, 명단 양식 적용, 폼수정 탭에서 씀
 //  폼ID: 명단이 차면 폼 닫기, 폼수정 탭에서 응답 삭제할 때 씀
 //  요청ID: 새 진행 만들기를 두 번 눌러도 한 번만 만들어지게 할 때 씀
-const LIST_HEADER = ['등록일', '진행일', '명단 제목', '유형', '택대', '실배송', '플랫폼', '목표인원', '인원', '진행 상태', '마감 시각', '택배 옮김', '캠페인', '일차', '총건수', '업체', '구매시간', '포토', '가격', '카톡방', '업체방', '폼 링크', '시트 링크', '폴더 링크', '시트ID', '폼ID', '요청ID'];
+const LIST_HEADER = ['등록일', '진행일', '명단 제목', '유형', '택대', '실배송', '플랫폼', '목표인원', '인원', '진행 상태', '마감 시각', '택배 옮김', '캠페인', '일차', '총건수', '업체', '구매시간', '포토', '가격', '카톡방', '업체방', '폼 링크', '시트 링크', '폴더 링크', '시트ID', '폼ID', '요청ID', '리뷰 취합', '업체 전송'];
 const LIST_HIDDEN = ['시트ID', '폼ID', '요청ID'];
 const LIST_ALIAS = { '마감': '마감 시각' };   // 예전 열 이름 → 새 이름
 
@@ -1201,6 +1201,7 @@ function formatList_(sh) {
   sh.getRange(2, lc_('등록일'), n, 1).setNumberFormat('yyyy-mm-dd');
   sh.getRange(2, lc_('진행일'), n, 1).setNumberFormat('yyyy-mm-dd');
   sh.getRange(2, lc_('마감 시각'), n, 1).setNumberFormat('M/d HH:mm');
+  sh.getRange(2, lc_('리뷰 취합'), n, 2).setNumberFormat('M/d');   // 리뷰 취합·업체 전송 = 체크한 날 (한눈에 탭 '리뷰 취합할 것'에서 체크)
   sh.getRange(2, lc_('가격'), n, 1).setNumberFormat('@');
   // 보기 좋게: 가운데 맞춤, 명단 제목·링크는 왼쪽
   sh.getRange(1, 1, n + 1, LIST_HEADER.length).setHorizontalAlignment('center').setVerticalAlignment('middle');
@@ -1316,7 +1317,7 @@ function diag_(p) {
   const days = Number(p.days || 10), cut = today_().getTime() - days * 86400000;
   try {
     out.runs = readRuns_().filter(function (r) { return p.all || r['진행 상태'] !== '종료' || (r['진행일'] instanceof Date && r['진행일'].getTime() >= cut); })
-      .map(function (r) { return { row: r.row, title: r['명단 제목'], day: f(r['진행일']), k: r['일차'], target: r['목표인원'], got: r['인원'], st: r['진행 상태'], closed: f(r['마감 시각'], 'MM-dd HH:mm'), camp: r['캠페인'], total: r['총건수'], room: r['카톡방'], slot: r['구매시간'], form: String(r['폼 링크'] || ''), formId: String(r['폼ID'] || '').slice(0, 12), req: r['요청ID'], reg: f(r['등록일']) }; });
+      .map(function (r) { return { row: r.row, title: r['명단 제목'], day: f(r['진행일']), k: r['일차'], target: r['목표인원'], got: r['인원'], st: r['진행 상태'], closed: f(r['마감 시각'], 'MM-dd HH:mm'), camp: r['캠페인'], total: r['총건수'], room: r['카톡방'], slot: r['구매시간'], form: String(r['폼 링크'] || ''), formId: String(r['폼ID'] || '').slice(0, 12), req: r['요청ID'], reg: f(r['등록일']), rvColl: f(r['리뷰 취합']), rvSend: f(r['업체 전송']) }; });
   } catch (e) { out.runsErr = String(e); }
   try {
     const ps = planSheet_(), pl = ps.getLastRow();
@@ -1372,7 +1373,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     out.props = keep;
   } catch (e) { out.propsErr = String(e); }
@@ -2623,6 +2624,7 @@ function checkFullInner_() {
   try { morningCheck_(); } catch (e) { note_('새벽 점검 실패: ' + e); }
   if (!props.getProperty('EXPECT_V4')) try { setupExpectOnce_(); } catch (e) { note_('기대평 진행 만들기 실패: ' + e); }
   if (!props.getProperty('EXPECT_V5')) try { fixExpect5Once_(); } catch (e) { note_('기대평 다시 나누기 실패: ' + e); }
+  if (!props.getProperty('MORNING_FA_V1')) { props.setProperty('MORNING_FA_V1', '1'); try { const ob = outboxSheet_(), ol = ob.getLastRow(); if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (v[2] === '할 일' && v[5] !== '보냄' && /^🌅 새벽 점검 \(10\/24/.test(String(v[4]))) obSet_(ob, v[0], 6, '보냄'); }); } catch (e) {} }   // 10/24 밤 첫 점검의 잘못된 알림(예전 월급시트 안내를 문제로 셈) 치움
   if (!props.getProperty('EXPPLAN_V8')) try { expPlanRestoreOnce_(); } catch (e) { note_('기대평 일정 되살리기 실패: ' + e); }
   if (!props.getProperty('BUYU_PHOTO_V1')) { props.setProperty('BUYU_PHOTO_V1', '1'); props.setProperty('RVSENT_' + campKey_('#택10.21 써니마켓 부유단감 5') + '_10.21', '1'); note_('✓ 부유단감 10.21 포토 전달됨으로 표시 (사용자 확인)'); }
   if (!props.getProperty('SENT1026_V1')) try { sent1026Once_(); } catch (e) { note_('10.26 공지 보냄 처리 실패: ' + e); }
@@ -4613,6 +4615,19 @@ function onAdminEditInner_(e) {
     }
     try { updatePay_(); } catch (err) {}
     return;
+  }
+  if (sh.getName() === DASH_TAB && e.range.getColumn() === 1 && e.range.getNumRows() === 1) {
+    // 한눈에 '리뷰 취합할 것' 체크 → 진행목록 '리뷰 취합'(그날) / '업체 전송'(의뢰 전체)에 체크한 날 저장, 풀면 지움
+    let m = {}; try { m = JSON.parse(PropertiesService.getScriptProperties().getProperty('DASH_RV') || '{}'); } catch (err) {}
+    const it = m[String(e.range.getRow())];
+    if (it) {
+      const on = String(e.value).toUpperCase() === 'TRUE', val = on ? today_() : '';
+      const runs = readRuns_();
+      if (it.type === 'day') { const r = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === it.title; }).pop(); if (r) setRun_(r.row, '리뷰 취합', val); }
+      else runs.filter(function (x) { return String(x['시트ID']) === String(it.sid); }).forEach(function (x) { setRun_(x.row, '업체 전송', val); });
+      try { sh.getRange(e.range.getRow(), 3).setValue(val).setNumberFormat('M/d'); } catch (err) {}
+      return;
+    }
   }
   if (sh.getName() === DASH_TAB && e.range.getColumn() === 13 && e.range.getRow() >= 2) {
     // 한눈에 탭 '택배 옮김' 체크 → 진행목록에 저장
@@ -6867,7 +6882,29 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '25';
+const DASH_VER = '26';
+// 한눈에 '리뷰 취합할 것' 칸에 보일 것: 그날 리뷰 확인이 다 된 방(RVDONE_) 중 취합 체크 안 했거나 체크한 지 3일 안 된 것,
+//  의뢰 전체 리뷰가 끝났고(RVRPT_) 날짜마다 취합이 다 된 의뢰 중 업체 전송 체크 안 했거나 3일 안 된 것. 최근 40일 진행만, 기대평 빼고
+function rvItems_(allRuns, props) {
+  const all = props.getProperties(), t0 = today_().getTime(), cut = t0 - 40 * 86400000, keep = function (d) { return !(d instanceof Date) || dayStart_(d) >= t0 - 3 * 86400000; };
+  const md = function (d) { return d instanceof Date ? Utilities.formatDate(d, CONFIG.TIMEZONE, 'yyyy-MM-dd') : ''; };
+  const runs = allRuns.filter(function (r) { return r['시트ID'] && !isExpect_(r) && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut; })
+    .sort(function (a, b) { return a['진행일'] - b['진행일']; });
+  const items = [];
+  runs.forEach(function (r) {
+    if (!all['RVDONE_' + String(r['명단 제목']).replace(/\s+/g, '')] || !keep(r['리뷰 취합'])) return;
+    items.push({ type: 'day', title: bareTitle_(r['명단 제목']), label: bareTitle_(r['명단 제목']), at: md(r['리뷰 취합']), sheet: String(r['시트 링크'] || ''), folder: String(r['폴더 링크'] || '') });
+  });
+  const bySheet = {};
+  runs.forEach(function (r) { (bySheet[r['시트ID']] = bySheet[r['시트ID']] || []).push(r); });
+  Object.keys(bySheet).forEach(function (sid) {
+    const mine = bySheet[sid];
+    if (!all['RVRPT_' + sid] || !mine.every(function (r) { return r['리뷰 취합'] instanceof Date; }) || !keep(mine[0]['업체 전송'])) return;
+    const f = function (r) { return (r['진행일'].getMonth() + 1) + '.' + r['진행일'].getDate(); };
+    items.push({ type: 'req', sid: sid, label: '📦 의뢰 끝: ' + campOf_(mine[0]['명단 제목']) + ' (' + f(mine[0]) + '~' + f(mine[mine.length - 1]) + ') 리뷰 사진 압축해서 업체에 보내기', at: md(mine[0]['업체 전송']), sheet: String(mine[0]['시트 링크'] || ''), folder: String(mine[0]['폴더 링크'] || '') });
+  });
+  return items;
+}
 const DASH_LIST_DAYS = 2;   // 아래 명단 덩어리를 보여 줄 지난 날 수   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
@@ -6947,7 +6984,8 @@ function buildDashboard_(force) {
     x.n = Math.max(Math.ceil((x.count + 5) / 5) * 5, 6);   // 5줄 단위라 응답 몇 개마다만 다시 만듦
     if (goal) x.n = Math.min(x.n, Math.max(goal + 3, x.count + 2));
   });
-  const sig = DASH_VER + '|' + show.join(',') + '|' + runs.map(dashStatus_).join(',') + '|' + props.getProperty('RUN_ERRORS') + '|' + order.map(function (id) { return id + ':' + sheets[id].n; }).join(',') + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태'] + ':' + r['진행일'] + ':' + r['택배 옮김']; }).join('|');
+  const rvItems = rvItems_(allRuns, props);
+  const sig = JSON.stringify(rvItems) + '|' + DASH_VER + '|' + show.join(',') + '|' + runs.map(dashStatus_).join(',') + '|' + props.getProperty('RUN_ERRORS') + '|' + order.map(function (id) { return id + ':' + sheets[id].n; }).join(',') + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태'] + ':' + r['진행일'] + ':' + r['택배 옮김']; }).join('|');
   let sh = ss.getSheetByName(DASH_TAB);
   // 한눈에 탭에서 방제를 직접 고쳐 둔 게 있으면 다시 만들기 전에 진행목록에 반영
   //  (지난번에 스크립트가 적은 값과 다를 때만 = 한눈에서 직접 고친 것. 진행목록에서 고친 걸 옛 값으로 되돌리지 않게)
@@ -6986,8 +7024,8 @@ function buildDashboard_(force) {
   try { errs = JSON.parse(props.getProperty('RUN_ERRORS') || '{}'); } catch (e) {}
   sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold').setBackground('#efe6f7');
   const payUrl = CONFIG.PAY_SHEET_ID ? 'https://docs.google.com/spreadsheets/d/' + CONFIG.PAY_SHEET_ID + '/edit#gid=' + CONFIG.PAY_TAB_GID : '';
-  // 아래 덩어리 자리 먼저 계산 (위 표 '틀린 옵션'이 덩어리의 옵션 확인 칸을 셈)
-  let row = runs.length + 4;
+  // 아래 덩어리 자리 먼저 계산 (위 표 '틀린 옵션'이 덩어리의 옵션 확인 칸을 셈). 위 표 아래 줄 다음에 '리뷰 취합할 것' 칸이 있으면 그만큼 아래로
+  let row = runs.length + 4 + (rvItems.length ? rvItems.length + 2 : 0);
   show.forEach(function (id) {
     const x = sheets[id];
     x.top = row;
@@ -7052,6 +7090,24 @@ function buildDashboard_(force) {
   if (payUrl) sh.getRange(bar, 6).setFormula('=HYPERLINK(' + q(payUrl) + ',"▶ 월급시트")').setFontWeight('bold').setHorizontalAlignment('left');
   if (CONFIG.TAKBAE_SHEET_URL) sh.getRange(bar, 7).setFormula('=HYPERLINK(' + q(CONFIG.TAKBAE_SHEET_URL) + ',"▶ 택배시트")').setFontWeight('bold').setHorizontalAlignment('left');
   try { sh.getRange(bar, 8).setValue(String(props.getProperty('LAST_REPORT') || '')).setFontWeight('bold').setHorizontalAlignment('left').setWrap(false); } catch (e) {}
+  // 리뷰 취합할 것 (사용자 요청 10/24): 그날 리뷰 확인이 다 된 방 → 사진 취합하면 체크, 의뢰 전체가 끝나고 날짜마다 취합이 다 되면 '업체에 보내기' 줄 → 보내면 체크. 체크하고 3일 뒤 사라짐
+  const rvMap = {};
+  if (rvItems.length) {
+    const rt = bar + 2;
+    sh.getRange(rt, 1, 1, 5).setValues([['취합', '리뷰 취합할 것 (그날 리뷰 확인이 다 된 방 · 사진 취합하면 체크 → 3일 뒤 사라짐)', '체크한 날', '명단', '폴더']]).setFontWeight('bold').setBackground('#e6f4ea');
+    rvItems.forEach(function (it, i) {
+      const rr = rt + 1 + i;
+      rvMap[rr] = it.type === 'req' ? { type: 'req', sid: it.sid } : { type: 'day', title: it.title };
+      sh.getRange(rr, 1).insertCheckboxes().setValue(!!it.at);
+      sh.getRange(rr, 2).setValue(it.label).setHorizontalAlignment('left');
+      if (it.type === 'req') sh.getRange(rr, 2).setFontWeight('bold').setFontColor('#1e5631');
+      if (it.at) sh.getRange(rr, 3).setValue(new Date(it.at + 'T00:00:00')).setNumberFormat('M/d');
+      if (it.sheet) sh.getRange(rr, 4).setFormula('=HYPERLINK(' + q(it.sheet) + ',"명단")');
+      if (it.folder) sh.getRange(rr, 5).setFormula('=HYPERLINK(' + q(it.folder) + ',"폴더")');
+    });
+    sh.getRange(rt, 1, rvItems.length + 1, 5).setBorder(true, true, true, true, true, true, '#cfe8d6', SpreadsheetApp.BorderStyle.SOLID).setVerticalAlignment('middle');
+  }
+  props.setProperty('DASH_RV', JSON.stringify(rvMap));
   // 월급시트·진행 도우미 링크는 위 표 바로 아래 줄에만 (O1, P1은 비움)
   if (runs.length) {
     // 위 표 보기 좋게: 가운데 맞춤, 방제는 왼쪽, 테두리
@@ -7608,7 +7664,9 @@ function morningCheck_() {
   } catch (e) {}
   // 7. 지난 12시간 확인 결과 중 문제
   try {
-    const log = JSON.parse(CacheService.getScriptCache().get('REPORT_LOG') || '[]').filter(function (t) { return /^⚠/.test(t) && !/다른 작업 중이라 건너뜀/.test(t); });
+    // 월급시트 나눠서 하는 중(오류 아님) 줄만 있는 결과는 빼고
+    const realProb = function (t) { return t.split('\n').slice(1).some(function (l) { return /^⚠/.test(l) && !/월급시트.*(이어서|나눠서)/.test(l); }); };
+    const log = JSON.parse(CacheService.getScriptCache().get('REPORT_LOG') || '[]').filter(function (t) { return /^⚠/.test(t) && !/다른 작업 중이라 건너뜀/.test(t) && realProb(t); });
     if (log.length) issues.push('최근 자동 확인에서 문제 ' + log.length + '번 (한눈에 Q열/실행 기록): ' + log[0].split('\n').slice(1, 3).join(' / ').slice(0, 160));
   } catch (e) {}
   const when = Utilities.formatDate(now, CONFIG.TIMEZONE, 'M/d HH:mm');
