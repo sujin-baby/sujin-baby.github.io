@@ -201,19 +201,23 @@ function moveRunDate_(r, d) {
   };
   // 원래 날짜 = 방제의 날짜 (진행일 칸은 이미 새 날짜로 고쳐져 있음)
   const om = (dateTok_(oldBare) || '').split('.'), oldDay = om.length === 2 ? new Date(d.getFullYear(), Number(om[0]) - 1, Number(om[1])) : d;
-  const done = [one(r, d)];
-  renameTodo_(r, oldBare, retitleDate_(oldBare, d));
   // 뒤 진행 (같은 명단 시트, 원래 이 진행보다 뒤): 겹치거나 앞서면 다음 진행일로
   let prev = d;
+  const moves = [[r, d]];
   const later = readRuns_().filter(function (x) { return x.row !== r.row && x['시트ID'] && String(x['시트ID']) === String(r['시트ID']) && x['진행일'] instanceof Date && x['진행 상태'] !== '종료' && dayStart_(x['진행일']) > dayStart_(oldDay); })
     .sort(function (a, b) { return a['진행일'] - b['진행일']; });
   later.forEach(function (x) {
     if (dayStart_(x['진행일']) > dayStart_(prev)) { prev = x['진행일']; return; }
     const nd = nextWorkday_(prev);
-    const ob1 = bareTitle_(x['명단 제목']);
-    done.push(one(x, nd)); prev = nd;
-    renameTodo_(x, ob1, retitleDate_(ob1, nd));
+    moves.push([x, nd]); prev = nd;
   });
+  // 늦은 날짜 진행부터 바꿈 (10/24 #10.26 공지들이 사라진 원인): 앞 진행을 먼저 #10.26으로 바꾸면 아직 안 바뀐 뒤 진행도 #10.26이라
+  //  뒤 진행을 #10.27로 바꿀 때 보낼메시지에서 '#10.26' 방 공지를 둘 다 데려가서 #10.26 공지가 없어지고, 똑같은 공지 두 개는 하나가 지워졌음
+  const done = moves.slice().reverse().map(function (m) {
+    const ob1 = bareTitle_(m[0]['명단 제목']), res = one(m[0], m[1]);
+    renameTodo_(m[0], ob1, retitleDate_(ob1, m[1]));
+    return res;
+  }).reverse();
   // 일정 탭 대기 계획 (아직 안 만든 다음 일차)
   try {
     const ps = planSheet_(), pl = ps.getLastRow(), ck = campKey_(r['캠페인'] || r['명단 제목']);
@@ -310,6 +314,9 @@ function renameRun_(r, title, why) {
   // 다른 진행(다른 상품)의 방제로는 절대 안 바꿈 (10/23: 한눈에 탭 방제 칸에 속눈썹영양제 방제가 들어가 기대평 진행 이름·보낼메시지 방이 속눈썹으로 바뀐 것)
   const other = readRuns_().filter(function (x) { return x.row !== r.row && x['진행 상태'] !== '종료' && (bareTitle_(x['명단 제목']) === title || sameRunTitle_(x['명단 제목'], title)) && campKey_(x['명단 제목']) !== campKey_(r['명단 제목']); })[0];
   if (other) { note_('⛔ 방제 안 바꿈: ' + bareTitle_(r['명단 제목']) + ' → ' + title + ' (다른 진행 ' + bareTitle_(other['명단 제목']) + '의 방제라서)' + (why ? ' [' + why + ']' : '')); return false; }
+  // 같은 상품의 다른 날 진행이 아직 그 방 이름(같은 날짜)을 쓰고 있으면 안 바꿈: 바꾸면 두 진행의 보낼메시지가 한 방으로 섞임 (10/24 #10.26 공지 사라진 원인)
+  const twin = readRuns_().filter(function (x) { return x.row !== r.row && x['진행 상태'] !== '종료' && campKey_(x['명단 제목']) === campKey_(r['명단 제목']) && dateTok_(x['명단 제목']) === dateTok_(title) && dateTok_(title) !== dateTok_(r['명단 제목']); })[0];
+  if (twin) { note_('⛔ 방제 안 바꿈: ' + bareTitle_(r['명단 제목']) + ' → ' + title + ' (같은 날짜 진행 ' + bareTitle_(twin['명단 제목']) + '이 아직 있어서)' + (why ? ' [' + why + ']' : '')); return false; }
   note_('방제 바꿈' + (why ? '(' + why + ')' : '') + ': ' + bareTitle_(r['명단 제목']) + ' → ' + title);
   const cm = title.match(/(\d+)\s*$/);
   if (cm && Number(cm[1]) > 0 && !isExpect_(r)) { setRun_(r.row, '목표인원', Number(cm[1])); r['목표인원'] = Number(cm[1]); }   // 기대평은 방제 끝이 건수(사람 × 27)
@@ -2537,7 +2544,7 @@ function checkFullInner_() {
   try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
   if (!props.getProperty('EXPECT_V4')) try { setupExpectOnce_(); } catch (e) { note_('기대평 진행 만들기 실패: ' + e); }
   if (!props.getProperty('EXPECT_V5')) try { fixExpect5Once_(); } catch (e) { note_('기대평 다시 나누기 실패: ' + e); }
-  if (!props.getProperty('LASH1026_V1')) try { lash1026Once_(); } catch (e) { note_('10.26 속눈썹영양제 공지 넣기 실패: ' + e); }
+  if (!props.getProperty('SENT1026_V1')) try { sent1026Once_(); } catch (e) { note_('10.26 공지 보냄 처리 실패: ' + e); }
   if (!props.getProperty('REOPEN_V1')) try { reopenClosedOnce_(); } catch (e) { note_('닫힌 폼 다시 열기 실패: ' + e); }
   if (!props.getProperty('WONGO_V1')) try { fixWongoOnce_(); } catch (e) { note_('원고 가이드 고치기 실패: ' + e); }
   if (!props.getProperty('EXPECT_V6')) try { fixExpect6Once_(); } catch (e) { note_('기대평 하루 3명 실패: ' + e); }
@@ -3261,7 +3268,10 @@ function ensureRunNotices_(runs) {
   del.sort(function (a, b) { return b - a; }).forEach(function (i) { note_('✓ 똑같은 방 공지 하나 지움: ' + v[i][3]); ob.deleteRow(i + 2); v.splice(i, 1); });
   runs.forEach(function (r) {
     if (r['진행 상태'] === '종료' || !(r['진행일'] instanceof Date) || !r['폼ID'] || !r['폼 링크']) return;
-    const d = dayStart_(r['진행일']); if (d !== t1 && d !== today_().getTime()) return;   // 오늘·다음 진행일 것만 (폼을 같이 쓰는 여러 날 진행은 폼 설명이 가장 늦은 날 공지라 아래에서 거름)
+    // 오늘 이후 진행 모두 (10/24: 미리 만들어 둔 뒤 날짜 진행 공지가 빠져도 보낼 날 전에 다시 들어가게). 보낼 날짜(전 진행일)가 지난 건
+    //  이미 직접 보냈을 수 있어서 안 넣음 (두 번 보내지 않게)
+    const d = dayStart_(r['진행일']); if (d < today_().getTime()) return;
+    { const sd = new Date(d); sd.setHours(12, 0, 0, 0); do { sd.setDate(sd.getDate() - 1); } while (!isWorkday_(sd)); sd.setHours(0, 0, 0, 0); if (sd.getTime() < today_().getTime()) return; }
     // 폼을 같이 쓰는 여러 날 진행(폼 설명은 가장 늦은 날 공지)은 일정 탭의 그날 계획으로 공지를 다시 만듦 (10/24 #10.26 속눈썹영양제 공지가 빠졌는데 여기서 건너뛰어 다시 안 생겼음)
     const shared = runs.some(function (x) { return x !== r && String(x['폼ID']) === String(r['폼ID']) && x['진행일'] instanceof Date && dayStart_(x['진행일']) > d && x['진행 상태'] !== '종료'; });
     const room = String(r['카톡방'] || bareTitle_(r['명단 제목'])), link = String(r['폼 링크']);
@@ -3271,9 +3281,6 @@ function ensureRunNotices_(runs) {
     if (props.getProperty(pk)) return;   // 한 번만 (사용자가 지웠으면 다시 안 넣음)
     let desc = '';
     if (shared) {
-      // 보낼 날짜(전 진행일)가 이미 지난 공지는 보냈을 수 있어서 다시 안 넣음 (두 번 보내지 않게). 10.26 속눈썹영양제는 아래 한 번 고침으로
-      const sd = new Date(d); sd.setHours(12, 0, 0, 0); do { sd.setDate(sd.getDate() - 1); } while (!isWorkday_(sd)); sd.setHours(0, 0, 0, 0);
-      if (sd.getTime() < today_().getTime() && !r.__force) return;
       desc = planNotice_(r, link);
       if (!desc) { note_('⚠ ' + room + ' 방 공지가 보낼메시지에 없는데 일정 탭에 그날 계획이 없어 못 만들었어요. 다른 날 공지를 복사해 인원만 고쳐 보내 주세요'); props.setProperty(pk, '1'); return; }
     } else {
@@ -7377,21 +7384,20 @@ function redateNoticesOnce_() {
   sortOutbox_(ob);
   note_('✓ 방 공지 보낼 날짜를 전 진행일로: ' + n + '줄');
 }
-// (10/24 한 번) #10.26 실 속눈썹영양제 방 공지가 보낼메시지에 없음 (사용자 확인) → 일정 탭 그날 계획으로 다시 넣음
-function lash1026Once_() {
+// (10/24 한 번) #10.26 방 공지(오메가3 빼고)는 보낼메시지에 안 떠서 사용자가 직접 보냄 → 다시 넣지 않고, 혹시 들어간 대기 줄은 '보냄'으로
+function sent1026Once_() {
   const props = PropertiesService.getScriptProperties();
-  if (props.getProperty('LASH1026_V1')) return;
+  if (props.getProperty('SENT1026_V1')) return;
+  props.setProperty('SENT1026_V1', '1');
   props.setProperty('LASH1026_V1', '1');
-  const r = readRuns_().filter(function (x) { return /속눈썹영양제/.test(String(x['명단 제목'])) && dateTok_(x['명단 제목']) === '10.26' && x['진행 상태'] !== '종료'; })[0];
-  if (!r) { note_('⚠ 진행목록에 #10.26 속눈썹영양제가 없어요'); return; }
-  const room = String(r['카톡방'] || bareTitle_(r['명단 제목'])), link = String(r['폼 링크'] || '');
   const ob = outboxSheet_(), ol = ob.getLastRow();
-  const has = ol >= 2 && ob.getRange(2, 1, ol - 1, 6).getValues().some(function (x) { return x[2] === '방 공지' && dateTok_(String(x[3])) === '10.26' && /속눈썹영양제/.test(String(x[3])) && /양식 작성 폼/.test(String(x[4])); });
-  if (has) { note_('#10.26 속눈썹영양제 방 공지는 이미 있어요'); return; }
-  const desc = planNotice_(r, link);
-  if (!desc) { note_('⚠ #10.26 속눈썹영양제: 일정 탭 계획을 못 찾아 공지를 못 만들었어요'); return; }
-  queueMsg_(room, withSlotLine_(desc, runSlot_(r), chainFruit_(r)), '방 공지');
-  note_('✓ #10.26 속눈썹영양제 방 공지 넣음 (일정 탭 계획으로)');
+  if (ol < 2) return;
+  const n = [];
+  ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (x) {
+    if (x[2] !== '방 공지' || x[5] === '보냄' || dateTok_(String(x[3])) !== '10.26' || !/^#/.test(String(x[3])) || !/양식 작성 폼/.test(String(x[4]))) return;
+    obSet_(ob, x[0], 6, '보냄'); n.push(x[3]);
+  });
+  if (n.length) note_('✓ 직접 보낸 #10.26 방 공지 보냄 처리: ' + n.join(', '));
 }
 // (10/24 한 번) 하루 인원 바꾸기(changeDaily_)가 남는 날 진행을 끝내면서 같은 폼을 쓰는 진행 중 폼까지 닫은 것 → 받는 중(진행중, 아직 마감 전)인 진행 폼은 다시 엶
 function reopenClosedOnce_() {
