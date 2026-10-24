@@ -4484,17 +4484,48 @@ function pickDups_(sh) {
   return '빨간색 중복 ' + n + '개 골랐어요 (같은 것끼리 맨 처음 낸 것은 남김). 확인하고 E1 삭제 실행을 체크하면 지워져요.';
 }
 
-// 진행 중인 폼마다 '제출하면 바로' 트리거 (월급시트, 인원이 바로 바뀌게). 끝난 폼 트리거는 지움. 트리거는 최대 20개라 폼은 15개까지
+// 진행 중인 폼마다 '제출하면 바로' 트리거 (월급시트, 인원이 바로 바뀌게). 끝난 폼 트리거는 지움.
+//  트리거는 계정당 20개까지라 (10/24 '스크립트에 트리거가 너무 많습니다'): 다 돈 1회 예약을 먼저 치우고, 남는 자리만큼 오늘 진행 → 다가오는 진행 → 지난 진행 순서로.
+//  트리거가 없는 폼도 15분 확인에서 똑같이 명단에 들어감 (늦을 뿐)
 function ensureSubmitTriggers_(runs) {
+  const props = PropertiesService.getScriptProperties(), now = Date.now();
+  const isFormT = function (t) { return t.getHandlerFunction() === 'onAdminEdit' && t.getEventType() === ScriptApp.EventType.ON_FORM_SUBMIT; };
+  let all = ScriptApp.getProjectTriggers();
+  // 1) 이미 돈 1분 뒤·0시 예약, 겹친 15분 확인 정리
+  const live = [];
+  [['SOON_TRIG_ID', 'SOON_TRIG_AT'], ['MID_TRIG_ID', 'MID_TRIG_AT']].forEach(function (k) {
+    const id = props.getProperty(k[0]), at = Number(props.getProperty(k[1]) || 0);
+    if (id && at > now - 5 * 60000) live.push(id);
+  });
+  const cf = all.filter(function (t) { return t.getHandlerFunction() === 'checkFull' && live.indexOf(t.getUniqueId()) === -1; });
+  let cleaned = 0;
+  if (cf.length > 1) {
+    cf.forEach(function (t) { ScriptApp.deleteTrigger(t); cleaned++; });
+    ScriptApp.newTrigger('checkFull').timeBased().everyMinutes(15).create(); cleaned--;
+  }
+  // 같은 일을 하는 트리거가 둘 이상이면 하나만 (편집, 9시 알림 등)
+  const seen = {};
+  all.forEach(function (t) {
+    if (t.getHandlerFunction() === 'checkFull' || isFormT(t)) return;
+    const k = t.getHandlerFunction() + '|' + t.getEventType() + '|' + (t.getTriggerSourceId() || '');
+    if (seen[k]) { ScriptApp.deleteTrigger(t); cleaned++; } else seen[k] = 1;
+  });
+  if (cleaned > 0) { note_('· 다 돈 예약·겹친 트리거 ' + cleaned + '개 지움'); all = ScriptApp.getProjectTriggers(); }
+  // 2) 폼 트리거: 남는 자리만큼 (1분 뒤·0시 예약을 새로 걸 자리 2개는 비워 둠)
+  const room = Math.max(0, 20 - all.filter(function (t) { return !isFormT(t); }).length - 2);
+  const t0 = today_().getTime();
+  const pri = function (r) { const d = r['진행일'] instanceof Date ? dayStart_(r['진행일']) : t0; return d === t0 ? [0, 0] : d > t0 ? [1, d - t0] : [2, t0 - d]; };
   const want = [];
-  runs.forEach(function (r) { if (r['진행 상태'] !== '종료' && r['폼ID'] && want.indexOf(String(r['폼ID'])) === -1) want.push(String(r['폼ID'])); });
+  runs.filter(function (r) { return r['진행 상태'] !== '종료' && r['폼ID']; })
+    .sort(function (a, b) { const x = pri(a), y = pri(b); return (x[0] - y[0]) || (x[1] - y[1]); })
+    .forEach(function (r) { const id = String(r['폼ID']); if (want.indexOf(id) === -1 && want.length < room) want.push(id); });
   const have = {};
-  ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() !== 'onAdminEdit' || t.getEventType() !== ScriptApp.EventType.ON_FORM_SUBMIT) return;
+  all.forEach(function (t) {
+    if (!isFormT(t)) return;
     const id = t.getTriggerSourceId();
     if (want.indexOf(id) === -1 || have[id]) ScriptApp.deleteTrigger(t); else have[id] = 1;
   });
-  want.slice(0, 14).forEach(function (id) {   // 트리거는 계정당 20개까지 (15분·9시·편집·0시 예약 포함)
+  want.forEach(function (id) {
     if (have[id]) return;
     try { ScriptApp.newTrigger('onAdminEdit').forForm(id).onFormSubmit().create(); } catch (e) { note_('폼 트리거 만들기 실패 ' + id + ': ' + e); }
   });
