@@ -1353,6 +1353,21 @@ function diag_(p) {
     out.formulasA = afl;
     try { out.namedRanges = SpreadsheetApp.openById(CONFIG.ADMIN_SHEET_ID).getNamedRanges().map(function (x) { return x.getName() + '=' + x.getRange().getSheet().getName() + '!' + x.getRange().getA1Notation(); }); } catch (e) {}
   } catch (e) { out.cellsErr = String(e); }
+  // (읽기만) 일정 탭 계획으로 만든 공지(planNotice_)가 보낼메시지에 있는 그날 공지와 같은지 (빠진 공지를 다시 넣을 때 맞는 글이 들어가는지 확인용)
+  if (p.pn) try {
+    const ob = outboxSheet_(), ol = ob.getLastRow(), rows = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues() : [];
+    const nz = function (t) { return String(t || '').split('\n').map(function (l) { return l.trim(); }).filter(Boolean); };
+    out.planNotices = readRuns_().filter(function (r) { return r['진행 상태'] !== '종료' && r['진행일'] instanceof Date && dayStart_(r['진행일']) >= today_().getTime() && r['폼 링크']; }).map(function (r) {
+      const room = String(r['카톡방'] || bareTitle_(r['명단 제목'])), link = String(r['폼 링크']);
+      const have = rows.filter(function (x) { return x[2] === '방 공지' && String(x[4]).indexOf(link) >= 0 && dateTok_(String(x[3])) === dateTok_(room); })[0];
+      let made = '';
+      try { made = planNotice_(r, link); if (made && !isExpect_(r)) made = withSlotLine_(made, runSlot_(r), chainFruit_(r)); } catch (e) { made = 'ERR ' + e; }
+      const a = nz(made), b = nz(have ? have[4] : '');
+      let diff = '';
+      for (let i = 0; i < Math.max(a.length, b.length); i++) if (a[i] !== b[i]) { diff = (i + 1) + '줄: 계획="' + (a[i] || '') + '" / 공지="' + (b[i] || '') + '"'; break; }
+      return { room: room, plan: !!made, outbox: !!have, same: !!made && !!have && !diff, diff: diff };
+    });
+  } catch (e) { out.pnErr = String(e); }
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
@@ -2800,7 +2815,7 @@ function checkFullInner_() {
     if (!late_(250)) {
       step_('월급시트');
       try { updatePay_(true); props.setProperty('PAY_SIG', paySig); props.deleteProperty('PAY_PENDING'); }
-      catch (e) { if (e && e.payLate) note_('· 월급시트: 시간이 모자라 다음 확인에서 이어서 해요 (' + e.payLate + ')'); else note_('월급시트 갱신 실패: ' + e); }
+      catch (e) { if (e && e.payLate) note_('✓ 월급시트 나눠서 하는 중 (' + e.payLate + ', 다음 확인에서 이어서. 오류 아님)'); else note_('월급시트 갱신 실패: ' + e); }
     }
   }
   // 급하지 않은 정리는 30분마다 (시간이 모자라면 다음 확인에서, 1시간 넘게 밀리면 맨 앞에서)
@@ -6420,7 +6435,12 @@ function updatePay_(resumable) {
   const props = PropertiesService.getScriptProperties();
   let prog = null;
   if (resumable) { try { prog = JSON.parse(props.getProperty('PAY_PROG') || 'null'); } catch (e) {} if (!prog || !prog.done) prog = { done: [], post: 0 }; }
-  const stop = function (what) { props.setProperty('PAY_PROG', JSON.stringify(prog)); throw { payLate: what }; };
+  // 줄마다 넣을 값이 지난번과 같으면 건너뜀 (10/24: 줄 하나에 10초 넘게 걸려 54줄이 확인 4번에 나뉘었음). 같아도 6시간마다는 다시 씀(손으로 지운 줄 되살리기)
+  let rowSig = {}; try { rowSig = JSON.parse(props.getProperty('PAY_ROWSIG') || '{}'); } catch (e) {}
+  const sigOf = function (a) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(a), Utilities.Charset.UTF_8)).slice(0, 12); };
+  const fresh = function (rid, sig) { const o = rowSig[rid]; return o && o.s === sig && Date.now() - o.t < 6 * 3600000; };
+  const saveSig = function () { try { const keep = {}; runs.forEach(function (r) { const k = r.row + '|' + nameOf(r); if (rowSig[k]) keep[k] = rowSig[k]; }); props.setProperty('PAY_ROWSIG', JSON.stringify(keep)); } catch (e) {} };
+  const stop = function (what) { props.setProperty('PAY_PROG', JSON.stringify(prog)); saveSig(); throw { payLate: what }; };
   const tooLate = function () { return resumable && late_(300); };
   const all = readRuns_().filter(function (r) { return r['시트ID'] && r['진행일'] instanceof Date; });
   const runs = all.filter(function (r) { return r['진행 상태'] !== '종료'; });
@@ -6459,13 +6479,15 @@ function updatePay_(resumable) {
       const gw = function (x) { return got(x) * expPer_(x); };
       const prevW = mine.filter(function (x) { return ym(x['진행일']) < ym(r['진행일']); }).reduce(function (a, x) { return a + gw(x); }, 0);
       const earlierW = mine.filter(function (x) { return x['진행일'] < r['진행일'] && ym(x['진행일']) === ym(r['진행일']); }).reduce(function (a, x) { return a + gw(x); }, 0);
-      writePayRow_(r, nameOf(r), EXP_LINKS.length * 15, prevW, siblings_(all, r).length > 1,
-        { store: pick('업체'), time: payTime_(runSlot_(r)), photo: '', earlier: earlierW, mult: expPer_(r) });
+      const exE = { store: pick('업체'), time: payTime_(runSlot_(r)), photo: '', earlier: earlierW, mult: expPer_(r) }, shE = siblings_(all, r).length > 1;
+      const sigE = sigOf([nameOf(r), EXP_LINKS.length * 15, prevW, shE, exE, String(r['시트ID']), String(r['진행일']), r['인원'], r['택대'], r['실배송'], r['일차']]);
+      if (!fresh(rid, sigE)) { writePayRow_(r, nameOf(r), EXP_LINKS.length * 15, prevW, shE, exE); rowSig[rid] = { s: sigE, t: Date.now() }; }
       if (prog) prog.done.push(rid);
       return;
     }
-    writePayRow_(r, nameOf(r), total, prev, siblings_(all, r).length > 1,
-      { store: pick('업체'), time: fruit ? '자정 ~ 오전 7시' : payTime_(runSlot_(r)), photo: pick('포토'), earlier: earlier });
+    const exN = { store: pick('업체'), time: fruit ? '자정 ~ 오전 7시' : payTime_(runSlot_(r)), photo: pick('포토'), earlier: earlier }, shN = siblings_(all, r).length > 1;
+    const sigN = sigOf([nameOf(r), total, prev, shN, exN, String(r['시트ID']), String(r['진행일']), r['인원'], r['택대'], r['실배송'], r['일차']]);
+    if (!fresh(rid, sigN)) { writePayRow_(r, nameOf(r), total, prev, shN, exN); rowSig[rid] = { s: sigN, t: Date.now() }; }
     if (prog) prog.done.push(rid);
   });
   // 줄 다음 정리들도 하나씩 (시간이 모자라면 다음 확인에서 그 단계부터)
@@ -6484,6 +6506,7 @@ function updatePay_(resumable) {
     try { post[i](); } catch (e) { note_('월급시트 ' + postName[i] + ' 실패: ' + e); }
     if (prog) prog.post = i + 1;
   }
+  saveSig();
   if (resumable) props.deleteProperty('PAY_PROG');
 }
 // 진행비 = 1건(1명)당 500원, 리뷰비 없음 (사용자 요청 10/18). 이번 달·다음 달 탭만 (지난달 이전은 그대로)
