@@ -73,6 +73,8 @@ function report_(name, ok) {
     if (slow.length) lines.push('· 걸린 시간: ' + slow.map(function (x) { return x.w + ' ' + x.s + '초'; }).join(', '));
   }
   const text = head + (lines.length ? '\n' + lines.join('\n') : '');
+  // 원격 점검(?p=diag)용: 최근 확인 결과 15개 (6시간 보관)
+  try { const c = CacheService.getScriptCache(); let log = []; try { log = JSON.parse(c.get('REPORT_LOG') || '[]'); } catch (e) {} log.unshift(text.slice(0, 1500)); c.put('REPORT_LOG', JSON.stringify(log.slice(0, 15)), 21600); } catch (e) {}
   // 한눈에 Q1은 한 줄 요약, 자세한 건 Q2부터 한 줄씩 (위 표 옆이라 잘 보이게)
   try {
     const d = adminSs_().getSheetByName(DASH_TAB);
@@ -1306,11 +1308,46 @@ function autoGo(){
 }
 </script>`;
 
+// 읽기 전용 점검 데이터. 시트·폼·속성을 읽기만 함 (쓰기·정렬·트리거 변경 없음)
+function diag_(p) {
+  const tz = CONFIG.TIMEZONE, f = function (d, fmt) { return d instanceof Date ? Utilities.formatDate(d, tz, fmt || 'yyyy-MM-dd') : d; };
+  const out = { now: f(new Date(), 'yyyy-MM-dd HH:mm:ss') };
+  const days = Number(p.days || 10), cut = today_().getTime() - days * 86400000;
+  try {
+    out.runs = readRuns_().filter(function (r) { return p.all || r['진행 상태'] !== '종료' || (r['진행일'] instanceof Date && r['진행일'].getTime() >= cut); })
+      .map(function (r) { return { row: r.row, title: r['명단 제목'], day: f(r['진행일']), k: r['일차'], target: r['목표인원'], got: r['인원'], st: r['진행 상태'], closed: f(r['마감 시각'], 'MM-dd HH:mm'), camp: r['캠페인'], total: r['총건수'], room: r['카톡방'], slot: r['구매시간'], form: String(r['폼 링크'] || ''), formId: String(r['폼ID'] || '').slice(0, 12), req: r['요청ID'], reg: f(r['등록일']) }; });
+  } catch (e) { out.runsErr = String(e); }
+  try {
+    const ps = planSheet_(), pl = ps.getLastRow();
+    out.plans = pl >= 2 ? ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().filter(function (x) { return p.all || x[8] === '대기' || (x[3] instanceof Date && x[3].getTime() >= cut); })
+      .map(function (x) { return { id: x[0], camp: x[1], k: x[2], day: f(x[3]), room: x[4], title: x[5], n: x[6], st: x[8] }; }) : [];
+  } catch (e) { out.plansErr = String(e); }
+  try {
+    const ob = outboxSheet_(), ol = ob.getLastRow();
+    out.outbox = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues().map(function (x, i) {
+      const link = (String(x[4]).match(/https:\/\/forms\.gle\/[\w-]+/) || [''])[0];
+      return { r: i + 2, id: String(x[0]), idType: typeof x[0], send: x[1] instanceof Date ? f(x[1]) : String(x[1]), kind: x[2], room: x[3], st: x[5], link: link, head: String(x[4]).slice(0, p.full ? 5000 : 60) };
+    }) : [];
+  } catch (e) { out.outboxErr = String(e); }
+  try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
+  try {
+    const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
+    ['PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
+    out.props = keep;
+  } catch (e) { out.propsErr = String(e); }
+  try { out.reports = JSON.parse(CacheService.getScriptCache().get('REPORT_LOG') || '[]'); } catch (e) { out.reportsErr = String(e); }
+  try { const d = adminSs_().getSheetByName(DASH_TAB); if (d) out.dashQ = d.getRange(1, 17, 13, 1).getValues().map(function (x) { return String(x[0]); }).filter(Boolean); } catch (e) {}
+  return out;
+}
+
 /* 아이폰 등에서 쓰는 웹 앱: 배포 링크로 열면 '새 진행 만들기' 창이 뜸 (주소 뒤 값으로 미리 채움) */
 function doGet(e) {
   const p = (e && e.parameter) || {};
   if (p.k !== CONFIG.KEY) return HtmlService.createHtmlOutput('링크가 올바르지 않아요. 체험단 가이드 생성기의 버튼으로 열어 주세요.');
   if (p.p === 'queue') return ContentService.createTextOutput(queueText_());
+  // 읽기 전용 점검 (10/24): 진행목록·일정·보낼메시지·트리거·최근 확인 결과를 JSON으로. 아무것도 안 바꿈 (원격으로 버그 원인 찾기용)
+  if (p.p === 'diag') return ContentService.createTextOutput(JSON.stringify(diag_(p), null, 1)).setMimeType(ContentService.MimeType.JSON);
   if (p.p === 'sent') { markMsg_(p.id, p.st === 'fail' ? '대기' : '보냄'); return ContentService.createTextOutput('ok'); }
   if (p.p === 'rank') return rankPage_(p);
   if (p.p === 'review') return reviewPage_(p);
