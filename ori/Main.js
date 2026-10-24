@@ -248,7 +248,7 @@ function changeDaily_(anchor, from, n) {
   items.sort(function (a, b) { return a.d - b.d; });
   const cnt = function (t, c) { return String(t).replace(/\d+(\s*(\([^)]*\))?\s*)$/, c + '$1'); };
   const one = function (t, c) { const m = String(t).match(/\(\s*\d+\s*명\)/g); return m && m.length === 1 ? String(t).replace(/\(\s*\d+\s*명\)/, '(' + c + '명)') : String(t); };
-  const done = [], closeIf = [], ended = [];
+  const done = [];
   items.forEach(function (it) {
     const c = Math.max(0, Math.min(n, left)); left -= c;
     if (it.run) {
@@ -262,9 +262,7 @@ function changeDaily_(anchor, from, n) {
         done.push(old + ' → ' + cnt(old, c));
       } else {
         setRun_(r.row, '진행 상태', '종료');
-        // 폼은 여기서 안 닫음: 같은 캠페인 다른 날 진행이 같은 폼을 씀 (10/24 실링팬 하루 2명으로 줄였더니 남는 날을 끝내면서 폼을 닫아 받는 날 폼까지 닫힘).
-        //  아래에서 이 폼을 쓰는 진행이 하나도 안 남았을 때만 닫음
-        if (r['폼ID']) closeIf.push(String(r['폼ID'])); ended.push(r.row);
+        // 폼은 절대 안 닫음 (사용자 요청 10/21 '폼 닫지 마'. 10/24 실링팬: 남는 날을 끝내면서 같은 폼을 쓰는 받는 날 폼까지 닫혔음)
         try { const room = String(r['카톡방'] || old), ob = outboxSheet_(), ol = ob.getLastRow(); if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (String(v[3]) === room && v[5] !== '보냄') obSet_(ob, v[0], 6, '취소'); }); } catch (e) {}
         done.push(old + ' 취소(종료)');
       }
@@ -293,13 +291,6 @@ function changeDaily_(anchor, from, n) {
     ps.appendRow([String(lastPlan.x[0]).replace(/-\d+$/, '') + '-' + k0, lastPlan.x[1], k0, nd, cnt(retitleDate_(lastPlan.x[4], nd), tc2), cnt(retitleDate_(lastPlan.x[5], nd), tc2), c, JSON.stringify(cc), '대기', lastPlan.x[9]]);
     done.push('(일정 추가) ' + bareTitle_(cnt(retitleDate_(lastPlan.x[5], nd), tc2)));
   }
-  // 끝낸 진행의 폼: 같은 폼을 쓰는 진행(끝내지 않은 것)이나 남은 일정이 하나도 없을 때만 닫음
-  const planLeft = prow.some(function (x, i) { return campKey_(x[1]) === ck && x[8] === '대기'; }) || add > 0;
-  closeIf.filter(function (f, i, a) { return a.indexOf(f) === i; }).forEach(function (fid) {
-    const used = runs.some(function (x) { return String(x['폼ID']) === fid && x['진행 상태'] !== '종료' && ended.indexOf(x.row) === -1; });
-    if (used || planLeft) return;
-    try { FormApp.openById(fid).setAcceptingResponses(false); } catch (e) {}
-  });
   return '✓ 하루 ' + n + '명으로: ' + (done.join(', ') || '바뀐 것 없음') + (left > 0 ? ' / ⚠ ' + left + '건이 남아요 (일정 탭에 줄이 없어서 못 늘림)' : '');
 }
 
@@ -2508,23 +2499,7 @@ function ensureMidnightTrigger_() {
 // 지금 받는 진행이 없는 폼은 닫아 둠 (같은 폼을 쓰는 다음 진행은 그 진행일 0시에 다시 열림)
 //  받는 진행 = 기간(진행일 0시 ~ 같은 명단 다음 진행일 0시) 안이고 아직 마감 안 된 것
 function closeIdleForms_(runs, msgs) {
-  return;   // 폼 자동으로 닫기 안 함 (사용자 요청 10/21). 초과 응답은 한눈에 '확인 필요' 칸에 표시
-  const forms = {}, now = Date.now(), live = {};
-  runs.forEach(function (r) { if (r['진행 상태'] !== '종료' && r['폼ID']) (forms[r['폼ID']] = forms[r['폼ID']] || []).push(r); });
-  // 받는 중인 진행의 폼 + 그 진행 공지에 들어간 폼은 열어 둠
-  runs.forEach(function (r) {
-    if (r['진행 상태'] === '종료' || !r['폼ID'] || r['마감 시각']) return;
-    const w = windowOf_(runs, r);
-    if (now >= w.from && !runOver_(runs, r, now)) runFormIds_(r, runs, msgs).forEach(function (fid) { live[fid] = 1; });
-  });
-  Object.keys(forms).forEach(function (fid) {
-    if (live[fid]) return;
-    try {
-      const f = FormApp.openById(fid);
-      const next = forms[fid].filter(function (r) { return r['진행일'] instanceof Date && dayStart_(r['진행일']) > now; }).sort(function (a, b) { return a['진행일'] - b['진행일']; })[0];
-      if (f.isAcceptingResponses()) { f.setAcceptingResponses(false); note_('✓ 폼 닫음: ' + bareTitle_(forms[fid][0]['명단 제목']) + (next ? ' (' + Utilities.formatDate(next['진행일'], CONFIG.TIMEZONE, 'M/d') + ' 0시에 다시 열림)' : '')); }
-    } catch (e) { note_('폼 닫기 실패 ' + bareTitle_(forms[fid][0]['명단 제목']) + ': ' + e.message); }
-  });
+  // 폼은 자동으로 절대 안 닫음 (사용자 요청 10/21, 10/24 다시). 초과 응답은 한눈에 '확인 필요' 칸에 표시
 }
 
 // 받는 기간이 끝난 진행: 같은 명단 다음 진행일 0시가 지났거나, 같은 캠페인의 더 늦은 진행이 이미 시작함 (명단 시트가 달라도)
@@ -2540,11 +2515,8 @@ function checkFullInner_() {
   step_('진행목록');
   try { removeOldUpdateTrigger_(); } catch (e) {}
   try { normalizeRuns_(); } catch (e) { note_('진행목록 정리 실패: ' + e); }
-  // 밀린 일은 맨 앞에서 먼저 (10/24: 시간이 모자라 뒤에서 못 한 일이 계속 밀리지 않게)
-  //  월급시트: 시작할 때 '할 일'로 적어 두고 끝나야 지움 → 중간에 끊겨도 다음 확인 맨 앞에서 다시
-  try { if (CONFIG.PAY_SHEET_ID && PropertiesService.getScriptProperties().getProperty('PAY_PENDING')) { step_('월급시트(밀린 것)'); updatePay_(); PropertiesService.getScriptProperties().deleteProperty('PAY_PENDING'); } } catch (e) { if (e && e.yieldLock) throw e; note_('월급시트 갱신 실패: ' + e); }
-  //  30분 정리가 1시간 넘게 못 돌았으면 맨 앞에서
-  try { if (Date.now() - Number(PropertiesService.getScriptProperties().getProperty('SLOW_AT') || 0) > 60 * 60000) { step_('정리(밀린 것)'); slowTasks_(); } } catch (e) { if (e && e.yieldLock) throw e; note_('정리 실패: ' + e); }
+  // (10/24) 밀린 월급시트·정리를 맨 앞에서 하던 것 없앰: 월급시트가 6분 안에 안 끝나서 확인이 매번 맨 앞에서 끊겼고,
+  //  그 뒤 일(다음 일차 만들기, 방 공지, 폼 트리거, 보낼 날짜)이 몇 시간 동안 하나도 안 됨. 이제 급한 일 먼저, 월급시트는 끝에서 나눠서 이어 함
   try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
   try { autoNextDay_(); } catch (e) { note_('다음 날 진행 만들기 실패: ' + e); }
   const me = Session.getEffectiveUser().getEmail();
@@ -2754,8 +2726,12 @@ function checkFullInner_() {
     step_('배정 수식'); try { refreshAssignFormulasOnce_(rr); props.setProperty('RUN_SIG', runSig); } catch (e) { note_('배정 수식 갱신 실패: ' + e); }
   }
   if (CONFIG.PAY_SHEET_ID && (slow || props.getProperty('PAY_SIG') !== paySig || props.getProperty('PAY_PENDING'))) {
-    props.setProperty('PAY_PENDING', '1');   // 끝나야 지움 → 중간에 끊기면 다음 확인 맨 앞에서
-    if (!late_(250)) { step_('월급시트'); try { updatePay_(); props.setProperty('PAY_SIG', paySig); props.deleteProperty('PAY_PENDING'); } catch (e) { note_('월급시트 갱신 실패: ' + e); } }
+    props.setProperty('PAY_PENDING', '1');   // 끝나야 지움 → 시간이 모자라면 다음 확인 끝에서 이어서 (한 일은 다시 안 함)
+    if (!late_(250)) {
+      step_('월급시트');
+      try { updatePay_(true); props.setProperty('PAY_SIG', paySig); props.deleteProperty('PAY_PENDING'); }
+      catch (e) { if (e && e.payLate) note_('· 월급시트: 시간이 모자라 다음 확인에서 이어서 해요 (' + e.payLate + ')'); else note_('월급시트 갱신 실패: ' + e); }
+    }
   }
   // 급하지 않은 정리는 30분마다 (시간이 모자라면 다음 확인에서, 1시간 넘게 밀리면 맨 앞에서)
   if (!slow || late_(240)) return;
@@ -6249,8 +6225,14 @@ function payLayout_(sh) {
   return L;
 }
 
-function updatePay_() {
+// resumable(15분 확인에서): 확인 시작부터 300초가 넘으면 한 데까지 적어 두고 멈춤 → 다음 확인이 남은 것부터 (10/24 매번 6분 제한에 끊기던 것)
+function updatePay_(resumable) {
   if (!CONFIG.PAY_SHEET_ID) return;
+  const props = PropertiesService.getScriptProperties();
+  let prog = null;
+  if (resumable) { try { prog = JSON.parse(props.getProperty('PAY_PROG') || 'null'); } catch (e) {} if (!prog || !prog.done) prog = { done: [], post: 0 }; }
+  const stop = function (what) { props.setProperty('PAY_PROG', JSON.stringify(prog)); throw { payLate: what }; };
+  const tooLate = function () { return resumable && late_(300); };
   const all = readRuns_().filter(function (r) { return r['시트ID'] && r['진행일'] instanceof Date; });
   const runs = all.filter(function (r) { return r['진행 상태'] !== '종료'; });
   // 스토어 왼쪽에 '진행일' 칸 (사용자 요청 10/19). 탭마다 한 번 (있으면 그대로)
@@ -6262,6 +6244,9 @@ function updatePay_() {
   const same = function (a, b) { return a && b && (a.indexOf(b) === 0 || b.indexOf(a) === 0); };
   // 같은 상품이 다시 의뢰돼도 섞이지 않게: 이 진행 직전의 '1일차'부터를 한 의뢰로 봄
   runs.forEach(function (r) {
+    const rid = r.row + '|' + nameOf(r);
+    if (prog && prog.done.indexOf(rid) >= 0) return;
+    if (tooLate()) stop('줄 ' + prog.done.length + '/' + runs.length);
     const k = keyOf(r);
     const group = all.filter(function (x) { return same(keyOf(x), k) && x['진행일'] <= r['진행일']; })
       .sort(function (a, b) { return a['진행일'] - b['진행일']; });
@@ -6287,23 +6272,31 @@ function updatePay_() {
       const earlierW = mine.filter(function (x) { return x['진행일'] < r['진행일'] && ym(x['진행일']) === ym(r['진행일']); }).reduce(function (a, x) { return a + gw(x); }, 0);
       writePayRow_(r, nameOf(r), EXP_LINKS.length * 15, prevW, siblings_(all, r).length > 1,
         { store: pick('업체'), time: payTime_(runSlot_(r)), photo: '', earlier: earlierW, mult: expPer_(r) });
+      if (prog) prog.done.push(rid);
       return;
     }
     writePayRow_(r, nameOf(r), total, prev, siblings_(all, r).length > 1,
       { store: pick('업체'), time: fruit ? '자정 ~ 오전 7시' : payTime_(runSlot_(r)), photo: pick('포토'), earlier: earlier });
+    if (prog) prog.done.push(rid);
   });
-  // 캠페인 색은 줄 옮기기(오래 걸림) 전에 (끝에서 하다가 시간이 모자라 색이 빠진 줄이 생김, 10/24)
-  try { payTabsNow_().forEach(payColors_); } catch (e) { note_('월급시트 캠페인 색 실패: ' + e); }
-  try { payDedupe_(all); } catch (e) { note_('월급시트 중복 줄 확인 실패: ' + e); }
-  try { payStatusAll_(all); } catch (e) { note_('월급시트 상태 잇기 실패: ' + e); }
-  // 진행일 칸 채우고 진행일 순서로 줄 정렬 (이번 달, 있으면 다음 달 탭)
-  try { payTabsNow_().forEach(payOrder_); } catch (e) { note_('월급시트 날짜순 정렬 실패: ' + e); }
-  try { payTabsNow_().forEach(payColors_); } catch (e) { note_('월급시트 캠페인 색 실패: ' + e); }
-  try { payRate_(); } catch (e) { note_('월급시트 진행비 500원 바꾸기 실패: ' + e); }
-  // 이번 달 탭(없으면 만듦)과 이미 있는 다음 달 탭에 안 끝난 캠페인 이월 줄
-  try { const m0 = new Date().getMonth() + 1; payTab_(m0); payCarry_(all, m0); payCarry_(all, m0 % 12 + 1); } catch (e) { note_('월급시트 이월 실패: ' + e); }
+  // 줄 다음 정리들도 하나씩 (시간이 모자라면 다음 확인에서 그 단계부터)
+  const post = [
+    function () { payTabsNow_().forEach(payColors_); },
+    function () { payDedupe_(all); },
+    function () { payStatusAll_(all); },
+    function () { payTabsNow_().forEach(payOrder_); },
+    function () { payTabsNow_().forEach(payColors_); },
+    function () { payRate_(); },
+    function () { const m0 = new Date().getMonth() + 1; payTab_(m0); payCarry_(all, m0); payCarry_(all, m0 % 12 + 1); }
+  ];
+  const postName = ['캠페인 색', '중복 줄', '상태', '날짜순 정렬', '캠페인 색', '진행비', '이월'];
+  for (let i = prog ? prog.post : 0; i < post.length; i++) {
+    if (tooLate()) stop(postName[i] + ' 단계');
+    try { post[i](); } catch (e) { note_('월급시트 ' + postName[i] + ' 실패: ' + e); }
+    if (prog) prog.post = i + 1;
+  }
+  if (resumable) props.deleteProperty('PAY_PROG');
 }
-
 // 진행비 = 1건(1명)당 500원, 리뷰비 없음 (사용자 요청 10/18). 이번 달·다음 달 탭만 (지난달 이전은 그대로)
 //  날짜 칸의 진행비는 그날그날 정산: =$G5*BG5(완료보고 × 수량) → =BG5*500 (완료보고와 상관없이 그날 수량 × 500원)
 //  날짜 칸 리뷰비는 비우고, 리뷰비 열은 한 번 숨김. 위쪽 '리뷰비 총액', '금일 리뷰비' 글자와 값도 지우고 '진행비 총액' 값 열은 보이게
