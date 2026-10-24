@@ -1329,6 +1329,14 @@ function diag_(p) {
       return { r: i + 2, id: String(x[0]), idType: typeof x[0], send: x[1] instanceof Date ? f(x[1]) : String(x[1]), kind: x[2], room: x[3], st: x[5], link: link, head: String(x[4]).slice(0, p.full ? 5000 : 60) };
     }) : [];
   } catch (e) { out.outboxErr = String(e); }
+  // 보낼메시지 B열에 수식·검증·필터가 있는지 (10/24 '포토전달대기'가 여러 줄에 퍼진 원인 찾기)
+  try {
+    const ob = outboxSheet_(), ol = ob.getLastRow(), fl = ob.getFilter();
+    out.outboxSheet = { filter: fl ? fl.getRange().getA1Notation() : '', lastRow: ol, maxRows: ob.getMaxRows(), hiddenA: ob.isColumnHiddenByUser(1),
+      bFormulas: ol >= 2 ? ob.getRange(2, 2, ol - 1, 1).getFormulas().map(function (x, i) { return x[0] ? (i + 2) + ':' + x[0] : ''; }).filter(Boolean).slice(0, 50) : [],
+      bValidation: ol >= 2 ? ob.getRange(2, 2, ol - 1, 1).getDataValidations().map(function (x, i) { return x[0] ? (i + 2) + ':' + x[0].getCriteriaType() : ''; }).filter(Boolean).slice(0, 20) : [],
+      bFormats: ol >= 2 ? ob.getRange(2, 2, ol - 1, 1).getNumberFormats().map(function (x) { return x[0]; }).filter(function (x, i, a) { return a.indexOf(x) === i; }) : [] };
+  } catch (e) { out.outboxSheetErr = String(e); }
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
