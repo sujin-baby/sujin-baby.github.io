@@ -390,8 +390,8 @@ async function shotRect(tabId, rc, info) {
   cv.getContext("2d").drawImage(bmp, x, y, w, h, 0, 0, w, h);
   const png = await cv.convertToBlob({ type: "image/png" });
   const safe = (info.name || "").replace(/[\\/:*?"<>|~#%&{}$!'@+`=^]/g, " ").replace(/\s+/g, " ").trim().slice(0, 30).replace(/[.\s]+$/, "");
-  const ft = fileSafe(await recentFn(info));
-  const fn = "체험단_썸네일/" + (ft ? ft + "_위치" : (safe ? safe + "_" : "") + (info.pid || "상품") + "_위치") + ".png";
+  const ft = fileSafe(String(await recentFn(info)).replace("{판매처}", String(info.seller || "").replace(/\s+/g, "")));
+  const fn = "체험단_썸네일/" + (ft ? ft : (safe ? safe + "_" : "") + (info.pid || "상품") + "_위치") + ".png";   /* 폼 제목만 (사용자 요청 10/24) */
   const data = "data:image/png;base64," + b64(await png.arrayBuffer());
   let fn2 = fn, id = null;
   try { id = await chrome.downloads.download({ url: data, filename: fn, conflictAction: "overwrite", saveAs: false }); }
@@ -407,7 +407,7 @@ async function saveThumb(info) {
   if (!info.img) return { t: "썸네일 주소를 못 찾았어요.", warn: true };
   const ext = ((info.img.match(/\.(png|jpe?g|webp|gif)(\?|$)/i) || [])[1] || "jpg").toLowerCase().replace("jpeg", "jpg");
   const safe = (info.name || "").replace(/[\\/:*?"<>|~#%&{}$!'@+`=^]/g, " ").replace(/\s+/g, " ").trim().slice(0, 30).replace(/[.\s]+$/, "");
-  const ft = fileSafe(await recentFn(info));
+  const ft = fileSafe(String(await recentFn(info)).replace("{판매처}", String(info.seller || "").replace(/\s+/g, "")));
   const fn = "체험단_썸네일/" + (ft ? ft : (safe ? safe + "_" : "") + info.pid) + "." + ext;
   try {
     let id = null, fn2 = fn;

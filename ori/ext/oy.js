@@ -432,7 +432,7 @@
   /* 썸네일 저장: PC는 바로 다운로드 폴더에(크롬 설정에서 다운로드 위치를 바탕화면으로 바꾸면 바탕화면), 휴대폰은 [앨범에 저장] → '이미지 저장' */
   if (img) {
     const phone = /iPhone|iPad|Android/i.test(navigator.userAgent);
-    const fbase = fnIn ? fnIn.replace(/[\\/:*?"<>|~%&{}$!'@+`=^]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40) : "thumb_" + pid;   /* 폼 제목 (없으면 상품번호) */
+    const fbase = fnIn ? fnIn.replace("{판매처}", String(typeof seller !== "undefined" ? seller : "").replace(/\s+/g, "")).replace(/[\\/:*?"<>|~%&{}$!'@+`=^]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40) : "thumb_" + pid;   /* 폼 제목 (없으면 상품번호) */
     let blob = null;
     const sv = mk(phone ? "썸네일 앨범에 저장" : "썸네일 저장", async () => {
       if (blob && phone && navigator.canShare) {

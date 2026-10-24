@@ -2528,8 +2528,11 @@ function checkFullInner_() {
   step_('진행목록');
   try { removeOldUpdateTrigger_(); } catch (e) {}
   try { normalizeRuns_(); } catch (e) { note_('진행목록 정리 실패: ' + e); }
-  // 지난 확인에서 시간이 모자라 월급시트를 못 했으면 맨 앞에서 (10/23 정리: 월급시트는 바뀐 게 있을 때만)
-  try { if (CONFIG.PAY_SHEET_ID && PropertiesService.getScriptProperties().getProperty('PAY_PENDING')) { step_('월급시트'); updatePay_(); PropertiesService.getScriptProperties().deleteProperty('PAY_PENDING'); } } catch (e) { if (e && e.yieldLock) throw e; note_('월급시트 갱신 실패: ' + e); }
+  // 밀린 일은 맨 앞에서 먼저 (10/24: 시간이 모자라 뒤에서 못 한 일이 계속 밀리지 않게)
+  //  월급시트: 시작할 때 '할 일'로 적어 두고 끝나야 지움 → 중간에 끊겨도 다음 확인 맨 앞에서 다시
+  try { if (CONFIG.PAY_SHEET_ID && PropertiesService.getScriptProperties().getProperty('PAY_PENDING')) { step_('월급시트(밀린 것)'); updatePay_(); PropertiesService.getScriptProperties().deleteProperty('PAY_PENDING'); } } catch (e) { if (e && e.yieldLock) throw e; note_('월급시트 갱신 실패: ' + e); }
+  //  30분 정리가 1시간 넘게 못 돌았으면 맨 앞에서
+  try { if (Date.now() - Number(PropertiesService.getScriptProperties().getProperty('SLOW_AT') || 0) > 60 * 60000) { step_('정리(밀린 것)'); slowTasks_(); } } catch (e) { if (e && e.yieldLock) throw e; note_('정리 실패: ' + e); }
   try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
   try { autoNextDay_(); } catch (e) { note_('다음 날 진행 만들기 실패: ' + e); }
   const me = Session.getEffectiveUser().getEmail();
@@ -2554,7 +2557,7 @@ function checkFullInner_() {
   if (!props.getProperty('EXPECT_V6')) try { fixExpect6Once_(); } catch (e) { note_('기대평 하루 3명 실패: ' + e); }
   if (!props.getProperty('EXPECT_V7')) try { fixExpect7Once_(); } catch (e) { note_('기대평 이름 되돌리기 실패: ' + e); }
   if (!props.getProperty('TALKDEAL_DATE_V1')) try { talkdealDateOnce_(); } catch (e) { note_('톡딜 진행일 실패: ' + e); }
-  if (!props.getProperty('REDATE_V1')) try { redateNoticesOnce_(); } catch (e) { note_('공지 날짜 바꾸기 실패: ' + e); }
+  if (!props.getProperty('REDATE_V2')) try { redateNoticesOnce_(); } catch (e) { note_('공지 날짜 바꾸기 실패: ' + e); }
   if (!props.getProperty('TALKDEAL_V2')) try { talkdealNoticeOnce_(); } catch (e) { note_('톡딜 공지 다시 넣기 실패: ' + e); }
   if (!props.getProperty('EXPECT_DUP_V1')) try { expectDupOnce_(); } catch (e) { note_('기대평 공지 하나로 실패: ' + e); }
   if (!props.getProperty('TALKDEAL_V1')) try { talkdealOnce_(); } catch (e) { note_('톡딜 넣기 실패: ' + e); }
@@ -2734,25 +2737,29 @@ function checkFullInner_() {
   const runSig = sigOf([Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd'), live.map(function (r) { return [r['명단 제목'], String(r['진행일']), r['시트ID'], r['폼ID'], r['진행 상태']]; })]);
   const paySig = sigOf([runSig, live.map(function (r) { return [r['인원'], r['목표인원'], r['가격'], r['총건수'], r['업체'], r['구매시간']]; })]);
   const slow = Date.now() - Number(props.getProperty('SLOW_AT') || 0) > 30 * 60000;
-  if (CONFIG.PAY_SHEET_ID && (slow || props.getProperty('PAY_SIG') !== paySig)) {
-    if (late_(250)) props.setProperty('PAY_PENDING', '1');   // 시간이 모자라면 다음 확인 맨 앞에서
-    else { step_('월급시트'); try { updatePay_(); props.setProperty('PAY_SIG', paySig); props.deleteProperty('PAY_PENDING'); } catch (e) { note_('월급시트 갱신 실패: ' + e); } }
-  }
   if (slow || props.getProperty('RUN_SIG') !== runSig) {
-    if (!late_(270)) { step_('배정 수식'); try { refreshAssignFormulasOnce_(rr); props.setProperty('RUN_SIG', runSig); } catch (e) { note_('배정 수식 갱신 실패: ' + e); } }
+    step_('배정 수식'); try { refreshAssignFormulasOnce_(rr); props.setProperty('RUN_SIG', runSig); } catch (e) { note_('배정 수식 갱신 실패: ' + e); }
   }
-  // 급하지 않은 정리는 30분마다, 시간이 남을 때만 (6분 넘으면 구글이 중간에 끊음)
+  if (CONFIG.PAY_SHEET_ID && (slow || props.getProperty('PAY_SIG') !== paySig || props.getProperty('PAY_PENDING'))) {
+    props.setProperty('PAY_PENDING', '1');   // 끝나야 지움 → 중간에 끊기면 다음 확인 맨 앞에서
+    if (!late_(250)) { step_('월급시트'); try { updatePay_(); props.setProperty('PAY_SIG', paySig); props.deleteProperty('PAY_PENDING'); } catch (e) { note_('월급시트 갱신 실패: ' + e); } }
+  }
+  // 급하지 않은 정리는 30분마다 (시간이 모자라면 다음 확인에서, 1시간 넘게 밀리면 맨 앞에서)
   if (!slow || late_(240)) return;
   step_('정리');
-  props.setProperty('SLOW_AT', String(Date.now()));
+  slowTasks_(rr, listed);
+}
+// 30분 정리: 다 끝나야 시각을 적음 (중간에 끊기면 다음 확인에서 다시)
+function slowTasks_(rr, listed) {
+  rr = rr || readRuns_(); listed = listed || {};
   try { reviewDone_(readRuns_()); } catch (e) { note_('리뷰 완료 확인 실패: ' + e); }
-  if (late_(270)) return;
   try { listTabsRecent_(rr, listed); } catch (e) { note_('지난 명단 탭 실패: ' + e); }
   try { blackSheet_(); } catch (e) { note_('블랙리스트 탭 만들기 실패: ' + e); }
   try { ensureUsageTab_(); } catch (e) { note_('사용법 탭 만들기 실패: ' + e); }
   try { cleanListSheetsOnce_(rr); } catch (e) { note_('명단 시트 표시 정리 실패: ' + e); }
   try { pruneOutbox_(); } catch (e) { note_('보낸 메시지 정리 실패: ' + e); }
   try { ensureEditTab_(); } catch (e) { note_('폼수정 탭 만들기 실패: ' + e); }
+  PropertiesService.getScriptProperties().setProperty('SLOW_AT', String(Date.now()));
 }
 
 // 명단방 형식 (사장님 예시): 시트 링크 → 빈 줄 → 명단 제목
@@ -3165,7 +3172,12 @@ function sendDate_(room, msg, kind) {
   if (!t) return today;
   const p = t.split('.'), m = Number(p[0]), d = Number(p[1]), cur = now.getMonth() + 1;
   let day = new Date(now.getFullYear() + (m < cur - 6 ? 1 : m > cur + 6 ? -1 : 0), m - 1, d);
-  // 방 공지도 진행일 그날 (10/24: 다음 일차가 진행일 0시에 만들어져서 그날 보냄. 예전엔 전날)
+  // 방 공지(폼 링크 있는 것)는 전 진행일 (월요일 진행이면 금요일, 사용자 요청 10/24)
+  if (kind === '방 공지' && /forms\.gle\/|docs\.google\.com\/forms\//.test(String(msg || '')) && !/리뷰내용 가이드/.test(String(msg || '').slice(0, 40))) {
+    let x = new Date(day.getTime() - 86400000);
+    for (let i = 0; i < 10 && !isWorkday_(x); i++) x = new Date(x.getTime() - 86400000);
+    day = x;
+  }
   if (day < today && kind === '방 공지') day = today;
   return day;
 }
@@ -5845,8 +5857,10 @@ function makeDueDays_() {
       x[3] = dayW; x[4] = retitleDate_(x[4], dayW); x[5] = retitleDate_(x[5], dayW);
       sh.getRange(i + 2, 4, 1, 3).setValues([[dayW, x[4], x[5]]]);
     }
-    // 진행일 0시에 만듦 (사용자 요청 10/23: 전날 오전 10시·앞 일차 마감 때 말고 그냥 자정에. 0시 예약 확인이 바로 만듦)
-    const due = new Date(dayW); due.setHours(0, 0, 0, 0);
+    // 전 진행일 0시에 만듦 (사용자 요청 10/24: 월요일 진행이면 금요일 0시. 0시 예약 확인이 바로 만듦)
+    const due = new Date(dayW); due.setHours(12, 0, 0, 0);
+    do { due.setDate(due.getDate() - 1); } while (!isWorkday_(due));
+    due.setHours(0, 0, 0, 0);
     if (now < due) return;
     locked_(function () {
       if (findRunByRequest_(x[0])) { sh.getRange(i + 2, 9).setValue('생성됨'); return; }
@@ -7248,11 +7262,11 @@ function pruneOutbox_() {
   for (let i = v.length - 1; i >= 0; i--) if (v[i][5] === '보냄' && v[i][1] instanceof Date && v[i][1].getTime() < cut) { ob.deleteRow(i + 2); n++; }
   if (n) note_('✓ 보낸 지 오래된 메시지 ' + n + '줄 지움');
 }
-// (10/24 한 번) 안 보낸 방 공지의 보낼 날짜를 진행일(방 이름 날짜)로 (예전 규칙은 전날이라 10/26 공지가 10/23에 있었음)
+// (10/24 한 번) 안 보낸 방 공지의 보낼 날짜를 지금 규칙(전 진행일)으로 다시
 function redateNoticesOnce_() {
   const props = PropertiesService.getScriptProperties();
-  if (props.getProperty('REDATE_V1')) return;
-  props.setProperty('REDATE_V1', '1');
+  if (props.getProperty('REDATE_V2')) return;
+  props.setProperty('REDATE_V2', '1');
   const ob = outboxSheet_(), last = ob.getLastRow();
   if (last < 2) return;
   const v = ob.getRange(2, 1, last - 1, 6).getValues();
@@ -7263,7 +7277,7 @@ function redateNoticesOnce_() {
     if (d.getTime() !== dayStart_(x[1])) { obSet_(ob, x[0], 2, d); n++; }
   });
   sortOutbox_(ob);
-  note_('✓ 방 공지 보낼 날짜를 진행일로: ' + n + '줄');
+  note_('✓ 방 공지 보낼 날짜를 전 진행일로: ' + n + '줄');
 }
 // (10/24 한 번) 10/24 톡딜 방 공지가 보낼메시지에 없으면 다시 넣음
 function talkdealNoticeOnce_() {
