@@ -39,6 +39,7 @@ function oyThumb(text) {
 async function autoRun(url, gt) {
   if (busy && Date.now() - busySince < 12 * 60000) { pushGen({ status: "이미 찾는 중이에요. 끝나고 다시 눌러 주세요." }); return; }
   pushGen({ status: "상품 페이지 여는 중…" });
+  await keepFn(fnOf(String(url).split("#")[1] || ""));   /* 단축 링크는 넘어가며 #을 버려서 미리 기억 */
   const t = await chrome.tabs.create({ url: url, active: false, windowId: gt.windowId, index: gt.index + 1 });
   autoTab = t.id;
   try {
@@ -364,6 +365,15 @@ const gageom = (lo, hi) => "가검" + (lo === hi ? lo : lo + "~" + hi);
 
 /* ---------- 상품 위치 캡처 저장: 검색 화면에서 찾은 칸을 빨간 테두리로, 상품명·가격이 보이게 잘라서 다운로드 폴더에 (사용자 요청 10/21) ---------- */
 const b64 = buf => { let s = ""; const a = new Uint8Array(buf); for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode.apply(null, a.subarray(i, i + 0x8000)); return btoa(s); };
+/* 썸네일·캡처 파일 이름 = 폼 제목 (생성기가 주소 뒤 &fn= 으로 넘김: '# 실링팬', '#택 과일쏙 대봉감', 사용자 요청 10/24). 2시간 안에 받은 이름을 씀 */
+const fnOf = h => { const m = String(h || "").match(/(?:^|&)fn=([^&]+)/); try { return m ? decodeURIComponent(m[1]) : ""; } catch (e) { return ""; } };
+async function keepFn(fn) { if (fn) await chrome.storage.local.set({ lastFn: { fn: fn, at: Date.now() } }); }
+async function recentFn(info) {
+  if (info && info.fn) return info.fn;
+  const o = (await chrome.storage.local.get("lastFn")).lastFn;
+  return o && Date.now() - o.at < 2 * 3600000 ? o.fn : "";
+}
+const fileSafe = s => String(s || "").replace(/[\\/:*?"<>|~%&{}$!'@+`=^]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40).replace(/[.\s]+$/, "");
 async function shotRect(tabId, rc, info) {
   if (!rc || !(rc.w > 0)) return null;
   const tab = await chrome.tabs.get(tabId);
@@ -380,7 +390,8 @@ async function shotRect(tabId, rc, info) {
   cv.getContext("2d").drawImage(bmp, x, y, w, h, 0, 0, w, h);
   const png = await cv.convertToBlob({ type: "image/png" });
   const safe = (info.name || "").replace(/[\\/:*?"<>|~#%&{}$!'@+`=^]/g, " ").replace(/\s+/g, " ").trim().slice(0, 30).replace(/[.\s]+$/, "");
-  const fn = "체험단_썸네일/" + (safe ? safe + "_" : "") + (info.pid || "상품") + "_위치.png";
+  const ft = fileSafe(await recentFn(info));
+  const fn = "체험단_썸네일/" + (ft ? ft + "_위치" : (safe ? safe + "_" : "") + (info.pid || "상품") + "_위치") + ".png";
   const data = "data:image/png;base64," + b64(await png.arrayBuffer());
   let fn2 = fn, id = null;
   try { id = await chrome.downloads.download({ url: data, filename: fn, conflictAction: "overwrite", saveAs: false }); }
@@ -396,7 +407,8 @@ async function saveThumb(info) {
   if (!info.img) return { t: "썸네일 주소를 못 찾았어요.", warn: true };
   const ext = ((info.img.match(/\.(png|jpe?g|webp|gif)(\?|$)/i) || [])[1] || "jpg").toLowerCase().replace("jpeg", "jpg");
   const safe = (info.name || "").replace(/[\\/:*?"<>|~#%&{}$!'@+`=^]/g, " ").replace(/\s+/g, " ").trim().slice(0, 30).replace(/[.\s]+$/, "");
-  const fn = "체험단_썸네일/" + (safe ? safe + "_" : "") + info.pid + "." + ext;
+  const ft = fileSafe(await recentFn(info));
+  const fn = "체험단_썸네일/" + (ft ? ft : (safe ? safe + "_" : "") + info.pid) + "." + ext;
   try {
     let id = null, fn2 = fn;
     try { id = await chrome.downloads.download({ url: info.img, filename: fn, conflictAction: "overwrite", saveAs: false }); }
@@ -440,6 +452,7 @@ async function run(tab) {
   if (site === "naver") return naverProduct(tab, info);
   PER = 36;
   const h = await tabHash(tab);
+  if (fnOf(h)) { info.fn = fnOf(h); await keepFn(info.fn); }
   const hk = (h.match(/(?:^|&)kw=([^&]+)/) || [])[1], hp = Number((h.match(/(?:^|&)pr=(\d+)/) || [])[1] || 0);
   const kws = (hk ? decodeURIComponent(hk).split("|") : suggest(info.name)).map(x => x.trim()).filter(Boolean).slice(0, 4);
   const price = hp || info.price || 0;
@@ -499,6 +512,7 @@ const won = n => Number(n).toLocaleString("ko-KR");
 
 async function naverProduct(tab, info) {
   const h = await tabHash(tab);
+  if (fnOf(h)) { info.fn = fnOf(h); await keepFn(info.fn); }
   const hk = (h.match(/(?:^|&)kw=([^&]+)/) || [])[1], hp = Number((h.match(/(?:^|&)pr=(\d+)/) || [])[1] || 0);
   const kws = (hk ? decodeURIComponent(hk).split("|") : suggest(info.name)).map(x => x.trim()).filter(Boolean).slice(0, 4);
   const price = hp || info.price || 0;

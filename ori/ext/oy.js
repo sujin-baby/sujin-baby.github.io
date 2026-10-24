@@ -318,6 +318,10 @@
   if (!opt) opt = "단일옵션";
   const hk = (L.hash.match(/kw=([^&]+)/) || [])[1];
   const hp = Number((L.hash.match(/pr=(\d+)/) || [])[1] || 0);
+  /* 썸네일 파일 이름 = 폼 제목 (생성기가 &fn= 으로 넘김, 사용자 요청 10/24). 주소에서 #이 빠졌으면 복사해 둔 주소에서 */
+  let fnIn = "";
+  try { fnIn = decodeURIComponent((L.hash.match(/fn=([^&]+)/) || [])[1] || ""); } catch (e) {}
+  if (!fnIn) { try { const cb0 = ((await navigator.clipboard.readText()) || ""); fnIn = decodeURIComponent((cb0.match(/[#&]fn=([^&\s]+)/) || [])[1] || ""); } catch (e) {} }
   /* 키워드: 생성기 [상품 페이지 열기]가 주소 뒤(#kw=)에 붙여 줌. 쿠팡 단축 링크가 넘어가면서 #을 버리면, 그 버튼이 복사해 둔 의뢰서 키워드(클립보드)를 씀. 상품명에 들어 있는 낱말이 있을 때만 */
   let kwIn = hk ? decodeURIComponent(hk) : "", kwFrom = hk ? "생성기" : "";
   if (!kwIn) {
@@ -428,7 +432,7 @@
   /* 썸네일 저장: PC는 바로 다운로드 폴더에(크롬 설정에서 다운로드 위치를 바탕화면으로 바꾸면 바탕화면), 휴대폰은 [앨범에 저장] → '이미지 저장' */
   if (img) {
     const phone = /iPhone|iPad|Android/i.test(navigator.userAgent);
-    const fbase = "thumb_" + pid;   /* 한글 파일 이름은 브라우저가 버릴 때가 있어서 상품번호로 */
+    const fbase = fnIn ? fnIn.replace(/[\\/:*?"<>|~%&{}$!'@+`=^]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40) : "thumb_" + pid;   /* 폼 제목 (없으면 상품번호) */
     let blob = null;
     const sv = mk(phone ? "썸네일 앨범에 저장" : "썸네일 저장", async () => {
       if (blob && phone && navigator.canShare) {

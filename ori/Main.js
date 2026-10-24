@@ -2554,6 +2554,9 @@ function checkFullInner_() {
   if (!props.getProperty('EXPECT_V6')) try { fixExpect6Once_(); } catch (e) { note_('기대평 하루 3명 실패: ' + e); }
   if (!props.getProperty('EXPECT_V7')) try { fixExpect7Once_(); } catch (e) { note_('기대평 이름 되돌리기 실패: ' + e); }
   if (!props.getProperty('TALKDEAL_DATE_V1')) try { talkdealDateOnce_(); } catch (e) { note_('톡딜 진행일 실패: ' + e); }
+  if (!props.getProperty('REDATE_V1')) try { redateNoticesOnce_(); } catch (e) { note_('공지 날짜 바꾸기 실패: ' + e); }
+  if (!props.getProperty('TALKDEAL_V2')) try { talkdealNoticeOnce_(); } catch (e) { note_('톡딜 공지 다시 넣기 실패: ' + e); }
+  if (!props.getProperty('EXPECT_DUP_V1')) try { expectDupOnce_(); } catch (e) { note_('기대평 공지 하나로 실패: ' + e); }
   if (!props.getProperty('TALKDEAL_V1')) try { talkdealOnce_(); } catch (e) { note_('톡딜 넣기 실패: ' + e); }
   if (!props.getProperty('ANKLEDUP_V1')) try { fixAnkleDupOnce_(readRuns_()); } catch (e) { note_('발목무압박 중복 정리 실패: ' + e); }
   if (!props.getProperty('CEIL2_V1')) try { fixCeilingOnce_(readRuns_()); } catch (e) { note_('실링팬 하루 인원 실패: ' + e); }
@@ -2748,6 +2751,7 @@ function checkFullInner_() {
   try { blackSheet_(); } catch (e) { note_('블랙리스트 탭 만들기 실패: ' + e); }
   try { ensureUsageTab_(); } catch (e) { note_('사용법 탭 만들기 실패: ' + e); }
   try { cleanListSheetsOnce_(rr); } catch (e) { note_('명단 시트 표시 정리 실패: ' + e); }
+  try { pruneOutbox_(); } catch (e) { note_('보낸 메시지 정리 실패: ' + e); }
   try { ensureEditTab_(); } catch (e) { note_('폼수정 탭 만들기 실패: ' + e); }
 }
 
@@ -3161,11 +3165,8 @@ function sendDate_(room, msg, kind) {
   if (!t) return today;
   const p = t.split('.'), m = Number(p[0]), d = Number(p[1]), cur = now.getMonth() + 1;
   let day = new Date(now.getFullYear() + (m < cur - 6 ? 1 : m > cur + 6 ? -1 : 0), m - 1, d);
-  if (kind === '방 공지' && /forms\.gle\/|docs\.google\.com\/forms\//.test(String(msg || '')) && !/리뷰내용 가이드/.test(String(msg || '').slice(0, 40))) {
-    let x = new Date(day.getTime() - 86400000);
-    for (let i = 0; i < 10 && !isWorkday_(x); i++) x = new Date(x.getTime() - 86400000);
-    day = x < today ? today : x;
-  }
+  // 방 공지도 진행일 그날 (10/24: 다음 일차가 진행일 0시에 만들어져서 그날 보냄. 예전엔 전날)
+  if (day < today && kind === '방 공지') day = today;
   return day;
 }
 
@@ -6214,6 +6215,8 @@ function updatePay_() {
     writePayRow_(r, nameOf(r), total, prev, siblings_(all, r).length > 1,
       { store: pick('업체'), time: fruit ? '자정 ~ 오전 7시' : payTime_(runSlot_(r)), photo: pick('포토'), earlier: earlier });
   });
+  // 캠페인 색은 줄 옮기기(오래 걸림) 전에 (끝에서 하다가 시간이 모자라 색이 빠진 줄이 생김, 10/24)
+  try { payTabsNow_().forEach(payColors_); } catch (e) { note_('월급시트 캠페인 색 실패: ' + e); }
   try { payDedupe_(all); } catch (e) { note_('월급시트 중복 줄 확인 실패: ' + e); }
   try { payStatusAll_(all); } catch (e) { note_('월급시트 상태 잇기 실패: ' + e); }
   // 진행일 칸 채우고 진행일 순서로 줄 정렬 (이번 달, 있으면 다음 달 탭)
@@ -6568,7 +6571,7 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '24';
+const DASH_VER = '25';
 const DASH_LIST_DAYS = 2;   // 아래 명단 덩어리를 보여 줄 지난 날 수   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
@@ -6720,13 +6723,15 @@ function buildDashboard_(force) {
   const fmt = function (t) { return 'DATE(' + Utilities.formatDate(new Date(t), CONFIG.TIMEZONE, 'yyyy,M,d') + ')'; };
   runs.forEach(function (r, i) {
     const rr = i + 2, x = sheets['b' + i];
-    sh.getRange(rr, 1, 1, 5).setValues([[r['진행일'], String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''), dashStatus_(r), Number(r['총건수']) || '', r['목표인원']]]);
+    // 기대평은 건수로 (의뢰 총건수 405, 그날 목표·신청 = 사람 × 그 주 건수, 사용자 요청 10/24)
+    const per = isExpect_(r) ? expPer_(r) : 1;
+    sh.getRange(rr, 1, 1, 5).setValues([[r['진행일'], String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''), dashStatus_(r), isExpect_(r) ? EXP_LINKS.length * 15 : (Number(r['총건수']) || ''), (Number(r['목표인원']) || 0) * per || r['목표인원']]]);
     const w = windowOf_(allRuns, r);
     const ts = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A' + x.start + ':A') + ')';
     // 명단 시트 하나를 여러 날이 같이 쓰면 그날 몫(진행일 0시 ~ 다음 진행 0시)만 셈
     sh.getRange(rr, 6).setFormula(w.shared
-      ? '=IFERROR(LET(v,' + ts + ',SUMPRODUCT(ISNUMBER(v)*(v>=' + (w.from ? fmt(w.from) : 0) + ')*(v<' + (isFinite(w.to) ? fmt(w.to) : 99999) + '))),"허용 필요")'
-      : '=IFERROR(SUMPRODUCT(ISNUMBER(' + ts + ')),"허용 필요")');   // 응답 없는 새 명단 시트는 빈 글자("")가 와서 COUNTA면 1로 셈 → 날짜(타임스탬프)만 셈
+      ? '=IFERROR(' + (per > 1 ? per + '*' : '') + 'LET(v,' + ts + ',SUMPRODUCT(ISNUMBER(v)*(v>=' + (w.from ? fmt(w.from) : 0) + ')*(v<' + (isFinite(w.to) ? fmt(w.to) : 99999) + '))),"허용 필요")'
+      : '=IFERROR(' + (per > 1 ? per + '*' : '') + 'SUMPRODUCT(ISNUMBER(' + ts + ')),"허용 필요")');   // 응답 없는 새 명단 시트는 빈 글자("")가 와서 COUNTA면 1로 셈 → 날짜(타임스탬프)만 셈
     sh.getRange(rr, 7).setFormula('=IF(ISNUMBER(F' + rr + '),E' + rr + '-F' + rr + ',"")');
     sh.getRange(rr, 8).setValue(r['마감 시각']);
     sh.getRange(rr, 9).setFormula('=HYPERLINK(' + q(x.url) + ',"명단")');
@@ -7133,7 +7138,7 @@ function fixWongoOnce_() {
 }
 
 // (10/23 한 번) 10/24(토) 카카오톡딜 구확건: 다른 진행자분 폼으로 진행 (우리 폼·명단 시트 없음) → 방 공지·구매확정 안내를 보낼메시지에, 월급시트에 50건 줄
-function talkdealOnce_() {
+function talkdealOnce_(skipGuide) {
   const props = PropertiesService.getScriptProperties();
   if (props.getProperty('TALKDEAL_V1')) return;
   props.setProperty('TALKDEAL_V1', '1');
@@ -7146,7 +7151,7 @@ function talkdealOnce_() {
     '🐥상품명 :[환절기선물]6년근 장홍삼 에브리데이 홍삼스틱 110포(대용량)/100포(선물용)', '🐥상품번호 :316704778', '🐥★키워드 :홍삼스틱', '🐥위치:1p',
     '🐥옵션:1. 장홍삼 110포', '🐥가격:24,900'].join('\n');
   queueMsg_(room, notice, '방 공지');
-  queueMsg_(room, '🐥리뷰내용 가이드🐥 : 구매확정\n\n🐥🐥🐥🐥🐥🐥🐥🐥🐥🐥', '방 공지');
+  if (!skipGuide) queueMsg_(room, '🐥리뷰내용 가이드🐥 : 구매확정\n\n🐥🐥🐥🐥🐥🐥🐥🐥🐥🐥', '방 공지');
   // 월급시트: 우리 명단 시트가 없어서 링크 칩 없이 직접 한 줄 (수량 50 = 계획. 실제 산 수가 다르면 날짜 칸만 고치기)
   try {
     const day = new Date(2026, 9, 24), sh = payTab_(10), L = payLayout_(sh);
@@ -7231,4 +7236,66 @@ function fixExpect7Once_() {
       if (String(v[6]) === sid && String(v[0]) !== t27 && bareTitle_(v[0]) !== title) as.getRange(i + 2, 1).setValue(title);
     });
   } catch (e) {}
+}
+
+// 보낼메시지: 보냄 체크하고 보낼 날짜가 2일 넘게 지난 줄은 지움 (탭이 너무 길어짐, 사용자 요청 10/24). 30분마다
+function pruneOutbox_() {
+  const ob = outboxSheet_(), last = ob.getLastRow();
+  if (last < 3) return;
+  const cut = today_().getTime() - 2 * 86400000;
+  const v = ob.getRange(2, 1, last - 1, 6).getValues();
+  let n = 0;
+  for (let i = v.length - 1; i >= 0; i--) if (v[i][5] === '보냄' && v[i][1] instanceof Date && v[i][1].getTime() < cut) { ob.deleteRow(i + 2); n++; }
+  if (n) note_('✓ 보낸 지 오래된 메시지 ' + n + '줄 지움');
+}
+// (10/24 한 번) 안 보낸 방 공지의 보낼 날짜를 진행일(방 이름 날짜)로 (예전 규칙은 전날이라 10/26 공지가 10/23에 있었음)
+function redateNoticesOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('REDATE_V1')) return;
+  props.setProperty('REDATE_V1', '1');
+  const ob = outboxSheet_(), last = ob.getLastRow();
+  if (last < 2) return;
+  const v = ob.getRange(2, 1, last - 1, 6).getValues();
+  let n = 0;
+  v.forEach(function (x) {
+    if (x[2] !== '방 공지' || x[5] === '보냄' || !(x[1] instanceof Date)) return;
+    const d = sendDate_(x[3], x[4], x[2]);
+    if (d.getTime() !== dayStart_(x[1])) { obSet_(ob, x[0], 2, d); n++; }
+  });
+  sortOutbox_(ob);
+  note_('✓ 방 공지 보낼 날짜를 진행일로: ' + n + '줄');
+}
+// (10/24 한 번) 10/24 톡딜 방 공지가 보낼메시지에 없으면 다시 넣음
+function talkdealNoticeOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('TALKDEAL_V2')) return;
+  props.setProperty('TALKDEAL_V2', '1');
+  const ob = outboxSheet_(), last = ob.getLastRow();
+  const v = last >= 2 ? ob.getRange(2, 1, last - 1, 6).getValues() : [];
+  if (v.some(function (x) { return /316704778/.test(String(x[4])) && /양식 작성 폼/.test(String(x[4])); })) return;
+  props.deleteProperty('TALKDEAL_V1');
+  // talkdealOnce_가 공지·구매확정 안내·월급시트 줄을 다시 (구매확정 안내·월급시트 줄은 있으면 안 넣음)
+  const room = '#10.24 5시 톡딜 홍삼스틱 50';
+  const hasGuide = v.some(function (x) { return String(x[3]) === room && /구매확정/.test(String(x[4])); });
+  talkdealOnce_(hasGuide);
+  note_('✓ 10/24 톡딜 방 공지 다시 넣음');
+}
+// (10/24 한 번) 기대평 방 공지가 2개 → 지금 공지(1주차 글)와 같은 것 하나만 남기고 안 보낸 나머지는 지움
+function expectDupOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('EXPECT_DUP_V1')) return;
+  const r = readRuns_().filter(function (x) { return String(x['요청ID']) === 'exp-100-4' && x['진행 상태'] !== '종료'; })[0];
+  if (!r) return;
+  props.setProperty('EXPECT_DUP_V1', '1');
+  const room = String(r['카톡방'] || bareTitle_(r['명단 제목'])), link = String(r['폼 링크']);
+  const want = expNotice_('A').split('(구글폼 링크)').join(link);
+  const ob = outboxSheet_(), last = ob.getLastRow();
+  if (last < 2) return;
+  const v = ob.getRange(2, 1, last - 1, 6).getValues();
+  const mine = v.map(function (x, i) { return { x: x, i: i }; }).filter(function (o) { return o.x[2] === '방 공지' && o.x[5] !== '보냄' && String(o.x[4]).indexOf(link) >= 0; });
+  if (mine.length <= 1) return;
+  let keep = mine.filter(function (o) { return String(o.x[4]) === want; })[0] || mine[0];
+  obSet_(ob, keep.x[0], 4, room);
+  mine.filter(function (o) { return o !== keep; }).map(function (o) { return o.i; }).sort(function (a, b) { return b - a; }).forEach(function (i) { ob.deleteRow(i + 2); });
+  note_('✓ 기대평 방 공지 하나만 남김 (' + (mine.length - 1) + '개 지움)');
 }
