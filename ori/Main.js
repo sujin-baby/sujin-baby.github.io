@@ -3182,6 +3182,28 @@ function outboxSheet_() {
 //  같은 번호가 두 줄이면 번호로 고치는 칸(보낼 날짜 등)이 엉뚱한 줄에 써짐 → 10/24 방 공지에 '포토전달대기'가 들어간 것)
 // (10/24 원인 찾기) 보낼메시지 보낼 날짜 고침·정렬 추적 → ?p=diag 의 obTrace
 function obTrace_(t) { try { const c = CacheService.getScriptCache(); let a = []; try { a = JSON.parse(c.get('OB_TRACE') || '[]'); } catch (e) {} a.push(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'HH:mm:ss') + ' ' + t); c.put('OB_TRACE', JSON.stringify(a.slice(-80)), 21600); } catch (e) {} }
+function repairObCells_(sh, bad) {
+  const same = function (a, b) { return (a instanceof Date ? a.getTime() : String(a)) === (b instanceof Date ? b.getTime() : String(b)); };
+  const fmt = function (w) { return w instanceof Date ? 'M/d (ddd)' : '@'; };
+  let left = bad.slice();
+  // 1) 칸 서식 지우고 다시 쓰기
+  left = left.filter(function (b) { const c = sh.getRange(b.row, 2); try { c.clearFormat(); c.setNumberFormat(fmt(b.want)); c.setValue(b.want); SpreadsheetApp.flush(); } catch (e) { obTrace_('서식 지우기 실패 ' + b.row + ' ' + e); } const ok = same(c.getValue(), b.want); obTrace_('서식 지우고 씀 줄' + b.row + ' → ' + (ok ? '됨' : '안 됨: ' + c.getValue())); return !ok; });
+  // 2) 칸 비우고 다시 쓰기
+  left = left.filter(function (b) { const c = sh.getRange(b.row, 2); try { c.clear(); c.setNumberFormat(fmt(b.want)); c.setValue(b.want); SpreadsheetApp.flush(); } catch (e) { obTrace_('비우기 실패 ' + b.row + ' ' + e); } const ok = same(c.getValue(), b.want); obTrace_('비우고 씀 줄' + b.row + ' → ' + (ok ? '됨' : '안 됨: ' + c.getValue())); return !ok; });
+  if (!left.length) return;
+  // 3) 필터를 잠깐 빼고 쓰고, 같은 범위·조건으로 다시 걸기
+  const f = sh.getFilter();
+  if (!f) { obTrace_('필터 없음, 그래도 안 되는 줄: ' + left.map(function (b) { return b.row; }).join(',')); return; }
+  const a1 = f.getRange().getA1Notation(), cols = f.getRange().getNumColumns(), col0 = f.getRange().getColumn(), crit = [];
+  for (let j = 0; j < cols; j++) { try { const k = f.getColumnFilterCriteria(col0 + j); if (k) crit.push([col0 + j, k]); } catch (e) {} }
+  try {
+    f.remove(); SpreadsheetApp.flush();
+    left.forEach(function (b) { const c = sh.getRange(b.row, 2); c.setNumberFormat(fmt(b.want)); c.setValue(b.want); });
+    SpreadsheetApp.flush();
+    left.forEach(function (b) { obTrace_('필터 빼고 씀 줄' + b.row + ' → ' + (same(sh.getRange(b.row, 2).getValue(), b.want) ? '됨' : '안 됨: ' + sh.getRange(b.row, 2).getValue())); });
+  } catch (e) { obTrace_('필터 빼고 쓰기 실패 ' + e); }
+  try { const nf = sh.getRange(a1).createFilter(); crit.forEach(function (k) { nf.setColumnFilterCriteria(k[0], k[1]); }); obTrace_('필터 다시 걺 ' + a1 + ' 조건 ' + crit.length + '개'); } catch (e) { obTrace_('필터 다시 걸기 실패 ' + e); note_('⚠ 보낼메시지 필터를 다시 못 걸었어요. 종류 칸 필터를 다시 걸어 주세요'); }
+}
 function newObId_() { return 'm' + Utilities.getUuid().replace(/-/g, '').slice(0, 12); }
 function dedupeObIds_(sh) {
   const last = sh.getLastRow();
@@ -3304,6 +3326,10 @@ function sortOutbox_(sh) {
       const back = sh.getRange(2, 1, sorted.length, 2).getValues(), diff = [];
       sorted.forEach(function (x, i) { const a = x[1] instanceof Date ? x[1].getTime() : String(x[1]), b = back[i][1] instanceof Date ? back[i][1].getTime() : String(back[i][1]); if (a !== b || String(back[i][0]) !== String(x[0])) diff.push((i + 2) + ':' + x[0] + ' 씀=' + (x[1] instanceof Date ? 'D' : x[1]) + ' 읽음=' + (back[i][1] instanceof Date ? 'D' : back[i][1]) + (String(back[i][0]) !== String(x[0]) ? ' 번호다름' : '')); });
       obTrace_('정렬 ' + sorted.length + '줄' + (diff.length ? ' 안 맞음: ' + diff.slice(0, 12).join(', ') : ' 맞음'));
+      // 써도 안 바뀌는 보낼 날짜 칸 고치기 (10/24: B14:B17에 날짜를 써도 '포토전달대기'로 남음). 칸 서식 지우기 → 칸 비우기 → (그래도 안 되면) 필터 잠깐 빼고 쓰기, 단계마다 기록
+      const bad = [];
+      sorted.forEach(function (x, i) { const a = x[1] instanceof Date ? x[1].getTime() : String(x[1]), b = back[i][1] instanceof Date ? back[i][1].getTime() : String(back[i][1]); if (a !== b && String(back[i][0]) === String(x[0])) bad.push({ row: i + 2, want: x[1] }); });
+      if (bad.length) repairObCells_(sh, bad);
     } catch (e) { obTrace_('정렬 추적 실패 ' + e); }
   }
 }
