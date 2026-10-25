@@ -5050,8 +5050,13 @@ function rvFolder_(mine, props, sid) {
   return { parent: parent, img: img };
 }
 function rvZip_(f, name, props, sid) {
-  const files = [], it = f.img.getFiles();
-  while (it.hasNext()) { const x = it.next(); if (/^image\//.test(x.getMimeType())) files.push(x); }
+  // 리뷰이미지 폴더 바로 안 사진 + 그 안 폴더(날짜별·카톡 저장 폴더째 올린 것)의 사진까지 (10/25: 폴더째 올리면 안 셌음)
+  const files = [], walk = function (fo, depth) {
+    const it = fo.getFiles();
+    while (it.hasNext()) { const x = it.next(); if (/^image\//.test(x.getMimeType())) files.push(x); }
+    if (depth < 3) { const fi = fo.getFolders(); while (fi.hasNext()) walk(fi.next(), depth + 1); }
+  };
+  walk(f.img, 0);
   if (!files.length) return;
   const sig = files.length + ':' + files.reduce(function (m, x) { return Math.max(m, x.getLastUpdated().getTime()); }, 0);
   if (props.getProperty('RVZIP_' + sid) === sig) return;
