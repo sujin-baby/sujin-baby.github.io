@@ -1633,8 +1633,11 @@ function createRunInner_(d) {
 // 폼의 '옵션' 질문 보기를 이번 가이드 옵션으로 바꿈 (예전 템플릿은 '단일옵션' 하나뿐이라 다 단일옵션으로 들어왔음)
 // 옵션이 숫자만('1', '1 (21,800원)')이면 '단일옵션' (의뢰서 '구매옵션 : 1' = 1개, 사용자 요청 10/20)
 function optDigits_(x) { return String(x).replace(/^\s*\d+\s*(개|ea)?\s*(?=\(|$)/i, '단일옵션 ').replace(/\s+$/, ''); }
+// 폼 옵션 보기에는 가격을 안 붙임 (사용자 요청 10/25: 로켓배송은 가격이 매일 바뀌어서 폼 가격과 실제 결제가 달라 폼을 두 번 쓰는 사람이 생김). 가격은 방 공지에만
+const OPT_PRICE_RE = /\s*\(\s*[\d,]+\s*원\s*\)\s*$/;
 function setOptionChoices_(form, opts) {
-  const list = String(opts || '').split('\n').map(function (x) { return optDigits_(x.trim()); }).filter(Boolean);
+  const list = String(opts || '').split('\n').map(function (x) { return optDigits_(x.trim().replace(OPT_PRICE_RE, '')); })
+    .filter(function (x, i, a) { return x && a.indexOf(x) === i; });
   if (!list.length) return;
   form.getItems().forEach(function (it) {
     if (!/옵션/.test(it.getTitle())) return;
@@ -2669,6 +2672,7 @@ function checkFullInner_() {
   if (!props.getProperty('MORNING_FA_V1')) { props.setProperty('MORNING_FA_V1', '1'); try { const ob = outboxSheet_(), ol = ob.getLastRow(); if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (v[2] === '할 일' && v[5] !== '보냄' && /^🌅 새벽 점검 \(10\/24/.test(String(v[4]))) obSet_(ob, v[0], 6, '보냄'); }); } catch (e) {} }   // 10/24 밤 첫 점검의 잘못된 알림(예전 월급시트 안내를 문제로 셈) 치움
   if (!props.getProperty('EXPPLAN_V8')) try { expPlanRestoreOnce_(); } catch (e) { note_('기대평 일정 되살리기 실패: ' + e); }
   if (!props.getProperty('EXPPLAN_CLEAN_V1')) try { expPlanCleanOnce_(); } catch (e) { note_('기대평 옛 일정 지우기 실패: ' + e); }
+  if (!props.getProperty('FORMNOPRICE_V1')) try { formNoPriceOnce_(); } catch (e) { note_('폼 옵션 가격 빼기 실패: ' + e); }
   if (!props.getProperty('BUYU_PHOTO_V1')) { props.setProperty('BUYU_PHOTO_V1', '1'); props.setProperty('RVSENT_' + campKey_('#택10.21 써니마켓 부유단감 5') + '_10.21', '1'); note_('✓ 부유단감 10.21 포토 전달됨으로 표시 (사용자 확인)'); }
   if (!props.getProperty('SENT1026_V1')) try { sent1026Once_(); } catch (e) { note_('10.26 공지 보냄 처리 실패: ' + e); }
   if (!props.getProperty('REOPEN_V1')) try { reopenClosedOnce_(); } catch (e) { note_('닫힌 폼 다시 열기 실패: ' + e); }
@@ -7767,6 +7771,25 @@ function expPlanRestoreOnce_() {
     ps.getRange(i + 2, 9).setValue('대기'); n.push(bareTitle_(x[4]));
   });
   note_('✓ 기대평 일정 되살림 (전 진행일 0시에 진행·공지가 만들어짐): ' + (n.join(', ') || '없음'));
+}
+// (10/25 한 번, 사용자 요청) 지금 받는 폼들의 옵션 보기에서 가격 '(10,630원)' 빼기 (끝나지 않은 진행의 폼)
+function formNoPriceOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FORMNOPRICE_V1')) return;
+  props.setProperty('FORMNOPRICE_V1', '1');
+  const seen = {}, done = [];
+  readRuns_().forEach(function (r) {
+    const fid = String(r['폼ID'] || '');
+    if (!fid || seen[fid] || r['진행 상태'] === '종료') return;
+    seen[fid] = 1;
+    try {
+      const fo = FormApp.openById(fid), cur = formChoices_(fo);
+      if (!cur.some(function (c) { return OPT_PRICE_RE.test(String(c)); })) return;
+      setOptionChoices_(fo, cur.join('\n'));
+      done.push(bareTitle_(r['명단 제목']) + ' (' + formChoices_(fo).join(', ') + ')');
+    } catch (e) { note_('폼 옵션 가격 빼기 실패 ' + bareTitle_(r['명단 제목']) + ': ' + e); }
+  });
+  note_('✓ 폼 옵션 보기에서 가격 뺌 ' + done.length + '개' + (done.length ? ': ' + done.join(' / ') : ''));
 }
 // (10/25 한 번, 사용자 허락) 일정 탭의 기대평 옛 계획 줄 지우기: 10/23~24에 계획을 다시 만들며 남은 exp-100-1/2/3 '취소 (다시 만듦)', exp-100-4 '건너뜀' (지금 쓰는 exp-100-4-v5-*는 그대로)
 function expPlanCleanOnce_() {
