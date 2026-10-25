@@ -1326,7 +1326,7 @@ function rvExplain_() {
         const sp = [], spIt = DriveApp.getFileById(sid).getParents(); while (spIt.hasNext()) sp.push(spIt.next().getName());
         o.folder = { name: fo.getName(), up: names(fo.getParents()), sub: names(fo.getFolders()), files: names(fo.getFiles()), sheetName: DriveApp.getFileById(sid).getName(), sheetIn: sp };
         const ri = fo.getFoldersByName(RV_IMG_FOLDER);
-        if (ri.hasNext()) { const rf = ri.next(), subs = [], si = rf.getFolders(); while (si.hasNext()) { const x = si.next(); subs.push(x.getName() + ' ' + imgs(x) + '장'); } o.folder.rvImg = { direct: imgs(rf), subs: subs }; }
+        if (ri.hasNext()) { const rf = ri.next(), subs = [], si = rf.getFolders(); while (si.hasNext()) { const x = si.next(), kinds = {}, fi = x.getFiles(), ff = x.getFolders(), inner = []; while (fi.hasNext()) { const m = fi.next().getMimeType(); kinds[m] = (kinds[m] || 0) + 1; } while (ff.hasNext()) { const y = ff.next(); inner.push(y.getName() + ' ' + imgs(y) + '장'); } subs.push(x.getName() + ' ' + imgs(x) + '장 ' + JSON.stringify(kinds) + (inner.length ? ' 안쪽 폴더: ' + inner.join(', ') : '')); } o.folder.rvImg = { direct: imgs(rf), subs: subs }; }
         o.folder.zipKey = props.getProperty('RVZIP_' + sid) || '';
       }
     } catch (e) { o.folderErr = String(e); }
