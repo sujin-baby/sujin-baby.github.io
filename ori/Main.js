@@ -1411,6 +1411,11 @@ function diag_(p) {
     });
   } catch (e) { out.pnErr = String(e); }
   if (p.rv) try { out.rvExplain = rvExplain_(); } catch (e) { out.rvErr = String(e); }
+  // &fo=1: 끝나지 않은 진행 폼의 옵션 보기 (읽기만)
+  if (p.fo) try {
+    const seen = {}; out.formOpts = [];
+    readRuns_().forEach(function (r) { const fid = String(r['폼ID'] || ''); if (!fid || seen[fid] || r['진행 상태'] === '종료') return; seen[fid] = 1; try { out.formOpts.push(bareTitle_(r['명단 제목']) + ': ' + formChoices_(FormApp.openById(fid)).join(' / ')); } catch (e) { out.formOpts.push(bareTitle_(r['명단 제목']) + ': ' + e); } });
+  } catch (e) { out.foErr = String(e); }
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
