@@ -2534,7 +2534,7 @@ function checkFull() {
   locked_(function () {
     ran = true;
     try { checkFullInner_(); } catch (e) {
-      if (e && e.yieldLock) { note_('✓ 새 진행 만들기 먼저 하게 확인을 잠깐 멈춤 (1분 뒤 이어서)'); try { soonCheck_(); } catch (e2) {} }
+      if (e && e.yieldLock) { note_('✓ 직접 하신 일(폼수정 탭·새 진행 만들기 등) 먼저 하게 확인을 잠깐 멈춤 (1분 뒤 이어서)'); try { soonCheck_(); } catch (e2) {} }
       else note_('멈춤: ' + (e && e.message || e));
     }
   }, 120000);
@@ -2648,7 +2648,10 @@ function checkFullInner_() {
   try { normalizeRuns_(); } catch (e) { note_('진행목록 정리 실패: ' + e); }
   // (10/24) 밀린 월급시트·정리를 맨 앞에서 하던 것 없앰: 월급시트가 6분 안에 안 끝나서 확인이 매번 맨 앞에서 끊겼고,
   //  그 뒤 일(다음 일차 만들기, 방 공지, 폼 트리거, 보낼 날짜)이 몇 시간 동안 하나도 안 됨. 이제 급한 일 먼저, 월급시트는 끝에서 나눠서 이어 함
+  // 단계를 잘게 나눠서 폼수정 탭 삭제 같은 직접 하는 일이 덜 기다리게 (10/26 '진행목록' 단계가 126초 걸려 삭제가 2분 늦음)
+  step_('다음 일차');
   try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
+  step_('다음 날 진행');
   try { autoNextDay_(); } catch (e) { note_('다음 날 진행 만들기 실패: ' + e); }
   const me = Session.getEffectiveUser().getEmail();
   const props = PropertiesService.getScriptProperties();
