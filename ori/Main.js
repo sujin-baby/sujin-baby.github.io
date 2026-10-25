@@ -4790,7 +4790,7 @@ function ensureSubmitTriggers_(runs) {
     const k = t.getHandlerFunction() + '|' + t.getEventType() + '|' + (t.getTriggerSourceId() || '');
     if (seen[k]) { ScriptApp.deleteTrigger(t); cleaned++; } else seen[k] = 1;
   });
-  if (cleaned > 0) { note_('· 다 돈 예약·겹친 트리거 ' + cleaned + '개 지움'); all = ScriptApp.getProjectTriggers(); }
+  if (cleaned > 0) { note_('✓ 다 돈 예약·겹친 트리거 ' + cleaned + '개 지움'); all = ScriptApp.getProjectTriggers(); }
   // 2) 폼 트리거: 남는 자리만큼 (1분 뒤·0시 예약을 새로 걸 자리 2개는 비워 둠)
   const room = Math.max(0, 20 - all.filter(function (t) { return !isFormT(t); }).length - 2);
   const t0 = today_().getTime();
