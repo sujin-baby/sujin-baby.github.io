@@ -2861,7 +2861,10 @@ function checkFullInner_() {
 // 30분 정리: 다 끝나야 시각을 적음 (중간에 끊기면 다음 확인에서 다시)
 function slowTasks_(rr, listed) {
   rr = rr || readRuns_(); listed = listed || {};
+  const rvN = function () { return Object.keys(PropertiesService.getScriptProperties().getProperties()).filter(function (k) { return /^(RVDONE_|RVRPT_)/.test(k); }).length; }, rv0 = rvN();
   try { reviewDone_(readRuns_()); } catch (e) { note_('리뷰 완료 확인 실패: ' + e); }
+  // 그날 리뷰가 다 확인된 방이 새로 생기면 한눈에 '리뷰 취합할 것'에 바로 보이게 다시 그림 (전엔 한눈에를 먼저 그려서 15~30분 늦게 떴음, 10/25)
+  if (rvN() !== rv0 && !late_(300)) { try { buildDashboard_(false); } catch (e) { note_('한눈에 탭 실패: ' + e); } }
   try { listTabsRecent_(rr, listed); } catch (e) { note_('지난 명단 탭 실패: ' + e); }
   try { blackSheet_(); } catch (e) { note_('블랙리스트 탭 만들기 실패: ' + e); }
   try { ensureUsageTab_(); } catch (e) { note_('사용법 탭 만들기 실패: ' + e); }
@@ -4591,7 +4594,7 @@ function onAdminEdit(e) {
   //  (예전엔 30초만 기다리고 조용히 안 해서 공지 붙여넣기가 배정에 안 들어갔음, 10/20)
   const sh0 = e.range.getSheet(), nm0 = sh0.getName(), a10 = e.range.getA1Notation();
   const action = (nm0 === EDIT_TAB && /^(B1|E1|E2|G2|I2)$/.test(a10)) || (nm0 === CONFIG.LIST_SHEET && e.range.getColumn() === lc_('진행일')) ||
-    (nm0 === DASH_TAB && (e.range.getColumn() === 2 || e.range.getColumn() === 13));
+    (nm0 === DASH_TAB && (e.range.getColumn() === 2 || e.range.getColumn() === 13)) || (nm0 === DASH_TAB && e.range.getColumn() === 1 && isRvRow_(e.range.getRow()));
   if (!action) return;
   const props = PropertiesService.getScriptProperties();
   if (nm0 === EDIT_TAB && a10 !== 'B1') { try { sh0.getRange('G1').setValue('⏳ 처리 중… (자동 확인이 돌고 있으면 1~2분 걸려요)'); } catch (err) {} }
@@ -4604,6 +4607,11 @@ function onAdminEdit(e) {
     try { if (nm0 === EDIT_TAB) sh0.getRange('G1').setValue(msg); else e.source.toast(msg, '체험단', 10); } catch (err) {}
   }
   return out;
+}
+
+// 한눈에 '리뷰 취합할 것' 체크칸 줄인지 (10/25: 이 칸이 위 목록에 없어서 체크해도 진행목록에 저장이 안 됐음)
+function isRvRow_(row) {
+  try { return !!JSON.parse(PropertiesService.getScriptProperties().getProperty('DASH_RV') || '{}')[String(row)]; } catch (e) { return false; }
 }
 
 function onAdminEditInner_(e) {
@@ -4655,6 +4663,7 @@ function onAdminEditInner_(e) {
       if (it.type === 'day') { const r = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === it.title; }).pop(); if (r) setRun_(r.row, '리뷰 취합', val); }
       else runs.filter(function (x) { return String(x['시트ID']) === String(it.sid); }).forEach(function (x) { setRun_(x.row, '업체 전송', val); });
       try { sh.getRange(e.range.getRow(), 3).setValue(val).setNumberFormat('M/d'); } catch (err) {}
+      try { e.source.toast(on ? '체크한 날 저장했어요 (3일 뒤 이 줄은 사라져요)' : '체크 풀었어요', '리뷰 취합', 8); } catch (err) {}
       return;
     }
   }
@@ -6934,6 +6943,25 @@ function rvItems_(allRuns, props) {
   });
   return items;
 }
+// 한눈에 '리뷰 취합할 것' 체크칸 상태 → 진행목록 '리뷰 취합'/'업체 전송' (편집 트리거가 못 받은 체크도 다시 그릴 때 저장. 10/25 # 10.15 고구마말랭이 체크가 안 남았음)
+function syncRvChecks_(ss, allRuns, props) {
+  let m = {}; try { m = JSON.parse(props.getProperty('DASH_RV') || '{}'); } catch (e) { return; }
+  const sh = ss.getSheetByName(DASH_TAB);
+  if (!sh) return;
+  Object.keys(m).forEach(function (row) {
+    const it = m[row], v = sh.getRange(Number(row), 1, 1, 2).getValues()[0];
+    if (typeof v[0] !== 'boolean') return;   // 체크칸이 아니면(줄이 바뀜) 안 건드림
+    if (it.type === 'day' ? String(v[1]).trim() !== it.title : String(v[1]).indexOf('📦') !== 0) return;   // 다른 줄이면 안 건드림
+    const col = it.type === 'day' ? '리뷰 취합' : '업체 전송';
+    const mine = it.type === 'day' ? allRuns.filter(function (x) { return bareTitle_(x['명단 제목']) === it.title; }).slice(-1) : allRuns.filter(function (x) { return String(x['시트ID']) === String(it.sid); });
+    mine.forEach(function (r) {
+      if (v[0] === (r[col] instanceof Date)) return;
+      const val = v[0] ? today_() : '';
+      setRun_(r.row, col, val); r[col] = val;
+      note_('✓ 리뷰 취합 체크 ' + (v[0] ? '저장' : '풀림') + ': ' + bareTitle_(r['명단 제목']) + ' (' + col + ')');
+    });
+  });
+}
 const DASH_LIST_DAYS = 2;   // 아래 명단 덩어리를 보여 줄 지난 날 수   // 모양을 바꾸면 올려서 다시 만들게 함
 
 function rebuildDashboard() {
@@ -6964,6 +6992,7 @@ function buildDashboard_(force) {
     });
   const props = PropertiesService.getScriptProperties();
   const ss = adminSs_();
+  try { syncRvChecks_(ss, allRuns, props); } catch (e) {}
   // 명단 시트(의뢰)마다 한 덩어리. 명단 탭(여러 날 폼 응답을 합친 것)이 있으면 거기서 가져옴
   let sheets = {}, order = [];
   runs.forEach(function (r) {
