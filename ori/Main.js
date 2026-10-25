@@ -1328,6 +1328,9 @@ function rvExplain_() {
         const ri = fo.getFoldersByName(RV_IMG_FOLDER);
         if (ri.hasNext()) { const rf = ri.next(), subs = [], si = rf.getFolders(); while (si.hasNext()) { const x = si.next(), kinds = {}, fi = x.getFiles(), ff = x.getFolders(), inner = []; while (fi.hasNext()) { const m = fi.next().getMimeType(); kinds[m] = (kinds[m] || 0) + 1; } while (ff.hasNext()) { const y = ff.next(); inner.push(y.getName() + ' ' + imgs(y) + '장'); } subs.push(x.getName() + ' ' + imgs(x) + '장 ' + JSON.stringify(kinds) + (inner.length ? ' 안쪽 폴더: ' + inner.join(', ') : '')); } o.folder.rvImg = { direct: imgs(rf), subs: subs }; }
         o.folder.zipKey = props.getProperty('RVZIP_' + sid) || '';
+        // 압축 파일 안 모양 (폴더별 사진 수)
+        const zi = fo.getFiles(); o.folder.zips = [];
+        while (zi.hasNext()) { const z = zi.next(); if (!/\.zip$/i.test(z.getName())) continue; const dirs = {}; try { Utilities.unzip(z.getBlob()).forEach(function (b) { const d = String(b.getName()).indexOf('/') > 0 ? String(b.getName()).split('/')[0] : '(맨 위)'; dirs[d] = (dirs[d] || 0) + 1; }); } catch (e) { dirs.err = String(e); } o.folder.zips.push(z.getName() + ' ' + JSON.stringify(dirs)); }
       }
     } catch (e) { o.folderErr = String(e); }
     try {
@@ -5030,7 +5033,7 @@ function reviewDone_(runs) {
         props.setProperty(k, '1');
         if (init) return;
         queueMsg_(String(r['카톡방'] || bareTitle_(r['명단 제목'])), '취완', '취완');
-        queueMsg_('내 할 일', '[' + bareTitle_(r['명단 제목']) + '] 그날 리뷰가 다 확인됐어요 → 리뷰 사진 취합하기 (명단 폴더 › 리뷰이미지에 모으면 압축까지 자동)', '할 일');   // 사용자 요청 10/21
+        queueMsg_('내 할 일', '[' + bareTitle_(r['명단 제목']) + '] 그날 리뷰가 다 확인됐어요 → 리뷰 사진 취합하기 (명단 폴더 › 리뷰이미지 › 이 방 폴더 안에 포토·텍스트·별점 폴더로 나눠 올리면, 의뢰가 다 끝날 때 캠페인명.zip으로 자동 압축)', '할 일');   // 사용자 요청 10/21
         note_('✓ 취완 메시지 넣음: ' + bareTitle_(r['명단 제목']));
       });
       // A-2. 의뢰 전체 끝 + 전부 체크 → 사장님 보고
@@ -5043,8 +5046,8 @@ function reviewDone_(runs) {
         if (!init) queueMsg_('사장님', '안녕하세요 ' + name + ' 리뷰완료되어 보고드립니다 !', '리뷰 보고');
         if (!init) note_('✓ 사장님 리뷰 완료 보고 넣음: ' + name);
       }
-      // B1. 리뷰이미지 폴더 사진 → 압축
-      if (folder) rvZip_(folder, name, props, sid);
+      // B1. 의뢰 리뷰가 다 끝나면 리뷰이미지 폴더 사진 → 종류별 압축 (사용자 요청 10/26: 다 끝난 뒤에 한 번에 업체로)
+      if (folder && props.getProperty(rk)) rvZip_(folder, name, props, sid, rvExpect_(sid, mine));
     } catch (e) { note_('리뷰 완료 확인 실패 ' + sid + ': ' + e.message); }
   });
   if (init) props.setProperty('RVDONE_INIT', '1');
@@ -5061,37 +5064,64 @@ function rvFolder_(mine, props, sid) {
   note_('✓ 리뷰 이미지 폴더 만듦: ' + parent.getName() + '/' + RV_IMG_FOLDER);
   return { parent: parent, img: img };
 }
-function rvZip_(f, name, props, sid) {
-  // 리뷰이미지 폴더 바로 안 사진 + 그 안 폴더(날짜별·카톡 저장 폴더째 올린 것)의 사진까지 (10/25: 폴더째 올리면 안 셌음)
-  const files = [], walk = function (fo, depth) {
-    const it = fo.getFiles();
-    while (it.hasNext()) { const x = it.next(); if (/^image\//.test(x.getMimeType())) files.push(x); }
-    if (depth < 3) { const fi = fo.getFolders(); while (fi.hasNext()) walk(fi.next(), depth + 1); }
+// 리뷰 사진 압축 (사용자 요청 10/26): 의뢰 리뷰가 다 끝나면(RVRPT_) 리뷰이미지 폴더의 사진을 종류별로 모아
+//  '캠페인명.zip' 안에 '포토 N' / '텍스트 N' / '별점 N' 폴더로. 종류는 사진이 들어 있는 폴더 이름(포토·텍스트·별점으로 시작)으로 앎
+//  (방마다 폴더 안에 포토/텍스트/별점 폴더, 또는 포토/텍스트/별점 폴더 안에 방 폴더 둘 다 됨). 사진 내용은 안 봄
+const RV_TYPES = ['포토', '텍스트', '별점'];
+function rvTypeOf_(folderName) { const m = String(folderName || '').trim().match(/^(포토|텍스트|별점)/); return m ? m[1] : ''; }
+// 의뢰서(생성기 리뷰 정보 RV_)의 종류별 개수 → 압축 개수와 다르면 할 일에 알림. 모르면 null
+function rvExpect_(sid, mine) {
+  let rv = {}; try { rv = JSON.parse(PropertiesService.getScriptProperties().getProperty('RV_' + sid) || '{}') || {}; } catch (e) {}
+  const total = mine.reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0), out = { 포토: 0, 텍스트: 0, 별점: 0 };
+  if (rv.kind === 'confirm') return null;
+  if (rv.kind === 'text') { out['텍스트'] = total; return total ? out : null; }
+  if (rv.kind === 'photo' || rv.kind === 'self') { out['포토'] = total; return total ? out : null; }
+  const prods = parseRvMix_(rv.mix);
+  if (!prods.length) return null;
+  prods.forEach(function (p) { p.mix.forEach(function (m) { out[/^별점/.test(m.label) ? '별점' : /^(포토|사진)/.test(m.label) ? '포토' : '텍스트'] += m.n; }); });
+  return out;
+}
+function rvZip_(f, name, props, sid, expect) {
+  const byType = { 포토: [], 텍스트: [], 별점: [] }, loose = [], looseIn = {};
+  const walk = function (fo, depth, type) {
+    const t = rvTypeOf_(fo.getName()) || type, it = fo.getFiles();
+    while (it.hasNext()) { const x = it.next(); if (!/^image\//.test(x.getMimeType())) continue; if (t) byType[t].push(x); else { loose.push(x); looseIn[fo.getName()] = (looseIn[fo.getName()] || 0) + 1; } }
+    if (depth < 4) { const fi = fo.getFolders(); while (fi.hasNext()) walk(fi.next(), depth + 1, t); }
   };
-  walk(f.img, 0);
-  if (!files.length) return;
-  const sig = files.length + ':' + files.reduce(function (m, x) { return Math.max(m, x.getLastUpdated().getTime()); }, 0);
+  walk(f.img, 0, '');
+  const files = byType['포토'].concat(byType['텍스트'], byType['별점']);
+  if (!files.length && !loose.length) return;
+  const cnt = RV_TYPES.map(function (t) { return t + ' ' + byType[t].length; });
+  const sig = cnt.join(',') + ':' + loose.length + ':' + files.concat(loose).reduce(function (m, x) { return Math.max(m, x.getLastUpdated().getTime()); }, 0);
   if (props.getProperty('RVZIP_' + sid) === sig) return;
+  const base = String(name).replace(/\s*\(응답\)\s*$/, '').replace(/\s*\d+\s*$/, '').trim(), zipName = base + '.zip';
+  const warn = [];
+  if (loose.length) warn.push('⚠ 포토·텍스트·별점 폴더에 안 들어간 사진 ' + loose.length + '장은 안 넣었어요 (' + Object.keys(looseIn).map(function (k) { return k + ' ' + looseIn[k] + '장'; }).join(', ') + ') → 종류 폴더로 옮기면 다시 압축돼요');
+  if (expect) { const diff = RV_TYPES.filter(function (t) { return expect[t] !== byType[t].length; }); if (diff.length) warn.push('⚠ 의뢰서 개수와 달라요: ' + diff.map(function (t) { return t + ' 의뢰서 ' + expect[t] + ' / 사진 ' + byType[t].length; }).join(', ')); }
+  props.setProperty('RVZIP_' + sid, sig);
+  if (!files.length) { note_(base + ' 리뷰 사진이 포토·텍스트·별점 폴더에 없어서 압축 못 함 (' + loose.length + '장)'); return; }
   const size = files.reduce(function (a, x) { return a + x.getSize(); }, 0);
-  if (size > 45 * 1024 * 1024) { note_(name + ' 리뷰 이미지가 너무 커서(' + Math.round(size / 1048576) + 'MB) 압축 못 함. 나눠서 올려 주세요'); props.setProperty('RVZIP_' + sid, sig); return; }
-  const zipName = name.replace(/\s*\d+\s*$/, '').trim() + '.zip';
-  const used = {};
-  const blobs = files.map(function (x) { let n = x.getName(); while (used[n]) n = '_' + n; used[n] = 1; return x.getBlob().setName(n); });
+  if (size > 45 * 1024 * 1024) { note_(base + ' 리뷰 사진이 너무 커서(' + Math.round(size / 1048576) + 'MB) 압축 못 함. 나눠서 올려 주세요'); return; }
+  const used = {}, blobs = [];
+  RV_TYPES.forEach(function (t) {
+    if (!byType[t].length) return;
+    byType[t].forEach(function (x) { let n = t + ' ' + byType[t].length + '/' + x.getName(); while (used[n]) n = n.replace(/\/([^/]*)$/, '/_$1'); used[n] = 1; blobs.push(x.getBlob().setName(n)); });
+  });
   const old = f.parent.getFilesByName(zipName);
   while (old.hasNext()) old.next().setTrashed(true);
   const zip = f.parent.createFile(Utilities.zip(blobs, zipName));
-  props.setProperty('RVZIP_' + sid, sig);
-  const msg = '[' + name + '] 리뷰 이미지 ' + files.length + '장 압축했어요 → 받아서 사장님 톡에 보고 문구와 같이 보내기\n' + zip.getUrl();
-  // 안 보낸 '할 일'이 있으면 새 링크로 바꿈
+  const head = '[' + base + '] 리뷰 압축';
+  const msg = head + ': ' + cnt.join(' · ') + ' → 받아서 업체에 보내기\n' + zip.getUrl() + (warn.length ? '\n' + warn.join('\n') : '');
+  // 안 보낸 '할 일'이 있으면 새 링크로 바꿈 (예전 문구 '[명단 시트 이름] 리뷰 이미지'도)
   const ob = outboxSheet_(), ol = ob.getLastRow();
   let done = false;
-  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v, i) { if (!done && v[2] === '할 일' && v[5] !== '보냄' && String(v[4]).indexOf('[' + name + '] 리뷰 이미지') === 0) { obSet_(ob, v[0], 5, msg); done = true; } });
+  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { const t = String(v[4]); if (!done && v[2] === '할 일' && v[5] !== '보냄' && (t.indexOf(head) === 0 || t.indexOf('[' + name + '] 리뷰 이미지') === 0)) { obSet_(ob, v[0], 5, msg); done = true; } });
   if (!done) queueMsg_('사장님', msg, '할 일');
-  note_('✓ 리뷰 이미지 압축: ' + zipName + ' (' + files.length + '장)');
+  note_('✓ 리뷰 압축: ' + zipName + ' (' + cnt.join(' · ') + ')' + (warn.length ? ' ' + warn.join(' ') : ''));
 }
 
 /* ---------------- 사용법 탭 (맨 앞, 사용자 요청 10/20). 글을 바꾸면 USAGE_VER를 올림 → 다시 씀 ---------------- */
-const USAGE_TAB = '사용법', USAGE_VER = '12';
+const USAGE_TAB = '사용법', USAGE_VER = '13';
 const USAGE_ROWS = [
   ['체험단 관리 시트 사용법', '(스크립트가 쓰는 탭이라 여기 고친 글은 다음 업데이트 때 다시 써져요)'],
   ['', ''],
@@ -5120,7 +5150,7 @@ const USAGE_ROWS = [
   ['잘못 산 사람·방 나간 사람', '폼수정 탭 B1에서 진행 고르기 → 그 응답 체크 → 삭제 실행. 그날 안이면 폼이 다시 열려 다른 사람을 받음'],
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
   ['리뷰 완료 (취완)', '명단 시트 "명단" 탭 맨 오른쪽 "리뷰 확인" 체크칸에 체크 → 그 방 사람 전부 체크되면 보낼메시지에 그 방 "취완", 의뢰 전체가 끝나고 전부 체크되면 사장님 보고 문구'],
-  ['리뷰 이미지 압축', '카톡 사진 전체 저장 → 의뢰 폴더(진행목록 "폴더 링크") 안 "리뷰이미지" 폴더에 올리기 → 압축 파일(명단 시트 이름.zip)이 생기고 보낼메시지 "할 일"에 링크 → 받아서 사장님 톡에 첨부'],
+  ['리뷰 사진 압축', '방마다 리뷰 캡처를 의뢰 폴더(진행목록 "폴더 링크") 안 "리뷰이미지"에 올리기: 방 폴더 안에 "포토", "텍스트", "별점" 폴더로 나눠서 → 의뢰 리뷰가 다 끝나면 캠페인명.zip(안에 포토 N / 텍스트 N / 별점 N 폴더)이 생기고 보낼메시지 "할 일"(사장님)에 링크 → 받아서 업체에 보내기. 종류 폴더 밖 사진·의뢰서와 다른 개수는 할 일에 ⚠로 알려 줌'],
   ['블랙리스트 사람이 폼을 냄', '한눈에 "확인 필요" 칸에 ⛔ + 메일 → 폼수정 탭에서 그 응답 지우기'],
   ['명단이 안 보임', '메뉴 체험단 도구 → 지금 명단 마감 확인 (명단 탭만 바로 새로고침, 나머지는 1분 뒤 자동)'],
   ['화면이 이상함', '메뉴 → 지금 최신 버전으로 업데이트 → 한눈에 탭 새로 만들기'],
