@@ -1317,6 +1317,19 @@ function rvExplain_() {
   Object.keys(bySheet).forEach(function (sid) {
     const mine = bySheet[sid].sort(function (a, b) { return a['진행일'] - b['진행일']; });
     const o = { sheet: sid.slice(0, 10), runs: mine.map(function (r) { return bareTitle_(r['명단 제목']); }), listv: !!props.getProperty('LISTV_' + sid) };
+    // 의뢰 폴더(진행목록 '폴더 링크')와 그 안 '리뷰이미지' 폴더에 사진이 어떻게 들어 있는지 (읽기만)
+    try {
+      const fl = (String((mine.filter(function (x) { return x['폴더 링크']; })[0] || {})['폴더 링크'] || '').match(/[-\w]{25,}/) || [])[0];
+      if (fl) {
+        const fo = DriveApp.getFolderById(fl), names = function (it) { const a = []; while (it.hasNext()) a.push(it.next().getName()); return a; };
+        const imgs = function (f) { let n = 0; const it = f.getFiles(); while (it.hasNext()) if (/^image\//.test(it.next().getMimeType())) n++; return n; };
+        const sp = [], spIt = DriveApp.getFileById(sid).getParents(); while (spIt.hasNext()) sp.push(spIt.next().getName());
+        o.folder = { name: fo.getName(), up: names(fo.getParents()), sub: names(fo.getFolders()), files: names(fo.getFiles()), sheetName: DriveApp.getFileById(sid).getName(), sheetIn: sp };
+        const ri = fo.getFoldersByName(RV_IMG_FOLDER);
+        if (ri.hasNext()) { const rf = ri.next(), subs = [], si = rf.getFolders(); while (si.hasNext()) { const x = si.next(); subs.push(x.getName() + ' ' + imgs(x) + '장'); } o.folder.rvImg = { direct: imgs(rf), subs: subs }; }
+        o.folder.zipKey = props.getProperty('RVZIP_' + sid) || '';
+      }
+    } catch (e) { o.folderErr = String(e); }
     try {
       const sh = SpreadsheetApp.openById(sid).getSheetByName(LIST_TAB);
       if (!sh) { o.why = '명단 탭 없음'; out.push(o); return; }
