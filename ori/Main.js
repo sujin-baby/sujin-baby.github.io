@@ -1310,6 +1310,33 @@ function autoGo(){
 }
 </script>`;
 
+// (읽기만) 진행마다 리뷰 확인 체크가 몇 개 됐는지 = reviewDone_와 같은 방법으로 셈 (한눈에 '리뷰 취합할 것'에 왜 안 뜨는지 보기)
+function rvExplain_() {
+  const props = PropertiesService.getScriptProperties(), runs = readRuns_(), cut = today_().getTime() - 40 * 86400000, out = [], bySheet = {};
+  runs.forEach(function (r) { if (r['시트ID'] && !isExpect_(r) && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut) (bySheet[r['시트ID']] = bySheet[r['시트ID']] || []).push(r); });
+  Object.keys(bySheet).forEach(function (sid) {
+    const mine = bySheet[sid].sort(function (a, b) { return a['진행일'] - b['진행일']; });
+    const o = { sheet: sid.slice(0, 10), runs: mine.map(function (r) { return bareTitle_(r['명단 제목']); }), listv: !!props.getProperty('LISTV_' + sid) };
+    try {
+      const sh = SpreadsheetApp.openById(sid).getSheetByName(LIST_TAB);
+      if (!sh) { o.why = '명단 탭 없음'; out.push(o); return; }
+      const lc = Math.max(sh.getLastColumn(), 1), hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_), cT = hdr.indexOf('타임스탬프');
+      if (cT < 0 || sh.getLastRow() < 3) { o.why = '타임스탬프 칸 없음/빈 시트'; out.push(o); return; }
+      const v = sh.getRange(3, 1, sh.getLastRow() - 2, lc).getValues(), nt = sh.getRange(3, cT + 1, sh.getLastRow() - 2, 1).getNotes();
+      const live = v.map(function (x, i) { return x[cT] instanceof Date && !nt[i][0] ? i : -1; }).filter(function (i) { return i >= 0; });
+      const isChk = function (c) { return live.every(function (i) { return typeof v[i][c] === 'boolean'; }); };
+      const rc = rvCol_(sh, lc); let cc = rc > 0 && isChk(rc - 1) ? rc - 1 : -1;
+      for (let c = lc - 1; cc < 0 && c >= 0; c--) if (isChk(c)) cc = c;
+      o.checkCol = cc >= 0 ? colLetter_(cc + 1) : '없음(모든 줄이 체크칸인 칸을 못 찾음)';
+      o.days = mine.map(function (r) {
+        const w = windowOf_(runs, r), rows = live.filter(function (i) { const t = v[i][cT].getTime(); return t >= w.from && t < w.to; });
+        return bareTitle_(r['명단 제목']) + ': ' + rows.filter(function (i) { return cc >= 0 && v[i][cc] === true; }).length + '/' + rows.length + ' 체크, 마감=' + (r['마감 시각'] instanceof Date) + ', RVDONE=' + !!props.getProperty('RVDONE_' + String(r['명단 제목']).replace(/\s+/g, ''));
+      });
+    } catch (e) { o.why = String(e); }
+    out.push(o);
+  });
+  return out;
+}
 // 읽기 전용 점검 데이터. 시트·폼·속성을 읽기만 함 (쓰기·정렬·트리거 변경 없음)
 function diag_(p) {
   const tz = CONFIG.TIMEZONE, f = function (d, fmt) { return d instanceof Date ? Utilities.formatDate(d, tz, fmt || 'yyyy-MM-dd') : d; };
@@ -1370,11 +1397,13 @@ function diag_(p) {
       return { room: room, plan: !!made, outbox: !!have, same: !!made && !!have && !diff, diff: diff };
     });
   } catch (e) { out.pnErr = String(e); }
+  if (p.rv) try { out.rvExplain = rvExplain_(); } catch (e) { out.rvErr = String(e); }
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
     ['PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
+    keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
   } catch (e) { out.propsErr = String(e); }
   try { out.reports = JSON.parse(CacheService.getScriptCache().get('REPORT_LOG') || '[]'); } catch (e) { out.reportsErr = String(e); }
