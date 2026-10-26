@@ -1447,6 +1447,15 @@ function diag_(p) {
   } catch (e) { out.respErr = String(e); }
   // &rvj=글자: 진행 제목에 그 글자가 든 의뢰의 리뷰 정보(RV_: 종류·개수·가이드) (읽기만)
   if (p.rvj) try { const pr = PropertiesService.getScriptProperties(), seen = {}; out.rvj = []; readRuns_().forEach(function (r) { const sid = String(r['시트ID'] || ''); if (!sid || seen[sid] || String(r['명단 제목']).indexOf(String(p.rvj)) < 0) return; seen[sid] = 1; out.rvj.push(bareTitle_(r['명단 제목']) + ' | ' + String(pr.getProperty('RV_' + sid) || '').slice(0, 600)); }); } catch (e) { out.rvjErr = String(e); }
+  // &payhead=1: 월급시트(이달) 위쪽 머리 줄과 맨 아래 합계 줄의 값·수식, 완료보고(H)를 쓰는 수식 (진행비 총액이 어떻게 나오는지 보기, 읽기만)
+  if (p.payhead) try {
+    const sh = payTab_(today_().getMonth() + 1), L = payLayout_(sh), lc = Math.min(sh.getLastColumn(), 30), last = sh.getLastRow();
+    const dump = function (r) { const dv = sh.getRange(r, 1, 1, lc).getDisplayValues()[0], fm = sh.getRange(r, 1, 1, lc).getFormulas()[0]; return r + ': ' + dv.map(function (v, j) { return (v || fm[j]) ? colLetter_(j + 1) + '=' + v + (fm[j] ? '{' + fm[j] + '}' : '') : ''; }).filter(Boolean).join(' | '); };
+    out.payHead = { tab: sh.getName(), L: L, top: [1, 2, 3, 4, 5].filter(function (r) { return r <= last; }).map(dump), bottom: [last - 1, last].filter(function (r) { return r > 5; }).map(dump) };
+    const all = sh.getRange(1, 1, last, Math.min(sh.getLastColumn(), 120)).getFormulas(), refs = [];
+    all.forEach(function (row, i) { row.forEach(function (f, j) { if (f && /\$?H\$?\d|H:H|\$H/.test(f) && refs.length < 15) refs.push(colLetter_(j + 1) + (i + 1) + ' ' + f); }); });
+    out.payHead.hRefs = refs;
+  } catch (e) { out.payHeadErr = String(e); }
   // &fo=1: 끝나지 않은 진행 폼의 옵션 보기 (읽기만)
   if (p.fo) try {
     const seen = {}; out.formOpts = [];
