@@ -2596,6 +2596,12 @@ function step_(what) {
     if (d) d.getRange(1, 17).setValue('⏳ ' + Utilities.formatDate(new Date(globalThis.__ORI_T0 || Date.now()), CONFIG.TIMEZONE, 'HH:mm') + ' 확인 중: ' + what).setFontColor('#9a6700');
   } catch (e) {}
 }
+// 직접 하는 일(폼수정 탭·새 진행 만들기)이 잠금을 기다리면 지금 멈추고 넘김 (step_과 같음, 긴 단계 안에서 씀)
+function yieldIfWanted_() {
+  if (!globalThis.__ORI_T0) return;
+  const want = Number(PropertiesService.getScriptProperties().getProperty('WANT_LOCK') || 0);
+  if (want && Date.now() - want < 300000) throw { yieldLock: 1 };
+}
 function late_(sec) { return Date.now() - (globalThis.__ORI_T0 || Date.now()) > sec * 1000; }
 
 // 이 진행이 받는 폼들: 진행목록 폼ID + 이 방 공지(보낼메시지)에 들어간 폼 링크의 폼 (공지 링크가 다른 날 폼이어도 그 폼을 열어 둠)
@@ -2701,6 +2707,7 @@ function checkFullInner_() {
   if (!props.getProperty('MERGE_BAG_V1')) try { mergeBagOnce_(); } catch (e) { note_('치약걸이·보냉백 합치기 실패: ' + e); }
   if (!props.getProperty('NOTICE1026_V1')) try { notice1026Once_(); } catch (e) { note_('10/26 공지 고치기 실패: ' + e); }
   if (!props.getProperty('COCO1026_V1')) try { cocoRunOnce_(); } catch (e) { note_('코코스무 진행 만들기 실패: ' + e); }
+  if (!props.getProperty('DEL_SEULBI_V1')) try { delSeulbiOnce_(); } catch (e) { note_('이슬비 응답 지우기 실패: ' + e); }
   if (!props.getProperty('BUYU_PHOTO_V1')) { props.setProperty('BUYU_PHOTO_V1', '1'); props.setProperty('RVSENT_' + campKey_('#택10.21 써니마켓 부유단감 5') + '_10.21', '1'); note_('✓ 부유단감 10.21 포토 전달됨으로 표시 (사용자 확인)'); }
   if (!props.getProperty('SENT1026_V1')) try { sent1026Once_(); } catch (e) { note_('10.26 공지 보냄 처리 실패: ' + e); }
   if (!props.getProperty('REOPEN_V1')) try { reopenClosedOnce_(); } catch (e) { note_('닫힌 폼 다시 열기 실패: ' + e); }
@@ -2734,6 +2741,7 @@ function checkFullInner_() {
   step_('폼 인원');
   try { ensureSubmitTriggers_(runs); } catch (e) { note_('응답 트리거 실패: ' + e); }
   runs.forEach(function (r) {
+    yieldIfWanted_();   // 폼수정 탭 같은 직접 하는 일이 기다리면 진행 하나 끝날 때마다 바로 넘김 (10/26 '폼 인원' 한 단계가 100초 넘어 붙여넣기가 실패)
     if (r['진행 상태'] === '종료' || !r['폼ID']) return;
     // 어제 이전에 끝난 진행은 15분마다 안 봄 (폼을 열 때마다 느리고 구글 쪽 시간 초과가 남. 인원은 매일 9시 현황 업데이트가 다시 셈)
     if (r['진행일'] instanceof Date && r['진행일'] < today_() && runOver_(runs, r)) return;
@@ -2743,6 +2751,7 @@ function checkFullInner_() {
   // 폼을 다 연결한 뒤 명단 탭이 그 시트의 모든 폼 응답을 합쳐 보여 주게
   step_('명단 시트');
   Object.keys(listed).forEach(function (id) {
+    yieldIfWanted_();
     try {
       const lss = SpreadsheetApp.openById(id);
       if (runs.some(function (x) { return String(x['시트ID']) === id && x['실배송'] === 'Y'; })) props.setProperty('LISTREAL_' + id, '1');
@@ -4660,7 +4669,7 @@ function onAdminEdit(e) {
   if (nm0 === EDIT_TAB && a10 !== 'B1') { try { sh0.getRange('G1').setValue('⏳ 처리 중… (자동 확인이 돌고 있으면 1~2분 걸려요)'); } catch (err) {} }
   props.setProperty('WANT_LOCK', String(Date.now()));
   let ran = false, out;
-  try { out = locked_(function () { ran = true; props.deleteProperty('WANT_LOCK'); return onAdminEditInner_(e); }, 170000); }
+  try { out = locked_(function () { ran = true; props.deleteProperty('WANT_LOCK'); return onAdminEditInner_(e); }, 270000); }
   finally { props.deleteProperty('WANT_LOCK'); }
   if (!ran) {
     const msg = '⚠ 자동 확인이 안 끝나서 못 했어요. 1~2분 뒤 다시 해 주세요 (붙여넣기면 다시 붙여넣기)';
@@ -7841,6 +7850,24 @@ function expPlanRestoreOnce_() {
     ps.getRange(i + 2, 9).setValue('대기'); n.push(bareTitle_(x[4]));
   });
   note_('✓ 기대평 일정 되살림 (전 진행일 0시에 진행·공지가 만들어짐): ' + (n.join(', ') || '없음'));
+}
+// (10/26 한 번, 사용자 요청) 신발패드 문어괄사 진행에서 이슬비가 폼을 두 번 냄 → 맨 처음 것 지움 (폼 응답·응답 탭·명단 탭, 인원 다시 셈 = 폼수정 탭 삭제와 같음)
+function delSeulbiOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('DEL_SEULBI_V1')) return;
+  props.setProperty('DEL_SEULBI_V1', '1');
+  const r = runByRequest_('coco1026');
+  if (!r || !r['시트ID']) { note_('이슬비 응답 지우기: 진행을 못 찾음'); return; }
+  const hits = [];
+  SpreadsheetApp.openById(r['시트ID']).getSheets().filter(function (t) { return !!t.getFormUrl(); }).forEach(function (t) {
+    const lr = t.getLastRow(), lc = Math.max(t.getLastColumn(), 1);
+    if (lr < 2) return;
+    t.getRange(2, 1, lr - 1, lc).getValues().forEach(function (x) { if (x[0] instanceof Date && x.slice(1).some(function (v) { return String(v).replace(/\s+/g, '').indexOf('이슬비') >= 0; })) hits.push(x[0]); });
+  });
+  hits.sort(function (a, b) { return a - b; });
+  const f = function (d) { return Utilities.formatDate(d, CONFIG.TIMEZONE, 'HH:mm:ss'); };
+  if (hits.length < 2) { note_('⚠ 이슬비 응답이 ' + hits.length + '개라 안 지움' + (hits.length ? ' (' + f(hits[0]) + ')' : '')); return; }
+  note_('✓ 이슬비 첫 응답 지움 (' + f(hits[0]) + ', 남은 것 ' + hits.slice(1).map(f).join(', ') + '): ' + deleteRunTimes_(r, [hits[0]]));
 }
 // (10/26 한 번, 사용자 요청: 아이폰이라 생성기 확장 프로그램을 못 써서) 코코스무 의뢰서 2개(신발 뒤꿈치 패드 5 + 문어 괄사 3)를 한 진행으로
 //  생성기와 같은 값(생성기를 그대로 돌려서 나온 공지·옵션·리뷰 정보). 방제는 20자 안으로 '#10.26 실 신발패드 문어괄사 8'
