@@ -6855,7 +6855,8 @@ function payStatusAll_(all) {
     return tabs[k];
   };
   chainsOf_(all).forEach(function (c) {
-    if (c.runs.length < 2) return;
+    // 하루짜리 의뢰도 (끝나면 완료보고 체크). 예전엔 2일 이상만 봐서 신발패드 문어괄사·노티아 대봉감·양모볼외가 빠졌음 (10/26)
+    if (!c.runs.length) return;
     const rows = [];
     c.runs.forEach(function (r) {
       const t = tabOf(r['진행일']);
@@ -7016,7 +7017,7 @@ function writePayRow_(r, name, remain, prevMonth, shared, ex) {
 function payStatusLink_(rows) {
   if (!rows.length) return;
   const last = rows[rows.length - 1];
-  // 의뢰가 다 끝나면(마지막 날 남은 = 0) 그 의뢰 모든 날 '완료보고' 체크 → 진행비(=완료보고 × 수량)가 들어감
+  // 의뢰가 다 끝나면(마지막 날 남은 = 0) 그 의뢰 모든 날 '완료보고' 체크 (표시만. 진행비는 10/18부터 그날 수량 × 500원이라 완료보고와 상관없음)
   //  줄마다 한 번만 체크 (사람이 체크를 풀면 다시 안 건드림)
   try {
     if (last.L.left && last.L.report && last.sh.getRange(last.row, last.L.left).getValue() === 0) {
