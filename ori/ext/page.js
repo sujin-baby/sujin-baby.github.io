@@ -42,6 +42,22 @@
     if (out.length < 2 || (cur && !out.some(x => x.p === cur))) return [];
     return out;
   };
+  /* 옵션 목록 칸(li·option)마다 '120ml × 검정 × 1개 9,500원 …' → 가격 앞 글자가 옵션 이름. 숨은 칸도 읽음. 지금 가격과 같은 줄이 없으면 안 씀 */
+  const readOptItems = cur => {
+    const out = [];
+    document.querySelectorAll('li, [role="option"]').forEach(el => {
+      if (el.querySelector('li, [role="option"]')) return;   /* 가장 안쪽 칸만 */
+      const t = (el.textContent || "").replace(/\s+/g, " ").trim();
+      if (t.length > 200 || t.indexOf("×") < 0) return;
+      const pm = t.match(/(\d{1,3}(?:,\d{3})+)\s*원/);
+      if (!pm) return;
+      const o = t.slice(0, pm.index).replace(/\s*×\s*/g, " × ").trim();
+      if (!o || o.length > 40 || o.indexOf("×") < 0 || out.some(x => x.o === o)) return;
+      out.push({ o: o, p: Number(pm[1].replace(/,/g, "")) });
+    });
+    if (out.length < 2 || (cur && !out.some(x => x.p === cur))) return [];
+    return out;
+  };
   /* 상품명: 화면에 보이는 제목(h1). og:title은 쿠팡이 ' - 일반거치대' 같은 분류를 붙여서 마지막에 */
   function visibleTitle() {
     const h = [...document.querySelectorAll("h1, h2, h3")].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).find(t => t.length >= 6 && t.length <= 200 && !/쿠팡|coupang|네이버|장바구니|카테고리/i.test(t));
@@ -103,7 +119,9 @@
       const pe = document.querySelector('.prod-sale-price .total-price strong, .total-price strong, [class*="final-price"] [class*="amount"], .price-amount.final-price-amount, [class*="finalPrice"]');
       if (pe) price = num(pe.textContent);
       if (!price) price = priceAfter(txt, name);
-      const optPrices = readOptPrices(txt, name, price);
+      let optPrices = readOptPrices(txt, name, price);
+      /* 옵션 목록이 닫힌 드롭다운이면 화면 글(innerText)에 안 나와서, 숨은 목록 칸의 글자(textContent)로도 읽음 (10/26 텀블러 '120ml × 검정 × 1개' 20줄) */
+      if (!optPrices.length) optPrices = readOptItems(price);
       /* 고른 옵션을 못 읽었으면 목록에서 지금 가격과 같은 옵션 (하나일 때만) */
       if (optPrices.length && !optPrices.some(x => x.o === opt)) { const hit = optPrices.filter(x => x.p === price); opt = hit.length === 1 ? hit[0].o : ""; }
       return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, opt: opt || "단일옵션", price: price, optPrices: optPrices, ship: /로켓\s*(배송|와우|그로스|직구|프레시)|판매자\s*로켓/.test(txt.slice(0, 8000)) ? "무료 (로켓배송)" : shipOf(txt, name, price), rocket: /로켓\s*(배송|와우|그로스|직구|프레시)|판매자\s*로켓/.test(txt.slice(0, 8000)), img: img };
