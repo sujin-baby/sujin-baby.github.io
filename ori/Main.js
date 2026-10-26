@@ -1381,6 +1381,15 @@ function diag_(p) {
       bFormulas: ol >= 2 ? ob.getRange(2, 2, ol - 1, 1).getFormulas().map(function (x, i) { return x[0] ? (i + 2) + ':' + x[0] : ''; }).filter(Boolean).slice(0, 50) : [],
       bValidation: ol >= 2 ? ob.getRange(2, 2, ol - 1, 1).getDataValidations().map(function (x, i) { return x[0] ? (i + 2) + ':' + x[0].getCriteriaType() : ''; }).filter(Boolean).slice(0, 20) : [],
       bFormats: ol >= 2 ? ob.getRange(2, 2, ol - 1, 1).getNumberFormats().map(function (x) { return x[0]; }).filter(function (x, i, a) { return a.indexOf(x) === i; }) : [] };
+    // 필터 조건(칸마다)과 필터·사용자가 숨긴 줄 (10/26 새 방 공지가 '안 보인다' 원인 찾기)
+    if (fl) {
+      const rg = fl.getRange(), c0 = rg.getColumn(), crit = [];
+      for (let j = 0; j < rg.getNumColumns(); j++) { let k = null; try { k = fl.getColumnFilterCriteria(c0 + j); } catch (e) {} if (!k) continue; const o = { col: colLetter_(c0 + j) }; try { o.hidden = k.getHiddenValues(); } catch (e) {} try { o.visible = k.getVisibleValues(); } catch (e) {} try { o.type = String(k.getCriteriaType() || ''); o.values = (k.getCriteriaValues() || []).map(String); } catch (e) {} crit.push(o); }
+      out.outboxSheet.criteria = crit;
+    }
+    const hid = [];
+    for (let i = 2; i <= ol; i++) { const a = ob.isRowHiddenByFilter(i), u = ob.isRowHiddenByUser(i); if (a || u) hid.push(i + (a ? 'F' : '') + (u ? 'U' : '')); }
+    out.outboxSheet.hiddenRows = hid;
   } catch (e) { out.outboxSheetErr = String(e); }
   // 보낼메시지 위쪽 칸 자세히 (값·수식·표시값·서식), 보호 범위, 병합, G~Z 수식 (10/24 정렬해도 B열 몇 칸만 '포토전달대기'로 남는 원인 찾기)
   try {
