@@ -2691,6 +2691,7 @@ function checkFullInner_() {
   if (!props.getProperty('FORMNOPRICE_V1')) try { formNoPriceOnce_(); } catch (e) { note_('폼 옵션 가격 빼기 실패: ' + e); }
   if (!props.getProperty('MERGE_BAG_V1')) try { mergeBagOnce_(); } catch (e) { note_('치약걸이·보냉백 합치기 실패: ' + e); }
   if (!props.getProperty('NOTICE1026_V1')) try { notice1026Once_(); } catch (e) { note_('10/26 공지 고치기 실패: ' + e); }
+  if (!props.getProperty('COCO1026_V1')) try { cocoRunOnce_(); } catch (e) { note_('코코스무 진행 만들기 실패: ' + e); }
   if (!props.getProperty('BUYU_PHOTO_V1')) { props.setProperty('BUYU_PHOTO_V1', '1'); props.setProperty('RVSENT_' + campKey_('#택10.21 써니마켓 부유단감 5') + '_10.21', '1'); note_('✓ 부유단감 10.21 포토 전달됨으로 표시 (사용자 확인)'); }
   if (!props.getProperty('SENT1026_V1')) try { sent1026Once_(); } catch (e) { note_('10.26 공지 보냄 처리 실패: ' + e); }
   if (!props.getProperty('REOPEN_V1')) try { reopenClosedOnce_(); } catch (e) { note_('닫힌 폼 다시 열기 실패: ' + e); }
@@ -7831,6 +7832,27 @@ function expPlanRestoreOnce_() {
     ps.getRange(i + 2, 9).setValue('대기'); n.push(bareTitle_(x[4]));
   });
   note_('✓ 기대평 일정 되살림 (전 진행일 0시에 진행·공지가 만들어짐): ' + (n.join(', ') || '없음'));
+}
+// (10/26 한 번, 사용자 요청: 아이폰이라 생성기 확장 프로그램을 못 써서) 코코스무 의뢰서 2개(신발 뒤꿈치 패드 5 + 문어 괄사 3)를 한 진행으로
+//  생성기와 같은 값(생성기를 그대로 돌려서 나온 공지·옵션·리뷰 정보). 방제는 20자 안으로 '#10.26 실 신발패드 문어괄사 8'
+//  상품명·판매처·위치·가격은 의뢰서에 없고 쿠팡을 서버에서 못 읽어서 공지에 ❗로 비워 둠 (사용자가 채워서 보냄)
+//  실배송 '포토 N명' = 받은 사람이 직접 찍는 포토리뷰 (업체 사진 아님) → 리뷰 종류 self
+const COCO_NOTICE = "★★★바로구매★★★\n가격이 높으면 사지 마세요!\n★ 광고(AD) 상품으로 주문 절대 금지 ★\n★ 스중 상중 불가 ★ (가능하면 진행자가 따로 안내합니다)\n▶ 리뷰는 배송완료 후 7일 이내 작성\n▶ 결제 스크린샷은 필수입니다\n\n※오리방 페이백 리뷰비 안내※\n리뷰비는 방전원 다 쓰셔야지 진행자가\n요청완료 기준으로 3일 뒤에 입금되는 점\n참고하여 주세요!\n실배송은 방에 인원이 다쓰셔야 페이백 요청됩니다\n일정기간 지나면 회오리가 방탈합니다!\n지급이 어려울수 있으니 안내된 기간은 지켜주세요! 감사합니다\n★사업자 4971201389 ★\n\n☆★☆★ 양식 작성 폼 ☆★☆★\n(구글폼 링크)\n\n1) 5명\n링크타고 검색▼( 상번이 네이버일때 무시)\nhttps://coupa.ng/b59klT\n🐥판매처 : ❗\n🐥상품명 : ❗\n🐥상품번호 : 9785776578\n🐥★키워드 : 코코스무 신발 뒤꿈치 패드\n🐥위치 : ❗\n🐥옵션 : 블랙\n🐥가격 : ❗가격 넣기\n\n------------------------------------------------\n\n2) 3명\n링크타고 검색▼( 상번이 네이버일때 무시)\nhttps://coupa.ng/b59klT\n🐥판매처 : ❗\n🐥상품명 : ❗\n🐥상품번호 : 9783998793\n🐥★키워드 : 코코스무 문어 괄사\n🐥위치 : ❗\n🐥옵션 : 핑크\n🐥가격 : ❗가격 넣기";
+function cocoRunOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('COCO1026_V1')) return;
+  props.setProperty('COCO1026_V1', '1');
+  if (Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd') !== '20261026') { note_('코코스무 진행: 10/26이 지나서 안 만듦'); return; }
+  const title = '#10.26 실 신발패드 문어괄사 8';
+  const res = createRunLocked_({
+    k: CONFIG.KEY, n: 'coco1026', title: title + ' (뽀짝오리)', room: title, fname: title, daily: '8', total: '8', day: '1', date: '2026-10-26',
+    desc: COCO_NOTICE, type: '입대', platform: '쿠팡', takdae: false, realship: true, opts: '신발 뒤꿈치 패드 블랙\n문어 괄사 핑크',
+    shop: '', slot: '★★★바로구매★★★', photo: '무', plan: '', slot2: '', croom: '',
+    rv: "{\"kind\": \"self\", \"mix\": \"\", \"guide\": \"코코스무 신발 뒤꿈치 패드 : 손쉬운 부착 강력한 접착 / 원하는 크기로 부착가능 / 스티커제품 때서 붙히면끝 / 새신발 뒤꿈치 까짐 미리보호\\n코코스무 문어 괄사 : 8개의 돌기 설계로 두피 혈자리를 한번에 / 머리,얼굴,목,승모근,팔다리 다양한 부위가능 / 컴팩트한 싸이즈로 휴대자유롭다 / 1+1 구성으로 집,사무실 하나씩 또는 선물가능 / 물세척이 가능한 위생 안심소재\"}",
+    urls: 'https://www.coupang.com/vp/products/9785776578?vendorItemId=96214179259\nhttps://www.coupang.com/vp/products/9783998793'
+  });
+  const r = runByRequest_('coco1026');
+  note_('✓ 코코스무 진행 만듦: ' + (r ? bareTitle_(r['명단 제목']) + ' / 폼 ' + r['폼 링크'] + ' / 시트 ' + r['시트 링크'] : '진행목록에서 못 찾음') + (res && res.again ? ' (이미 있던 진행)' : ''));
 }
 // (10/26 한 번, 사용자 요청) 공지 고치기
 //  치약걸이·보냉백: 오늘 방 공지 = 사용자가 보낸 글, 10.27 방 공지·폼 설명 = 같은 모양(자정 구매, 보냉백 옵션 3색 중 택1)
