@@ -31,7 +31,8 @@ const MATCH = {
   dup: /아이디|계정(?!명)|이메일|전화|연락처|휴대폰|핸드폰|주소/,   // 한 명단 시트에서 겹치면 중복(빨간색). 이름은 동명이인이 많아서 뺌
   reviewFee: /리뷰비/,
   nick: /카카오\s*톡?\s*닉네임|카톡\s*닉네임/,   // '방에 참여한 카카오톡 닉네임' (옵션 확인은 이 닉네임으로)
-  opt: /옵션/
+  opt: /옵션/,
+  expSet: /작성한\s*링크\s*묶음/   // 기대평 폼 '작성한 링크 묶음'(A 14개·B 13개, 10/26). 진행비 건수 셈용이라 명단 탭(업체가 보는 곳)에는 안 넣음
 };
 const NICK_Q = '방에 참여한 카카오톡 닉네임';
 
@@ -280,7 +281,7 @@ function changeDaily_(anchor, from, n) {
         let cc = []; try { cc = JSON.parse(x[7]); } catch (e) {}
         cc = (cc || []).map(function (g) { g = (g || []).slice(); g[0] = c; if (g[1] && g[1].length === 1) g[1] = [c]; return g; });
         let tc = titleCount_(anchor, c);
-        if (isExpect_(anchor)) { try { tc = c * Math.round(Number(JSON.parse(x[9]).prices) / 1000); } catch (e) {} }
+        if (isExpect_(anchor)) { const pc = expPlanCount_(dateTok_(x[5]), c); if (pc !== null) tc = pc; else { try { tc = c * Math.round(Number(JSON.parse(x[9]).prices) / 1000); } catch (e) {} } }
         ps.getRange(row, 5, 1, 4).setValues([[cnt(x[4], tc), cnt(x[5], tc), c, JSON.stringify(cc)]]);
         done.push('(일정) ' + bareTitle_(x[5]) + ' → ' + bareTitle_(cnt(x[5], tc)));
       } else { ps.getRange(row, 9).setValue('취소 (하루 인원 바꿈)'); done.push('(일정) ' + bareTitle_(x[5]) + ' 취소'); }
@@ -295,7 +296,7 @@ function changeDaily_(anchor, from, n) {
     let cc = []; try { cc = JSON.parse(lastPlan.x[7]); } catch (e) {}
     cc = (cc || []).map(function (g) { g = (g || []).slice(); g[0] = c; if (g[1] && g[1].length === 1) g[1] = [c]; return g; });
     let tc2 = titleCount_(anchor, c);
-    if (isExpect_(anchor)) { try { tc2 = c * Math.round(Number(JSON.parse(lastPlan.x[9]).prices) / 1000); } catch (e) {} }
+    if (isExpect_(anchor)) { const pc2 = expPlanCount_(dateTok_(lastPlan.x[5]), c); if (pc2 !== null) tc2 = pc2; else { try { tc2 = c * Math.round(Number(JSON.parse(lastPlan.x[9]).prices) / 1000); } catch (e) {} } }
     ps.appendRow([String(lastPlan.x[0]).replace(/-\d+$/, '') + '-' + k0, lastPlan.x[1], k0, nd, cnt(retitleDate_(lastPlan.x[4], nd), tc2), cnt(retitleDate_(lastPlan.x[5], nd), tc2), c, JSON.stringify(cc), '대기', lastPlan.x[9]]);
     done.push('(일정 추가) ' + bareTitle_(cnt(retitleDate_(lastPlan.x[5], nd), tc2)));
   }
@@ -617,7 +618,7 @@ function convertListToValues_(ss) {
   if (mr >= 3) sh.getRange(3, 1, mr - 2, mc).setBackground(null);
   sh.setConditionalFormatRules([]);   // 날짜 색 규칙은 값으로 칠함
   const tabs = ss.getSheets().filter(function (t) { return !!t.getFormUrl(); }), heads = [];
-  tabs.forEach(function (t) { rawHead_(t).map(hk_).forEach(function (x) { if (x && heads.indexOf(x) === -1 && !MATCH.nick.test(x)) heads.push(x); }); });
+  tabs.forEach(function (t) { rawHead_(t).map(hk_).forEach(function (x) { if (x && heads.indexOf(x) === -1 && !MATCH.nick.test(x) && !MATCH.expSet.test(x)) heads.push(x); }); });
   if (heads.length) sh.getRange(2, 1, 1, heads.length).setValues([heads]);
   props.setProperty('LISTV_' + id, '1');
   props.deleteProperty('LISTK_' + id); props.deleteProperty('LISTH_' + id);
@@ -686,7 +687,7 @@ function syncList_(ss) {
   const heads = [], rows = [];
   tabs.forEach(function (t) {
     const lr = t.getLastRow(), h = rawHead_(t).map(hk_);
-    h.forEach(function (x) { if (x && heads.indexOf(x) === -1 && !MATCH.nick.test(x)) heads.push(x); });
+    h.forEach(function (x) { if (x && heads.indexOf(x) === -1 && !MATCH.nick.test(x) && !MATCH.expSet.test(x)) heads.push(x); });
     if (lr < 2 || !h.length) return;
     t.getRange(2, 1, lr - 1, h.length).getValues().forEach(function (x) {
       if (!(x[0] instanceof Date)) return;
@@ -2740,6 +2741,7 @@ function checkFullInner_() {
   if (!props.getProperty('SILING_DAYMIX_V1')) try { silingDayMixOnce_(); } catch (e) { note_('실링팬 10.27 리뷰 종류 실패: ' + e); }
   if (!props.getProperty('FIX1026C_V1')) try { fix1026cOnce_(); } catch (e) { note_('10/26 보낼메시지 정리 실패: ' + e); }
   if (!props.getProperty('TALKDEAL_G_V1')) try { talkdealQtyOnce_(); } catch (e) { note_('톡딜 월급시트 상태 실패: ' + e); }
+  if (!props.getProperty('EXPMIX_V1')) try { expMixOnce_(); } catch (e) { note_('기대평 A·B묶음 바꾸기 실패: ' + e); }
   if (!props.getProperty('BUYU_PHOTO_V1')) { props.setProperty('BUYU_PHOTO_V1', '1'); props.setProperty('RVSENT_' + campKey_('#택10.21 써니마켓 부유단감 5') + '_10.21', '1'); note_('✓ 부유단감 10.21 포토 전달됨으로 표시 (사용자 확인)'); }
   if (!props.getProperty('SENT1026_V1')) try { sent1026Once_(); } catch (e) { note_('10.26 공지 보냄 처리 실패: ' + e); }
   if (!props.getProperty('REOPEN_V1')) try { reopenClosedOnce_(); } catch (e) { note_('닫힌 폼 다시 열기 실패: ' + e); }
@@ -5231,7 +5233,7 @@ function rvZip_(f, name, props, sid, expect) {
 }
 
 /* ---------------- 사용법 탭 (맨 앞, 사용자 요청 10/20). 글을 바꾸면 USAGE_VER를 올림 → 다시 씀 ---------------- */
-const USAGE_TAB = '사용법', USAGE_VER = '13';
+const USAGE_TAB = '사용법', USAGE_VER = '14';
 const USAGE_ROWS = [
   ['체험단 관리 시트 사용법', '(스크립트가 쓰는 탭이라 여기 고친 글은 다음 업데이트 때 다시 써져요)'],
   ['', ''],
@@ -5255,7 +5257,7 @@ const USAGE_ROWS = [
   ['날짜 바꾸기', '예) 목요일 건너뛰고 금요일에: 진행목록에서 그 진행 "진행일"을 새 날짜(10/23)로 고치기 → 방제·카톡방 이름·보낼메시지·월급시트·뒤 일차까지 같이 바뀜 (오른쪽 아래 알림). 이미 만든 카톡방 이름은 직접 바꾸기. 아직 안 만든 일차는 "일정" 탭 진행일을 고치기'],
   ['하루 건너뛰기 (예: 오메가3)', '예) 오늘(목)은 그대로 2시 전까지 받고, 내일(금)만 쉬고 월요일에: 진행목록에서 "내일" 진행의 "진행일"을 월요일(10/26)로 고치기 → 그 뒤 일차·일정·방제·보낼메시지 날짜가 같이 밀림. 내일 진행이 진행목록에 아직 없으면 "일정" 탭에서 그 줄 진행일을 월요일로 (그 뒤 줄도 하루씩 직접). 오늘 진행은 건드리지 않기. 카톡방 이름이 이미 있으면 직접 바꾸기'],
   ['하루 인원 바꾸기 (예: 실링팬 하루 2명)', '진행목록에서 바꾸기 시작할 날 진행의 "목표인원"을 새 숫자(2)로 고치기 → 그날부터 뒤 일차·일정 탭까지 하루 2명으로 바뀜 (방제 끝 숫자·폼 설명·안 보낸 방 공지 "(N명)"도). 총건수를 넘는 남는 날은 취소, 모자라면 일정 줄이 추가됨 (오른쪽 아래 알림으로 결과). 그날 진행이 진행목록에 아직 없으면 일정 탭 "건수" 칸과 방제·명단 제목 끝 숫자를 직접 고치기. 이미 만든 카톡방 이름은 직접 바꾸기'],
-  ['기대평 진행 (백발백중 도서)', '구매 없이 링크에 기대평만. 업체 요청(매주 개인당 13~14건)대로 한 사람이 두 번: 1주차(10/26~10/30) 14건·14,000원, 2주차(11/2~11/6) 나머지 13건·13,000원. 주마다 15명(월~금 하루 3명, 주말 빼고) = 405건. 하루 인원은 진행목록 "목표인원"(사람 수)으로 바꿈. 자정 ~ 오전 8시 20분 작성. 방제 끝은 건수(사람 × 14 또는 13), 진행목록 목표인원은 사람 수. 월급시트 수량도 건수(× 500원). 캡처는 카톡방으로. 하루 인원 바꾸기는 진행목록 "목표인원"에 사람 수'],
+  ['기대평 진행 (백발백중 도서)', '구매 없이 링크에 기대평만. 27개 링크 × 15개 = 405건, 11/6까지(주말 빼고). 매일 27개 링크가 다 나가게 하루 3계정을 A묶음(14개)·B묶음(13개)으로 나눔(10/26부터). 한 계정은 한 주에 한 묶음, 다음 주에 같은 계정이 나머지 묶음. 폼 \'작성한 링크 묶음\'으로 사람마다 14·13건을 세서 방제 끝 건수·월급시트 수량(× 500원)에 씀. 자정 ~ 오전 8시 20분 작성. 진행목록 목표인원은 사람 수. 캡처는 카톡방으로'],
   ['안 산 사람 (인원 모자람)', '그대로 두면 됨. 의뢰 마지막 날이면 그날 오후 2시 이후 다음 진행일에 모자란 만큼 진행이 자동으로 생김(보낼메시지에 방 공지). 그날 방제는 산 인원으로 바뀜(10→8, 월급시트 캠페인명도) → 보낼메시지 "할 일"대로 카톡방 이름·오리명단방 명단 메시지를 수정. 중간 날 모자란 건 마지막 날 끝난 뒤 한꺼번에. 바로 더 받으려면 폼수정 탭 I2에 인원 숫자'],
   ['잘못 산 사람·방 나간 사람', '폼수정 탭 B1에서 진행 고르기 → 그 응답 체크 → 삭제 실행. 그날 안이면 폼이 다시 열려 다른 사람을 받음'],
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
@@ -6714,10 +6716,10 @@ function updatePay_(resumable) {
     const earlier = mine.filter(function (x) { return x['진행일'] < r['진행일'] && ym(x['진행일']) === ym(r['진행일']); }).reduce(function (a, x) { return a + got(x); }, 0);
     // 기대평은 사람 × 건수(1주차 14, 2주차 13, 건당 500원): 총액 405건, 전월·앞 날·그날 수량도 건수로 (사용자 요청 10/23)
     if (isExpect_(r)) {
-      const gw = function (x) { return got(x) * expPer_(x); };
+      const gw = function (x) { return expCount_(x, got(x), all); };   // A묶음 14·B묶음 13 (10/26)
       const prevW = mine.filter(function (x) { return ym(x['진행일']) < ym(r['진행일']); }).reduce(function (a, x) { return a + gw(x); }, 0);
       const earlierW = mine.filter(function (x) { return x['진행일'] < r['진행일'] && ym(x['진행일']) === ym(r['진행일']); }).reduce(function (a, x) { return a + gw(x); }, 0);
-      const exE = { store: pick('업체'), time: payTime_(runSlot_(r)), photo: '', earlier: earlierW, mult: expPer_(r) }, shE = siblings_(all, r).length > 1;
+      const exE = { store: pick('업체'), time: payTime_(runSlot_(r)), photo: '', earlier: earlierW, mult: expPer_(r), count: expCount_(r, Number(r['인원']) || 0, all) }, shE = siblings_(all, r).length > 1;
       const sigE = sigOf([nameOf(r), EXP_LINKS.length * 15, prevW, shE, exE, String(r['시트ID']), String(r['진행일']), r['인원'], r['택대'], r['실배송'], r['일차']]);
       if (!fresh(rid, sigE)) { writePayRow_(r, nameOf(r), EXP_LINKS.length * 15, prevW, shE, exE); rowSig[rid] = { s: sigE, t: Date.now() }; }
       if (prog) prog.done.push(rid);
@@ -7007,7 +7009,7 @@ function writePayRow_(r, name, remain, prevMonth, shared, ex) {
   }
   putIfEmpty(L.note, [r['택대'] === 'Y' ? '택대' : '', r['실배송'] === 'Y' ? '실배송' : '', Number(r['일차']) ? r['일차'] + '일차' : '', /유/.test(String(ex.photo || '')) ? '포토' : ''].filter(Boolean).join(' / '));
   const col = L.days[(day.getMonth() + 1) + '-' + day.getDate()] || L.days[String(day.getDate())];
-  put(col, (Number(r['인원']) || 0) * (ex.mult || 1));
+  put(col, ex.count != null ? ex.count : (Number(r['인원']) || 0) * (ex.mult || 1));
   if (L.date) { const dc = sh.getRange(row, L.date), dv = dc.getValue(); if (!dc.getFormula() && !(dv instanceof Date && dv.getTime() === day.getTime())) dc.setValue(day).setNumberFormat('M/d'); }
   return { sh: sh, row: row, L: L };
 }
@@ -7288,12 +7290,13 @@ function buildDashboard_(force) {
   runs.forEach(function (r, i) {
     const rr = i + 2, x = sheets['b' + i];
     // 기대평은 건수로 (의뢰 총건수 405, 그날 목표·신청 = 사람 × 그 주 건수, 사용자 요청 10/24)
-    const per = isExpect_(r) ? expPer_(r) : 1;
-    sh.getRange(rr, 1, 1, 5).setValues([[r['진행일'], String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''), dashStatus_(r), isExpect_(r) ? EXP_LINKS.length * 15 : (Number(r['총건수']) || ''), (Number(r['목표인원']) || 0) * per || r['목표인원']]]);
+    const per = isExpect_(r) ? expPer_(r) : 1, mixDay = isExpect_(r) && !!EXP_MIX[dateTok_(r['명단 제목'])];   // A·B묶음 섞인 기대평 날은 건수를 직접 셈 (10/26)
+    sh.getRange(rr, 1, 1, 5).setValues([[r['진행일'], String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''), dashStatus_(r), isExpect_(r) ? EXP_LINKS.length * 15 : (Number(r['총건수']) || ''), (mixDay ? expCount_(r, Number(r['목표인원']) || 0, allRuns) : (Number(r['목표인원']) || 0) * per) || r['목표인원']]]);
     const w = windowOf_(allRuns, r);
     const ts = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A' + x.start + ':A') + ')';
     // 명단 시트 하나를 여러 날이 같이 쓰면 그날 몫(진행일 0시 ~ 다음 진행 0시)만 셈
-    sh.getRange(rr, 6).setFormula(w.shared
+    if (mixDay) sh.getRange(rr, 6).setValue(expCount_(r, Number(r['인원']) || 0, allRuns));
+    else sh.getRange(rr, 6).setFormula(w.shared
       ? '=IFERROR(' + (per > 1 ? per + '*' : '') + 'LET(v,' + ts + ',SUMPRODUCT(ISNUMBER(v)*(v>=' + (w.from ? fmt(w.from) : 0) + ')*(v<' + (isFinite(w.to) ? fmt(w.to) : 99999) + '))),"허용 필요")'
       : '=IFERROR(' + (per > 1 ? per + '*' : '') + 'SUMPRODUCT(ISNUMBER(' + ts + ')),"허용 필요")');   // 응답 없는 새 명단 시트는 빈 글자("")가 와서 COUNTA면 1로 셈 → 날짜(타임스탬프)만 셈
     sh.getRange(rr, 7).setFormula('=IF(ISNUMBER(F' + rr + '),E' + rr + '-F' + rr + ',"")');
@@ -7577,6 +7580,39 @@ function expNotice_(set) {
   });
   return L.join('\n');
 }
+// 기대평 공지 (A·B묶음 같이, 사용자 요청 10/26): 하루 3계정이 A묶음(14개)·B묶음(13개)을 나눠 매일 27개 링크가 다 나가게.
+//  who = { A: '윤주영 2계정', B: '신규 1계정' }처럼 누가 어느 묶음인지 (없으면 인원만)
+function expNoticeMix_(a, b, who) {
+  who = who || {};
+  const nA = EXP_SETS.A.length, nB = EXP_SETS.B.length;
+  const part = function (k, n, cnt) { return k + '묶음(' + n + '개 링크) ' + cnt + '명' + (who[k] ? ' - ' + who[k] : ''); };
+  const L = ['★★★자정 ~ 오전 8시 20분까지 작성★★★', '※구매 아님! 아래 링크에 기대평 댓글만 작성해주세요※', '',
+    '▶ 오늘: ' + [a ? part('A', nA, a) : '', b ? part('B', nB, b) : ''].filter(Boolean).join(' / '),
+    '▶ 한 계정은 한 주에 한 묶음만! 다음 주에 같은 계정으로 나머지 묶음을 한 번 더 해 주세요',
+    '▶ 폼에서 \'' + EXP_SET_Q + '\'(A 또는 B)을 꼭 골라 주세요',
+    '▶ 공백 제외 100~150자 이상, 긍정적인 기대평 (예스24는 한줄평이 50자까지만 써져서 50자 꽉 채워서)',
+    '▶ 알라딘은 100자평 말고 "마이리뷰"로 써 주세요',
+    '▶ "구매했다"는 내용 금지 금지 금지 !!!!! → 구매하고 싶다 or 기대된다는 내용으로 부탁드려요',
+    '▶ 짧은 기대평 or 복붙 같은 글 금지 금지 금지 !!!!! (교재마다 다르게)',
+    '▶ 다 작성 후 캡처해서 [당일 바로] 카톡방에 올려주세요!',
+    '▶ 리뷰비: A묶음 ' + expFee_('A') + ' / B묶음 ' + expFee_('B'), '',
+    '☆★☆★ 양식 작성 폼 ☆★☆★', '(구글폼 링크)', '',
+    '🐥교재별로 넣을 내용🐥',
+    '[짱 개념연산] 시험에 자주 나오는 연산 유형 집중 대비 / 개념 문제로 내신 대비·연산 실력 향상 / 빠르고 정확한 연산 연습에 좋을 것 같아 써 보고 싶다',
+    '[짱 수학서술형] 서술형 기출·내신·수행평가 대비 / 기본 서술형부터 변형문제, 쌍둥이 문제로 반복 학습 / 서술형 대비에 유용할 것 같아 풀어 보고 싶다',
+    '[짱 개념수학] 시험에 필요한 개념과 유형을 체계적으로 / 개념북 세분화 학습 + 익힘북 반복·복습 / 개념부터 유형까지 확실히 대비할 것 같아 풀어 보고 싶다'];
+  [['A', '🔵'], ['B', '🟢']].forEach(function (s0) {
+    const k = s0[0], links = EXP_SETS[k];
+    L.push('', '', s0[1] + ' ' + k + '묶음 (' + links.length + '개 링크)' + (who[k] ? ' - ' + who[k] : ''));
+    ['예스24', '알라딘', '교보문고'].forEach(function (pl) {
+      const xs = links.filter(function (x) { return x[0] === pl; });
+      if (!xs.length) return;
+      L.push('', '🐥' + pl + ({ 예스24: ' (한줄평 50자 꽉 채우기, 한두 줄 짧은 글은 안 돼요)', 알라딘: ' (100자평 말고 마이리뷰로)' }[pl] || ''));
+      xs.forEach(function (x, i) { L.push((i + 1) + '. ' + x[1] + ' ' + x[2]); });
+    });
+  });
+  return L.join('\n');
+}
 function expDays_() {
   // 주말 빼고 (사용자 요청 10/23): 1주차 10/26~10/30 A묶음, 2주차 11/2~11/6 B묶음. 주마다 15명 = 하루 3명
   //  하루 3명씩 고르게 (10/23: 월요일만 5명은 많음 → 윤주영 5계정은 월 3 + 화 2로 나눔)
@@ -7588,9 +7624,57 @@ function expDays_() {
 }
 function expTitle_(d, n, set) { return (d.getMonth() + 1) + '.' + String(d.getDate()).padStart(2, '0') + ' 백발백중 도서 기대평 ' + (n * EXP_SETS[set].length); }
 // 기대평 한 사람 건수 = 그 진행 가격(리뷰비) / 1,000 (1주차 14, 2주차 13)
-function expPer_(r) { return Math.round((Number(String(r && r['가격'] || '').replace(/[^0-9]/g, '')) || EXP_PER * 1000) / 1000); }
+function expPer_(r) { return Math.round((Number((String(r && r['가격'] || '').replace(/,(?=\d{3})/g, '').match(/\d+/) || [])[0]) || EXP_PER * 1000) / 1000); }
+// 기대평 하루 계획 (사용자 요청 10/26): 매일 27개 링크가 다 나가게 하루 3계정을 A묶음(14개)·B묶음(13개)으로 나눔.
+//  한 계정은 한 주에 한 묶음, 다음 주에 같은 계정이 나머지 묶음 → 링크마다 15개 = 405건, 11/6까지. [A묶음 계정 수, B묶음 계정 수]
+//  10.26(월)은 이미 A묶음 3계정(윤주영)으로 끝남. 다음 주는 이번 주 계정이 반대 묶음 + 10.26 계정 3은 B묶음
+const EXP_MIX = { '10.26': [3, 0], '10.27': [2, 1], '10.28': [1, 2], '10.29': [2, 1], '10.30': [1, 2], '11.2': [1, 2], '11.3': [1, 2], '11.4': [1, 2], '11.5': [1, 2], '11.6': [2, 1] };
+const EXP_SET_Q = '작성한 링크 묶음', EXP_SET_CH = ['A묶음 (14개 링크)', 'B묶음 (13개 링크)'];
+// 계획대로 n명이면 몇 건 (A묶음 자리 먼저). 계획 없는 날이면 null
+function expPlanCount_(tok, n) {
+  const mx = EXP_MIX[tok]; n = Math.max(0, Number(n) || 0);
+  if (!mx) return null;
+  const a = Math.min(n, mx[0]);
+  return a * EXP_SETS.A.length + (n - a) * EXP_SETS.B.length;
+}
+// 기대평 그날 건수 (진행비·방제·한눈에): 폼 '작성한 링크 묶음' 답(A 14·B 13)으로 세고, 답이 없는 사람(예전 응답)은 그날 계획(EXP_MIX)의 남은 자리(A 먼저)로.
+//  계획 없는 날은 예전처럼 사람 × expPer_
+function expCount_(r, n, runs) {
+  n = Math.max(0, Number(n) || 0);
+  const mx = EXP_MIX[dateTok_(r && r['명단 제목'])];
+  if (!mx) return n * expPer_(r);
+  const ans = expAnswers_(r, runs);
+  let a = ans.a, b = ans.b;
+  while (a + b > n) { if (b > 0) b--; else a--; }
+  let rest = n - a - b;
+  const addA = Math.min(rest, Math.max(0, mx[0] - a)); a += addA; rest -= addA; b += rest;
+  return a * EXP_SETS.A.length + b * EXP_SETS.B.length;
+}
+// 그날(진행일 0시 ~ 다음 진행 0시) 폼 응답의 '작성한 링크 묶음' 답 수 {a, b} (한 번 실행에 진행마다 한 번만 읽음)
+function expAnswers_(r, runs) {
+  const memo = globalThis.__EXPANS = globalThis.__EXPANS || {}, key = String(r['명단 제목']);
+  if (memo[key]) return memo[key];
+  const out = memo[key] = { a: 0, b: 0 };
+  try {
+    if (!r['시트ID']) return out;
+    const w = windowOf_(runs || readRuns_(), r);
+    SpreadsheetApp.openById(r['시트ID']).getSheets().filter(function (t) { return !!t.getFormUrl(); }).forEach(function (t) {
+      const lr = t.getLastRow(), lc = t.getLastColumn();
+      if (lr < 2 || lc < 2) return;
+      const head = t.getRange(1, 1, 1, lc).getValues()[0].map(hk_), c = head.findIndex(function (h) { return MATCH.expSet.test(h); });
+      if (c < 0) return;
+      t.getRange(2, 1, lr - 1, c + 1).getValues().forEach(function (x) {
+        const tm = tsMs_(x[0]);
+        if (!isFinite(tm) || tm < w.from || tm >= w.to) return;
+        const v = String(x[c]).trim();
+        if (/^A/.test(v)) out.a++; else if (/^B/.test(v)) out.b++;
+      });
+    });
+  } catch (e) {}
+  return out;
+}
 // 방제 끝 숫자: 기대평은 사람 × 건수, 나머지는 사람 수 (월급시트 수량·총액도 기대평은 건수)
-function titleCount_(r, n) { return isExpect_(r) ? n * expPer_(r) : n; }
+function titleCount_(r, n) { return isExpect_(r) ? expCount_(r, n) : n; }
 function setupExpectOnce_() {
   const props = PropertiesService.getScriptProperties();
   if (props.getProperty('EXPECT_V4')) return;
@@ -7938,6 +8022,64 @@ function fix1026bOnce_() {
   ['#10.22 실링팬 1', '#10.26 실링팬 2'].forEach(function (t) { props.setProperty('RVSENT_' + campKey_(t) + '_' + dateTok_(t), '1'); });
   log.push('실링팬 10.22·10.26 포토 받음');
   note_('✓ 10/26 고침: ' + log.join(', '));
+}
+// (10/26 한 번, 사용자 요청) 기대평을 A·B묶음 섞어서 (EXP_MIX): 폼에 '작성한 링크 묶음' 질문, 10.27 진행(윤주영 2계정 A + 신규 1계정 B = 41건) 방제·공지·폼 설명,
+//  앞으로 만들 일정(대기)의 방제 건수·공지 틀
+function expMixOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('EXPMIX_V1')) return;
+  props.setProperty('EXPMIX_V1', '1');
+  const log = [];
+  let runs = readRuns_();
+  const exps = runs.filter(function (r) { return isExpect_(r) && r['진행 상태'] !== '종료' && r['폼ID']; });
+  // 1) 폼 질문 (닉네임 질문 바로 뒤, 필수)
+  const seen = {};
+  exps.forEach(function (r) {
+    const fid = String(r['폼ID']);
+    if (seen[fid]) return;
+    seen[fid] = 1;
+    try {
+      const fo = FormApp.openById(fid), items = fo.getItems();
+      if (items.some(function (it) { return MATCH.expSet.test(String(it.getTitle() || '')); })) return;
+      const q = fo.addMultipleChoiceItem().setTitle(EXP_SET_Q).setChoiceValues(EXP_SET_CH).setRequired(true).setHelpText('공지에 적힌 내 묶음 (A 14개 / B 13개)');
+      const ni = items.findIndex(function (it) { return MATCH.nick.test(String(it.getTitle() || '')); });
+      fo.moveItem(q.getIndex(), ni >= 0 ? ni + 1 : 0);
+      log.push('폼 질문 추가 (' + bareTitle_(r['명단 제목']) + ' 폼)');
+    } catch (e) { note_('기대평 폼 질문 추가 실패: ' + e); }
+  });
+  // 2) 10.27 진행: 방제 41건, 공지·폼 설명
+  const r27 = exps.filter(function (r) { return dateTok_(r['명단 제목']) === '10.27'; })[0];
+  if (r27) {
+    const nt = '10.27 백발백중 도서 기대평 ' + expPlanCount_('10.27', 3);
+    if (bareTitle_(r27['명단 제목']) !== nt) renameRun_(r27, nt, '기대평 A·B묶음');
+    runs = readRuns_();
+    const r = runs.filter(function (x) { return x.row === r27.row; })[0] || r27;
+    const room = String(r['카톡방'] || bareTitle_(r['명단 제목']));
+    const text = expNoticeMix_(2, 1, { A: '윤주영 2계정', B: '신규 1계정' }).split('(구글폼 링크)').join(String(r['폼 링크']));
+    const ob = outboxSheet_(), ol = ob.getLastRow();
+    let n = 0;
+    if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (String(v[3]) === room && v[2] === '방 공지' && v[5] !== '보냄' && /양식 작성 폼/.test(String(v[4]))) { obSet_(ob, v[0], 5, text); n++; } });
+    if (!n) queueMsg_(room, text, '방 공지');   // 이미 보냈으면 새 공지로 하나 더
+    try { FormApp.openById(r['폼ID']).setDescription(formDesc_(text)); } catch (e) { note_('기대평 폼 설명 실패: ' + e); }
+    log.push(bareTitle_(r['명단 제목']) + ' 공지 ' + (n ? '고침' : '새로 넣음'));
+  }
+  // 3) 일정 탭 대기 계획: 방제 건수, 공지 틀
+  try {
+    const ps = planSheet_(), pl = ps.getLastRow();
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x, i) {
+      // 대기 계획 + 이미 만든 10.27 계획(공지가 빠지면 이 틀로 다시 넣으니 같이 맞춤)
+      if (!(x[8] === '대기' || (x[8] === '생성됨' && dateTok_(x[5]) === '10.27')) || String(x[0]).indexOf('exp-100-4-v5-') !== 0) return;
+      const tok = dateTok_(x[5]), mx = EXP_MIX[tok];
+      if (!mx) return;
+      const cnt = expPlanCount_(tok, Number(x[6]) || mx[0] + mx[1]);
+      const cfg = JSON.parse(x[9]);
+      cfg.desc = expNoticeMix_(mx[0], mx[1], tok === '10.27' ? { A: '윤주영 2계정', B: '신규 1계정' } : null);
+      ps.getRange(i + 2, 5, 1, 2).setValues([[String(x[4]).replace(/\d+\s*$/, String(cnt)), String(x[5]).replace(/\d+(\s*(?:\([^)]*\))?\s*)$/, cnt + '$1')]]);
+      ps.getRange(i + 2, 10).setValue(JSON.stringify(cfg));
+      log.push(tok + ' ' + cnt + '건 (A' + mx[0] + '·B' + mx[1] + ')');
+    });
+  } catch (e) { note_('기대평 일정 바꾸기 실패: ' + e); }
+  note_('✓ 기대평 A·B묶음: ' + log.join(', '));
 }
 // (10/26 한 번, 사용자 요청) 월급시트 톡딜 줄 상태가 '시작전': 상태 수식 =IF(G=0,"시작전",…)이 계약 수량 칸(G, 보통 명단 시트 링크)을 보는데
 //  톡딜은 명단 시트가 없어서 G가 비어 있었음 → G에 글자를 넣어 수식대로 '완료'(남은 0)가 되게. 돈 칸(완료보고·진행비)은 안 건드림
