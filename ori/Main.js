@@ -2721,6 +2721,7 @@ function checkFullInner_() {
   if (!props.getProperty('COCO1026_V1')) try { cocoRunOnce_(); } catch (e) { note_('코코스무 진행 만들기 실패: ' + e); }
   if (!props.getProperty('DEL_SEULBI_V1')) try { delSeulbiOnce_(); } catch (e) { note_('이슬비 응답 지우기 실패: ' + e); }
   if (!props.getProperty('FIX1026B_V1')) try { fix1026bOnce_(); } catch (e) { note_('10/26 실링팬·치약걸이 고치기 실패: ' + e); }
+  if (!props.getProperty('SILING_DAYMIX_V1')) try { silingDayMixOnce_(); } catch (e) { note_('실링팬 10.27 리뷰 종류 실패: ' + e); }
   if (!props.getProperty('BUYU_PHOTO_V1')) { props.setProperty('BUYU_PHOTO_V1', '1'); props.setProperty('RVSENT_' + campKey_('#택10.21 써니마켓 부유단감 5') + '_10.21', '1'); note_('✓ 부유단감 10.21 포토 전달됨으로 표시 (사용자 확인)'); }
   if (!props.getProperty('SENT1026_V1')) try { sent1026Once_(); } catch (e) { note_('10.26 공지 보냄 처리 실패: ' + e); }
   if (!props.getProperty('REOPEN_V1')) try { reopenClosedOnce_(); } catch (e) { note_('닫힌 폼 다시 열기 실패: ' + e); }
@@ -3158,7 +3159,9 @@ function ensureReviewGuideMsgs_(runs) {
         return p.length ? p.reduce(function (a, y) { return a + y.n; }, 0) : (Number(x['인원']) || Number(x['목표인원']) || 0);
       });
       rv.days = !r['플랫폼'] || /쿠팡|네이버/.test(String(r['플랫폼'])) ? 7 : 10;
-      const res = reviewGuideMsg_(rv, ppl, counts, k);
+      // 그날만 사용자가 정한 리뷰 종류 개수 (RV_.dayMix['#10.27실링팬2'] = '포토대기 1, 텍스트리뷰 1'): 앞 날을 손으로 바꿔서 비율 계산이 안 맞을 때 (10/26 실링팬)
+      const dm = rv.dayMix && rv.dayMix[bareTitle_(r['명단 제목']).replace(/\s+/g, '')];
+      const res = dm ? reviewGuideMsg_(Object.assign({}, rv, { mix: dm }), ppl, [counts[k]], 0) : reviewGuideMsg_(rv, ppl, counts, k);
       const room = String(r['카톡방'] || bareTitle_(r['명단 제목']));
       if (old) {
         // 예전 카톡 이름 글: 아직 안 보냈으면 이 글로 바꾸고, 보냈으면 그대로 둠
@@ -7880,6 +7883,20 @@ function fix1026bOnce_() {
   ['#10.22 실링팬 1', '#10.26 실링팬 2'].forEach(function (t) { props.setProperty('RVSENT_' + campKey_(t) + '_' + dateTok_(t), '1'); });
   log.push('실링팬 10.22·10.26 포토 받음');
   note_('✓ 10/26 고침: ' + log.join(', '));
+}
+// (10/26 한 번, 사용자 요청) 실링팬 10.27은 포토 1 + 텍스트 1 (10.26을 둘 다 포토로 바꿔서 비율 계산과 달라짐. 10.28·10.29는 계산대로 각각 포토 1 + 텍스트 1 → 포토 6 · 텍스트 4)
+function silingDayMixOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('SILING_DAYMIX_V1')) return;
+  props.setProperty('SILING_DAYMIX_V1', '1');
+  const r = readRuns_().filter(function (x) { return /^#10\.27 실링팬/.test(bareTitle_(x['명단 제목'])) && x['진행 상태'] !== '종료'; })[0];
+  if (!r || !r['시트ID']) { note_('실링팬 10.27 리뷰 종류: 진행을 못 찾음'); return; }
+  const k = 'RV_' + r['시트ID'];
+  let rv = {}; try { rv = JSON.parse(props.getProperty(k) || '{}') || {}; } catch (e) {}
+  rv.dayMix = rv.dayMix || {};
+  rv.dayMix[bareTitle_(r['명단 제목']).replace(/\s+/g, '')] = '포토대기 1, 텍스트리뷰 1';
+  props.setProperty(k, JSON.stringify(rv));
+  note_('✓ 실링팬 10.27 리뷰 종류: 포토 1 + 텍스트 1');
 }
 // (10/26 한 번, 사용자 요청) 신발패드 문어괄사 진행에서 이슬비가 폼을 두 번 냄 → 맨 처음 것 지움 (폼 응답·응답 탭·명단 탭, 인원 다시 셈 = 폼수정 탭 삭제와 같음)
 function delSeulbiOnce_() {
