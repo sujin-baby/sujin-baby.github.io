@@ -1515,6 +1515,18 @@ function diag_(p) {
     out.payHead.hRefs = refs;
   } catch (e) { out.payHeadErr = String(e); }
   // &fo=1: 끝나지 않은 진행 폼의 옵션 보기 (읽기만)
+  // (읽기만) 배정 탭 줄(숨은 H열 폼 옵션 포함)·폼수정 E2·그 진행 폼 설명: ?asg=방제 일부 (10/27 효자손 '아직'·'초과' 원인 보기)
+  if (p.asg) try {
+    const ss0 = adminSs_(), as0 = ss0.getSheetByName(ASSIGN_TAB), want = String(p.asg);
+    out.asgRows = [];
+    if (as0 && as0.getLastRow() >= 2) {
+      const av = as0.getRange(2, 1, as0.getLastRow() - 1, ASSIGN_HEAD.length).getDisplayValues(), af = as0.getRange(2, 5, as0.getLastRow() - 1, 1).getFormulas();
+      av.forEach(function (x, i) { if (String(x[0]).indexOf(want) >= 0) out.asgRows.push((i + 2) + ' | ' + x.join(' | ') + (i === 0 || out.asgRows.length === 0 ? ' | E식=' + String(af[i][0]).slice(0, 400) : '')); });
+    }
+    const et = ss0.getSheetByName(EDIT_TAB); out.editE2 = et ? String(et.getRange('E2').getValue()).slice(0, 4000) : '';
+    const rr = readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']).indexOf(want) >= 0 && x['폼ID']; })[0];
+    if (rr) { const fm = FormApp.openById(rr['폼ID']); out.asgForm = { title: fm.getTitle(), desc: String(fm.getDescription() || '').slice(0, 4000), choices: formChoices_(fm) }; }
+  } catch (e) { out.asgErr = String(e); }
   if (p.fo) try {
     const seen = {}; out.formOpts = [];
     readRuns_().forEach(function (r) { const fid = String(r['폼ID'] || ''); if (!fid || seen[fid] || r['진행 상태'] === '종료') return; seen[fid] = 1; try { out.formOpts.push(bareTitle_(r['명단 제목']) + ': ' + formChoices_(FormApp.openById(fid)).join(' / ')); } catch (e) { out.formOpts.push(bareTitle_(r['명단 제목']) + ': ' + e); }
