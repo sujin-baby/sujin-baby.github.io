@@ -2836,6 +2836,7 @@ function checkFullInner_() {
   if (!props.getProperty('RVCAMP_V1')) try { rvCampOnce_(); } catch (e) { note_('리뷰 취합 의뢰 단위로 바꾸기 실패: ' + e); }
   if (!props.getProperty('EXPFEE_AB_V1')) try { expFeeAbOnce_(); } catch (e) { note_('기대평 폼 리뷰비 보기 바꾸기 실패: ' + e); }
   if (!props.getProperty('HYOJA_ROOM_V1')) try { hyojaRoomOnce_(); } catch (e) { note_('효자손 방제 줄이기 실패: ' + e); }
+  if (!props.getProperty('FIX1027_V1')) try { fix1027Once_(); } catch (e) { note_('10/27 보낼메시지 정리 실패: ' + e); }
   if (!props.getProperty('NAMES1026_V1')) try { names1026Once_(); } catch (e) { note_('효자손·보냉백 이름 맞추기 실패: ' + e); }
   if (!props.getProperty('BAG_SILBIN_V1')) try { bagSilBinOnce_(); } catch (e) { note_('치약걸이 보냉백 실/빈 바꾸기 실패: ' + e); }
   if (!props.getProperty('BUYU_PHOTO_V1')) { props.setProperty('BUYU_PHOTO_V1', '1'); props.setProperty('RVSENT_' + campKey_('#택10.21 써니마켓 부유단감 5') + '_10.21', '1'); note_('✓ 부유단감 10.21 포토 전달됨으로 표시 (사용자 확인)'); }
@@ -4845,7 +4846,12 @@ function obUserEdit_(e) {
     if (val.length > 20 && last >= 2) {
       const all = sh.getRange(2, 5, last - 1, 1).getValues(), same = [];
       all.forEach(function (x, i) { if (i + 2 !== r0 && String(x[0]) === val) same.push(i + 2); });
-      if (same.length) { try { e.source.toast(r0 + '행 메시지 글이 ' + same.join(', ') + '행과 똑같아요. 복사한 걸 시트에 잘못 붙여넣었으면 Ctrl+Z(되돌리기) 해 주세요.', '⚠ 보낼메시지', 20); } catch (err) {} }
+      // 다른 줄 글을 그대로 붙여넣은 것(카톡에 붙이려고 복사한 걸 시트 칸에 붙여넣음)은 바로 원래 글로 되돌림 (10/26 E27, 10/27 E30: 줄넘기 방 공지가 속눈썹 명단 전달 글로 바뀜)
+      if (same.length && e.oldValue != null && String(e.oldValue).length > 0 && String(e.oldValue) !== val) {
+        sh.getRange(r0, 5).setValue(e.oldValue);
+        log.unshift(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm:ss') + ' E' + r0 + ' 되돌림 (' + same.join(',') + '행과 같은 글이 붙여넣어짐)'); c.put('OB_USEREDIT', JSON.stringify(log.slice(0, 40)), 21600);
+        try { e.source.toast(r0 + '행 메시지 칸에 ' + same.join(', ') + '행 글이 붙여넣어져서 원래 글로 되돌렸어요. (카톡에 붙여넣을 때는 카톡 창을 먼저 누르고 붙여넣기)', '⚠ 보낼메시지 되돌림', 20); } catch (err) {}
+      } else if (same.length) { try { e.source.toast(r0 + '행 메시지 글이 ' + same.join(', ') + '행과 똑같아요. 복사한 걸 시트에 잘못 붙여넣었으면 Ctrl+Z(되돌리기) 해 주세요.', '⚠ 보낼메시지', 20); } catch (err) {} }
     }
   }
 }
@@ -8292,6 +8298,24 @@ function hyojaRoomOnce_() {
   globalThis.__PAY_RENAME_ANY = true;
   try { if (renameRun_(r, '#10.27 실 효자손외 20', '방제 20자')) note_('✓ 방제 20자로: #10.27 실 유앤아이푸드 효자손외 20 → #10.27 실 효자손외 20 (카톡방 이름도 바꿔 주세요)'); }
   finally { globalThis.__PAY_RENAME_ANY = false; }
+}
+// (10/27 한 번, 사용자 요청) '#택10.28 줄넘기 2' 방 공지 칸(m11062be8d2a5)에 속눈썹 명단 전달 글이 붙여넣어진 것(10/27 08:04 사람이 붙여넣기, 기록 있음) → 지움
+//  같은 방의 정상 공지(m47cc8b6581ca)가 따로 있어서 그 줄만 남김. 글이 그새 바뀌었으면 안 건드림
+function fix1027Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FIX1027_V1')) return;
+  props.setProperty('FIX1027_V1', '1');
+  const res = withObWrite_(function () {
+    const ob = outboxSheet_(), ol = ob.getLastRow(); if (ol < 2) return '보낼메시지 비어 있음';
+    const v = ob.getRange(2, 1, ol - 1, 6).getValues();
+    const bad = v.findIndex(function (x) { return String(x[0]) === 'm11062be8d2a5' && /^https:\/\/docs\.google\.com\/spreadsheets/.test(String(x[4])) && /속눈썹영양제/.test(String(x[4])) && x[5] !== '보냄'; });
+    const good = v.some(function (x) { return String(x[0]) !== 'm11062be8d2a5' && String(x[3]) === '#택10.28 줄넘기 2' && x[2] === '방 공지' && /양식 작성 폼/.test(String(x[4])); });
+    if (bad < 0) return '그 줄이 없거나 이미 고쳐짐';
+    if (!good) return '줄넘기 10.28 정상 공지가 없어서 안 지움';
+    ob.deleteRow(bad + 2);
+    return '줄넘기 10.28 방에 잘못 들어간 속눈썹 명단 글 지움 (정상 공지 줄은 그대로)';
+  });
+  note_('✓ 10/27 보낼메시지: ' + res);
 }
 // (10/26 한 번, 사용자 요청 '이렇게 달라지면 안 된다고') 1) 효자손: 명단 시트·폼·폴더 '# 실 유앤아이푸드 효자손외' → '# 실 효자손외' (방제와 같게)
 //  2) '#10.27 실 치약걸이 보냉백 5' → '#10.27 실/빈 치약걸이 보냉백 5' (시트·폼은 이미 '# 실/빈 치약걸이 보냉백'). 10.26은 전부 실배송이라 그대로
