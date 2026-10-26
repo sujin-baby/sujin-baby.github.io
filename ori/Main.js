@@ -2969,10 +2969,15 @@ function checkFullInner_() {
   const live = rr.filter(function (r) { return r['진행 상태'] !== '종료'; });
   const runSig = sigOf([Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd'), live.map(function (r) { return [r['명단 제목'], String(r['진행일']), r['시트ID'], r['폼ID'], r['진행 상태']]; })]);
   const paySig = sigOf([runSig, live.map(function (r) { return [r['인원'], r['목표인원'], r['가격'], r['총건수'], r['업체'], r['구매시간']]; })]);
-  const slow = Date.now() - Number(props.getProperty('SLOW_AT') || 0) > 30 * 60000;
+  const slowAge = Date.now() - Number(props.getProperty('SLOW_AT') || 0), slow = slowAge > 30 * 60000;
   if (slow || props.getProperty('RUN_SIG') !== runSig) {
     step_('배정 수식'); try { refreshAssignFormulasOnce_(rr); props.setProperty('RUN_SIG', runSig); } catch (e) { note_('배정 수식 갱신 실패: ' + e); }
   }
+  // 급하지 않은 정리(취완·리뷰 독촉·리뷰 보고·사용법 탭 등)는 30분마다. 밀렸으면 월급시트보다 먼저 (월급시트는 나눠서 다음 확인에서 이어 함)
+  //  10/26: 월급시트가 매번 90초 걸려 4분을 넘기는 바람에 정리가 16:53부터 2시간 넘게 안 돌았음 → 정리 시각이 안 바뀌어 월급시트가 또 매번 도는 악순환
+  //  1시간 넘게 밀리면 조금 늦게(4분 30초 전까지) 시작해도 돌림. 2시간 넘게 못 돌면 실행 기록에 ⚠
+  if (slow && !late_(slowAge > 60 * 60000 ? 270 : 240)) { step_('정리'); slowTasks_(rr, listed); }
+  else if (slow && slowAge > 120 * 60000) note_('⚠ 정리(취완·리뷰 독촉·리뷰 보고)가 ' + Math.floor(slowAge / 3600000) + '시간 넘게 못 돌았어요: 확인이 오래 걸려서 (다음 확인에서 다시)');
   if (CONFIG.PAY_SHEET_ID && (slow || props.getProperty('PAY_SIG') !== paySig || props.getProperty('PAY_PENDING'))) {
     props.setProperty('PAY_PENDING', '1');   // 끝나야 지움 → 시간이 모자라면 다음 확인 끝에서 이어서 (한 일은 다시 안 함)
     if (!late_(250)) {
@@ -2981,10 +2986,6 @@ function checkFullInner_() {
       catch (e) { if (e && e.payLate) note_('✓ 월급시트 나눠서 하는 중 (' + e.payLate + ', 다음 확인에서 이어서. 오류 아님)'); else note_('월급시트 갱신 실패: ' + e); }
     }
   }
-  // 급하지 않은 정리는 30분마다 (시간이 모자라면 다음 확인에서, 1시간 넘게 밀리면 맨 앞에서)
-  if (!slow || late_(240)) return;
-  step_('정리');
-  slowTasks_(rr, listed);
 }
 // 30분 정리: 다 끝나야 시각을 적음 (중간에 끊기면 다음 확인에서 다시)
 function slowTasks_(rr, listed) {
@@ -5308,10 +5309,9 @@ function rvZip_(f, name, props, sid, mine) {
   const sig = 'v2:' + RV_TYPES.map(function (t) { return byType[t].length; }).join(',') + ':' + loose.length + ':' + newest;
   if (props.getProperty('RVZIP_' + sid) === sig) return;
   if (Date.now() - newest < 10 * 60000) return;   // 아직 올리는 중일 수 있음 → 다음 확인에서
-  props.setProperty('RVZIP_' + sid, sig);
   const base = rvBase_(name), zipName = base.replace(/\//g, '／').replace(/[\\:*?"<>|]/g, '') + '.zip', warn = [];   // 파일 이름에 못 쓰는 글자 (# 실/빈 → 실／빈)
   const size = files.reduce(function (a, x) { return a + x.getSize(); }, 0);
-  if (size > 45 * 1024 * 1024) { queueMsg_('내 할 일', '[' + base + '] 리뷰 사진이 너무 커서(' + Math.round(size / 1048576) + 'MB) 압축 못 했어요 → 사진을 줄이거나 나눠서 보내기', '할 일'); return; }
+  if (size > 45 * 1024 * 1024) { props.setProperty('RVZIP_' + sid, sig); queueMsg_('내 할 일', '[' + base + '] 리뷰 사진이 너무 커서(' + Math.round(size / 1048576) + 'MB) 압축 못 했어요 → 사진을 줄이거나 나눠서 보내기', '할 일'); return; }
   // 개수: 전부 종류 폴더에 나눴으면 폴더 사진 수, 아니면 리뷰 가이드 배정(못 찾으면 의뢰서)
   let cnt = null, from = '';
   if (!loose.length) {
@@ -5345,6 +5345,7 @@ function rvZip_(f, name, props, sid, mine) {
   const old = f.parent.getFilesByName(zipName);
   while (old.hasNext()) old.next().setTrashed(true);
   const zip = f.parent.createFile(Utilities.zip(blobs, zipName));
+  props.setProperty('RVZIP_' + sid, sig);   // 압축을 다 만든 뒤에 기억 (중간에 끊기면 다음 확인에서 다시)
   props.setProperty('RVZIPURL_' + sid, zip.getUrl());
   const cntTxt = cnt ? rvCntText_(cnt) : '개수 모름';
   // 사장님께 보낼 글 하나: 리뷰 완료 보고 + 압축 파일 링크 (사용자 요청 10/26 '하나로 붙여'). 안 보낸 보고 글이 있으면 거기에 링크를 붙이거나 새 링크로 바꿈
