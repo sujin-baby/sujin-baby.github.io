@@ -270,7 +270,8 @@ function changeDaily_(anchor, from, n) {
       } else {
         setRun_(r.row, '진행 상태', '종료');
         // 폼은 절대 안 닫음 (사용자 요청 10/21 '폼 닫지 마'. 10/24 실링팬: 남는 날을 끝내면서 같은 폼을 쓰는 받는 날 폼까지 닫혔음)
-        try { const room = String(r['카톡방'] || old), ob = outboxSheet_(), ol = ob.getLastRow(); if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (String(v[3]) === room && v[5] !== '보냄') obSet_(ob, v[0], 6, '취소'); }); } catch (e) {}
+        // 안 보낸 메시지는 지움 (예전엔 보냄 칸에 '취소'를 썼는데 체크칸이라 안 들어가서 '대기'로 남았음, 10/26 실링팬 10.30·11.02~11.04)
+        try { delPendingFor_(String(r['카톡방'] || old)); } catch (e) {}
         done.push(old + ' 취소(종료)');
       }
     } else {
@@ -1423,10 +1424,16 @@ function diag_(p) {
     });
   } catch (e) { out.pnErr = String(e); }
   if (p.rv) try { out.rvExplain = rvExplain_(); } catch (e) { out.rvErr = String(e); }
+  try { out.obUserEdit = JSON.parse(CacheService.getScriptCache().get('OB_USEREDIT') || '[]'); } catch (e) {}
   // &pay=글자: 월급시트에서 캠페인명에 그 글자가 든 줄 (읽기만, 같은 진행이 두 줄인지 보기)
   if (p.pay) try {
     out.payRows = [];
-    payTabsNow_().forEach(function (sh) { const L = payLayout_(sh); if (!L) return; const last = sh.getLastRow(); if (last <= L.head) return; sh.getRange(L.head + 1, L.name, last - L.head, 1).getValues().forEach(function (x, i) { if (String(x[0]).indexOf(String(p.pay)) >= 0) out.payRows.push(sh.getName() + '!' + (L.head + 1 + i) + ' ' + x[0]); }); });
+    payTabsNow_().forEach(function (sh) { const L = payLayout_(sh); if (!L) return; const last = sh.getLastRow(); if (last <= L.head) return; sh.getRange(L.head + 1, L.name, last - L.head, 1).getValues().forEach(function (x, i) {
+      if (String(x[0]).indexOf(String(p.pay)) < 0) return;
+      const row = L.head + 1 + i, lc = Math.min(sh.getLastColumn(), 60), hd = sh.getRange(L.head, 1, 1, lc).getDisplayValues()[0], dv = sh.getRange(row, 1, 1, lc).getDisplayValues()[0], fm = sh.getRange(row, 1, 1, lc).getFormulas()[0];
+      out.payRows.push(sh.getName() + '!' + row + ' ' + x[0]);
+      out.payDetail = (out.payDetail || []).concat([{ row: row, cells: hd.map(function (h, j) { return (dv[j] || fm[j]) ? colLetter_(j + 1) + '[' + h + ']=' + dv[j] + (fm[j] ? ' {' + fm[j] + '}' : '') : ''; }).filter(Boolean), L: L }]);
+    }); });
   } catch (e) { out.payErr = String(e); }
   // &resp=요청ID: 그 진행 명단 시트의 폼 응답 (시각, 닉네임, 수령인, 전화 뒤 4자리, 옵션) — 중복·두 번 낸 사람 찾기 (읽기만)
   if (p.resp) try {
@@ -2722,6 +2729,7 @@ function checkFullInner_() {
   if (!props.getProperty('DEL_SEULBI_V1')) try { delSeulbiOnce_(); } catch (e) { note_('이슬비 응답 지우기 실패: ' + e); }
   if (!props.getProperty('FIX1026B_V1')) try { fix1026bOnce_(); } catch (e) { note_('10/26 실링팬·치약걸이 고치기 실패: ' + e); }
   if (!props.getProperty('SILING_DAYMIX_V1')) try { silingDayMixOnce_(); } catch (e) { note_('실링팬 10.27 리뷰 종류 실패: ' + e); }
+  if (!props.getProperty('FIX1026C_V1')) try { fix1026cOnce_(); } catch (e) { note_('10/26 보낼메시지 정리 실패: ' + e); }
   if (!props.getProperty('BUYU_PHOTO_V1')) { props.setProperty('BUYU_PHOTO_V1', '1'); props.setProperty('RVSENT_' + campKey_('#택10.21 써니마켓 부유단감 5') + '_10.21', '1'); note_('✓ 부유단감 10.21 포토 전달됨으로 표시 (사용자 확인)'); }
   if (!props.getProperty('SENT1026_V1')) try { sent1026Once_(); } catch (e) { note_('10.26 공지 보냄 처리 실패: ' + e); }
   if (!props.getProperty('REOPEN_V1')) try { reopenClosedOnce_(); } catch (e) { note_('닫힌 폼 다시 열기 실패: ' + e); }
@@ -3085,9 +3093,12 @@ function reviewGuideMsg_(rv, ppl, counts, k) {
   // 리뷰 종류 줄 사이는 빈 줄 (별점(13명) : … / 빈 줄 / 텍스트(10명) : …)
   const spread = function (head) { const o = []; head.forEach(function (h, i) { if (i) o.push(''); o.push(h); }); return o; };
   const guideOf = function (head, people) { return ['🐥리뷰내용 가이드🐥', ''].concat(spread(head), [''], prods.length ? mkBody(people) : noGuide ? [] : ['(리뷰 가이드: 사장님께 물어보고 채우기)', ''], foot(sumN(people))).join('\n'); };
+  const pwLine = pw.length ? '포토리뷰(' + pw.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + pw.map(nm).join(' ') : '';
+  // 한 방에 텍스트와 포토(업체 사진 대기)가 섞이면 가이드 하나에 둘 다, 맨 밑 0/그 방 인원 (사용자 요청 10/26: 실링팬 2인데 0/1로 나뉘어 나옴)
+  if (lines.length && pw.length) return { msg: guideOf([pwLine].concat(lines), pw.concat(used)), ask: ask, photoWait: true, pwMsg: '' };
   const msg = lines.length ? guideOf(lines, used) : '';
-  // 업체 사진을 기다리는 사람 몫도 가이드는 미리 만들어 둠 (사진 전달 뒤 보냄, 사용자 요청 10/21)
-  const pwMsg = pw.length ? guideOf(['포토리뷰(' + pw.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + pw.map(nm).join(' ')], pw) : '';
+  // 방 사람이 모두 업체 사진 대기면 가이드는 미리 만들어 두고 사진 전달 뒤 보냄 (사용자 요청 10/21)
+  const pwMsg = pw.length ? guideOf([pwLine], pw) : '';
   return { msg: msg, ask: ask, photoWait: pw.length > 0, pwMsg: pwMsg };
 }
 // 그날 응답의 수령인(계정) 이름 순서대로 [{nm, n:1}] (한 사람이 두 계정이면 계정마다 따로). 수령인 칸: 수령인·수취인·이름·성함
@@ -3172,7 +3183,7 @@ function ensureReviewGuideMsgs_(runs) {
         note_('✓ 리뷰 가이드 메시지를 수령인 이름으로 바꿈: ' + room);
         return;
       }
-      if (res.photoWait) { queueMsg_(room, '⭐️포토대기⭐️', '방 공지'); queueMsg_(room, res.pwMsg, '포토 가이드'); }   // 그날 몫이 업체 사진 대기면 (10/21 실링팬 하루 포토·하루 텍스트)
+      if (res.photoWait) { queueMsg_(room, '⭐️포토대기⭐️', '방 공지'); if (res.pwMsg) queueMsg_(room, res.pwMsg, '포토 가이드'); }   // 그날 몫이 업체 사진 대기면 (10/21 실링팬 하루 포토·하루 텍스트)
       if (photoAll) { queueMsg_(room, '⭐️포토대기⭐️', '방 공지'); if (res.msg) queueMsg_(room, res.msg, '포토 가이드'); }
       else if (res.msg) queueMsg_(room, res.msg, '방 공지');
       if (res.ask.length) queueMsg_('사장님', '[' + room + '] 의뢰서에 ' + res.ask.join(', ') + '이(가) 없어요. 사장님께 물어보고 리뷰 가이드 공지를 고쳐서 보내기', '할 일');
@@ -3581,6 +3592,14 @@ function obFilterRestore_(sh, saved) {
     props.deleteProperty('OB_FILTER');
   } catch (e) { note_('⚠ 보낼메시지 필터를 다시 못 걸었어요 (' + e.message + '). 종류 칸 필터를 다시 걸어 주세요'); }
 }
+// 그 카톡방의 안 보낸 메시지 줄을 지움 (취소된 진행)
+function delPendingFor_(room) { return withObWrite_(function () {
+  const ob = outboxSheet_(), ol = ob.getLastRow(), del = [];
+  if (ol < 2 || !room) return 0;
+  ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v, i) { if (String(v[3]) === room && v[5] !== '보냄') del.push(i + 2); });
+  for (let j = del.length - 1; j >= 0; j--) ob.deleteRow(del[j]);
+  return del.length;
+}); }
 function obSet_(ob, id, col, val) { return withObWrite_(function () { return obSetInner_(ob, id, col, val); }); }
 function queueMsg_(room, msg, kind) { return withObWrite_(function () { return queueMsgInner_(room, msg, kind); }); }
 function markMsg_(id, st) { return withObWrite_(function () { return markMsgInner_(id, st); }); }
@@ -4668,6 +4687,7 @@ function ensureEditTab_() {
 function onAdminEdit(e) {
   if (e && e.response) return onRunSubmit_(e);   // 폼 제출 트리거도 이 이름으로 받음 (로더에 이미 있는 이름이라)
   if (!e || !e.range) return;
+  try { if (e.range.getSheet().getName() === OUTBOX_SHEET) obUserEdit_(e); } catch (err) {}
   // 한눈에 탭 '진행 도우미' 체크 → 시트 오른쪽에 진행 도우미 (새 탭 없이)
   if (e.range.getSheet().getName() === DASH_TAB && e.range.getColumn() === 1 && String(e.range.getRow()) === PropertiesService.getScriptProperties().getProperty('DASH_BAR_ROW')) {
     if (String(e.value).toUpperCase() !== 'TRUE') return;
@@ -4697,6 +4717,28 @@ function onAdminEdit(e) {
 // 한눈에 '리뷰 취합할 것' 체크칸 줄인지 (10/25: 이 칸이 위 목록에 없어서 체크해도 진행목록에 저장이 안 됐음)
 function isRvRow_(row) {
   try { return !!JSON.parse(PropertiesService.getScriptProperties().getProperty('DASH_RV') || '{}')[String(row)]; } catch (e) { return false; }
+}
+
+// 보낼메시지를 사람이 고친 기록 (스크립트가 쓴 건 편집 트리거가 안 불림) → 점검 주소 obUserEdit (10/26: 방 공지 칸 글이 위 줄 명단 전달 글로 바뀐 원인을 기록이 없어 못 가림)
+//  메시지 칸에 다른 줄과 똑같은 글이 들어오면(복사한 걸 시트에 잘못 붙여넣기) 바로 알림
+function obUserEdit_(e) {
+  const sh = e.range.getSheet(), r0 = e.range.getRow(), n = e.range.getNumRows(), c0 = e.range.getColumn(), c1 = c0 + e.range.getNumColumns() - 1;
+  if (r0 < 2) return;
+  const ids = sh.getRange(r0, 1, n, 1).getValues().map(function (x) { return String(x[0]); });
+  const nv = e.range.getValues();
+  const item = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm:ss') + ' ' + e.range.getA1Notation() + ' 번호 ' + ids.join(',') +
+    ' 전="' + String(e.oldValue == null ? '' : e.oldValue).slice(0, 50).replace(/\n/g, ' / ') + '" 후="' + String(nv[0][0]).slice(0, 50).replace(/\n/g, ' / ') + '"';
+  const c = CacheService.getScriptCache();
+  let log = []; try { log = JSON.parse(c.get('OB_USEREDIT') || '[]'); } catch (err) {}
+  log.unshift(item); c.put('OB_USEREDIT', JSON.stringify(log.slice(0, 40)), 21600);
+  if (c0 <= 5 && c1 >= 5 && n === 1) {
+    const val = String(sh.getRange(r0, 5).getValue()), last = sh.getLastRow();
+    if (val.length > 20 && last >= 2) {
+      const all = sh.getRange(2, 5, last - 1, 1).getValues(), same = [];
+      all.forEach(function (x, i) { if (i + 2 !== r0 && String(x[0]) === val) same.push(i + 2); });
+      if (same.length) { try { e.source.toast(r0 + '행 메시지 글이 ' + same.join(', ') + '행과 똑같아요. 복사한 걸 시트에 잘못 붙여넣었으면 Ctrl+Z(되돌리기) 해 주세요.', '⚠ 보낼메시지', 20); } catch (err) {} }
+    }
+  }
 }
 
 function onAdminEditInner_(e) {
@@ -5099,7 +5141,7 @@ function reviewDone_(runs) {
       const rk = 'RVRPT_' + sid;
       if (allDone && !props.getProperty(rk)) {
         props.setProperty(rk, '1');
-        if (!init) queueMsg_('사장님', '안녕하세요 ' + name + ' 리뷰완료되어 보고드립니다 !', '리뷰 보고');
+        if (!init) queueMsg_('사장님', rvReportLine_(name), '리뷰 보고');
         if (!init) note_('✓ 사장님 리뷰 완료 보고 넣음: ' + name);
       }
       // B1. 의뢰 리뷰가 다 끝나면 리뷰이미지 폴더 사진 → 종류별 압축 (사용자 요청 10/26: 다 끝난 뒤에 한 번에 업체로)
@@ -5124,6 +5166,8 @@ function rvFolder_(mine, props, sid) {
 //  '캠페인명.zip' 안에 '포토 N' / '텍스트 N' / '별점 N' 폴더로. 종류는 사진이 들어 있는 폴더 이름(포토·텍스트·별점으로 시작)으로 앎
 //  (방마다 폴더 안에 포토/텍스트/별점 폴더, 또는 포토/텍스트/별점 폴더 안에 방 폴더 둘 다 됨). 사진 내용은 안 봄
 const RV_TYPES = ['포토', '텍스트', '별점'];
+// 사장님 리뷰 완료 보고 첫 줄 (명단 시트 이름에서 예전 '(응답)'은 뺌)
+function rvReportLine_(name) { return '안녕하세요 ' + String(name).replace(/\s*\(응답\)\s*$/, '').trim() + ' 리뷰완료되어 보고드립니다 !'; }
 function rvTypeOf_(folderName) { const m = String(folderName || '').trim().match(/^(포토|텍스트|별점)/); return m ? m[1] : ''; }
 // 의뢰서(생성기 리뷰 정보 RV_)의 종류별 개수 → 압축 개수와 다르면 할 일에 알림. 모르면 null
 function rvExpect_(sid, mine) {
@@ -5166,13 +5210,13 @@ function rvZip_(f, name, props, sid, expect) {
   const old = f.parent.getFilesByName(zipName);
   while (old.hasNext()) old.next().setTrashed(true);
   const zip = f.parent.createFile(Utilities.zip(blobs, zipName));
-  const head = '[' + base + '] 리뷰 압축';
-  const msg = head + ': ' + cnt.join(' · ') + ' → 받아서 업체에 보내기\n' + zip.getUrl() + (warn.length ? '\n' + warn.join('\n') : '');
-  // 안 보낸 '할 일'이 있으면 새 링크로 바꿈 (예전 문구 '[명단 시트 이름] 리뷰 이미지'도)
+  // 사장님께 보낼 글 하나: 리뷰 완료 보고 + 압축 파일 링크 (사용자 요청 10/26 '하나로 붙여'). 안 보낸 보고 글이 있으면 거기에 링크를 붙이거나 새 링크로 바꿈
+  const line = rvReportLine_(name), msg = line + '\n' + zip.getUrl();
   const ob = outboxSheet_(), ol = ob.getLastRow();
   let done = false;
-  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { const t = String(v[4]); if (!done && v[2] === '할 일' && v[5] !== '보냄' && (t.indexOf(head) === 0 || t.indexOf('[' + name + '] 리뷰 이미지') === 0)) { obSet_(ob, v[0], 5, msg); done = true; } });
-  if (!done) queueMsg_('사장님', msg, '할 일');
+  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (!done && v[2] === '리뷰 보고' && v[5] !== '보냄' && String(v[4]).split('\n')[0].replace(/\s*\(응답\)/, '') === line) { obSet_(ob, v[0], 5, msg); done = true; } });
+  if (!done) queueMsg_('사장님', msg, '리뷰 보고');
+  if (warn.length) queueMsg_('내 할 일', '[' + base + '] 리뷰 압축 확인: ' + cnt.join(' · ') + '\n' + warn.join('\n'), '할 일');
   note_('✓ 리뷰 압축: ' + zipName + ' (' + cnt.join(' · ') + ')' + (warn.length ? ' ' + warn.join(' ') : ''));
 }
 
@@ -7883,6 +7927,32 @@ function fix1026bOnce_() {
   ['#10.22 실링팬 1', '#10.26 실링팬 2'].forEach(function (t) { props.setProperty('RVSENT_' + campKey_(t) + '_' + dateTok_(t), '1'); });
   log.push('실링팬 10.22·10.26 포토 받음');
   note_('✓ 10/26 고침: ' + log.join(', '));
+}
+// (10/26 한 번, 사용자 요청) 보낼메시지 정리
+//  1) 하루 인원 바꾸기로 취소된 실링팬 진행(10.30, 11.02~11.04)의 안 보낸 공지 지움 (예전 코드가 '취소'를 못 써서 '대기'로 남음)
+//  2) #10.26 실링팬 2 리뷰 가이드: 윤정(포토 가이드)·허예인(방 공지)으로 나뉜 걸 하나로 (포토리뷰 2명, 0/2), 포토는 이미 전달함
+//  3) 옥광밤 리뷰 보고 글의 '(응답)' 뺌
+function fix1026cOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FIX1026C_V1')) return;
+  props.setProperty('FIX1026C_V1', '1');
+  const log = [], runs = readRuns_();
+  ['#10.30 실링팬 1', '#11.02 실링팬 1', '#11.03 실링팬 1', '#11.04 실링팬 1'].forEach(function (room) {
+    const r = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === room; })[0];
+    if (r && r['진행 상태'] !== '종료') return;   // 취소(종료)된 진행만
+    const n = delPendingFor_(room); if (n) log.push(room + ' ' + n + '줄 지움');
+  });
+  const ob = outboxSheet_(), ol = ob.getLastRow(), v = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues() : [];
+  const g1 = v.filter(function (x) { return String(x[3]) === '#10.26 실링팬 2' && x[2] === '포토 가이드' && x[5] !== '보냄' && /포토리뷰\(1명\)\s*:\s*윤정/.test(String(x[4])); })[0];
+  const g2 = v.filter(function (x) { return String(x[3]) === '#10.26 실링팬 2' && x[2] === '방 공지' && x[5] !== '보냄' && /포토리뷰\(1명\)\s*:\s*허예인/.test(String(x[4])); })[0];
+  if (g1 && g2) {
+    const t = String(g2[4]).replace(/포토리뷰\(1명\)\s*:\s*허예인/, '포토리뷰(2명) : 윤정 허예인').replace(/\n0\/1\n/, '\n0/2\n');
+    obSet_(ob, g2[0], 5, t);
+    withObWrite_(function () { const o2 = outboxSheet_(), l2 = o2.getLastRow(), ids = o2.getRange(2, 1, l2 - 1, 1).getValues(); for (let i = ids.length - 1; i >= 0; i--) if (String(ids[i][0]) === String(g1[0])) o2.deleteRow(i + 2); });
+    log.push('#10.26 실링팬 2 가이드 하나로 (포토리뷰 2명, 0/2)');
+  }
+  v.forEach(function (x) { if (x[2] === '리뷰 보고' && x[5] !== '보냄' && /\(응답\)/.test(String(x[4]))) { obSet_(ob, x[0], 5, String(x[4]).replace(/\s*\(응답\)/g, '')); log.push('리뷰 보고 (응답) 뺌'); } });
+  note_('✓ 10/26 보낼메시지 정리: ' + (log.join(', ') || '고칠 것 없음'));
 }
 // (10/26 한 번, 사용자 요청) 실링팬 10.27은 포토 1 + 텍스트 1 (10.26을 둘 다 포토로 바꿔서 비율 계산과 달라짐. 10.28·10.29는 계산대로 각각 포토 1 + 텍스트 1 → 포토 6 · 텍스트 4)
 function silingDayMixOnce_() {
