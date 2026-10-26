@@ -1414,6 +1414,11 @@ function diag_(p) {
     });
   } catch (e) { out.pnErr = String(e); }
   if (p.rv) try { out.rvExplain = rvExplain_(); } catch (e) { out.rvErr = String(e); }
+  // &pay=글자: 월급시트에서 캠페인명에 그 글자가 든 줄 (읽기만, 같은 진행이 두 줄인지 보기)
+  if (p.pay) try {
+    out.payRows = [];
+    payTabsNow_().forEach(function (sh) { const L = payLayout_(sh); if (!L) return; const last = sh.getLastRow(); if (last <= L.head) return; sh.getRange(L.head + 1, L.name, last - L.head, 1).getValues().forEach(function (x, i) { if (String(x[0]).indexOf(String(p.pay)) >= 0) out.payRows.push(sh.getName() + '!' + (L.head + 1 + i) + ' ' + x[0]); }); });
+  } catch (e) { out.payErr = String(e); }
   // &fo=1: 끝나지 않은 진행 폼의 옵션 보기 (읽기만)
   if (p.fo) try {
     const seen = {}; out.formOpts = [];
@@ -2684,6 +2689,7 @@ function checkFullInner_() {
   if (!props.getProperty('EXPPLAN_V8')) try { expPlanRestoreOnce_(); } catch (e) { note_('기대평 일정 되살리기 실패: ' + e); }
   if (!props.getProperty('EXPPLAN_CLEAN_V1')) try { expPlanCleanOnce_(); } catch (e) { note_('기대평 옛 일정 지우기 실패: ' + e); }
   if (!props.getProperty('FORMNOPRICE_V1')) try { formNoPriceOnce_(); } catch (e) { note_('폼 옵션 가격 빼기 실패: ' + e); }
+  if (!props.getProperty('MERGE_BAG_V1')) try { mergeBagOnce_(); } catch (e) { note_('치약걸이·보냉백 합치기 실패: ' + e); }
   if (!props.getProperty('BUYU_PHOTO_V1')) { props.setProperty('BUYU_PHOTO_V1', '1'); props.setProperty('RVSENT_' + campKey_('#택10.21 써니마켓 부유단감 5') + '_10.21', '1'); note_('✓ 부유단감 10.21 포토 전달됨으로 표시 (사용자 확인)'); }
   if (!props.getProperty('SENT1026_V1')) try { sent1026Once_(); } catch (e) { note_('10.26 공지 보냄 처리 실패: ' + e); }
   if (!props.getProperty('REOPEN_V1')) try { reopenClosedOnce_(); } catch (e) { note_('닫힌 폼 다시 열기 실패: ' + e); }
@@ -2847,7 +2853,7 @@ function checkFullInner_() {
     // 폼은 안 닫음 (사용자 요청 10/21) → 인원이 차면 마감 시각만 적고 명단·리뷰 가이드 메시지
     setRun_(r.row, '마감 시각', new Date());
     changed = true;
-    const listMsg = queueListMsgs_(r);
+    const listMsg = pendingListMsg_(r) || queueListMsgs_(r);
     // 폼이 다 차면 리뷰 가이드도 바로 보낼메시지에 (다음 확인까지 안 기다리게, 사용자 요청 10/21)
     try { ensureReviewGuideMsgs_(readRuns_()); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
     MailApp.sendEmail(me, '[체험단] 명단 마감: ' + r['명단 제목'], [
@@ -2921,6 +2927,20 @@ function listMsgText_(r) {
     }
   } catch (e) {}
   return r['시트 링크'] + '\n\n' + t + (tail ? '\n' + tail : '');
+}
+// 이 진행의 명단 전달이 아직 안 보내고 대기 중이면 새로 넣지 않고 그 글을 지금 내용으로 고침 (인원을 늘려 다시 마감될 때 두 줄 생기지 않게, 10/26)
+function pendingListMsg_(r) {
+  const ob = outboxSheet_(), ol = ob.getLastRow();
+  if (ol < 2) return '';
+  const want = listMsgText_(r);
+  let hit = '';
+  ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
+    if (hit || v[2] !== '명단 전달' || v[5] !== '대기') return;
+    if (!String(v[4]).split('\n').some(function (l) { return l.trim() && sameRunTitle_(l, r['명단 제목']); })) return;
+    if (String(v[4]) !== want) obSet_(ob, v[0], 5, want);
+    hit = want;
+  });
+  return hit;
 }
 function queueListMsgs_(r, onlyWithRoom) {
   const listMsg = listMsgText_(r);
@@ -6772,7 +6792,7 @@ function payTime_(t) {
 function payRename_(oldName, newName) {
   const o = String(oldName).replace(/\s+/g, ''), n = String(newName).replace(/\s+/g, '');
   if (!o || o === n) return;
-  if (campKey_(oldName) !== campKey_(newName)) { note_('⛔ 월급시트 이름 안 바꿈 (다른 상품): ' + oldName + ' → ' + newName); return; }   // 다른 진행 줄 이름을 바꾸지 않게 (10/23)
+  if (campKey_(oldName) !== campKey_(newName) && !globalThis.__PAY_RENAME_ANY) { note_('⛔ 월급시트 이름 안 바꿈 (다른 상품): ' + oldName + ' → ' + newName); return; }   // 다른 진행 줄 이름을 바꾸지 않게 (10/23)
   payTabsNow_().forEach(function (sh) {
     const L = payLayout_(sh); if (!L) return;
     const last = sh.getLastRow(); if (last <= L.head) return;
@@ -7809,6 +7829,49 @@ function expPlanRestoreOnce_() {
     ps.getRange(i + 2, 9).setValue('대기'); n.push(bareTitle_(x[4]));
   });
   note_('✓ 기대평 일정 되살림 (전 진행일 0시에 진행·공지가 만들어짐): ' + (n.join(', ') || '없음'));
+}
+// (10/26 한 번, 사용자 요청) 치약걸이 의뢰(m9qmh8ds)에 같은 업체(아이누빅) 보냉백 의뢰를 합침: 같은 폼·명단 시트
+//  10.26 5명 = 치약걸이 2(이미 삼) + 보냉백 3 실배송, 10.27 5명 = 치약걸이 3 실배송 + 보냉백 2 일반 → 총 10건, 10.28 치약걸이 1 계획은 취소
+//  폼 옵션 치약걸이/보냉백 3색, 폼·명단 시트·폴더 이름 '# 실 치약걸이 보냉백'(다른 의뢰처럼 날짜·인원 없이). 이미 들어온 응답은 그대로
+function mergeBagOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('MERGE_BAG_V1')) return;
+  props.setProperty('MERGE_BAG_V1', '1');
+  const find = function (req) { return readRuns_().filter(function (x) { return String(x['요청ID']) === req && x['진행 상태'] !== '종료'; })[0]; };
+  let r1 = find('m9qmh8ds'), r2 = find('m9qmh8ds-2');
+  if (!r1 || !r2 || !/치약걸이/.test(r1['명단 제목']) || !/치약걸이/.test(r2['명단 제목']) || String(r1['폼ID']) !== String(r2['폼ID'])) { note_('치약걸이·보냉백 합치기: 진행을 못 찾아서 안 함'); return; }
+  const old1 = bareTitle_(r1['명단 제목']), log = [];
+  // 늦은 날짜부터 이름 바꿈 (10/24 규칙)
+  // 상품 이름이 바뀌어도 월급시트 그 진행 줄 이름을 같이 바꿈 (안 하면 새 이름 줄이 하나 더 생겨 같은 진행이 두 줄 = 돈 두 번)
+  globalThis.__PAY_RENAME_ANY = true;
+  try { [[r2, '#10.27 실 치약걸이 보냉백 5'], [r1, '#10.26 실 치약걸이 보냉백 5']].forEach(function (x) { if (renameRun_(x[0], x[1], '보냉백 합침')) log.push(x[1]); }); }
+  finally { globalThis.__PAY_RENAME_ANY = false; }
+  [r2, r1].forEach(function (r) { setRun_(r.row, '캠페인', '실 치약걸이 보냉백'); setRun_(r.row, '총건수', 10); setRun_(r.row, '목표인원', 5); setRun_(r.row, '가격', '17800, 17000'); });
+  setRun_(r1.row, '마감 시각', '');   // 2명 → 5명이 돼서 다시 받는 중
+  r1 = find('m9qmh8ds');
+  // 폼: 옵션, 받기, 이름 (폼·명단 시트·폴더)
+  const nm = sheetName_('#10.26 실 치약걸이 보냉백 5');
+  try {
+    const fo = FormApp.openById(r1['폼ID']);
+    setOptionChoices_(fo, '치약걸이 클린화이트\n보냉백 블랙\n보냉백 그레이\n보냉백 네이비');
+    if (!fo.isAcceptingResponses()) fo.setAcceptingResponses(true);
+    fo.setTitle(nm);
+    DriveApp.getFileById(r1['폼ID']).setName(nm);
+    log.push('폼 옵션: ' + formChoices_(fo).join(', '));
+  } catch (e) { note_('보냉백 합치기 폼 실패: ' + e); }
+  try { DriveApp.getFileById(r1['시트ID']).setName(nm); } catch (e) { note_('보냉백 합치기 명단 시트 이름 실패: ' + e); }
+  try { const fid = (String(r1['폴더 링크'] || '').match(/[-\w]{25,}/) || [])[0]; if (fid) DriveApp.getFolderById(fid).setName(nm); } catch (e) {}
+  // 10.28 치약걸이 1 계획 취소 (치약걸이 2 + 3 = 5건 끝)
+  try {
+    const ps = planSheet_(), pl = ps.getLastRow();
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, 9).getValues().forEach(function (v, i) { if (String(v[0]).indexOf('m9qmh8ds-') === 0 && v[8] === '대기') { ps.getRange(i + 2, 9).setValue('취소 (보냉백과 합침)'); log.push('계획 취소: ' + v[4]); } });
+  } catch (e) {}
+  // 대기 중인 명단 전달(2명일 때 들어간 것)은 새 이름으로. 5명이 차면 새로 안 넣고 이 줄을 씀(pendingListMsg_)
+  try {
+    const ob = outboxSheet_(), ol = ob.getLastRow();
+    if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (v[2] === '명단 전달' && v[5] === '대기' && String(v[4]).indexOf(old1) >= 0) obSet_(ob, v[0], 5, listMsgText_(r1)); });
+  } catch (e) {}
+  note_('✓ 치약걸이·보냉백 합침: ' + log.join(' / '));
 }
 // (10/25 한 번, 사용자 요청) 지금 받는 폼들의 옵션 보기에서 가격 '(10,630원)' 빼기 (끝나지 않은 진행의 폼)
 function formNoPriceOnce_() {
