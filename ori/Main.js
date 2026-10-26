@@ -1535,6 +1535,11 @@ function doGet(e) {
     try { p.desc = Utilities.newBlob(Utilities.base64DecodeWebSafe(p.d64)).getDataAsString('UTF-8'); } catch (err) {}
     delete p.d64;
   }
+  // 긴 공지는 생성기가 gzip으로 압축해서 보냄 (10/26: 주소가 길어 공지가 빠진 채로 만들어졌음)
+  if (p.z64) {
+    try { p.desc = Utilities.ungzip(Utilities.newBlob(Utilities.base64DecodeWebSafe(p.z64), 'application/x-gzip')).getDataAsString('UTF-8'); } catch (err) {}
+    delete p.z64;
+  }
   // 생성기 버튼으로 열면(auto=1) 값이 다 채워진 채로 바로 만들기 실행. 같은 요청ID는 한 번만 만들어짐
   const pre = '<script>window.__N=' + JSON.stringify(p.n || '') + ';window.__ROOM=' + JSON.stringify(p.room || '') + ';window.__DATE=' + JSON.stringify(p.date || '') + ';window.__SHOP=' + JSON.stringify(p.shop || '') + ';window.__OPTS=' + JSON.stringify(p.opts || '') + ';window.__SLOT=' + JSON.stringify(p.slot || '') + ';window.__PHOTO=' + JSON.stringify(p.photo || '') + ';window.__PLAN=' + JSON.stringify(p.plan || '') + ';window.__SLOT2=' + JSON.stringify(p.slot2 || '') + ';window.__DAY=' + JSON.stringify(p.day || '') + ';window.__TOTAL=' + JSON.stringify(p.total || '') + ';window.__CROOM=' + JSON.stringify(p.croom || '') + ';window.__RV=' + JSON.stringify(p.rv || '') + ';window.__AUTO=' + (p.auto === '1' && p.title ? 'true' : 'false') + ';</' + 'script>';
   const fill = pre + '<script>window.__K=' + JSON.stringify(CONFIG.KEY) + ';window.__FNAME=' + JSON.stringify(p.fname || '') + ';(function(){var p=' + JSON.stringify(p).replace(/</g, '\\u003c') + ';var $=function(i){return document.getElementById(i)};if(p.title)$("title").value=p.title;if(p.daily)$("daily").value=p.daily;if(p.desc)$("desc").value=p.desc;if(p.type)$("type").value=p.type;if(p.platform)$("platform").value=p.platform;$("takdae").checked=p.takdae==="1";$("realship").checked=p.realship==="1";autoGo();})();</' + 'script>';
@@ -1553,6 +1558,9 @@ function createRun(d) {
   if (d.act && /^(info|sent|assign|unassign|move)$/.test(d.act)) return toolAction_(d);
   if (d.act) return locked_(function () { return toolAction_(d); }, 30000) || { msg: '다른 작업 중이에요. 잠시 뒤 다시 눌러 주세요.' };
   // 15분 확인이 돌고 있으면 다음 단계에서 멈추라고 알리고 기다림 (예전엔 60초 넘게 기다리면 아무것도 안 하고 화면만 멈춰 있었음)
+  // 공지(폼 설명)가 비었으면 안 만듦 (10/26 효자손외·양배추채칼외: 공지가 구매 시간 한 줄만 남은 채로 폼·방 공지가 만들어졌음)
+  if (!String(d.desc || '').split('\n').some(function (l) { return l.trim() && !isSlotLine_(l); }))
+    throw new Error('공지(폼 설명)가 비어 있어요. 생성기에서 공지를 복사해 이 화면 폼 설명 칸에 붙여넣고 다시 만들기를 눌러 주세요.');
   const props = PropertiesService.getScriptProperties();
   props.setProperty('WANT_LOCK', String(Date.now()));
   let out;
@@ -1565,11 +1573,13 @@ function createRunLocked_(d) {
   {
     // 이미 만든 진행(같은 요청ID, 또는 생성기를 다시 열어 같은 방제로 누름)이면 새로 안 만들고
     //  공지에 살 사람 이름이 있으면 배정 저장 + 폼 설명·안 보낸 방 공지를 이름 넣은 공지로
-    const run = (d.n && runByRequest_(d.n)) || runByTitle_(d);
+    const run = (d.n && runByRequest_(d.n)) || runByTitle_(d) || runByUrls_(d);
     if (run) {
       const prev = againResult_(run);
       prev.assign = autoAssign_(run, d.desc);
-      if (prev.assign) { try { prev.notice = refreshNotice_(run, d) || prev.notice; } catch (e) { note_('공지 다시 넣기 실패: ' + e); } }
+      // 폼 설명이 비어 있으면(공지가 빠진 채로 만들어진 진행) 이번 공지로 채움 (10/26)
+      let empty = false; try { empty = !!run['폼ID'] && !String(FormApp.openById(run['폼ID']).getDescription() || '').split('\n').some(function (l) { return l.trim() && !isSlotLine_(l); }); } catch (e) {}
+      if (prev.assign || empty) { try { prev.notice = refreshNotice_(run, d) || prev.notice; if (empty) note_('✓ 빈 공지 채움: ' + bareTitle_(run['명단 제목'])); } catch (e) { note_('공지 다시 넣기 실패: ' + e); } }
       return prev;
     }
     const res = createRunInner_(d);
@@ -1609,6 +1619,16 @@ function runByTitle_(d) {
   return readRuns_().filter(function (x) {
     return x['진행 상태'] !== '종료' && !/^(next|add)-/.test(String(x['요청ID'])) && key(x['명단 제목']) === want &&
       (!/^\d{4}-\d{2}-\d{2}$/.test(String(d.date || '')) || !(x['진행일'] instanceof Date) || Utilities.formatDate(x['진행일'], CONFIG.TIMEZONE, 'yyyy-MM-dd') === d.date);
+  })[0] || null;
+}
+// 방제가 바뀌어도(20자 줄임 등) 같은 날 같은 상품 링크로 만든 1일차 진행이면 같은 진행 (10/26)
+function runByUrls_(d) {
+  const u = String(d.urls || '').trim();
+  if (!u || !/^\d{4}-\d{2}-\d{2}$/.test(String(d.date || ''))) return null;
+  const props = PropertiesService.getScriptProperties();
+  return readRuns_().filter(function (x) {
+    return x['진행 상태'] !== '종료' && x['시트ID'] && !/^(next|add)-/.test(String(x['요청ID'])) && x['진행일'] instanceof Date &&
+      Utilities.formatDate(x['진행일'], CONFIG.TIMEZONE, 'yyyy-MM-dd') === d.date && String(props.getProperty('PURL_' + x['시트ID']) || '').trim() === u.slice(0, 2000);
   })[0] || null;
 }
 function findRunByRequest_(n) { const r = runByRequest_(n); return r ? againResult_(r) : null; }
@@ -2780,6 +2800,7 @@ function checkFullInner_() {
   if (!props.getProperty('EXPMIX_V1')) try { expMixOnce_(); } catch (e) { note_('기대평 A·B묶음 바꾸기 실패: ' + e); }
   if (!props.getProperty('RVCAMP_V1')) try { rvCampOnce_(); } catch (e) { note_('리뷰 취합 의뢰 단위로 바꾸기 실패: ' + e); }
   if (!props.getProperty('EXPFEE_AB_V1')) try { expFeeAbOnce_(); } catch (e) { note_('기대평 폼 리뷰비 보기 바꾸기 실패: ' + e); }
+  if (!props.getProperty('HYOJA_ROOM_V1')) try { hyojaRoomOnce_(); } catch (e) { note_('효자손 방제 줄이기 실패: ' + e); }
   if (!props.getProperty('BAG_SILBIN_V1')) try { bagSilBinOnce_(); } catch (e) { note_('치약걸이 보냉백 실/빈 바꾸기 실패: ' + e); }
   if (!props.getProperty('BUYU_PHOTO_V1')) { props.setProperty('BUYU_PHOTO_V1', '1'); props.setProperty('RVSENT_' + campKey_('#택10.21 써니마켓 부유단감 5') + '_10.21', '1'); note_('✓ 부유단감 10.21 포토 전달됨으로 표시 (사용자 확인)'); }
   if (!props.getProperty('SENT1026_V1')) try { sent1026Once_(); } catch (e) { note_('10.26 공지 보냄 처리 실패: ' + e); }
@@ -8224,6 +8245,17 @@ function talkdealQtyOnce_() {
     c.setValue('톡딜 (명단 시트 없음)');
     note_('✓ 월급시트 톡딜 줄 계약 수량 칸 채움 (상태 수식이 시작전으로 나오던 것): ' + sh.getName() + '!' + (L.head + 1 + i));
   });
+}
+// (10/26 한 번, 사용자 요청) '#10.27 실 유앤아이푸드 효자손외 20'(23자) → '#10.27 실 효자손외 20' (카톡방 이름 20자까지. 생성기 v96 규칙과 같게)
+function hyojaRoomOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('HYOJA_ROOM_V1')) return;
+  props.setProperty('HYOJA_ROOM_V1', '1');
+  const r = readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']) === '#10.27 실 유앤아이푸드 효자손외 20' && x['진행 상태'] !== '종료'; })[0];
+  if (!r) { note_('효자손 방제: 진행을 못 찾음 (이미 바뀜?)'); return; }
+  globalThis.__PAY_RENAME_ANY = true;
+  try { if (renameRun_(r, '#10.27 실 효자손외 20', '방제 20자')) note_('✓ 방제 20자로: #10.27 실 유앤아이푸드 효자손외 20 → #10.27 실 효자손외 20 (카톡방 이름도 바꿔 주세요)'); }
+  finally { globalThis.__PAY_RENAME_ANY = false; }
 }
 // (10/26 한 번, 사용자 요청) 치약걸이 보냉백: 명단 시트·폼·폴더 이름 '# 실 치약걸이 보냉백' → '# 실/빈 치약걸이 보냉백' (방제·카톡방은 그대로)
 //  명단 탭 노란색: 10.26은 전부 실배송(치약걸이 2 + 보냉백 3), 10.27부터는 치약걸이(실배송)만, 보냉백(일반배송)은 안 칠함
