@@ -129,7 +129,8 @@ function campOf_(title) {
 
 // 같은 캠페인인지 비교할 때 쓰는 키 (#택, 날짜, 끝 건수, 띄어쓰기 뺌)
 // 실배송 표시 '실'은 위치가 바뀌어도(10/19: 끝 → 날짜 오른쪽) 같은 캠페인으로 보게 뺌
-function campKey_(s) { return campOf_(s).replace(/(^|\s)실(?=\s|$)/g, ' ').replace(/\s+/g, '').replace(/^실|실$/g, ''); }
+//  '실/빈'(실배송·일반배송이 섞인 의뢰, 10/26 치약걸이 보냉백)도 같은 표시로 봄
+function campKey_(s) { return campOf_(s).replace(/(^|\s)실(\/빈)?(?=\s|$)/g, ' ').replace(/\s+/g, '').replace(/^실|실$/g, ''); }
 
 // 같은 캠페인 진행들을 날짜순으로 묶어서 '한 의뢰'씩 나눔: 총건수를 다 채우면 다음 진행은 새 의뢰
 function chainsOf_(runs) {
@@ -337,6 +338,8 @@ function renameRun_(r, title, why) {
     if (al >= 2) as.getRange(2, 1, al - 1, 1).getValues().forEach(function (v, i) { if (String(v[0]) === oldTitle) as.getRange(i + 2, 1).setValue(title + nick); });
   } catch (e) {}
   setRun_(r.row, '카톡방', title); r['카톡방'] = title;
+  // 명단 시트·폼·폴더 이름도 같이 (10/26 효자손: 방제만 바뀌고 시트·폼은 '# 실 유앤아이푸드 효자손외'로 남아 서로 달랐음)
+  try { renameRunFiles_(r, sheetName_(oldTitle), sheetName_(title)); } catch (e) { note_('명단 시트·폼 이름 바꾸기 실패: ' + e); }
   try {
     const ob = outboxSheet_(), last = ob.getLastRow();
     if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) {
@@ -349,6 +352,26 @@ function renameRun_(r, title, why) {
   return true;
 }
 
+// 진행의 명단 시트·폼(제목·파일)·폴더 이름을 옛 이름 → 새 이름 (끝의 ' (응답)'은 그대로). 지금 이름이 옛 이름과 같을 때만 (손으로 바꾼 이름은 안 건드림)
+function renameRunFiles_(r, oldN, newN) {
+  oldN = String(oldN || '').trim(); newN = String(newN || '').trim();
+  if (!oldN || !newN || oldN === newN) return [];
+  const done = [];
+  const ren = function (kind, get, set) {
+    const cur = String(get()), tail = (cur.match(/\s*\(응답\)\s*$/) || [''])[0], base = cur.slice(0, cur.length - tail.length).trim();
+    if (base.replace(/\s+/g, '') !== oldN.replace(/\s+/g, '')) return;
+    set(newN + tail); done.push(kind);
+  };
+  const sid = String(r['시트ID'] || ''), fid = String(r['폼ID'] || ''), fo = (String(r['폴더 링크'] || '').match(/[-\w]{25,}/) || [])[0];
+  if (sid) try { const f = DriveApp.getFileById(sid); ren('명단 시트', function () { return f.getName(); }, function (n) { f.setName(n); }); } catch (e) {}
+  if (fid) {
+    try { const fm = FormApp.openById(fid); ren('폼 제목', function () { return fm.getTitle(); }, function (n) { fm.setTitle(n); }); } catch (e) {}
+    try { const ff = DriveApp.getFileById(fid); ren('폼 파일', function () { return ff.getName(); }, function (n) { ff.setName(n); }); } catch (e) {}
+  }
+  if (fo) try { const d = DriveApp.getFolderById(fo); ren('폴더', function () { return d.getName(); }, function (n) { d.setName(n); }); } catch (e) {}
+  if (done.length) note_('✓ ' + done.join('·') + ' 이름: ' + oldN + ' → ' + newN);
+  return done;
+}
 // 의뢰서 하나 = 명단 시트(폼) 하나. 날짜마다 카톡방만 새로 만들고 같은 폼, 같은 명단 시트에 이어서 받음
 // 같은 명단 시트를 쓰는 진행들 (진행일 순)
 function siblings_(runs, r) {
@@ -2801,6 +2824,7 @@ function checkFullInner_() {
   if (!props.getProperty('RVCAMP_V1')) try { rvCampOnce_(); } catch (e) { note_('리뷰 취합 의뢰 단위로 바꾸기 실패: ' + e); }
   if (!props.getProperty('EXPFEE_AB_V1')) try { expFeeAbOnce_(); } catch (e) { note_('기대평 폼 리뷰비 보기 바꾸기 실패: ' + e); }
   if (!props.getProperty('HYOJA_ROOM_V1')) try { hyojaRoomOnce_(); } catch (e) { note_('효자손 방제 줄이기 실패: ' + e); }
+  if (!props.getProperty('NAMES1026_V1')) try { names1026Once_(); } catch (e) { note_('효자손·보냉백 이름 맞추기 실패: ' + e); }
   if (!props.getProperty('BAG_SILBIN_V1')) try { bagSilBinOnce_(); } catch (e) { note_('치약걸이 보냉백 실/빈 바꾸기 실패: ' + e); }
   if (!props.getProperty('BUYU_PHOTO_V1')) { props.setProperty('BUYU_PHOTO_V1', '1'); props.setProperty('RVSENT_' + campKey_('#택10.21 써니마켓 부유단감 5') + '_10.21', '1'); note_('✓ 부유단감 10.21 포토 전달됨으로 표시 (사용자 확인)'); }
   if (!props.getProperty('SENT1026_V1')) try { sent1026Once_(); } catch (e) { note_('10.26 공지 보냄 처리 실패: ' + e); }
@@ -5741,7 +5765,7 @@ function fixFormQuestions_(form, real) {
 function withSil_(t) {
   t = String(t || '');
   t = t.replace(/\s+실(\s+\d+(?:\s*\([^)]*\))?\s*)$/, '$1');   // 끝 쪽 '실 7' → '7'
-  if (/^[#업택\s]*\d{1,2}\.\d{1,2}\s+실(\s|$)/.test(t)) return t;
+  if (/^[#업택\s]*\d{1,2}\.\d{1,2}\s+실(\/빈)?(\s|$)/.test(t)) return t;   // '실/빈'도 이미 있는 걸로
   return /^[#업택\s]*\d{1,2}\.\d{1,2}/.test(t) ? t.replace(/^([#업택\s]*\d{1,2}\.\d{1,2})\s*/, '$1 실 ') : t;
 }
 
@@ -8256,6 +8280,23 @@ function hyojaRoomOnce_() {
   globalThis.__PAY_RENAME_ANY = true;
   try { if (renameRun_(r, '#10.27 실 효자손외 20', '방제 20자')) note_('✓ 방제 20자로: #10.27 실 유앤아이푸드 효자손외 20 → #10.27 실 효자손외 20 (카톡방 이름도 바꿔 주세요)'); }
   finally { globalThis.__PAY_RENAME_ANY = false; }
+}
+// (10/26 한 번, 사용자 요청 '이렇게 달라지면 안 된다고') 1) 효자손: 명단 시트·폼·폴더 '# 실 유앤아이푸드 효자손외' → '# 실 효자손외' (방제와 같게)
+//  2) '#10.27 실 치약걸이 보냉백 5' → '#10.27 실/빈 치약걸이 보냉백 5' (시트·폼은 이미 '# 실/빈 치약걸이 보냉백'). 10.26은 전부 실배송이라 그대로
+function names1026Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('NAMES1026_V1')) return;
+  props.setProperty('NAMES1026_V1', '1');
+  const runs = readRuns_(), log = [];
+  const h = runs.filter(function (x) { return /^#10\.27 실 (유앤아이푸드 )?효자손외 20$/.test(bareTitle_(x['명단 제목'])) && x['진행 상태'] !== '종료'; })[0];
+  if (h) { const d = renameRunFiles_(h, '# 실 유앤아이푸드 효자손외', '# 실 효자손외'); log.push('효자손 ' + (d.length ? d.join('·') : '바꿀 것 없음')); } else log.push('효자손 진행 못 찾음');
+  const b = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === '#10.27 실 치약걸이 보냉백 5' && x['진행 상태'] !== '종료'; })[0];
+  if (b) {
+    globalThis.__PAY_RENAME_ANY = true;
+    try { log.push(renameRun_(b, '#10.27 실/빈 치약걸이 보냉백 5', '실/빈') ? '보냉백 10.27 → #10.27 실/빈 치약걸이 보냉백 5' : '보냉백 방제 못 바꿈'); }
+    finally { globalThis.__PAY_RENAME_ANY = false; }
+  } else log.push('보냉백 10.27 진행 못 찾음');
+  note_('✓ 10/26 이름 맞추기: ' + log.join(', ') + ' (카톡방 이름은 직접 바꿔 주세요)');
 }
 // (10/26 한 번, 사용자 요청) 치약걸이 보냉백: 명단 시트·폼·폴더 이름 '# 실 치약걸이 보냉백' → '# 실/빈 치약걸이 보냉백' (방제·카톡방은 그대로)
 //  명단 탭 노란색: 10.26은 전부 실배송(치약걸이 2 + 보냉백 3), 10.27부터는 치약걸이(실배송)만, 보냉백(일반배송)은 안 칠함
