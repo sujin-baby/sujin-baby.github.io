@@ -2690,6 +2690,7 @@ function checkFullInner_() {
   if (!props.getProperty('EXPPLAN_CLEAN_V1')) try { expPlanCleanOnce_(); } catch (e) { note_('기대평 옛 일정 지우기 실패: ' + e); }
   if (!props.getProperty('FORMNOPRICE_V1')) try { formNoPriceOnce_(); } catch (e) { note_('폼 옵션 가격 빼기 실패: ' + e); }
   if (!props.getProperty('MERGE_BAG_V1')) try { mergeBagOnce_(); } catch (e) { note_('치약걸이·보냉백 합치기 실패: ' + e); }
+  if (!props.getProperty('NOTICE1026_V1')) try { notice1026Once_(); } catch (e) { note_('10/26 공지 고치기 실패: ' + e); }
   if (!props.getProperty('BUYU_PHOTO_V1')) { props.setProperty('BUYU_PHOTO_V1', '1'); props.setProperty('RVSENT_' + campKey_('#택10.21 써니마켓 부유단감 5') + '_10.21', '1'); note_('✓ 부유단감 10.21 포토 전달됨으로 표시 (사용자 확인)'); }
   if (!props.getProperty('SENT1026_V1')) try { sent1026Once_(); } catch (e) { note_('10.26 공지 보냄 처리 실패: ' + e); }
   if (!props.getProperty('REOPEN_V1')) try { reopenClosedOnce_(); } catch (e) { note_('닫힌 폼 다시 열기 실패: ' + e); }
@@ -7464,10 +7465,11 @@ const EXP_SETS = {
 };
 function expFee_(set) { const n = EXP_SETS[set].length; return '총 ' + n + '건, ' + (n * 1000).toLocaleString('en-US') + '원'; }
 function expNotice_(set) {
-  // 사용자가 고친 글 그대로 (10/23). 맨 위 시간 줄·사업자 줄 없음
+  // 사용자가 고친 글 그대로 (10/23). 사업자 줄 없음. 맨 위 시간 줄, 예스24 한줄평 50자·알라딘 마이리뷰 안내 (사용자 요청 10/26)
   const links = EXP_SETS[set], wk = set === 'A' ? '1주차' : '2주차', n = links.length;
-  const L = ['※구매 아님! 아래 링크 ' + n + '개에 기대평 댓글만 작성해주세요 (' + wk + ')※', '',
-    '▶ 공백 제외 100~150자 이상, 긍정적인 기대평',
+  const L = ['★★★자정 ~ 오전 8시 20분까지 작성★★★', '※구매 아님! 아래 링크 ' + n + '개에 기대평 댓글만 작성해주세요 (' + wk + ')※', '',
+    '▶ 공백 제외 100~150자 이상, 긍정적인 기대평 (예스24는 한줄평이 50자까지만 써져서 50자 꽉 채워서)',
+    '▶ 알라딘은 100자평 말고 "마이리뷰"로 써 주세요',
     '▶ "구매했다"는 내용 금지 금지 금지 !!!!! → 구매하고 싶다 or 기대된다는 내용으로 부탁드려요',
     '▶ 짧은 기대평 or 복붙 같은 글 금지 금지 금지 !!!!! (교재마다 다르게)',
     '▶ ' + n + '개 다 작성 후 캡처해서 [당일 바로] 카톡방에 올려주세요!',
@@ -7480,7 +7482,7 @@ function expNotice_(set) {
   ['예스24', '알라딘', '교보문고'].forEach(function (pl) {
     const xs = links.filter(function (x) { return x[0] === pl; });
     if (!xs.length) return;
-    L.push('', '🐥' + pl);
+    L.push('', '🐥' + pl + ({ 예스24: ' (한줄평 50자 꽉 채우기, 한두 줄 짧은 글은 안 돼요)', 알라딘: ' (100자평 말고 마이리뷰로)' }[pl] || ''));
     xs.forEach(function (x, i) { L.push((i + 1) + '. ' + x[1] + ' ' + x[2]); });
   });
   return L.join('\n');
@@ -7829,6 +7831,50 @@ function expPlanRestoreOnce_() {
     ps.getRange(i + 2, 9).setValue('대기'); n.push(bareTitle_(x[4]));
   });
   note_('✓ 기대평 일정 되살림 (전 진행일 0시에 진행·공지가 만들어짐): ' + (n.join(', ') || '없음'));
+}
+// (10/26 한 번, 사용자 요청) 공지 고치기
+//  치약걸이·보냉백: 오늘 방 공지 = 사용자가 보낸 글, 10.27 방 공지·폼 설명 = 같은 모양(자정 구매, 보냉백 옵션 3색 중 택1)
+//  기대평: 시간 줄·예스24 50자·알라딘 마이리뷰 (expNotice_) → 10.27 방 공지·폼 설명, 앞으로 만들 일정(대기)
+const BAG_NOTICE_1026 = "★★★바로구매★★★\n가격이 높으면 사지 마세요!\n★ 광고(AD) 상품으로 주문 절대 금지 ★\n★ 스중 상중 불가 ★ (가능하면 진행자가 따로 안내합니다)\n▶ 리뷰는 배송완료 후 7일 이내 작성\n▶ 결제 스크린샷은 필수입니다\n\n※오리방 페이백 리뷰비 안내※\n리뷰비는 방전원 다 쓰셔야지 진행자가\n요청완료 기준으로 3일 뒤에 입금되는 점\n참고하여 주세요!\n실배송은 방에 인원이 다쓰셔야 페이백 요청됩니다\n일정기간 지나면 회오리가 방탈합니다!\n지급이 어려울수 있으니 안내된 기간은 지켜주세요! 감사합니다\n★사업자 4971201389 ★\n\n☆★☆★ 양식 작성 폼 ☆★☆★\nhttps://forms.gle/JvUNH6HVbto5uvvH8\n\n링크타고 검색▼( 상번이 네이버일때 무시)\nhttps://coupa.ng/b59klT\n🐥판매처 : 아이누빅\n🐥상품명 : 루오넬 무타공 치약걸이 벽부착 롱 튜브 홀더 화이트 1개\n🐥상품번호 : \n🐥★키워드 : 무타공 치약걸이\n🐥위치 : 1페이지(로켓으로 들어가서 일반상품으로 변경해주세요!!)\n🐥옵션 : 클린화이트\n🐥가격 : 17,800\n\n링크타고 검색▼( 상번이 네이버일때 무시)\nhttps://coupa.ng/b59klT\n🐥판매처 : 아이누빅\n🐥상품명 : 루오넬 데일리 보온 보냉백 이유식 도시락가방 런치백, XL\n🐥상품번호 : \n🐥★키워드 : 보냉백\n🐥위치 : 1페이지(가검 17,000, 필터 패턴/프린트 : 단색)\n🐥옵션 : 블랙 - 고지은, 네이비 - 박민아, 그레이-민아\n🐥가격 : 17,000";
+const BAG_NOTICE_1027 = "★★★자정 ~ 오전 8시 20분 구매★★★\n가격이 높으면 사지 마세요!\n★ 광고(AD) 상품으로 주문 절대 금지 ★\n★ 스중 상중 불가 ★ (가능하면 진행자가 따로 안내합니다)\n▶ 리뷰는 배송완료 후 7일 이내 작성\n▶ 결제 스크린샷은 필수입니다\n\n※오리방 페이백 리뷰비 안내※\n리뷰비는 방전원 다 쓰셔야지 진행자가\n요청완료 기준으로 3일 뒤에 입금되는 점\n참고하여 주세요!\n실배송은 방에 인원이 다쓰셔야 페이백 요청됩니다\n일정기간 지나면 회오리가 방탈합니다!\n지급이 어려울수 있으니 안내된 기간은 지켜주세요! 감사합니다\n★사업자 4971201389 ★\n\n☆★☆★ 양식 작성 폼 ☆★☆★\nhttps://forms.gle/JvUNH6HVbto5uvvH8\n\n링크타고 검색▼( 상번이 네이버일때 무시)\nhttps://coupa.ng/b59klT\n🐥판매처 : 아이누빅\n🐥상품명 : 루오넬 무타공 치약걸이 벽부착 롱 튜브 홀더 화이트 1개\n🐥상품번호 : \n🐥★키워드 : 무타공 치약걸이\n🐥위치 : 1페이지(로켓으로 들어가서 일반상품으로 변경해주세요!!)\n🐥옵션 : 클린화이트\n🐥가격 : 17,800\n\n링크타고 검색▼( 상번이 네이버일때 무시)\nhttps://coupa.ng/b59klT\n🐥판매처 : 아이누빅\n🐥상품명 : 루오넬 데일리 보온 보냉백 이유식 도시락가방 런치백, XL\n🐥상품번호 : \n🐥★키워드 : 보냉백\n🐥위치 : 1페이지(가검 17,000, 필터 패턴/프린트 : 단색)\n🐥옵션 : 블랙, 그레이, 네이비 중 택1\n🐥가격 : 17,000";
+function notice1026Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('NOTICE1026_V1')) return;
+  props.setProperty('NOTICE1026_V1', '1');
+  const runs = readRuns_(), log = [];
+  const ob = outboxSheet_(), ol = ob.getLastRow(), v = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues() : [];
+  const setNotice = function (room, text) {
+    let n = 0;
+    v.forEach(function (x) { if (x[2] === '방 공지' && x[5] === '대기' && String(x[3]) === room && /양식 작성 폼/.test(String(x[4]))) { obSet_(ob, x[0], 5, text); n++; } });
+    return n;
+  };
+  // 치약걸이·보냉백
+  const b1 = runs.filter(function (r) { return String(r['요청ID']) === 'm9qmh8ds' && r['진행 상태'] !== '종료'; })[0], b2 = runs.filter(function (r) { return String(r['요청ID']) === 'm9qmh8ds-2' && r['진행 상태'] !== '종료'; })[0];
+  if (b1 && /보냉백/.test(b1['명단 제목'])) log.push('10.26 치약걸이·보냉백 공지 ' + setNotice(String(b1['카톡방']), BAG_NOTICE_1026) + '개');
+  if (b2 && /보냉백/.test(b2['명단 제목'])) {
+    log.push('10.27 치약걸이·보냉백 공지 ' + setNotice(String(b2['카톡방']), BAG_NOTICE_1027) + '개');
+    try { FormApp.openById(b2['폼ID']).setDescription(BAG_NOTICE_1027); log.push('치약걸이·보냉백 폼 설명'); } catch (e) { note_('치약걸이·보냉백 폼 설명 실패: ' + e); }
+  }
+  // 기대평 10.27 (1주차 A)
+  const e2 = runs.filter(function (r) { return isExpect_(r) && r['진행 상태'] !== '종료' && dateTok_(r['명단 제목']) === '10.27'; })[0];
+  if (e2 && e2['폼 링크']) {
+    const t = expNotice_('A').split('(구글폼 링크)').join(String(e2['폼 링크']));
+    log.push('10.27 기대평 공지 ' + setNotice(String(e2['카톡방'] || bareTitle_(e2['명단 제목'])), t) + '개');
+    try { FormApp.openById(e2['폼ID']).setDescription(t); log.push('기대평 폼 설명'); } catch (e) { note_('기대평 폼 설명 실패: ' + e); }
+  }
+  // 기대평 앞으로 만들 일정(대기)의 공지 틀
+  try {
+    const ps = planSheet_(), pl = ps.getLastRow();
+    let n = 0;
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x, i) {
+      if (x[8] !== '대기' || String(x[0]).indexOf('exp-100-4-v5-') !== 0) return;
+      const cfg = JSON.parse(x[9]), set = Number(String(cfg.prices).replace(/[^0-9]/g, '')) === EXP_SETS.B.length * 1000 ? 'B' : 'A';
+      cfg.desc = expNotice_(set);
+      ps.getRange(i + 2, 10).setValue(JSON.stringify(cfg)); n++;
+    });
+    log.push('기대평 일정 공지 틀 ' + n + '개');
+  } catch (e) { note_('기대평 일정 공지 틀 실패: ' + e); }
+  note_('✓ 10/26 공지 고침: ' + log.join(', '));
 }
 // (10/26 한 번, 사용자 요청) 치약걸이 의뢰(m9qmh8ds)에 같은 업체(아이누빅) 보냉백 의뢰를 합침: 같은 폼·명단 시트
 //  10.26 5명 = 치약걸이 2(이미 삼) + 보냉백 3 실배송, 10.27 5명 = 치약걸이 3 실배송 + 보냉백 2 일반 → 총 10건, 10.28 치약걸이 1 계획은 취소
