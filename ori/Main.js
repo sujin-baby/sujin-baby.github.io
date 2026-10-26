@@ -1329,6 +1329,12 @@ function rvExplain_() {
         o.folder = { name: fo.getName(), up: names(fo.getParents()), sub: names(fo.getFolders()), files: names(fo.getFiles()), sheetName: DriveApp.getFileById(sid).getName(), sheetIn: sp };
         const ri = fo.getFoldersByName(RV_IMG_FOLDER);
         if (ri.hasNext()) { const rf = ri.next(), subs = [], si = rf.getFolders(); while (si.hasNext()) { const x = si.next(), kinds = {}, fi = x.getFiles(), ff = x.getFolders(), inner = []; while (fi.hasNext()) { const m = fi.next().getMimeType(); kinds[m] = (kinds[m] || 0) + 1; } while (ff.hasNext()) { const y = ff.next(); inner.push(y.getName() + ' ' + imgs(y) + '장'); } subs.push(x.getName() + ' ' + imgs(x) + '장 ' + JSON.stringify(kinds) + (inner.length ? ' 안쪽 폴더: ' + inner.join(', ') : '')); } o.folder.rvImg = { direct: imgs(rf), subs: subs }; }
+        // 의뢰 폴더 안 모든 폴더(리뷰캡처 등)의 사진 수 (3단계까지, 읽기만)
+        const tree = function (f, d) { const ch = [], it = f.getFolders(); if (d < 3) while (it.hasNext()) ch.push(tree(it.next(), d + 1)); return f.getName() + ' ' + imgs(f) + '장' + (ch.length ? ' [' + ch.join(', ') + ']' : ''); };
+        o.folder.tree = []; const tf = fo.getFolders(); while (tf.hasNext()) o.folder.tree.push(tree(tf.next(), 0));
+        // 날마다 폴더 링크가 다른 예전 진행 (그 폴더 이름과 안쪽 폴더)
+        const seenF = {}; seenF[fl] = 1; o.folder.other = [];
+        mine.forEach(function (x) { const id = (String(x['폴더 링크'] || '').match(/[-\w]{25,}/) || [])[0]; if (!id || seenF[id]) return; seenF[id] = 1; try { o.folder.other.push(bareTitle_(x['명단 제목']) + ': ' + tree(DriveApp.getFolderById(id), 0)); } catch (e) { o.folder.other.push(bareTitle_(x['명단 제목']) + ': ' + e); } });
         o.folder.zipKey = props.getProperty('RVZIP_' + sid) || '';
         // 압축 파일 안 모양 (폴더별 사진 수)
         const zi = fo.getFiles(); o.folder.zips = [];
