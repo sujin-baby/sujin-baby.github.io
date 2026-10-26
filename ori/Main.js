@@ -705,6 +705,8 @@ function syncList_(ss) {
     for (let c = h0.length - 1; c >= 0; c--) if (MATCH.nick.test(String(h0[c]))) sh.deleteColumn(c + 1);
   }
   const real = !!props.getProperty('LISTREAL_' + id);
+  // 날·옵션마다 실배송이 다른 의뢰 (10/26 치약걸이 보냉백: 10.27부터 치약걸이만 실배송, 보냉백은 일반배송) → 실배송 줄만 노란색
+  let realOpt = []; try { realOpt = JSON.parse(props.getProperty('LISTREALOPT_' + id) || '[]') || []; } catch (e) {}
   // (10/19 한 번) 머리글 끝 띄어쓰기·줄바꿈 때문에 전화번호·옵션·결제금액·계좌번호 등이 빈칸으로 들어가고 오른쪽에 같은 이름 칸이 또 생긴 것 고치기
   if (!props.getProperty('LISTFIX1_' + id)) { props.setProperty('LISTFIX1_' + id, '1'); try { repairList_(sh, rows); } catch (e) { note_('명단 탭 고치기 실패: ' + e); } }
   // 은행·계좌번호·예금주 칸은 접어서 숨김(+ 단추로 펼침). 고치기(repairList_)가 묶음을 풀었으면 다시 접음. 한 번만 (사용자가 펼쳐 두면 그대로)
@@ -793,10 +795,10 @@ function syncList_(ss) {
       above.forEach(function (v, j) { if (typeof v === 'boolean' && heads.indexOf(hdr[j]) === -1 && j + 1 !== rvc) sh.getRange(start, j + 1, n, 1).insertCheckboxes(); });
     }
     if (rvc > 0) sh.getRange(start, rvc, n, 1).insertCheckboxes().setHorizontalAlignment('center');
-    // 날짜별 연한 색. 실배송이면 전부 노란색 (사용자 요청 10/19)
+    // 날짜별 연한 색. 실배송이면 전부 노란색 (사용자 요청 10/19). 실배송 의뢰 안의 일반배송 줄은 색 없음 (10/26 '나머지는 노란색 색칠하지마')
     sh.getRange(start, 1, n, paint).setBackgrounds(add.map(function (x) {
       const day = Math.floor((x.t + 9 * 3600000) / 86400000) + 25569;
-      return Array(paint).fill(real ? REAL_YELLOW : DAY_COLORS[day % 7]);
+      return Array(paint).fill(realRow_(real, realOpt, x) ? REAL_YELLOW : real ? '#ffffff' : DAY_COLORS[day % 7]);
     }));
     done = done.concat(add.map(function (x) { return String(x.t); }));
     try { payCheck_(ss, add); } catch (e) { note_('결제금액 확인 실패: ' + e); }
@@ -816,6 +818,32 @@ function syncList_(ss) {
   return add.length;
 }
 
+// 명단 줄이 실배송(노란색)인지: 실배송 의뢰면 그렇고, 규칙 [{ from: '2026-10-27', opt: '치약걸이' }]이 있으면 그 날부터는 고른 옵션에 opt 글자가 있을 때만
+function realRow_(real, rules, x) {
+  if (!real) return false;
+  const d = Utilities.formatDate(new Date(x.t), CONFIG.TIMEZONE, 'yyyy-MM-dd');
+  const r = (rules || []).filter(function (y) { return y && d >= String(y.from); }).sort(function (a, b) { return a.from < b.from ? -1 : 1; }).pop();
+  if (!r) return true;
+  const k = Object.keys(x.o || {}).filter(function (h) { return MATCH.opt.test(h); })[0];
+  return !!k && String(x.o[k]).indexOf(String(r.opt)) >= 0;
+}
+// 명단 탭에 이미 들어온 줄을 규칙대로 다시 칠함 (규칙 날짜 이후 줄만). 칠한 줄 수
+function repaintRealRows_(ss, rules) {
+  const sh = ss.getSheetByName(LIST_TAB);
+  if (!sh || sh.getLastRow() < 3 || !rules.length) return 0;
+  const lc = Math.max(sh.getLastColumn(), 1), hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_), cT = hdr.indexOf('타임스탬프');
+  if (cT < 0) return 0;
+  const rvc = rvCol_(sh, lc), paint = rvc > 0 ? Math.max(Math.min(lc, rvc - (hdr[rvc - 2] ? 1 : 2)), 1) : lc;
+  const from = rules.map(function (y) { return String(y.from); }).sort()[0];
+  let n = 0;
+  sh.getRange(3, 1, sh.getLastRow() - 2, lc).getValues().forEach(function (v, i) {
+    if (!(v[cT] instanceof Date) || Utilities.formatDate(v[cT], CONFIG.TIMEZONE, 'yyyy-MM-dd') < from) return;
+    const o = {}; hdr.forEach(function (h, j) { if (h) o[h] = v[j]; });
+    sh.getRange(i + 3, 1, 1, paint).setBackground(realRow_(true, rules, { t: v[cT].getTime(), o: o }) ? REAL_YELLOW : '#ffffff');
+    n++;
+  });
+  return n;
+}
 // 결제금액 확인 (사용자 요청 10/20): 새 응답의 결제금액이 공지 가격(배송비 포함)과 다르면 보낼메시지 '내 할 일'에. 명단 시트에는 아무것도 안 씀
 //  공지 가격: 고른 옵션 글의 '(17,200원)', 없으면 진행목록 가격(하나거나 다 같을 때만). 2~5개 산 금액(가격 × 개수)은 맞는 걸로
 function payCheck_(ss, add) {
@@ -2752,6 +2780,7 @@ function checkFullInner_() {
   if (!props.getProperty('EXPMIX_V1')) try { expMixOnce_(); } catch (e) { note_('기대평 A·B묶음 바꾸기 실패: ' + e); }
   if (!props.getProperty('RVCAMP_V1')) try { rvCampOnce_(); } catch (e) { note_('리뷰 취합 의뢰 단위로 바꾸기 실패: ' + e); }
   if (!props.getProperty('EXPFEE_AB_V1')) try { expFeeAbOnce_(); } catch (e) { note_('기대평 폼 리뷰비 보기 바꾸기 실패: ' + e); }
+  if (!props.getProperty('BAG_SILBIN_V1')) try { bagSilBinOnce_(); } catch (e) { note_('치약걸이 보냉백 실/빈 바꾸기 실패: ' + e); }
   if (!props.getProperty('BUYU_PHOTO_V1')) { props.setProperty('BUYU_PHOTO_V1', '1'); props.setProperty('RVSENT_' + campKey_('#택10.21 써니마켓 부유단감 5') + '_10.21', '1'); note_('✓ 부유단감 10.21 포토 전달됨으로 표시 (사용자 확인)'); }
   if (!props.getProperty('SENT1026_V1')) try { sent1026Once_(); } catch (e) { note_('10.26 공지 보냄 처리 실패: ' + e); }
   if (!props.getProperty('REOPEN_V1')) try { reopenClosedOnce_(); } catch (e) { note_('닫힌 폼 다시 열기 실패: ' + e); }
@@ -5280,7 +5309,7 @@ function rvZip_(f, name, props, sid, mine) {
   if (props.getProperty('RVZIP_' + sid) === sig) return;
   if (Date.now() - newest < 10 * 60000) return;   // 아직 올리는 중일 수 있음 → 다음 확인에서
   props.setProperty('RVZIP_' + sid, sig);
-  const base = rvBase_(name), zipName = base + '.zip', warn = [];
+  const base = rvBase_(name), zipName = base.replace(/\//g, '／').replace(/[\\:*?"<>|]/g, '') + '.zip', warn = [];   // 파일 이름에 못 쓰는 글자 (# 실/빈 → 실／빈)
   const size = files.reduce(function (a, x) { return a + x.getSize(); }, 0);
   if (size > 45 * 1024 * 1024) { queueMsg_('내 할 일', '[' + base + '] 리뷰 사진이 너무 커서(' + Math.round(size / 1048576) + 'MB) 압축 못 했어요 → 사진을 줄이거나 나눠서 보내기', '할 일'); return; }
   // 개수: 전부 종류 폴더에 나눴으면 폴더 사진 수, 아니면 리뷰 가이드 배정(못 찾으면 의뢰서)
@@ -8194,6 +8223,29 @@ function talkdealQtyOnce_() {
     c.setValue('톡딜 (명단 시트 없음)');
     note_('✓ 월급시트 톡딜 줄 계약 수량 칸 채움 (상태 수식이 시작전으로 나오던 것): ' + sh.getName() + '!' + (L.head + 1 + i));
   });
+}
+// (10/26 한 번, 사용자 요청) 치약걸이 보냉백: 명단 시트·폼·폴더 이름 '# 실 치약걸이 보냉백' → '# 실/빈 치약걸이 보냉백' (방제·카톡방은 그대로)
+//  명단 탭 노란색: 10.26은 전부 실배송(치약걸이 2 + 보냉백 3), 10.27부터는 치약걸이(실배송)만, 보냉백(일반배송)은 안 칠함
+function bagSilBinOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('BAG_SILBIN_V1')) return;
+  props.setProperty('BAG_SILBIN_V1', '1');
+  const r = readRuns_().filter(function (x) { return String(x['요청ID']) === 'm9qmh8ds' && /치약걸이/.test(x['명단 제목']) && /보냉백/.test(x['명단 제목']); })[0];
+  if (!r || !r['시트ID']) { note_('치약걸이 보냉백 실/빈: 진행을 못 찾음'); return; }
+  const OLD = '# 실 치약걸이 보냉백', NEW = '# 실/빈 치약걸이 보냉백', log = [];
+  const ren = function (kind, get, set) { try { const cur = String(get()); if (cur.indexOf(OLD) === 0) { set(NEW + cur.slice(OLD.length)); log.push(kind); } else log.push(kind + ' 그대로(' + cur + ')'); } catch (e) { log.push(kind + ' 실패: ' + e); } };
+  const sid = String(r['시트ID']), fid = String(r['폼ID'] || ''), fo = (String(r['폴더 링크'] || '').match(/[-\w]{25,}/) || [])[0];
+  ren('명단 시트', function () { return DriveApp.getFileById(sid).getName(); }, function (n) { DriveApp.getFileById(sid).setName(n); });
+  if (fid) {
+    let fm = null; try { fm = FormApp.openById(fid); } catch (e) { log.push('폼 못 엶: ' + e); }
+    if (fm) ren('폼 제목', function () { return fm.getTitle(); }, function (n) { fm.setTitle(n); });
+    ren('폼 파일', function () { return DriveApp.getFileById(fid).getName(); }, function (n) { DriveApp.getFileById(fid).setName(n); });
+  }
+  if (fo) ren('폴더', function () { return DriveApp.getFolderById(fo).getName(); }, function (n) { DriveApp.getFolderById(fo).setName(n); });
+  const rule = [{ from: '2026-10-27', opt: '치약걸이' }];
+  props.setProperty('LISTREALOPT_' + sid, JSON.stringify(rule));
+  let re = 0; try { re = repaintRealRows_(SpreadsheetApp.openById(sid), rule); } catch (e) { log.push('색 다시 칠하기 실패: ' + e); }
+  note_('✓ 치약걸이 보냉백 → ' + NEW + ' (' + log.join(', ') + '). 명단 노란색: 10.26 전부 + 10.27부터 치약걸이만' + (re ? ' (이미 들어온 10.27 줄 ' + re + '개 다시 칠함)' : ''));
 }
 // (10/26 한 번) 기대평 폼 '기대평 댓글 리뷰비' 보기 1주차/2주차 → A묶음/B묶음 (A·B묶음으로 바꿀 때 못 고친 예전 글. 금액 같음, 이미 낸 응답 값은 그대로)
 function expFeeAbOnce_() {
