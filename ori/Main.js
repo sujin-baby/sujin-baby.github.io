@@ -2730,6 +2730,7 @@ function checkFullInner_() {
   if (!props.getProperty('FIX1026B_V1')) try { fix1026bOnce_(); } catch (e) { note_('10/26 실링팬·치약걸이 고치기 실패: ' + e); }
   if (!props.getProperty('SILING_DAYMIX_V1')) try { silingDayMixOnce_(); } catch (e) { note_('실링팬 10.27 리뷰 종류 실패: ' + e); }
   if (!props.getProperty('FIX1026C_V1')) try { fix1026cOnce_(); } catch (e) { note_('10/26 보낼메시지 정리 실패: ' + e); }
+  if (!props.getProperty('TALKDEAL_G_V1')) try { talkdealQtyOnce_(); } catch (e) { note_('톡딜 월급시트 상태 실패: ' + e); }
   if (!props.getProperty('BUYU_PHOTO_V1')) { props.setProperty('BUYU_PHOTO_V1', '1'); props.setProperty('RVSENT_' + campKey_('#택10.21 써니마켓 부유단감 5') + '_10.21', '1'); note_('✓ 부유단감 10.21 포토 전달됨으로 표시 (사용자 확인)'); }
   if (!props.getProperty('SENT1026_V1')) try { sent1026Once_(); } catch (e) { note_('10.26 공지 보냄 처리 실패: ' + e); }
   if (!props.getProperty('REOPEN_V1')) try { reopenClosedOnce_(); } catch (e) { note_('닫힌 폼 다시 열기 실패: ' + e); }
@@ -7927,6 +7928,23 @@ function fix1026bOnce_() {
   ['#10.22 실링팬 1', '#10.26 실링팬 2'].forEach(function (t) { props.setProperty('RVSENT_' + campKey_(t) + '_' + dateTok_(t), '1'); });
   log.push('실링팬 10.22·10.26 포토 받음');
   note_('✓ 10/26 고침: ' + log.join(', '));
+}
+// (10/26 한 번, 사용자 요청) 월급시트 톡딜 줄 상태가 '시작전': 상태 수식 =IF(G=0,"시작전",…)이 계약 수량 칸(G, 보통 명단 시트 링크)을 보는데
+//  톡딜은 명단 시트가 없어서 G가 비어 있었음 → G에 글자를 넣어 수식대로 '완료'(남은 0)가 되게. 돈 칸(완료보고·진행비)은 안 건드림
+function talkdealQtyOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('TALKDEAL_G_V1')) return;
+  props.setProperty('TALKDEAL_G_V1', '1');
+  const sh = payTab_(10), L = payLayout_(sh);
+  if (!L || !L.qty) return;
+  const last = sh.getLastRow(), names = sh.getRange(L.head + 1, L.name, Math.max(last - L.head, 1), 1).getValues();
+  names.forEach(function (x, i) {
+    if (String(x[0]).replace(/\s+/g, '') !== '#10.245시톡딜홍삼스틱50') return;
+    const c = sh.getRange(L.head + 1 + i, L.qty);
+    if (String(c.getValue()).trim() || c.getFormula()) return;
+    c.setValue('톡딜 (명단 시트 없음)');
+    note_('✓ 월급시트 톡딜 줄 계약 수량 칸 채움 (상태 수식이 시작전으로 나오던 것): ' + sh.getName() + '!' + (L.head + 1 + i));
+  });
 }
 // (10/26 한 번, 사용자 요청) 보낼메시지 정리
 //  1) 하루 인원 바꾸기로 취소된 실링팬 진행(10.30, 11.02~11.04)의 안 보낸 공지 지움 (예전 코드가 '취소'를 못 써서 '대기'로 남음)
