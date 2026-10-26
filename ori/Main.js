@@ -2836,6 +2836,7 @@ function checkFullInner_() {
   if (!props.getProperty('RVCAMP_V1')) try { rvCampOnce_(); } catch (e) { note_('리뷰 취합 의뢰 단위로 바꾸기 실패: ' + e); }
   if (!props.getProperty('EXPFEE_AB_V1')) try { expFeeAbOnce_(); } catch (e) { note_('기대평 폼 리뷰비 보기 바꾸기 실패: ' + e); }
   if (!props.getProperty('HYOJA_ROOM_V1')) try { hyojaRoomOnce_(); } catch (e) { note_('효자손 방제 줄이기 실패: ' + e); }
+  if (!props.getProperty('TUMB1027_V1')) try { tumbler1027Once_(); } catch (e) { note_('텀블러 옵션 인원 채우기 실패: ' + e); }
   if (!props.getProperty('FIX1027_V1')) try { fix1027Once_(); } catch (e) { note_('10/27 보낼메시지 정리 실패: ' + e); }
   if (!props.getProperty('NAMES1026_V1')) try { names1026Once_(); } catch (e) { note_('효자손·보냉백 이름 맞추기 실패: ' + e); }
   if (!props.getProperty('BAG_SILBIN_V1')) try { bagSilBinOnce_(); } catch (e) { note_('치약걸이 보냉백 실/빈 바꾸기 실패: ' + e); }
@@ -8298,6 +8299,41 @@ function hyojaRoomOnce_() {
   globalThis.__PAY_RENAME_ANY = true;
   try { if (renameRun_(r, '#10.27 실 효자손외 20', '방제 20자')) note_('✓ 방제 20자로: #10.27 실 유앤아이푸드 효자손외 20 → #10.27 실 효자손외 20 (카톡방 이름도 바꿔 주세요)'); }
   finally { globalThis.__PAY_RENAME_ANY = false; }
+}
+// (10/27 한 번) 런치버스 텀블러 4색상(색마다 5개, 하루 5명): 다음 일차 공지·일정이 '검정 (  명)'처럼 인원이 비어 있음 (만들 때 생성기가 옵션 이름 없이 '4색상'으로 읽어서)
+//  10.27 실제 2·1·1·1 → 10.28 1·2·1·1, 10.29 1·1·2·1, 10.30 1·1·1·2 (색마다 5개). 안 보낸 10.28 공지, 폼 설명(빈 인원이 있을 때만), 10.29·10.30 일정
+function tumbler1027Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('TUMB1027_V1')) return;
+  props.setProperty('TUMB1027_V1', '1');
+  const C = ['검정', '아이보리', '연그린', '하늘색'], log = [];
+  const fill = function (t, n) {
+    return String(t).split('\n').map(function (l) {
+      const m = l.match(/^(\s*(?:🐥\s*옵션\s*[:：]\s*)?)(검정|아이보리|연그린|하늘색)\s*\(\s*명\s*\)\s*$/);
+      return m ? m[1] + m[2] + ' (' + n[C.indexOf(m[2])] + '명)' : l;
+    }).join('\n');
+  };
+  const d28 = [1, 2, 1, 1];
+  const r28 = readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']) === '#10.28 실 런치버스 텀블러 5' && x['진행 상태'] !== '종료'; })[0];
+  if (r28) {
+    withObWrite_(function () {
+      const ob = outboxSheet_(), ol = ob.getLastRow(); if (ol < 2) return;
+      ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
+        if (String(v[3]) === '#10.28 실 런치버스 텀블러 5' && v[2] === '방 공지' && v[5] !== '보냄' && /\(\s*명\s*\)/.test(String(v[4]))) { obSet_(ob, v[0], 5, fill(v[4], d28)); log.push('10.28 공지 1·2·1·1'); }
+      });
+    });
+    try { const f = FormApp.openById(r28['폼ID']), ds = String(f.getDescription() || ''); if (/(검정|아이보리|연그린|하늘색)\s*\(\s*명\s*\)/.test(ds)) { f.setDescription(fill(ds, d28)); log.push('폼 설명'); } } catch (e) { log.push('폼 설명 실패: ' + e); }
+  } else log.push('10.28 진행 못 찾음');
+  try {
+    const ps = planSheet_(), pl = ps.getLastRow();
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (v, i) {
+      const want = String(v[0]) === '8cwumhm2-3' ? [1, 1, 2, 1] : String(v[0]) === '8cwumhm2-4' ? [1, 1, 1, 2] : null;
+      if (!want || v[8] !== '대기') return;
+      ps.getRange(i + 2, 8).setValue(JSON.stringify([[5, want, '', C]]));
+      log.push(String(v[4]) + ' ' + want.join('·'));
+    });
+  } catch (e) { log.push('일정 실패: ' + e); }
+  note_('✓ 텀블러 옵션 인원 채움: ' + (log.join(', ') || '바꿀 것 없음'));
 }
 // (10/27 한 번, 사용자 요청) '#택10.28 줄넘기 2' 방 공지 칸(m11062be8d2a5)에 속눈썹 명단 전달 글이 붙여넣어진 것(10/27 08:04 사람이 붙여넣기, 기록 있음) → 지움
 //  같은 방의 정상 공지(m47cc8b6581ca)가 따로 있어서 그 줄만 남김. 글이 그새 바뀌었으면 안 건드림
