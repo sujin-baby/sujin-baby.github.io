@@ -2268,7 +2268,11 @@ function boughtFormula_(row, info) {
   return '=IFERROR(LET(t,' + imp('A') + ',nk,' + imp(info.nick) + ',ok,' + imp(info.opt || info.nick) + ',' +
     // 그 기간 응답에 닉네임이 하나도 없으면(닉네임 질문 전 응답) 셀 수 없어서 빈칸
     'IF(SUMPRODUCT(ISNUMBER(t)*(t>=' + day(info.from) + ')*(t<' + day(info.to) + ')*(LEN(nk)>0))=0,"",' +
-    'SUMPRODUCT(ISNUMBER(t)*(t>=' + day(info.from) + ')*(t<' + day(info.to) + ')*(ARRAYFORMULA(' + NORM('nk') + ')=' + NORM('$B' + row) + ')*' +
+    // 닉네임이 같거나, 배정 닉네임 뒤에 기호로 덧붙여 낸 것도 같은 사람 (10/27 '종이' → 폼 '종이/jenny', '백이왕자' → '백이왕자❤️찐쇼우쯔')
+    //  덧붙임 계산이 시트에서 오류가 나도 IFERROR로 0 → 원래(닉네임 같음) 계산은 그대로
+    'SUMPRODUCT(ISNUMBER(t)*(t>=' + day(info.from) + ')*(t<' + day(info.to) + ')*(((ARRAYFORMULA(' + NORM('nk') + ')=' + NORM('$B' + row) + ')+' +
+      'IFERROR(ARRAYFORMULA((LEFT(' + NORM('nk') + ',LEN(' + NORM('$B' + row) + '))=' + NORM('$B' + row) + ')*(LEN(' + NORM('nk') + ')>LEN(' + NORM('$B' + row) + '))*(LEN(' + NORM('$B' + row) + ')>0)*' +
+      'REGEXMATCH(MID(' + NORM('nk') + ',LEN(' + NORM('$B' + row) + ')+1,1),"[^가-힣ㄱ-ㅎa-z0-9]")),0))>0)*' +
     '(((ARRAYFORMULA(' + NORM('ok') + ')=' + NORM('$H' + row) + ')+($H' + row + '=""))>0)))),"")';
 }
 
@@ -2495,7 +2499,8 @@ function parseAssign_(text, choices) {
       tok = tok.replace(/^@+/, '').trim();
       if (!tok) return;
       if (/^[2-9]$/.test(tok) && lastKey) { rows[at[lastKey]][2] = Number(tok); return; }   // '송기주 2'
-      if (!/[A-Za-z가-힣ㄱ-ㅎㅏ-ㅣ]/.test(tok) || /^\d+명$/.test(tok)) return;   // 'ㅁㅈ'처럼 자음만인 닉네임도 (10/23)
+      if (!/[A-Za-z가-힣ㄱ-ㅎㅏ-ㅣ]/.test(tok) || /^\d+명$/.test(tok)) return;
+      if (/^(마감|완료|품절|끝)$/.test(tok)) return;   // 사람 이름이 아니라 표시 (10/27 '눈썹제모기 로즈핑크 (5명) 마감 …'에서 '마감'이 이름으로 들어감)   // 'ㅁㅈ'처럼 자음만인 닉네임도 (10/23)
       const cancel = /#취소$/.test(tok);
       tok = tok.replace(/#취소$/, '');
       let n = 1;
@@ -2847,6 +2852,7 @@ function checkFullInner_() {
   if (!props.getProperty('RVCAMP_V1')) try { rvCampOnce_(); } catch (e) { note_('리뷰 취합 의뢰 단위로 바꾸기 실패: ' + e); }
   if (!props.getProperty('EXPFEE_AB_V1')) try { expFeeAbOnce_(); } catch (e) { note_('기대평 폼 리뷰비 보기 바꾸기 실패: ' + e); }
   if (!props.getProperty('HYOJA_ROOM_V1')) try { hyojaRoomOnce_(); } catch (e) { note_('효자손 방제 줄이기 실패: ' + e); }
+  if (!props.getProperty('ASGFIX1027_V1')) try { assignFix1027Once_(); } catch (e) { note_('배정 옵션 빈칸 채우기 실패: ' + e); }
   if (!props.getProperty('HYOJA_ASG_V1')) try { hyojaAssignOnce_(); } catch (e) { note_('효자손 배정 옵션 고치기 실패: ' + e); }
   if (!props.getProperty('TUMB1027_V1')) try { tumbler1027Once_(); } catch (e) { note_('텀블러 옵션 인원 채우기 실패: ' + e); }
   if (!props.getProperty('FIX1027_V1')) try { fix1027Once_(); } catch (e) { note_('10/27 보낼메시지 정리 실패: ' + e); }
@@ -8311,6 +8317,31 @@ function hyojaRoomOnce_() {
   globalThis.__PAY_RENAME_ANY = true;
   try { if (renameRun_(r, '#10.27 실 효자손외 20', '방제 20자')) note_('✓ 방제 20자로: #10.27 실 유앤아이푸드 효자손외 20 → #10.27 실 효자손외 20 (카톡방 이름도 바꿔 주세요)'); }
   finally { globalThis.__PAY_RENAME_ANY = false; }
+}
+// (10/27 한 번, 사용자 요청 '안민지 2계정 맞는데 왜 초과') 배정 탭에서 폼 옵션(H) 빈칸 줄 = 공지 옵션이 'XXX 마감'이라 폼 보기와 못 이어진 줄
+//  → 그 상품 이름이 든 폼 보기가 하나뿐이면 그걸로 (빈칸이면 닉네임만 세서 2계정이 두 줄 다 '초과'로 나옴). '마감'이 이름으로 들어간 줄은 지움
+function assignFix1027Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('ASGFIX1027_V1')) return;
+  props.setProperty('ASGFIX1027_V1', '1');
+  const as = assignSheet_(), al = as.getLastRow(); if (al < 2) return;
+  const runs = readRuns_(), cut = today_().getTime() - 3 * 86400000, chMemo = {}, log = [], del = [];
+  const k = function (x) { return String(x || '').toLowerCase().replace(/\s+/g, '').replace(/\([\d,\s]+원\)$/, ''); };
+  as.getRange(2, 1, al - 1, 8).getValues().forEach(function (v, i) {
+    const r = runs.filter(function (x) { return String(x['명단 제목']) === String(v[0]); })[0];
+    if (!r || !r['폼ID'] || !(r['진행일'] instanceof Date) || r['진행일'].getTime() < cut) return;
+    if (String(v[1]).trim() === '마감') { del.push(i + 2); return; }
+    if (String(v[7]).trim()) return;
+    if (!chMemo[r['폼ID']]) { try { chMemo[r['폼ID']] = formChoices_(FormApp.openById(r['폼ID'])); } catch (e) { chMemo[r['폼ID']] = []; } }
+    const ch = chMemo[r['폼ID']], lab = String(v[2]).replace(/\s*(마감|완료|품절)\s*$/, '').trim();
+    if (!lab) return;
+    let hit = ch.filter(function (c) { return k(c).indexOf(k(lab)) >= 0; });
+    if (hit.length !== 1) hit = ch.filter(function (c) { return k(c).indexOf(k(lab.split(/\s+/)[0])) >= 0; });
+    if (hit.length !== 1) return;
+    as.getRange(i + 2, 8).setValue(hit[0]); log.push(String(v[1]) + '→' + hit[0]);
+  });
+  for (let j = del.length - 1; j >= 0; j--) as.deleteRow(del[j]);
+  note_('✓ 배정 옵션 빈칸 채움 ' + log.length + '줄' + (del.length ? ', 이름이 아닌 \'마감\' 줄 ' + del.length + '개 지움' : ''));
 }
 // (10/27 한 번, 사용자 요청) 효자손외 배정 탭: 거치대 줄 7개가 모두 '맥세이프 휴대폰 거치대'로, 효자손 줄은 빈칸으로 연결돼 있었음
 //  (공지 상품 이름을 끝 낱말 '거치대'로만 줄여 3종류를 구분 못 함). 효자손 줄 → 코코스무 효자손 우드, 신현규·신윤정·슬기·워니 → 대쉬보드 시야확보 거치대(폼에 낸 것)
