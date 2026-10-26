@@ -1428,6 +1428,16 @@ function diag_(p) {
     out.payRows = [];
     payTabsNow_().forEach(function (sh) { const L = payLayout_(sh); if (!L) return; const last = sh.getLastRow(); if (last <= L.head) return; sh.getRange(L.head + 1, L.name, last - L.head, 1).getValues().forEach(function (x, i) { if (String(x[0]).indexOf(String(p.pay)) >= 0) out.payRows.push(sh.getName() + '!' + (L.head + 1 + i) + ' ' + x[0]); }); });
   } catch (e) { out.payErr = String(e); }
+  // &resp=요청ID: 그 진행 명단 시트의 폼 응답 (시각, 닉네임, 수령인, 전화 뒤 4자리, 옵션) — 중복·두 번 낸 사람 찾기 (읽기만)
+  if (p.resp) try {
+    const rr = runByRequest_(p.resp); out.resp = [];
+    if (rr) SpreadsheetApp.openById(rr['시트ID']).getSheets().filter(function (t) { return !!t.getFormUrl(); }).forEach(function (t) {
+      const h = headers_(t).map(hk_), lr = t.getLastRow(); if (lr < 2) return;
+      const ci = function (re, not) { return h.findIndex(function (x) { return re.test(x) && !(not && not.test(x)); }); };
+      const cN = ci(MATCH.nick), cA = ci(/수령인|계정명/), cP = ci(/전화|연락처|휴대폰/), cO = ci(MATCH.opt, MATCH.nick);
+      t.getRange(2, 1, lr - 1, h.length).getValues().forEach(function (x) { if (!(x[0] instanceof Date)) return; out.resp.push([t.getName(), Utilities.formatDate(x[0], CONFIG.TIMEZONE, 'MM-dd HH:mm:ss'), cN >= 0 ? x[cN] : '', cA >= 0 ? x[cA] : '', cP >= 0 ? String(x[cP]).slice(-4) : '', cO >= 0 ? x[cO] : ''].join(' | ')); });
+    });
+  } catch (e) { out.respErr = String(e); }
   // &fo=1: 끝나지 않은 진행 폼의 옵션 보기 (읽기만)
   if (p.fo) try {
     const seen = {}; out.formOpts = [];
