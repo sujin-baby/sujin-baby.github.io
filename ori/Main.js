@@ -2473,12 +2473,21 @@ function parseAssign_(text, choices) {
   const multi = noticeProducts_(text).length > 1 || blocks.length > 1;
   const junk = /http|★|☆|▶|▼|※|🐥|[:!?]|\d\s*원|\d{1,3},\d{3}|구매|리뷰|링크|가격|배송|검색|사업자|입금|참고|안내/;
   const rows = [], at = {}, priceMemo = {};
-  const toChoice = function (label, opt) {
+  const toChoice = function (label, opt, full, prod) {
     const a = k(label), b = k(opt);
-    let hit = choices.filter(function (c) { return bare(c) === a || bare(c) === b; })[0];
-    if (!hit) hit = choices.filter(function (c) { return a && bare(c).indexOf(a) >= 0; })[0];
-    if (!hit && !multi) hit = choices.filter(function (c) { return b && bare(c).indexOf(b) >= 0; })[0];
-    return hit || '';
+    let cs = choices.filter(function (c) { return bare(c) === a || bare(c) === b; });
+    if (!cs.length) cs = choices.filter(function (c) { return a && bare(c).indexOf(a) >= 0; });
+    if (!cs.length && !multi) cs = choices.filter(function (c) { return b && bare(c).indexOf(b) >= 0; });
+    // 여러 상품인데 옵션 글자로 못 찾으면 그 상품 짧은 이름이 들어간 보기 (10/27 '효자손 마감' → 코코스무 효자손 우드)
+    if (!cs.length && multi && prod) cs = choices.filter(function (c) { return bare(c).indexOf(k(prod)) >= 0; });
+    // 짧은 이름이 같은 상품이 여럿이면(10/27 거치대 3종: 맥세이프 휴대폰 / 대쉬보드 시야확보 / 계기판 집게형) 그 가이드의 키워드·상품명 낱말이 가장 많이 겹치는 보기
+    if (cs.length > 1 && full) {
+      const toks = String(full).split(/[\s,()\[\]\/·]+/).map(k).filter(function (t, i, arr) { return t.length >= 2 && arr.indexOf(t) === i; });
+      const sc = function (c) { return toks.filter(function (t) { return bare(c).indexOf(t) >= 0; }).length; };
+      const best = Math.max.apply(null, cs.map(sc)), top = cs.filter(function (c) { return sc(c) === best; });
+      if (best > 0 && top.length === 1) cs = top;
+    }
+    return cs[0] || '';
   };
   const add = function (names, label, choice) {
     let lastKey = null;
@@ -2523,6 +2532,8 @@ function parseAssign_(text, choices) {
   };
   blocks.forEach(function (b) {
     const prod = multi ? (noticeProducts_(b)[0] || {}).name || '' : '';
+    // 그 가이드의 키워드·상품명 전체 (짧은 이름이 같은 상품 구분용)
+    const full = multi ? ((b.match(/키워드\s*[:：]\s*(.+)/) || [])[1] || '') + ' ' + ((b.match(/상품명\s*[:：]\s*(.+)/) || [])[1] || '') : '';
     const lines = b.split(/\r?\n/);
     // 옵션 가격: '🐥옵션 : X (N명)' 다음 '🐥가격 : 20500', 또는 '1kg*1 : 17200원 / 1kg*2개 : 29200' 같은 줄
     //  생성기 공지처럼 가격 칸이 여러 줄이면('🐥가격 : 1kg*1 17,200' 다음 줄 '1kg*2개 29,800') 이어진 줄도 가격 줄로 봄
@@ -2563,7 +2574,7 @@ function parseAssign_(text, choices) {
           const ol = oi >= 0 ? lines[oi] : '';
           if (ol && !/\(\s*\d*\s*명\s*\)/.test(ol)) {
             const o2 = ol.replace(/^.*?옵션\s*[:：]\s*/, '').trim(), label2 = [prod, o2].filter(Boolean).join(' ');
-            add(m[3].replace(/^[\s\-–—:]+/, ''), label2, toChoice(label2, o2));
+            add(m[3].replace(/^[\s\-–—:]+/, ''), label2, toChoice(label2, o2, full, prod));
             const pr2 = priceOf(o2, oi);
             rows.forEach(function (x) { if (x[1] === label2 && !x[4]) x[4] = pr2; });
           }
@@ -2571,7 +2582,7 @@ function parseAssign_(text, choices) {
         }
         if (!opt || /가격|원$/.test(opt)) { cur = null; return; }
         const label = [prod, opt].filter(Boolean).join(' ');
-        cur = { label: label, choice: toChoice(label, opt) };
+        cur = { label: label, choice: toChoice(label, opt, full, prod) };
         const before = rows.length;
         add(m[3], cur.label, cur.choice);
         const pr = priceOf(opt, idx);
@@ -2836,6 +2847,7 @@ function checkFullInner_() {
   if (!props.getProperty('RVCAMP_V1')) try { rvCampOnce_(); } catch (e) { note_('리뷰 취합 의뢰 단위로 바꾸기 실패: ' + e); }
   if (!props.getProperty('EXPFEE_AB_V1')) try { expFeeAbOnce_(); } catch (e) { note_('기대평 폼 리뷰비 보기 바꾸기 실패: ' + e); }
   if (!props.getProperty('HYOJA_ROOM_V1')) try { hyojaRoomOnce_(); } catch (e) { note_('효자손 방제 줄이기 실패: ' + e); }
+  if (!props.getProperty('HYOJA_ASG_V1')) try { hyojaAssignOnce_(); } catch (e) { note_('효자손 배정 옵션 고치기 실패: ' + e); }
   if (!props.getProperty('TUMB1027_V1')) try { tumbler1027Once_(); } catch (e) { note_('텀블러 옵션 인원 채우기 실패: ' + e); }
   if (!props.getProperty('FIX1027_V1')) try { fix1027Once_(); } catch (e) { note_('10/27 보낼메시지 정리 실패: ' + e); }
   if (!props.getProperty('NAMES1026_V1')) try { names1026Once_(); } catch (e) { note_('효자손·보냉백 이름 맞추기 실패: ' + e); }
@@ -8299,6 +8311,25 @@ function hyojaRoomOnce_() {
   globalThis.__PAY_RENAME_ANY = true;
   try { if (renameRun_(r, '#10.27 실 효자손외 20', '방제 20자')) note_('✓ 방제 20자로: #10.27 실 유앤아이푸드 효자손외 20 → #10.27 실 효자손외 20 (카톡방 이름도 바꿔 주세요)'); }
   finally { globalThis.__PAY_RENAME_ANY = false; }
+}
+// (10/27 한 번, 사용자 요청) 효자손외 배정 탭: 거치대 줄 7개가 모두 '맥세이프 휴대폰 거치대'로, 효자손 줄은 빈칸으로 연결돼 있었음
+//  (공지 상품 이름을 끝 낱말 '거치대'로만 줄여 3종류를 구분 못 함). 효자손 줄 → 코코스무 효자손 우드, 신현규·신윤정·슬기·워니 → 대쉬보드 시야확보 거치대(폼에 낸 것)
+function hyojaAssignOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('HYOJA_ASG_V1')) return;
+  props.setProperty('HYOJA_ASG_V1', '1');
+  const as = assignSheet_(), al = as.getLastRow(); if (al < 2) return;
+  const HY = '코코스무 효자손 우드 (옵션단일)', DASH = '코코스무 대쉬보드 시야확보 거치대 블랙 (옵션단일)', log = [];
+  as.getRange(2, 1, al - 1, 8).getValues().forEach(function (v, i) {
+    if (String(v[0]) !== '#10.27 실 효자손외 20 (뽀짝오리)') return;
+    const nk = String(v[1]).trim(), lab = String(v[2]);
+    let want = '';
+    if (/효자손/.test(lab)) want = HY;
+    else if (/거치대/.test(lab) && /^(신현규|신윤정|슬기|워니)$/.test(nk)) want = DASH;
+    if (!want || String(v[7]) === want) return;
+    as.getRange(i + 2, 8).setValue(want); log.push(nk);
+  });
+  note_('✓ 효자손외 배정 옵션 고침: ' + (log.join(', ') || '바꿀 것 없음'));
 }
 // (10/27 한 번) 런치버스 텀블러 4색상(색마다 5개, 하루 5명): 다음 일차 공지·일정이 '검정 (  명)'처럼 인원이 비어 있음 (만들 때 생성기가 옵션 이름 없이 '4색상'으로 읽어서)
 //  10.27 실제 2·1·1·1 → 10.28 1·2·1·1, 10.29 1·1·2·1, 10.30 1·1·1·2 (색마다 5개). 안 보낸 10.28 공지, 폼 설명(빈 인원이 있을 때만), 10.29·10.30 일정
