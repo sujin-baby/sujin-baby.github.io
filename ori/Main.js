@@ -2750,6 +2750,8 @@ function checkFullInner_() {
   if (!props.getProperty('FIX1026C_V1')) try { fix1026cOnce_(); } catch (e) { note_('10/26 보낼메시지 정리 실패: ' + e); }
   if (!props.getProperty('TALKDEAL_G_V1')) try { talkdealQtyOnce_(); } catch (e) { note_('톡딜 월급시트 상태 실패: ' + e); }
   if (!props.getProperty('EXPMIX_V1')) try { expMixOnce_(); } catch (e) { note_('기대평 A·B묶음 바꾸기 실패: ' + e); }
+  if (!props.getProperty('RVCAMP_V1')) try { rvCampOnce_(); } catch (e) { note_('리뷰 취합 의뢰 단위로 바꾸기 실패: ' + e); }
+  if (!props.getProperty('EXPFEE_AB_V1')) try { expFeeAbOnce_(); } catch (e) { note_('기대평 폼 리뷰비 보기 바꾸기 실패: ' + e); }
   if (!props.getProperty('BUYU_PHOTO_V1')) { props.setProperty('BUYU_PHOTO_V1', '1'); props.setProperty('RVSENT_' + campKey_('#택10.21 써니마켓 부유단감 5') + '_10.21', '1'); note_('✓ 부유단감 10.21 포토 전달됨으로 표시 (사용자 확인)'); }
   if (!props.getProperty('SENT1026_V1')) try { sent1026Once_(); } catch (e) { note_('10.26 공지 보냄 처리 실패: ' + e); }
   if (!props.getProperty('REOPEN_V1')) try { reopenClosedOnce_(); } catch (e) { note_('닫힌 폼 다시 열기 실패: ' + e); }
@@ -2958,9 +2960,9 @@ function checkFullInner_() {
 // 30분 정리: 다 끝나야 시각을 적음 (중간에 끊기면 다음 확인에서 다시)
 function slowTasks_(rr, listed) {
   rr = rr || readRuns_(); listed = listed || {};
-  const rvN = function () { return Object.keys(PropertiesService.getScriptProperties().getProperties()).filter(function (k) { return /^(RVDONE_|RVRPT_)/.test(k); }).length; }, rv0 = rvN();
+  const rvN = function () { return Object.keys(PropertiesService.getScriptProperties().getProperties()).filter(function (k) { return /^(RVDONE_|RVRPT_|RVZIPURL_)/.test(k); }).length; }, rv0 = rvN();
   try { reviewDone_(readRuns_()); } catch (e) { note_('리뷰 완료 확인 실패: ' + e); }
-  // 그날 리뷰가 다 확인된 방이 새로 생기면 한눈에 '리뷰 취합할 것'에 바로 보이게 다시 그림 (전엔 한눈에를 먼저 그려서 15~30분 늦게 떴음, 10/25)
+  // 의뢰 리뷰가 다 끝나거나 압축 파일이 처음 생기면 한눈에 '리뷰 취합할 것'에 바로 보이게 다시 그림 (전엔 한눈에를 먼저 그려서 15~30분 늦게 떴음, 10/25)
   if (rvN() !== rv0 && !late_(300)) { try { buildDashboard_(false); } catch (e) { note_('한눈에 탭 실패: ' + e); } }
   try { listTabsRecent_(rr, listed); } catch (e) { note_('지난 명단 탭 실패: ' + e); }
   try { blackSheet_(); } catch (e) { note_('블랙리스트 탭 만들기 실패: ' + e); }
@@ -5151,7 +5153,7 @@ function reviewDone_(runs) {
         props.setProperty(k, '1');
         if (init) return;
         queueMsg_(String(r['카톡방'] || bareTitle_(r['명단 제목'])), '취완', '취완');
-        queueMsg_('내 할 일', '[' + bareTitle_(r['명단 제목']) + '] 그날 리뷰가 다 확인됐어요 → 리뷰 사진 취합하기 (명단 폴더 › 리뷰이미지 › 이 방 폴더 안에 포토·텍스트·별점 폴더로 나눠 올리면, 의뢰가 다 끝날 때 캠페인명.zip으로 자동 압축)', '할 일');   // 사용자 요청 10/21
+        // 리뷰 사진은 날마다 말고 의뢰가 다 끝난 뒤 한 번에 취합 (사용자 요청 10/26) → 아래 A-2에서 '리뷰 캡처 올리기' 할 일
         note_('✓ 취완 메시지 넣음: ' + bareTitle_(r['명단 제목']));
       });
       // A-2. 의뢰 전체 끝 + 전부 체크 → 사장님 보고
@@ -5159,13 +5161,22 @@ function reviewDone_(runs) {
       const got = mine.reduce(function (a, x) { return a + (Number(x['인원']) || 0); }, 0);
       const allDone = (!total || got >= total) && !pend[campKey_(mine[0]['캠페인'] || mine[0]['명단 제목'])] && live.every(function (i) { return v[i][cc] === true; });
       const rk = 'RVRPT_' + sid;
+      // 구매확정만 의뢰는 리뷰 캡처가 없음 → 캡처 올리기·압축 없이 보고 글 바로
+      let rvKind = ''; try { rvKind = (JSON.parse(props.getProperty('RV_' + sid) || '{}') || {}).kind || ''; } catch (e) {}
+      const capF = rvKind === 'confirm' ? null : folder;
       if (allDone && !props.getProperty(rk)) {
         props.setProperty(rk, '1');
-        if (!init) queueMsg_('사장님', rvReportLine_(name), '리뷰 보고');
-        if (!init) note_('✓ 사장님 리뷰 완료 보고 넣음: ' + name);
+        // 리뷰이미지 폴더가 있으면 보고 글은 압축 파일이 생길 때 링크와 같이 넣음 (먼저 보내고 나중에 링크 글이 또 가지 않게, 10/26)
+        if (!init && !capF) queueMsg_('사장님', rvReportLine_(name), '리뷰 보고');
+        if (!init) note_('✓ 의뢰 리뷰 다 끝남: ' + name);
       }
-      // B1. 의뢰 리뷰가 다 끝나면 리뷰이미지 폴더 사진 → 종류별 압축 (사용자 요청 10/26: 다 끝난 뒤에 한 번에 업체로)
-      if (folder && props.getProperty(rk)) rvZip_(folder, name, props, sid, rvExpect_(sid, mine));
+      // 의뢰 리뷰가 다 끝나면 한 번: 리뷰 캡처를 의뢰 폴더 '리뷰이미지'에 전부 올리라는 할 일 (폴더 링크, 사용자 요청 10/26 '한 캠페인이 모두 완료되면 그때 취합')
+      if (capF && props.getProperty(rk) && !props.getProperty('RVUP_' + sid)) {
+        props.setProperty('RVUP_' + sid, '1');
+        if (!init) queueMsg_('내 할 일', rvUploadMsg_(name, capF.img.getUrl()), '할 일');
+      }
+      // B1. 리뷰이미지 폴더 사진 → 압축 (다 끝난 뒤에 한 번에 업체로)
+      if (capF && props.getProperty(rk)) rvZip_(capF, name, props, sid, mine);
     } catch (e) { note_('리뷰 완료 확인 실패 ' + sid + ': ' + e.message); }
   });
   if (init) props.setProperty('RVDONE_INIT', '1');
@@ -5177,14 +5188,12 @@ function rvFolder_(mine, props, sid) {
   const id = (String(first['폴더 링크']).match(/[-\w]{25,}/) || [])[0];
   if (!id) return null;
   const parent = DriveApp.getFolderById(id), it = parent.getFoldersByName(RV_IMG_FOLDER);
-  if (it.hasNext()) return { parent: parent, img: it.next() };
-  const img = parent.createFolder(RV_IMG_FOLDER);
-  note_('✓ 리뷰 이미지 폴더 만듦: ' + parent.getName() + '/' + RV_IMG_FOLDER);
+  let img = it.hasNext() ? it.next() : null;
+  if (!img) { img = parent.createFolder(RV_IMG_FOLDER); note_('✓ 리뷰 이미지 폴더 만듦: ' + parent.getName() + '/' + RV_IMG_FOLDER); }
+  // 한눈에 '리뷰 취합할 것' 줄의 '사진 올릴 곳' 링크
+  if (props.getProperty('RVIMG_' + sid) !== img.getId()) props.setProperty('RVIMG_' + sid, img.getId());
   return { parent: parent, img: img };
 }
-// 리뷰 사진 압축 (사용자 요청 10/26): 의뢰 리뷰가 다 끝나면(RVRPT_) 리뷰이미지 폴더의 사진을 종류별로 모아
-//  '캠페인명.zip' 안에 '포토 N' / '텍스트 N' / '별점 N' 폴더로. 종류는 사진이 들어 있는 폴더 이름(포토·텍스트·별점으로 시작)으로 앎
-//  (방마다 폴더 안에 포토/텍스트/별점 폴더, 또는 포토/텍스트/별점 폴더 안에 방 폴더 둘 다 됨). 사진 내용은 안 봄
 const RV_TYPES = ['포토', '텍스트', '별점'];
 // 사장님 리뷰 완료 보고 첫 줄 (명단 시트 이름에서 예전 '(응답)'은 뺌)
 function rvReportLine_(name) { return '안녕하세요 ' + String(name).replace(/\s*\(응답\)\s*$/, '').trim() + ' 리뷰완료되어 보고드립니다 !'; }
@@ -5194,6 +5203,7 @@ function rvExpect_(sid, mine) {
   let rv = {}; try { rv = JSON.parse(PropertiesService.getScriptProperties().getProperty('RV_' + sid) || '{}') || {}; } catch (e) {}
   const total = mine.reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0), out = { 포토: 0, 텍스트: 0, 별점: 0 };
   if (rv.kind === 'confirm') return null;
+  if (isWongo_(rv)) { out['포토'] = total; return total ? out : null; }   // 원고제공·자율 = 전체 포토리뷰
   if (rv.kind === 'text') { out['텍스트'] = total; return total ? out : null; }
   if (rv.kind === 'photo' || rv.kind === 'self') { out['포토'] = total; return total ? out : null; }
   const prods = parseRvMix_(rv.mix);
@@ -5201,47 +5211,125 @@ function rvExpect_(sid, mine) {
   prods.forEach(function (p) { p.mix.forEach(function (m) { out[/^별점/.test(m.label) ? '별점' : /^(포토|사진)/.test(m.label) ? '포토' : '텍스트'] += m.n; }); });
   return out;
 }
-function rvZip_(f, name, props, sid, expect) {
-  const byType = { 포토: [], 텍스트: [], 별점: [] }, loose = [], looseIn = {};
+// 리뷰 캡처 올리기 할 일 (의뢰 리뷰가 다 끝났을 때 한 번, 사용자 요청 10/26: 날짜별 말고 의뢰가 다 끝나면 한 번에)
+function rvUploadMsg_(name, url) {
+  return '📦 [' + rvBase_(name) + '] 의뢰 리뷰가 다 끝났어요 → 이 의뢰 리뷰 캡처를 전부 아래 폴더에 올려 주세요 (날짜·포토·텍스트·별점 안 나눠도 돼요)\n' + url +
+    '\n올리고 10~40분 뒤 자동으로 압축돼요. 압축 파일 안에 포토·텍스트·별점 개수가 적히고, 보낼메시지 \'리뷰 보고\'(사장님)에 압축 파일 링크가 붙어요 → 받아서 보고 글과 같이 보내기';
+}
+// 캠페인명 (명단 시트 이름에서 '(응답)'과 끝 건수 뺌) = 압축 파일 이름
+function rvBase_(name) { return String(name).replace(/\s*\(응답\)\s*$/, '').replace(/\s*\d+\s*$/, '').trim(); }
+const RV_CAP_RE = /^리뷰\s*캡[처쳐]/;   // 의뢰 폴더에 직접 만든 '리뷰캡처' 폴더도 같이 (10/26 옥광밤)
+// 의뢰 방마다 보낸 리뷰 가이드 글('포토리뷰(2명) : 가 나2', 원고는 '전체 포토리뷰')에서 실제로 배정한 리뷰 종류별 인원
+//  같은 방에 가이드가 여러 번 나갔으면 이름으로 합침 (같은 글 두 번 = 한 번, 10/26 실링팬처럼 포토 가이드가 사람마다 따로 = 더함). 이름 끝 숫자는 계정 수
+//  → { 포토, 텍스트, 별점 } / 방 하나라도 가이드를 못 찾으면 { miss: [방] }, 합친 인원이 방 인원보다 많으면(사람이 종류를 바꿈) { odd: [방] }
+function rvGuideCounts_(mine, obRows) {
+  const rooms = {};
+  mine.forEach(function (r) { const n = Number(r['인원']) || 0; if (n > 0) rooms[String(r['카톡방'] || bareTitle_(r['명단 제목']))] = n; });
+  const per = {};
+  obRows.forEach(function (v, vi) {
+    const room = String(v[3]), m = String(v[4]);
+    if (!rooms[room] || !/^\S{0,4}리뷰내용 가이드/.test(m)) return;
+    const c = per[room] = per[room] || { 포토: {}, 텍스트: {}, 별점: {}, bad: 0 };
+    if (/^[^\n]*리뷰내용 가이드[^\n]*전체\s*포토\s*리뷰/.test(m)) { c['포토']['(방 전체)'] = rooms[room]; return; }
+    m.split('\n').forEach(function (l, li) {
+      const x = l.match(/^\s*([^():\n]{1,20}?)\s*\((\d+)명\)\s*:(.*)$/);
+      if (!x) return;
+      if (/종류\s*확인/.test(x[1])) { c.bad = 1; return; }
+      const t = /별점/.test(x[1]) ? '별점' : /포토|사진/.test(x[1]) ? '포토' : '텍스트', n = Number(x[2]) || 0;
+      const who = String(x[3]).trim().split(/\s+/).filter(Boolean).map(function (w) { const y = w.match(/^(.*?\D)(\d+)$/); return y ? { nm: y[1], n: Number(y[2]) } : { nm: w, n: 1 }; });
+      // 이름 수가 (N명)과 맞으면 이름으로, 아니면 그 줄 통째로 (못 합침)
+      if (who.reduce(function (a, y) { return a + y.n; }, 0) === n) who.forEach(function (y) { c[t][y.nm] = y.n; });
+      else c[t]['#' + vi + '_' + li] = n;
+    });
+  });
+  const out = { 포토: 0, 텍스트: 0, 별점: 0 }, miss = [], odd = [];
+  const sumOf = function (o) { return Object.keys(o).reduce(function (a, k) { return a + o[k]; }, 0); };
+  Object.keys(rooms).forEach(function (room) {
+    const c = per[room];
+    if (!c || c.bad) { miss.push(room); return; }
+    const k = {}; RV_TYPES.forEach(function (t) { k[t] = sumOf(c[t]); });
+    const sum = k['포토'] + k['텍스트'] + k['별점'];
+    if (!sum) { miss.push(room); return; }
+    if (sum > rooms[room]) { odd.push(room); return; }
+    RV_TYPES.forEach(function (t) { out[t] += k[t]; });
+  });
+  if (!Object.keys(rooms).length) return { miss: ['(인원 없음)'] };
+  if (miss.length) return { miss: miss };
+  if (odd.length) return { odd: odd };
+  return out;
+}
+function rvCntText_(c) { return RV_TYPES.filter(function (t) { return c[t] > 0; }).map(function (t) { return t + ' ' + c[t]; }).join(', '); }
+// 리뷰 사진 압축 (사용자 요청 10/26): 의뢰 리뷰가 다 끝나면(RVRPT_) 의뢰 폴더 '리뷰이미지'(와 직접 만든 '리뷰캡처') 사진을 전부 모아 '캠페인명.zip'
+//  사진은 안 나눠도 됨: 압축 안에 '포토 5, 텍스트 10, 별점 5.txt'(개수 = 방마다 보낸 리뷰 가이드 배정, 못 찾으면 의뢰서)
+//  포토·텍스트·별점으로 시작하는 폴더에 나눠 올린 사진은 압축 안에서도 '포토 N/' 폴더로 (전부 나눴으면 폴더 이름이 개수라 메모 파일 없음)
+//  다 올릴 때까지 기다림: 마지막 사진을 올리고 10분 동안 새 사진이 없을 때 만듦. 사진을 더 올리면 다시 만듦. 사진 내용은 안 봄
+function rvZip_(f, name, props, sid, mine) {
+  const byType = { 포토: [], 텍스트: [], 별점: [] }, loose = [], seen = {};
   const walk = function (fo, depth, type) {
     const t = rvTypeOf_(fo.getName()) || type, it = fo.getFiles();
-    while (it.hasNext()) { const x = it.next(); if (!/^image\//.test(x.getMimeType())) continue; if (t) byType[t].push(x); else { loose.push(x); looseIn[fo.getName()] = (looseIn[fo.getName()] || 0) + 1; } }
+    while (it.hasNext()) { const x = it.next(); if (!/^image\//.test(x.getMimeType()) || seen[x.getId()]) continue; seen[x.getId()] = 1; if (t) byType[t].push(x); else loose.push(x); }
     if (depth < 4) { const fi = fo.getFolders(); while (fi.hasNext()) walk(fi.next(), depth + 1, t); }
   };
   walk(f.img, 0, '');
-  const files = byType['포토'].concat(byType['텍스트'], byType['별점']);
-  if (!files.length && !loose.length) return;
-  const cnt = RV_TYPES.map(function (t) { return t + ' ' + byType[t].length; });
-  const sig = cnt.join(',') + ':' + loose.length + ':' + files.concat(loose).reduce(function (m, x) { return Math.max(m, x.getLastUpdated().getTime()); }, 0);
+  const ci = f.parent.getFolders();
+  while (ci.hasNext()) { const x = ci.next(); if (RV_CAP_RE.test(String(x.getName()).trim())) walk(x, 0, ''); }
+  const typed = byType['포토'].concat(byType['텍스트'], byType['별점']), files = typed.concat(loose);
+  if (!files.length) return;
+  const newest = files.reduce(function (m, x) { return Math.max(m, x.getLastUpdated().getTime(), x.getDateCreated().getTime()); }, 0);
+  const sig = 'v2:' + RV_TYPES.map(function (t) { return byType[t].length; }).join(',') + ':' + loose.length + ':' + newest;
   if (props.getProperty('RVZIP_' + sid) === sig) return;
-  const base = String(name).replace(/\s*\(응답\)\s*$/, '').replace(/\s*\d+\s*$/, '').trim(), zipName = base + '.zip';
-  const warn = [];
-  if (loose.length) warn.push('⚠ 포토·텍스트·별점 폴더에 안 들어간 사진 ' + loose.length + '장은 안 넣었어요 (' + Object.keys(looseIn).map(function (k) { return k + ' ' + looseIn[k] + '장'; }).join(', ') + ') → 종류 폴더로 옮기면 다시 압축돼요');
-  if (expect) { const diff = RV_TYPES.filter(function (t) { return expect[t] !== byType[t].length; }); if (diff.length) warn.push('⚠ 의뢰서 개수와 달라요: ' + diff.map(function (t) { return t + ' 의뢰서 ' + expect[t] + ' / 사진 ' + byType[t].length; }).join(', ')); }
+  if (Date.now() - newest < 10 * 60000) return;   // 아직 올리는 중일 수 있음 → 다음 확인에서
   props.setProperty('RVZIP_' + sid, sig);
-  if (!files.length) { note_(base + ' 리뷰 사진이 포토·텍스트·별점 폴더에 없어서 압축 못 함 (' + loose.length + '장)'); return; }
+  const base = rvBase_(name), zipName = base + '.zip', warn = [];
   const size = files.reduce(function (a, x) { return a + x.getSize(); }, 0);
-  if (size > 45 * 1024 * 1024) { note_(base + ' 리뷰 사진이 너무 커서(' + Math.round(size / 1048576) + 'MB) 압축 못 함. 나눠서 올려 주세요'); return; }
+  if (size > 45 * 1024 * 1024) { queueMsg_('내 할 일', '[' + base + '] 리뷰 사진이 너무 커서(' + Math.round(size / 1048576) + 'MB) 압축 못 했어요 → 사진을 줄이거나 나눠서 보내기', '할 일'); return; }
+  // 개수: 전부 종류 폴더에 나눴으면 폴더 사진 수, 아니면 리뷰 가이드 배정(못 찾으면 의뢰서)
+  let cnt = null, from = '';
+  if (!loose.length) {
+    cnt = { 포토: byType['포토'].length, 텍스트: byType['텍스트'].length, 별점: byType['별점'].length }; from = '폴더';
+    const ex = rvExpect_(sid, mine);
+    if (ex && RV_TYPES.some(function (t) { return ex[t] !== cnt[t]; })) warn.push('⚠ 의뢰서(' + rvCntText_(ex) + ')와 폴더 사진 수(' + rvCntText_(cnt) + ')가 달라요');
+  }
+  else {
+    let obRows = [];
+    try { const ob = outboxSheet_(), ol = ob.getLastRow(); if (ol >= 2) obRows = ob.getRange(2, 1, ol - 1, 6).getValues(); } catch (e) {}
+    const g = rvGuideCounts_(mine, obRows), ex = rvExpect_(sid, mine);
+    if (!g.miss && !g.odd) {
+      cnt = g; from = '가이드';
+      if (ex && RV_TYPES.some(function (t) { return ex[t] !== g[t]; })) warn.push('⚠ 의뢰서(' + rvCntText_(ex) + ')와 실제 배정(' + rvCntText_(g) + ')이 달라요 → 압축 파일에는 실제 배정대로 적었어요');
+    } else if (ex) {
+      cnt = ex; from = '의뢰서';
+      warn.push('⚠ ' + (g.odd ? '리뷰 가이드가 여러 번 나간 방(' + g.odd.join(', ') + ')이 있어서' : '리뷰 가이드를 못 찾은 방(' + g.miss.join(', ') + ')이 있어서') + ' 개수를 의뢰서대로 적었어요 → 맞는지 확인');
+    } else warn.push('⚠ 리뷰 종류별 개수를 몰라서 압축 파일에 못 적었어요 (사진 ' + files.length + '장)');
+  }
+  const total = cnt ? cnt['포토'] + cnt['텍스트'] + cnt['별점'] : 0;
+  if (from !== '폴더' && total && files.length < total) warn.push('⚠ 리뷰 ' + total + '건인데 사진이 ' + files.length + '장이에요 → 빠진 캡처가 없는지 확인 (더 올리면 다시 압축돼요)');
   const used = {}, blobs = [];
-  RV_TYPES.forEach(function (t) {
-    if (!byType[t].length) return;
-    byType[t].forEach(function (x) { let n = t + ' ' + byType[t].length + '/' + x.getName(); while (used[n]) n = n.replace(/\/([^/]*)$/, '/_$1'); used[n] = 1; blobs.push(x.getBlob().setName(n)); });
-  });
+  const add = function (n, x) { while (used[n]) n = n.replace(/([^/]*)$/, '_$1'); used[n] = 1; blobs.push(x.getBlob().setName(n)); };
+  RV_TYPES.forEach(function (t) { byType[t].forEach(function (x) { add(t + ' ' + byType[t].length + '/' + x.getName(), x); }); });
+  loose.forEach(function (x) { add(x.getName(), x); });
+  if (from !== '폴더' && total) {
+    const txt = rvCntText_(cnt);
+    used[txt + '.txt'] = 1;
+    blobs.push(Utilities.newBlob('\uFEFF' + base + ' 리뷰\r\n' + RV_TYPES.filter(function (t) { return cnt[t] > 0; }).map(function (t) { return t + ' ' + cnt[t]; }).join('\r\n') + '\r\n총 ' + total + '건\r\n', 'text/plain', txt + '.txt'));
+  }
   const old = f.parent.getFilesByName(zipName);
   while (old.hasNext()) old.next().setTrashed(true);
   const zip = f.parent.createFile(Utilities.zip(blobs, zipName));
+  props.setProperty('RVZIPURL_' + sid, zip.getUrl());
+  const cntTxt = cnt ? rvCntText_(cnt) : '개수 모름';
   // 사장님께 보낼 글 하나: 리뷰 완료 보고 + 압축 파일 링크 (사용자 요청 10/26 '하나로 붙여'). 안 보낸 보고 글이 있으면 거기에 링크를 붙이거나 새 링크로 바꿈
   const line = rvReportLine_(name), msg = line + '\n' + zip.getUrl();
   const ob = outboxSheet_(), ol = ob.getLastRow();
   let done = false;
   if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (!done && v[2] === '리뷰 보고' && v[5] !== '보냄' && String(v[4]).split('\n')[0].replace(/\s*\(응답\)/, '') === line) { obSet_(ob, v[0], 5, msg); done = true; } });
   if (!done) queueMsg_('사장님', msg, '리뷰 보고');
-  if (warn.length) queueMsg_('내 할 일', '[' + base + '] 리뷰 압축 확인: ' + cnt.join(' · ') + '\n' + warn.join('\n'), '할 일');
-  note_('✓ 리뷰 압축: ' + zipName + ' (' + cnt.join(' · ') + ')' + (warn.length ? ' ' + warn.join(' ') : ''));
+  if (warn.length) queueMsg_('내 할 일', '[' + base + '] 리뷰 압축 확인 (사진 ' + files.length + '장 · ' + cntTxt + ')\n' + warn.join('\n'), '할 일');
+  note_('✓ 리뷰 압축: ' + zipName + ' (사진 ' + files.length + '장 · ' + cntTxt + (from ? ', ' + from + ' 기준' : '') + ')' + (warn.length ? ' ' + warn.join(' ') : ''));
 }
 
 /* ---------------- 사용법 탭 (맨 앞, 사용자 요청 10/20). 글을 바꾸면 USAGE_VER를 올림 → 다시 씀 ---------------- */
-const USAGE_TAB = '사용법', USAGE_VER = '14';
+const USAGE_TAB = '사용법', USAGE_VER = '15';
 const USAGE_ROWS = [
   ['체험단 관리 시트 사용법', '(스크립트가 쓰는 탭이라 여기 고친 글은 다음 업데이트 때 다시 써져요)'],
   ['', ''],
@@ -5269,8 +5357,8 @@ const USAGE_ROWS = [
   ['안 산 사람 (인원 모자람)', '그대로 두면 됨. 의뢰 마지막 날이면 그날 오후 2시 이후 다음 진행일에 모자란 만큼 진행이 자동으로 생김(보낼메시지에 방 공지). 그날 방제는 산 인원으로 바뀜(10→8, 월급시트 캠페인명도) → 보낼메시지 "할 일"대로 카톡방 이름·오리명단방 명단 메시지를 수정. 중간 날 모자란 건 마지막 날 끝난 뒤 한꺼번에. 바로 더 받으려면 폼수정 탭 I2에 인원 숫자'],
   ['잘못 산 사람·방 나간 사람', '폼수정 탭 B1에서 진행 고르기 → 그 응답 체크 → 삭제 실행. 그날 안이면 폼이 다시 열려 다른 사람을 받음'],
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
-  ['리뷰 완료 (취완)', '명단 시트 "명단" 탭 맨 오른쪽 "리뷰 확인" 체크칸에 체크 → 그 방 사람 전부 체크되면 보낼메시지에 그 방 "취완", 의뢰 전체가 끝나고 전부 체크되면 사장님 보고 문구'],
-  ['리뷰 사진 압축', '방마다 리뷰 캡처를 의뢰 폴더(진행목록 "폴더 링크") 안 "리뷰이미지"에 올리기: 방 폴더 안에 "포토", "텍스트", "별점" 폴더로 나눠서 → 의뢰 리뷰가 다 끝나면 캠페인명.zip(안에 포토 N / 텍스트 N / 별점 N 폴더)이 생기고 보낼메시지 "할 일"(사장님)에 링크 → 받아서 업체에 보내기. 종류 폴더 밖 사진·의뢰서와 다른 개수는 할 일에 ⚠로 알려 줌'],
+  ['리뷰 완료 (취완)', '명단 시트 "명단" 탭 맨 오른쪽 "리뷰 확인" 체크칸에 체크 → 그 방 사람 전부 체크되면 보낼메시지에 그 방 "취완". 의뢰 전체가 끝나고 전부 체크되면 보낼메시지 "할 일"에 리뷰 캡처 올릴 폴더 링크'],
+  ['리뷰 사진 압축', '날마다 말고 의뢰가 다 끝난 뒤 한 번에: 그 의뢰 리뷰 캡처를 전부 의뢰 폴더 안 "리뷰이미지"(할 일·한눈에 "리뷰 취합할 것" 줄의 링크)에 올리기. 날짜·포토·텍스트·별점으로 안 나눠도 됨 → 10~40분 뒤 캠페인명.zip이 생기고(안에 "포토 N, 텍스트 N, 별점 N" 메모 파일, 개수는 방마다 보낸 리뷰 가이드대로 자동) 보낼메시지 "리뷰 보고"(사장님)에 압축 파일 링크 → 받아서 보고 글과 같이 업체에 보내고, 한눈에 그 줄 체크. 사진이 리뷰 건수보다 적거나 개수가 의뢰서와 다르면 할 일에 ⚠'],
   ['블랙리스트 사람이 폼을 냄', '한눈에 "확인 필요" 칸에 ⛔ + 메일 → 폼수정 탭에서 그 응답 지우기'],
   ['명단이 안 보임', '메뉴 체험단 도구 → 지금 명단 마감 확인 (명단 탭만 바로 새로고침, 나머지는 1분 뒤 자동)'],
   ['화면이 이상함', '메뉴 → 지금 최신 버전으로 업데이트 → 한눈에 탭 새로 만들기'],
@@ -7102,26 +7190,25 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '26';
-// 한눈에 '리뷰 취합할 것' 칸에 보일 것: 그날 리뷰 확인이 다 된 방(RVDONE_) 중 취합 체크 안 했거나 체크한 지 3일 안 된 것,
-//  의뢰 전체 리뷰가 끝났고(RVRPT_) 날짜마다 취합이 다 된 의뢰 중 업체 전송 체크 안 했거나 3일 안 된 것. 최근 40일 진행만, 기대평 빼고
+const DASH_VER = '27';
+// 한눈에 '리뷰 취합할 것' 칸에 보일 것: 의뢰 전체 리뷰가 끝난(RVRPT_) 의뢰 중 업체 전송 체크 안 했거나 체크한 지 3일 안 된 것. 최근 40일 진행만, 기대평 빼고
+//  날마다 취합하던 줄은 없앰 (사용자 요청 10/26: 날짜별로 말고 한 캠페인이 다 끝나면 그때 한 번에)
 function rvItems_(allRuns, props) {
   const all = props.getProperties(), t0 = today_().getTime(), cut = t0 - 40 * 86400000, keep = function (d) { return !(d instanceof Date) || dayStart_(d) >= t0 - 3 * 86400000; };
   const md = function (d) { return d instanceof Date ? Utilities.formatDate(d, CONFIG.TIMEZONE, 'yyyy-MM-dd') : ''; };
   const runs = allRuns.filter(function (r) { return r['시트ID'] && !isExpect_(r) && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut; })
     .sort(function (a, b) { return a['진행일'] - b['진행일']; });
   const items = [];
-  runs.forEach(function (r) {
-    if (!all['RVDONE_' + String(r['명단 제목']).replace(/\s+/g, '')] || !keep(r['리뷰 취합'])) return;
-    items.push({ type: 'day', title: bareTitle_(r['명단 제목']), label: bareTitle_(r['명단 제목']), at: md(r['리뷰 취합']), sheet: String(r['시트 링크'] || ''), folder: String(r['폴더 링크'] || '') });
-  });
   const bySheet = {};
   runs.forEach(function (r) { (bySheet[r['시트ID']] = bySheet[r['시트ID']] || []).push(r); });
   Object.keys(bySheet).forEach(function (sid) {
     const mine = bySheet[sid];
-    if (!all['RVRPT_' + sid] || !mine.every(function (r) { return r['리뷰 취합'] instanceof Date; }) || !keep(mine[0]['업체 전송'])) return;
+    if (!all['RVRPT_' + sid] || !keep(mine[0]['업체 전송'])) return;
     const f = function (r) { return (r['진행일'].getMonth() + 1) + '.' + r['진행일'].getDate(); };
-    items.push({ type: 'req', sid: sid, label: '📦 의뢰 끝: ' + campOf_(mine[0]['명단 제목']) + ' (' + f(mine[0]) + '~' + f(mine[mine.length - 1]) + ') 리뷰 사진 압축해서 업체에 보내기', at: md(mine[0]['업체 전송']), sheet: String(mine[0]['시트 링크'] || ''), folder: String(mine[0]['폴더 링크'] || '') });
+    const span = f(mine[0]) === f(mine[mine.length - 1]) ? f(mine[0]) : f(mine[0]) + '~' + f(mine[mine.length - 1]);
+    const todo = all['RVZIPURL_' + sid] ? '압축 완료 → 보낼메시지 \'리뷰 보고\' 압축 파일 받아서 업체에 보내고 체크' : '리뷰 캡처 전부 올리기(오른쪽 리뷰이미지) → 압축되면 업체에 보내고 체크';
+    const img = all['RVIMG_' + sid] ? 'https://drive.google.com/drive/folders/' + all['RVIMG_' + sid] : String(mine[0]['폴더 링크'] || '');
+    items.push({ type: 'req', sid: sid, label: '📦 의뢰 끝: ' + campOf_(mine[0]['명단 제목']) + ' (' + span + ') ' + todo, at: md(mine[0]['업체 전송']), sheet: String(mine[0]['시트 링크'] || ''), folder: img });
   });
   return items;
 }
@@ -7331,11 +7418,11 @@ function buildDashboard_(force) {
   if (payUrl) sh.getRange(bar, 6).setFormula('=HYPERLINK(' + q(payUrl) + ',"▶ 월급시트")').setFontWeight('bold').setHorizontalAlignment('left');
   if (CONFIG.TAKBAE_SHEET_URL) sh.getRange(bar, 7).setFormula('=HYPERLINK(' + q(CONFIG.TAKBAE_SHEET_URL) + ',"▶ 택배시트")').setFontWeight('bold').setHorizontalAlignment('left');
   try { sh.getRange(bar, 8).setValue(String(props.getProperty('LAST_REPORT') || '')).setFontWeight('bold').setHorizontalAlignment('left').setWrap(false); } catch (e) {}
-  // 리뷰 취합할 것 (사용자 요청 10/24): 그날 리뷰 확인이 다 된 방 → 사진 취합하면 체크, 의뢰 전체가 끝나고 날짜마다 취합이 다 되면 '업체에 보내기' 줄 → 보내면 체크. 체크하고 3일 뒤 사라짐
+  // 리뷰 취합할 것 (사용자 요청 10/24, 10/26부터 의뢰 단위만): 의뢰 리뷰가 다 끝나면 '캡처 올리기 → 업체에 보내기' 줄 → 보내면 체크. 체크하고 3일 뒤 사라짐
   const rvMap = {};
   if (rvItems.length) {
     const rt = bar + 2;
-    sh.getRange(rt, 1, 1, 5).setValues([['취합', '리뷰 취합할 것 (그날 리뷰 확인이 다 된 방 · 사진 취합하면 체크 → 3일 뒤 사라짐)', '체크한 날', '명단', '폴더']]).setFontWeight('bold').setBackground('#e6f4ea');
+    sh.getRange(rt, 1, 1, 5).setValues([['보냄', '리뷰 취합할 것 (의뢰 리뷰가 다 끝난 것 · 업체에 보내면 체크 → 3일 뒤 사라짐)', '체크한 날', '명단', '사진 올릴 곳']]).setFontWeight('bold').setBackground('#e6f4ea');
     rvItems.forEach(function (it, i) {
       const rr = rt + 1 + i;
       rvMap[rr] = it.type === 'req' ? { type: 'req', sid: it.sid } : { type: 'day', title: it.title };
@@ -7344,7 +7431,7 @@ function buildDashboard_(force) {
       if (it.type === 'req') sh.getRange(rr, 2).setFontWeight('bold').setFontColor('#1e5631');
       if (it.at) sh.getRange(rr, 3).setValue(new Date(it.at + 'T00:00:00')).setNumberFormat('M/d');
       if (it.sheet) sh.getRange(rr, 4).setFormula('=HYPERLINK(' + q(it.sheet) + ',"명단")');
-      if (it.folder) sh.getRange(rr, 5).setFormula('=HYPERLINK(' + q(it.folder) + ',"폴더")');
+      if (it.folder) sh.getRange(rr, 5).setFormula('=HYPERLINK(' + q(it.folder) + ',' + q(it.type === 'req' ? '리뷰이미지' : '폴더') + ')');
     });
     sh.getRange(rt, 1, rvItems.length + 1, 5).setBorder(true, true, true, true, true, true, '#cfe8d6', SpreadsheetApp.BorderStyle.SOLID).setVerticalAlignment('middle');
   }
@@ -7565,6 +7652,8 @@ const EXP_SETS = {
   B: EXP_LINKS.filter(function (x) { const i = EXP_LINKS.filter(function (y) { return y[0] === x[0]; }).indexOf(x); return x[0] === '교보문고' ? i >= 4 : i >= 5; })
 };
 function expFee_(set) { const n = EXP_SETS[set].length; return '총 ' + n + '건, ' + (n * 1000).toLocaleString('en-US') + '원'; }
+// 폼 '기대평 댓글 리뷰비' 보기 (10/26 A·B묶음: 예전 '1주차/2주차' 글은 같은 날 A·B가 섞이면서 헷갈려서 바꿈. 금액은 같음)
+function expFeeCh_() { return ['A묶음 ' + expFee_('A'), 'B묶음 ' + expFee_('B')]; }
 function expNotice_(set) {
   // 사용자가 고친 글 그대로 (10/23). 사업자 줄 없음. 맨 위 시간 줄, 예스24 한줄평 50자·알라딘 마이리뷰 안내 (사용자 요청 10/26)
   const links = EXP_SETS[set], wk = set === 'A' ? '1주차' : '2주차', n = links.length;
@@ -7711,7 +7800,7 @@ function setupExpectOnce_() {
   form.addTextItem().setTitle('계정명(이름)').setRequired(true);
   ['예스24', '알라딘', '교보문고'].forEach(function (pl) { form.addTextItem().setTitle(pl + ' 아이디').setRequired(true); });
   form.addTextItem().setTitle('리뷰비 계좌').setHelpText('은행 / 계좌번호 / 예금주').setRequired(true);
-  form.addMultipleChoiceItem().setTitle('기대평 댓글 리뷰비').setChoiceValues(['1주차 ' + expFee_('A'), '2주차 ' + expFee_('B')]).setRequired(true);
+  form.addMultipleChoiceItem().setTitle('기대평 댓글 리뷰비').setChoiceValues(expFeeCh_()).setRequired(true);
   const ss = SpreadsheetApp.create(fname);
   ss.setSpreadsheetTimeZone(CONFIG.TIMEZONE);
   DriveApp.getFileById(ss.getId()).moveTo(folder);
@@ -8105,6 +8194,45 @@ function talkdealQtyOnce_() {
     c.setValue('톡딜 (명단 시트 없음)');
     note_('✓ 월급시트 톡딜 줄 계약 수량 칸 채움 (상태 수식이 시작전으로 나오던 것): ' + sh.getName() + '!' + (L.head + 1 + i));
   });
+}
+// (10/26 한 번) 기대평 폼 '기대평 댓글 리뷰비' 보기 1주차/2주차 → A묶음/B묶음 (A·B묶음으로 바꿀 때 못 고친 예전 글. 금액 같음, 이미 낸 응답 값은 그대로)
+function expFeeAbOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('EXPFEE_AB_V1')) return;
+  props.setProperty('EXPFEE_AB_V1', '1');
+  const seen = {}, log = [];
+  readRuns_().forEach(function (r) {
+    const fid = String(r['폼ID'] || '');
+    if (!isExpect_(r) || !fid || seen[fid] || r['진행 상태'] === '종료') return;
+    seen[fid] = 1;
+    try {
+      FormApp.openById(fid).getItems(FormApp.ItemType.MULTIPLE_CHOICE).forEach(function (it) {
+        if (!/기대평\s*댓글\s*리뷰비/.test(it.getTitle())) return;
+        const mc = it.asMultipleChoiceItem(), cur = mc.getChoices().map(function (c) { return c.getValue(); });
+        if (!cur.some(function (c) { return /주차/.test(c); })) return;
+        mc.setChoiceValues(expFeeCh_());
+        log.push(bareTitle_(r['명단 제목']) + ' (' + cur.join(' / ') + ' → ' + expFeeCh_().join(' / ') + ')');
+      });
+    } catch (e) { log.push(bareTitle_(r['명단 제목']) + ' 실패: ' + e); }
+  });
+  note_('✓ 기대평 폼 리뷰비 보기: ' + (log.join(', ') || '고칠 폼 없음'));
+}
+// (10/26 한 번, 사용자 요청 '날짜별로 말고 한 캠페인이 모두 완료되면 그때 취합') 날마다 넣던 '그날 리뷰가 다 확인됐어요 → 리뷰 사진 취합하기' 할 일 중
+//  안 보낸 것만 지움 (이제 의뢰가 다 끝나면 '리뷰 캡처 올리기' 할 일 하나). 취완 글은 그대로
+function rvCampOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('RVCAMP_V1')) return;
+  props.setProperty('RVCAMP_V1', '1');
+  const gone = withObWrite_(function () {
+    const ob = outboxSheet_(), ol = ob.getLastRow(), del = [];
+    if (ol < 2) return [];
+    ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v, i) {
+      if (v[2] === '할 일' && String(v[3]) === '내 할 일' && v[5] !== '보냄' && /그날 리뷰가 다 확인됐어요 → 리뷰 사진 취합하기/.test(String(v[4]))) del.push({ row: i + 2, t: (String(v[4]).match(/^\[([^\]]+)\]/) || [])[1] || '' });
+    });
+    for (let j = del.length - 1; j >= 0; j--) ob.deleteRow(del[j].row);
+    return del.map(function (x) { return x.t; });
+  });
+  note_('✓ 리뷰 취합을 의뢰 단위로: 날마다 넣던 리뷰 사진 취합 할 일 ' + gone.length + '개 지움' + (gone.length ? ' (' + gone.join(', ') + ')' : '') + ' → 의뢰가 다 끝나면 리뷰 캡처 올리기 할 일 하나');
 }
 // (10/26 한 번, 사용자 요청) 보낼메시지 정리
 //  1) 하루 인원 바꾸기로 취소된 실링팬 진행(10.30, 11.02~11.04)의 안 보낸 공지 지움 (예전 코드가 '취소'를 못 써서 '대기'로 남음)
