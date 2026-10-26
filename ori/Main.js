@@ -1438,6 +1438,8 @@ function diag_(p) {
       t.getRange(2, 1, lr - 1, h.length).getValues().forEach(function (x) { if (!(x[0] instanceof Date)) return; out.resp.push([t.getName(), Utilities.formatDate(x[0], CONFIG.TIMEZONE, 'MM-dd HH:mm:ss'), cN >= 0 ? x[cN] : '', cA >= 0 ? x[cA] : '', cP >= 0 ? String(x[cP]).slice(-4) : '', cO >= 0 ? x[cO] : ''].join(' | ')); });
     });
   } catch (e) { out.respErr = String(e); }
+  // &rvj=글자: 진행 제목에 그 글자가 든 의뢰의 리뷰 정보(RV_: 종류·개수·가이드) (읽기만)
+  if (p.rvj) try { const pr = PropertiesService.getScriptProperties(), seen = {}; out.rvj = []; readRuns_().forEach(function (r) { const sid = String(r['시트ID'] || ''); if (!sid || seen[sid] || String(r['명단 제목']).indexOf(String(p.rvj)) < 0) return; seen[sid] = 1; out.rvj.push(bareTitle_(r['명단 제목']) + ' | ' + String(pr.getProperty('RV_' + sid) || '').slice(0, 600)); }); } catch (e) { out.rvjErr = String(e); }
   // &fo=1: 끝나지 않은 진행 폼의 옵션 보기 (읽기만)
   if (p.fo) try {
     const seen = {}; out.formOpts = [];
@@ -2718,6 +2720,7 @@ function checkFullInner_() {
   if (!props.getProperty('NOTICE1026_V1')) try { notice1026Once_(); } catch (e) { note_('10/26 공지 고치기 실패: ' + e); }
   if (!props.getProperty('COCO1026_V1')) try { cocoRunOnce_(); } catch (e) { note_('코코스무 진행 만들기 실패: ' + e); }
   if (!props.getProperty('DEL_SEULBI_V1')) try { delSeulbiOnce_(); } catch (e) { note_('이슬비 응답 지우기 실패: ' + e); }
+  if (!props.getProperty('FIX1026B_V1')) try { fix1026bOnce_(); } catch (e) { note_('10/26 실링팬·치약걸이 고치기 실패: ' + e); }
   if (!props.getProperty('BUYU_PHOTO_V1')) { props.setProperty('BUYU_PHOTO_V1', '1'); props.setProperty('RVSENT_' + campKey_('#택10.21 써니마켓 부유단감 5') + '_10.21', '1'); note_('✓ 부유단감 10.21 포토 전달됨으로 표시 (사용자 확인)'); }
   if (!props.getProperty('SENT1026_V1')) try { sent1026Once_(); } catch (e) { note_('10.26 공지 보냄 처리 실패: ' + e); }
   if (!props.getProperty('REOPEN_V1')) try { reopenClosedOnce_(); } catch (e) { note_('닫힌 폼 다시 열기 실패: ' + e); }
@@ -7860,6 +7863,23 @@ function expPlanRestoreOnce_() {
     ps.getRange(i + 2, 9).setValue('대기'); n.push(bareTitle_(x[4]));
   });
   note_('✓ 기대평 일정 되살림 (전 진행일 0시에 진행·공지가 만들어짐): ' + (n.join(', ') || '없음'));
+}
+// (10/26 한 번, 사용자 요청)
+//  1) 보낼메시지에서 #10.26 실 치약걸이 보냉백 5 '리뷰내용 가이드'(m4c368e96e61e) 글이 기대평 명단 전달 글로 바뀌어 있음 → 원래 글로 되돌림
+//  2) #10.26 실링팬 2: 둘 다 포토 (허예인 텍스트리뷰 → 포토리뷰). 업체 포토를 받아 10.22·10.26 사람에게 전달함 → 포토 받음 표시
+const BAG_RVGUIDE_1026 = "🐥리뷰내용 가이드🐥 : 전체 포토리뷰!\n\n원고 언급 안되신 나머지 분들은 포토+원고자율작성 부탁드려요 :)\n\n원고제공되신 분들은 상황연출은 변형되도 되어서 \n원고는 약간 참고만 하면됩니다 !\n\n그리고 포토리뷰 올릴때는 무조건 사용샷으로 뜯어서 사용해주세요 !!! 항상 감사합니다 !\n\n🐥🐥🐥🐥🐥🐥🐥🐥🐥🐥";
+function fix1026bOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FIX1026B_V1')) return;
+  props.setProperty('FIX1026B_V1', '1');
+  const ob = outboxSheet_(), ol = ob.getLastRow(), v = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues() : [], log = [];
+  v.forEach(function (x) {
+    if (String(x[0]) === 'm4c368e96e61e' && x[5] === '대기' && /백발백중 도서 기대평/.test(String(x[4]))) { obSet_(ob, x[0], 5, BAG_RVGUIDE_1026); log.push('치약걸이 리뷰 가이드 되돌림'); }
+    if (String(x[3]) === '#10.26 실링팬 2' && x[5] === '대기' && /텍스트리뷰\(1명\)\s*:\s*허예인/.test(String(x[4]))) { obSet_(ob, x[0], 5, String(x[4]).replace(/텍스트리뷰\(1명\)(\s*:\s*허예인)/, '포토리뷰(1명)$1')); log.push('실링팬 10.26 허예인 포토리뷰로'); }
+  });
+  ['#10.22 실링팬 1', '#10.26 실링팬 2'].forEach(function (t) { props.setProperty('RVSENT_' + campKey_(t) + '_' + dateTok_(t), '1'); });
+  log.push('실링팬 10.22·10.26 포토 받음');
+  note_('✓ 10/26 고침: ' + log.join(', '));
 }
 // (10/26 한 번, 사용자 요청) 신발패드 문어괄사 진행에서 이슬비가 폼을 두 번 냄 → 맨 처음 것 지움 (폼 응답·응답 탭·명단 탭, 인원 다시 셈 = 폼수정 탭 삭제와 같음)
 function delSeulbiOnce_() {
