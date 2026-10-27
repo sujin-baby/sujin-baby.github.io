@@ -2997,6 +2997,7 @@ function checkFullInner_() {
   if (!props.getProperty('PROTECT_V1')) try { protectSystemOnce_(); } catch (e) { note_('자동 칸 경고 잠금 실패: ' + e); }
   if (!props.getProperty('RVGUIDE1027_V1')) try { rvGuide1027Once_(); } catch (e) { note_('10.27 리뷰 가이드 다시 쓰기 실패: ' + e); }
   if (!props.getProperty('TUMBRV_V1')) try { tumbRvOnce_(); } catch (e) { note_('텀블러 리뷰 설정 실패: ' + e); }
+  if (!props.getProperty('EXPWHO1029_V1')) try { expWho1029Once_(); } catch (e) { note_('기대평 10.29 이름 넣기 실패: ' + e); }
   if (!props.getProperty('OPTPRICE_SEED_V1')) try { optPriceSeedOnce_(); } catch (e) { note_('옵션 가격 기억 실패: ' + e); }
   if (!props.getProperty('PAYRETRO_V2')) try { payRetro2Once_(); } catch (e) { note_('양배추 결제금액 다시 보기 실패: ' + e); }
   if (!props.getProperty('PAYRETRO_V1')) try { payRetroOnce_(); } catch (e) { note_('지난 결제금액 다시 보기 실패: ' + e); }
@@ -8110,7 +8111,7 @@ function expPer_(r) { return Math.round((Number((String(r && r['가격'] || '').
 const EXP_MIX = { '10.26': [3, 0], '10.27': [2, 1], '10.28': [1, 2], '10.29': [1, 2], '10.30': [2, 1], '11.2': [0, 3], '11.3': [1, 2], '11.4': [2, 1], '11.5': [2, 1], '11.6': [1, 2] };
 // 2주차 날 공지에 넣을 사람 (1주차 같은 요일 사람이 반대 묶음)
 const EXP_WHO = { '10.28': { A: '김미주', B: '임혜영 주은' }, '11.2': { B: '윤주영 3계정' }, '11.3': { A: '10.27 B묶음 하신 분', B: '윤주영 2계정' },
-  '11.4': { A: '임혜영 주은', B: '김미주' }, '11.5': { A: '10.29 B묶음 하신 2분', B: '10.29 A묶음 하신 분' }, '11.6': { A: '10.30 B묶음 하신 분', B: '10.30 A묶음 하신 2분' } };
+  '11.4': { A: '임혜영 주은', B: '김미주' }, '10.29': { A: '조아린', B: '. 방윤아' }, '11.5': { A: '. 방윤아', B: '조아린' }, '11.6': { A: '10.30 B묶음 하신 분', B: '10.30 A묶음 하신 2분' } };
 const EXP_SET_Q = '작성한 링크 묶음', EXP_SET_CH = ['A묶음 (14개 링크)', 'B묶음 (13개 링크)'];
 // 계획대로 n명이면 몇 건 (A묶음 자리 먼저). 계획 없는 날이면 null
 function expPlanCount_(tok, n) {
@@ -8806,6 +8807,29 @@ function tumbRvOnce_() {
   const ob = outboxSheet_(), ol = ob.getLastRow();
   if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (v[2] === '방 공지' && v[5] === '대기' && /^#10\.27 실 런치버스 텀블러/.test(String(v[3])) && /^🐥리뷰내용 가이드🐥/.test(String(v[4]))) obSet_(ob, v[0], 5, SENT); });
   note_('✓ 텀블러 리뷰: 날마다 포토 1·별점 4, 색상마다 포토 한 명 (' + Object.keys(dayMix).join(', ') + ')');
+}
+// (10/28 한 번, 사용자 요청) 기대평 10.29(조아린 A, . 방윤아 B)·11.5(반대) 공지에 이름: 일정 탭 계획과 이미 만든 대기 공지
+function expWho1029Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('EXPWHO1029_V1')) return;
+  props.setProperty('EXPWHO1029_V1', '1');
+  const log = [];
+  const ps = planSheet_(), pl = ps.getLastRow();
+  if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x, i) {
+    const tok = dateTok_(x[5]);
+    if (String(x[0]).indexOf('exp-100-4-v5-') !== 0 || (tok !== '10.29' && tok !== '11.5')) return;
+    const mx = EXP_MIX[tok], cfg = JSON.parse(x[9]);
+    cfg.desc = expNoticeMix_(mx[0], mx[1], EXP_WHO[tok]);
+    ps.getRange(i + 2, 10).setValue(JSON.stringify(cfg)); log.push(tok + ' 계획');
+  });
+  const ob = outboxSheet_(), ol = ob.getLastRow(), w = EXP_WHO['10.29'];
+  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
+    if (v[2] !== '방 공지' || v[5] !== '대기' || !/^10\.29 백발백중 도서 기대평/.test(String(v[3]))) return;
+    const t = String(v[4]).replace(/(A묶음\(\d+개 링크\) \d+명)(?! -)/, '$1 - ' + w.A).replace(/(B묶음\(\d+개 링크\) \d+명)(?! -)/, '$1 - ' + w.B)
+      .replace(/(🔵 A묶음 \(\d+개 링크\))(?! -)/, '$1 - ' + w.A).replace(/(🟢 B묶음 \(\d+개 링크\))(?! -)/, '$1 - ' + w.B);
+    if (t !== String(v[4])) { obSet_(ob, v[0], 5, t); log.push('10.29 대기 공지'); }
+  });
+  note_('✓ 기대평 10.29·11.5 이름: ' + (log.join(', ') || '바꿀 것 없음'));
 }
 // (10/27 한 번) 지금 배정 탭에 남은 줄의 옵션 가격을 시트마다 기억 (앞으로는 배정을 쓸 때마다 기억)
 function optPriceSeedOnce_() {
