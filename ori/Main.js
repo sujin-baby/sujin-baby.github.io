@@ -2946,6 +2946,8 @@ function checkFullInner_() {
   if (!props.getProperty('CABBAGE_DEL_V1')) try { cabbageRocketDelOnce_(); } catch (e) { note_('양배추채칼외 로켓 응답 지우기 실패: ' + e); }
   if (!props.getProperty('EXPSCHED_V1')) try { expSchedOnce_(); } catch (e) { note_('기대평 2주차 일정 바꾸기 실패: ' + e); }
   if (!props.getProperty('HYOJA1028_V1')) try { hyoja1028Once_(); } catch (e) { note_('효자손외 10.28 만들기 실패: ' + e); }
+  if (!props.getProperty('FIX1027B_V1')) try { fix1027bOnce_(); } catch (e) { note_('10/27 저녁 고치기 실패: ' + e); }
+  if (!props.getProperty('PROTECT_V1')) try { protectSystemOnce_(); } catch (e) { note_('자동 칸 경고 잠금 실패: ' + e); }
   if (!props.getProperty('CABBAGE_SOJ_V1')) try { cabbageSojungOnce_(); } catch (e) { note_('양배추채칼외 소정 배정 지우기 실패: ' + e); }
   if (!props.getProperty('HYOJA_ASG_V1')) try { hyojaAssignOnce_(); } catch (e) { note_('효자손 배정 옵션 고치기 실패: ' + e); }
   if (!props.getProperty('TUMB1027_V1')) try { tumbler1027Once_(); } catch (e) { note_('텀블러 옵션 인원 채우기 실패: ' + e); }
@@ -6714,7 +6716,7 @@ function makeDueDays_() {
       const res = createRunInner_({
         k: CONFIG.KEY, n: x[0], title: x[5], room: x[4], fname: x[4], camp: cfg.camp, day: k, total: cfg.total,
         daily: String(x[6]), date: dateIso, desc: desc, type: cfg.type, takdae: cfg.takdae, realship: cfg.realship,
-        platform: cfg.platform, prices: cfg.prices, croom: cfg.croom, opts: cfg.opts, shop: cfg.shop, photo: cfg.photo, slot: exp ? '' : cfg.slot2,
+        platform: cfg.platform, prices: cfg.prices, croom: cfg.croom, opts: cfg.opts, shop: cfg.shop, photo: cfg.photo, slot: exp ? (/백발백중/.test(String(cfg.camp)) ? '자정 ~ 오전 8시 20분' : '') : cfg.slot2,   // 백발백중 기대평 진행시간 (사용자 요청 10/27)
         reuse: baseRun && baseRun['폼ID'] ? baseRun : undefined, sheetId: baseRun ? baseRun['시트ID'] : undefined
       });
       sh.getRange(i + 2, 9).setValue('생성됨');
@@ -8580,6 +8582,72 @@ function hyoja1028Once_() {
     '☆★☆★ 양식 작성 폼 ☆★☆★', String(r['폼 링크']), '', prod('코코스무 맥세이프 휴대폰 거치대 블랙', '[확인 필요]', 1, '12,900'), '', prod('코코스무 계기판 대쉬보드 집게형 거치대 블랙', '[확인 필요]', 5, '[확인 필요]')].join('\n');
   const so = [['코코스무 맥세이프 휴대폰 거치대 블랙', 1, '코코스무 맥세이프 휴대폰 거치대 블랙|블랙'], ['코코스무 계기판 대쉬보드 집게형 거치대 블랙', 5, '코코스무 계기판 대쉬보드 집게형 거치대 블랙|블랙']];
   note_('✓ 효자손외 10.28: ' + addMoreRun_(r, 6, { next: true, short: so, desc: desc }));
+}
+// (10/27 한 번, 사용자 요청) 10.28 효자손외 공지(사용자가 준 글), 월급시트 스토어(신발패드 = 유앤아이푸드, 양배추채칼외 = 로이시마켓), 백발백중 기대평 진행시간
+const HYOJA1028_NOTICE = ['★★★자정 ~ 오전 8시 20분 구매★★★', '가격이 높으면 사지 마세요!', '★ 광고(AD) 상품으로 주문 절대 금지 ★', '★ 스중 상중 불가 ★ (가능하면 진행자가 따로 안내합니다)', '▶ 리뷰는 배송완료 후 7일 이내 작성', '▶ 결제 스크린샷은 필수입니다', '',
+  '※오리방 페이백 리뷰비 안내※', '리뷰비는 방전원 다 쓰셔야지 진행자가', '요청완료 기준으로 3일 뒤에 입금되는 점', '참고하여 주세요!', '실배송은 방에 인원이 다쓰셔야 페이백 요청됩니다', '일정기간 지나면 회오리가 방탈합니다!', '지급이 어려울수 있으니 안내된 기간은 지켜주세요! 감사합니다', '★사업자 4971201389 ★', '',
+  '☆★☆★ 양식 작성 폼 ☆★☆★', 'https://forms.gle/Z6wGQbKQc3bbmrd19', '', '------------------------------------------------', '',
+  '1) 1명', '링크타고 검색▼( 상번이 네이버일때 무시)', 'https://coupa.ng/b59klT', '🐥판매처 : 유앤아이푸드', '🐥상품명 : 코코스무 맥세이프 360도 회전 차량용 강력 진공 흡착식 접이식 휴대폰 핸드폰 태블릿 대시보드 거치대', '🐥상품번호 : 9791573679 - 2931***5485', '🐥★키워드 : 코코스무 맥세이프 휴대폰 거치대', '🐥위치 : 1페이지', '🐥옵션 : 블랙 (옵션단일)', '🐥가격 : 12,900', '',
+  '------------------------------------------------', '',
+  '2) 5명', '링크타고 검색▼( 상번이 네이버일때 무시)', 'https://coupa.ng/b59klT', '🐥판매처 : 유앤아이푸드', '🐥상품명 : 코코스무 차량용 전방주시 안전운행 계기판 대쉬보드 각도조절 원터치 휴대폰 강력 집게형 거치대', '🐥상품번호 : 9791478092 - 2931***6849', '🐥★키워드 : 코코스무 계기판 대쉬보드 집게형 거치대', '🐥위치 : 1페이지', '🐥옵션 : 블랙 (옵션단일)', '🐥가격 : 9,900'].join('\n');
+function fix1027bOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FIX1027B_V1')) return;
+  props.setProperty('FIX1027B_V1', '1');
+  const log = [], runs = readRuns_(), SLOT = '자정 ~ 오전 8시 20분';
+  // 1) 10.28 효자손외 공지: 보낼메시지(대기)와 폼 설명
+  const hy = runs.filter(function (x) { return /^#10\.28 실 효자손외/.test(String(x['명단 제목'])); })[0];
+  if (hy) {
+    const ob = outboxSheet_(), ol = ob.getLastRow();
+    if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (v[2] === '방 공지' && v[5] === '대기' && /^#10\.28 실 효자손외/.test(String(v[3])) && /양식 작성 폼/.test(String(v[4]))) { obSet_(ob, v[0], 5, HYOJA1028_NOTICE); log.push('효자손외 10.28 공지'); } });
+    try { FormApp.openById(hy['폼ID']).setDescription(formDesc_(HYOJA1028_NOTICE)); log.push('효자손외 폼 설명'); } catch (e) { note_('효자손외 폼 설명 실패: ' + e); }
+  } else note_('⚠ #10.28 실 효자손외 진행이 아직 없어 공지 못 넣음');
+  // 2) 진행목록 업체·구매시간 (월급시트 스토어·진행시간이 이걸로 채워짐)
+  runs.forEach(function (x) {
+    const t = String(x['명단 제목']);
+    if (/^#10\.26 실 신발패드 문어괄사/.test(t) && !x['업체']) { setRun_(x.row, '업체', '유앤아이푸드'); log.push('신발패드 업체'); }
+    if (/^#10\.27 실 양배추채칼외/.test(t) && !x['업체']) { setRun_(x.row, '업체', '로이시마켓'); log.push('양배추 업체'); }
+    if (/백발백중 도서 기대평/.test(t) && x['진행 상태'] !== '종료' && x['구매시간'] !== SLOT) { setRun_(x.row, '구매시간', SLOT); log.push(dateTok_(t) + ' 기대평 시간'); }
+  });
+  // 3) 월급시트 칸 직접 (❗·빈칸·'…까지 작성')
+  payTabsNow_().forEach(function (sh) {
+    const L = payLayout_(sh); if (!L) return;
+    const last = sh.getLastRow(); if (last <= L.head) return;
+    sh.getRange(L.head + 1, L.name, last - L.head, 1).getValues().forEach(function (v, i) {
+      const nm = String(v[0]), row = L.head + 1 + i;
+      if (L.store && /^#10\.26 실 신발패드 문어괄사/.test(nm)) { sh.getRange(row, L.store).setValue('유앤아이푸드'); log.push(sh.getName() + ' 신발패드 스토어'); }
+      if (L.store && /^#10\.27 실 양배추채칼외/.test(nm)) { sh.getRange(row, L.store).setValue('로이시마켓'); log.push(sh.getName() + ' 양배추 스토어'); }
+      if (L.time && /^\d+\.\d+ 백발백중 도서 기대평/.test(nm) && !sh.getRange(row, L.time).getFormula()) { sh.getRange(row, L.time).setValue(SLOT); log.push(sh.getName() + ' ' + nm.slice(0, 5) + ' 기대평 시간'); }
+    });
+  });
+  note_('✓ 10/27 저녁: ' + log.join(', '));
+}
+// (10/27 한 번, 사용자 요청) 사용자가 고치면 안 되는 자동 칸에 경고 잠금 (고치려 하면 경고창, 스크립트는 그대로 씀)
+//  관리 시트: 배정 E(산 수)·F(확인)·G(시트ID), 보낼메시지 A(ID)·C(종류), 진행목록 인원·마감 시각·시트ID·폼ID·요청ID / 월급시트: 수식 칸
+function protectSystemOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('PROTECT_V1')) return;
+  props.setProperty('PROTECT_V1', '1');
+  const DESC = '자동 칸 (스크립트가 씀, 고치지 마세요)', done = [];
+  const lock = function (rg, what) {
+    rg.getSheet().getProtections(SpreadsheetApp.ProtectionType.RANGE).forEach(function (p) { if (p.getDescription() === DESC && p.getRange().getA1Notation() === rg.getA1Notation()) p.remove(); });
+    rg.protect().setDescription(DESC).setWarningOnly(true); done.push(what);
+  };
+  const col = function (sh, c, what) { if (c > 0) lock(sh.getRange(2, c, Math.max(sh.getMaxRows() - 1, 1), 1), sh.getName() + ' ' + what); };
+  try { const as = assignSheet_(); col(as, 5, '산 수'); col(as, 6, '확인'); col(as, 7, '시트ID'); } catch (e) { note_('배정 잠금 실패: ' + e); }
+  try { const ob = outboxSheet_(); col(ob, 1, 'ID'); col(ob, 3, '종류'); } catch (e) { note_('보낼메시지 잠금 실패: ' + e); }
+  try {
+    const ls = ensureListSheet_(), hd = ls.getRange(1, 1, 1, ls.getLastColumn()).getValues()[0].map(String);
+    ['인원', '마감 시각', '시트ID', '폼ID', '요청ID'].forEach(function (h) { col(ls, hd.indexOf(h) + 1, h); });
+  } catch (e) { note_('진행목록 잠금 실패: ' + e); }
+  try {
+    payTabsNow_().forEach(function (sh) {
+      const L = payLayout_(sh); if (!L) return;
+      const last = Math.max(sh.getLastRow(), L.head + 1), fm = sh.getRange(L.head + 1, 1, 1, sh.getLastColumn()).getFormulas()[0];
+      fm.forEach(function (f, j) { if (f) lock(sh.getRange(L.head + 1, j + 1, sh.getMaxRows() - L.head, 1), sh.getName() + ' ' + colLetter_(j + 1)); });
+    });
+  } catch (e) { note_('월급시트 잠금 실패: ' + e); }
+  note_('✓ 자동 칸 경고 잠금 ' + done.length + '곳: ' + done.join(', '));
 }
 // (10/27 한 번, 사용자 요청) #10.27 실 양배추채칼외 배정 탭에서 '소정' 줄 지움 (안 사고 나감. 박소정은 다른 사람이라 그대로)
 function cabbageSojungOnce_() {
