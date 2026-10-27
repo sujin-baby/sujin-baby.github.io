@@ -876,7 +876,7 @@ function payCheck_(ss, add) {
   const num = function (x) { return Number(String(x == null ? '' : x).replace(/[^0-9]/g, '')) || 0; };
   const won = function (n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '원'; };
   const bad = {};
-  const pm = optPriceMap_(mine.map(function (m) { return String(m['명단 제목']); }));
+  const pm = optPriceMap_(mine.map(function (m) { return String(m['명단 제목']); }), sid);
   // 배정 가격도 없으면 같은 옵션 다른 사람들이 가장 많이 낸 금액 (3명 이상, 절반 넘게 같은 값일 때만. 10/27 양배추 배정이 비어 있어서 못 잡음)
   let maj = null;
   const majOf = function (opt) {
@@ -906,10 +906,11 @@ function payCheck_(ss, add) {
     if (!exp && kOpt) exp = pm[String(x.o[kOpt]).trim()] || 0;
     if (!exp && kOpt) exp = majOf(x.o[kOpt]);
     if (!exp) { const ps = runPrices_(r['가격']); if (ps.length && ps.every(function (p) { return p === ps[0]; })) exp = ps[0]; }
-    if (!exp) return;
-    for (let k = 1; k <= 5; k++) if (paid === exp * k) return;
     const kName = keys.filter(function (k) { return /수령인|계정명/.test(k); })[0] || keys.filter(function (k) { return /이름|성함/.test(k) && !MATCH.nick.test(k); })[0];
     const room = bareTitle_(r['명단 제목']);
+    // 기준 가격을 못 찾으면 넘어가지 않고 '확인 필요'로 (사용자 요청 10/27)
+    if (!exp) { (bad[room] = bad[room] || []).push((kName ? String(x.o[kName]).trim() : '?') + ': ' + won(paid) + ' 결제 (공지 가격을 못 찾음' + (kOpt ? ', 옵션 ' + String(x.o[kOpt]).trim() : '') + ') → 확인 필요'); return; }
+    for (let k = 1; k <= 5; k++) if (paid === exp * k) return;
     (bad[room] = bad[room] || []).push((kName ? String(x.o[kName]).trim() : '?') + ': ' + won(paid) + ' 결제 (공지 ' + won(exp) + ', ' + (paid > exp ? '더 비싸게 삼' : '더 싸게 삼') + ')');
   });
   Object.keys(bad).forEach(function (room) {
@@ -918,8 +919,9 @@ function payCheck_(ss, add) {
   });
 }
 // 폼 보기 → 공지 가격 (배정 탭 H 폼 보기 → I 가격, 같은 보기면 가장 많이 나온 값). 폼 보기에 가격이 없는 여러 상품 의뢰용 (10/27)
-function optPriceMap_(titles) {
+function optPriceMap_(titles, sid) {
   const out = {}, cnt = {};
+  if (sid) try { Object.assign(out, JSON.parse(PropertiesService.getScriptProperties().getProperty('OPTPRICE_' + sid) || '{}')); } catch (e) {}
   try {
     const as = assignSheet_(), al = as.getLastRow();
     if (al >= 2) as.getRange(2, 1, al - 1, 9).getValues().forEach(function (v) {
@@ -2386,6 +2388,13 @@ function writeAssign_(r, rows) {
     return [title, x[0], x[1], x[2], info.nick ? boughtFormula_(row, info) : '', needFormula_(row), String(r['시트ID']), x[3] || '', x[4] || ''];
   }));
   grantImport_(adminSs_().getId(), r['시트ID']);
+  // 옵션 가격을 시트마다 따로 기억 (사용자가 지난 배정 줄을 날마다 지워도 결제금액 확인이 되게, 10/27)
+  try {
+    const pp = PropertiesService.getScriptProperties(), pk = 'OPTPRICE_' + r['시트ID'];
+    const mp = JSON.parse(pp.getProperty(pk) || '{}');
+    rows.forEach(function (x) { if (x[3] && Number(x[4]) > 0) mp[String(x[3]).trim()] = Number(x[4]); });
+    pp.setProperty(pk, JSON.stringify(mp));
+  } catch (e) {}
   try {
     const choices = globalThis.__CHOICES || formChoices_(formOf_(info.raw));
     if (choices.length > 1) sh.getRange(start, 8, rows.length, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(choices, true).setAllowInvalid(true).build());
@@ -2988,6 +2997,7 @@ function checkFullInner_() {
   if (!props.getProperty('PROTECT_V1')) try { protectSystemOnce_(); } catch (e) { note_('자동 칸 경고 잠금 실패: ' + e); }
   if (!props.getProperty('RVGUIDE1027_V1')) try { rvGuide1027Once_(); } catch (e) { note_('10.27 리뷰 가이드 다시 쓰기 실패: ' + e); }
   if (!props.getProperty('TUMBRV_V1')) try { tumbRvOnce_(); } catch (e) { note_('텀블러 리뷰 설정 실패: ' + e); }
+  if (!props.getProperty('OPTPRICE_SEED_V1')) try { optPriceSeedOnce_(); } catch (e) { note_('옵션 가격 기억 실패: ' + e); }
   if (!props.getProperty('PAYRETRO_V2')) try { payRetro2Once_(); } catch (e) { note_('양배추 결제금액 다시 보기 실패: ' + e); }
   if (!props.getProperty('PAYRETRO_V1')) try { payRetroOnce_(); } catch (e) { note_('지난 결제금액 다시 보기 실패: ' + e); }
   if (!props.getProperty('CABBAGE_SOJ_V1')) try { cabbageSojungOnce_(); } catch (e) { note_('양배추채칼외 소정 배정 지우기 실패: ' + e); }
@@ -7884,7 +7894,7 @@ function buildDashboard_(force) {
     x.prods.forEach(function (p) { p.prices.forEach(function (v) { if (prices.indexOf(v) === -1) prices.push(v); }); });
     (String(x.runs[0]['가격'] || '').match(/\d{3,}/g) || []).forEach(function (v) { v = Number(v); if (prices.indexOf(v) === -1) prices.push(v); });
     // 옵션마다 가격을 알면(배정 탭) 그 옵션 가격과 비교 (10/27: 상품 여럿이면 다른 상품 가격과 같기만 해도 넘어가던 것)
-    const pm = optPriceMap_(x.runs.map(function (m) { return String(m['명단 제목']); })), pc = Object.keys(pm);
+    const pm = optPriceMap_(x.runs.map(function (m) { return String(m['명단 제목']); }), x.sid), pc = Object.keys(pm);
     if ((prices.length || pc.length) && x.layout[6][1]) {
       const num = 'VALUE(REGEXREPLACE(TO_TEXT(G' + r0 + '),"[^0-9]",""))', F = 'TRIM(F' + r0 + ')';
       const any = prices.length ? 'NOT(OR(' + prices.map(function (v) { return num + '=' + v; }).join(',') + '))' : 'FALSE';
@@ -8796,6 +8806,18 @@ function tumbRvOnce_() {
   const ob = outboxSheet_(), ol = ob.getLastRow();
   if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (v[2] === '방 공지' && v[5] === '대기' && /^#10\.27 실 런치버스 텀블러/.test(String(v[3])) && /^🐥리뷰내용 가이드🐥/.test(String(v[4]))) obSet_(ob, v[0], 5, SENT); });
   note_('✓ 텀블러 리뷰: 날마다 포토 1·별점 4, 색상마다 포토 한 명 (' + Object.keys(dayMix).join(', ') + ')');
+}
+// (10/27 한 번) 지금 배정 탭에 남은 줄의 옵션 가격을 시트마다 기억 (앞으로는 배정을 쓸 때마다 기억)
+function optPriceSeedOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('OPTPRICE_SEED_V1')) return;
+  props.setProperty('OPTPRICE_SEED_V1', '1');
+  const as = assignSheet_(), al = as.getLastRow(), by = {};
+  if (al >= 2) as.getRange(2, 1, al - 1, 9).getValues().forEach(function (v) { const sid = String(v[6]), c = String(v[7]).trim(), p = Number(String(v[8]).replace(/[^0-9]/g, '')) || 0; if (sid && c && p) (by[sid] = by[sid] || {})[c] = p; });
+  // 양배추채칼외는 배정 줄이 지워져서 10/27 낮에 본 값으로
+  by['1o5XI6KkuMbYZDRujaYGdhswOL55w4ttFYZJU2UThYjE'] = Object.assign({ '양배추 채칼 메탈실버 1개': 9800, '턱걸이스트랩 다크블랙': 14600, '주방가위': 10800, '음식물거름망 올리브그린': 8900, '안경세척기 퓨어화이트': 17800, '전자레인지찜기 그레이 블루': 9700, '도어스토퍼 다크블랙': 17800, '변기솔 화이트': 8300, '오토바이방한장갑 블랙워머': 15800, '방수테이프 화이트 2개': 8600, '눈썹제모기 로즈핑크': 12800 }, by['1o5XI6KkuMbYZDRujaYGdhswOL55w4ttFYZJU2UThYjE'] || {});
+  Object.keys(by).forEach(function (sid) { const k = 'OPTPRICE_' + sid; let mp = {}; try { mp = JSON.parse(props.getProperty(k) || '{}'); } catch (e) {} props.setProperty(k, JSON.stringify(Object.assign(by[sid], mp))); });
+  note_('✓ 옵션 가격 기억: 시트 ' + Object.keys(by).length + '개');
 }
 // (10/27 한 번) 양배추채칼외 결제금액 다시 (배정 줄이 비어서 V1에서 못 본 것 → 같은 옵션 다수 금액으로)
 function payRetro2Once_() {
