@@ -2469,11 +2469,26 @@ function noticeProducts_(text) {
 function parseAssign_(text, choices) {
   text = String(text || '').normalize('NFC').replace(/[\u200B-\u200F\uFEFF\u3164\u115F\u1160]/g, '');   // 숨은 글자 빼기 (10/23)
   // 띄어쓰기 있는 닉네임은 대괄호로 묶어 한 사람: [시묘 심효진] (U+2060으로 잠깐 붙였다가 이름에서 다시 띄어 씀)
-  text = String(text || '').replace(/\[([^\]\n]{1,20})\]/g, function (m, g) { return g.trim().replace(/\s+/g, '\u2060'); });
+  //  괄호 안에 'N명'이 있으면 이름이 아니라 배정 줄 전체를 묶은 것 → 괄호만 뺌 (10/27 '🐥[실배송 3명 - 현지 슬기 선우승]'이 한 사람으로 들어감)
+  text = String(text || '').replace(/\[([^\[\]\n]{1,40})\]/g, function (m, g) { if (/\d\s*명/.test(g)) return ' ' + g.trim() + ' '; return g.length <= 20 ? g.trim().replace(/\s+/g, '\u2060') : m; });
   const k = function (x) { return String(x || '').toLowerCase().replace(/[\s\u2060]+/g, ''); };
   const bare = function (c) { return k(String(c).replace(/\s*\([\d,\s]+원\)\s*$/, '')); };
   // 상품 구분선: ---- 또는 ———— (카톡에서 긴 줄로 바뀜, 10/21 오즈네즈)
-  const blocks = String(text || '').split(/\n\s*[-—─_]{5,}\s*\n?/);
+  //  구분선 없이 상품 정보가 여러 개 이어진 공지(링크타고 검색▼ … 🐥상품명 … 가 두 번)는 상품마다 나눔: 이름 줄은 바로 위 상품 것 (10/27 치약걸이 보냉백)
+  const byProduct = function (b) {
+    const ls = b.split('\n'), at = [];
+    ls.forEach(function (l, i) { if (/상품명\s*[:：]/.test(l)) at.push(i); });
+    if (at.length < 2) return [b];
+    const out = []; let s = 0;
+    for (let j = 1; j < at.length; j++) {
+      let c = at[j];
+      for (let i = at[j] - 1; i > at[j - 1]; i--) if (!ls[i].trim()) { c = i; break; }
+      out.push(ls.slice(s, c).join('\n')); s = c;
+    }
+    out.push(ls.slice(s).join('\n'));
+    return out;
+  };
+  const blocks = [].concat.apply([], String(text || '').split(/\n\s*[-—─_]{5,}\s*\n?/).map(byProduct));
   const multi = noticeProducts_(text).length > 1 || blocks.length > 1;
   const junk = /http|★|☆|▶|▼|※|🐥|[:!?]|\d\s*원|\d{1,3},\d{3}|구매|리뷰|링크|가격|배송|검색|사업자|입금|참고|안내/;
   const rows = [], at = {}, priceMemo = {};
@@ -2483,7 +2498,12 @@ function parseAssign_(text, choices) {
     if (!cs.length) cs = choices.filter(function (c) { return a && bare(c).indexOf(a) >= 0; });
     if (!cs.length && !multi) cs = choices.filter(function (c) { return b && bare(c).indexOf(b) >= 0; });
     // 여러 상품인데 옵션 글자로 못 찾으면 그 상품 짧은 이름이 들어간 보기 (10/27 '효자손 마감' → 코코스무 효자손 우드)
-    if (!cs.length && multi && prod) cs = choices.filter(function (c) { return bare(c).indexOf(k(prod)) >= 0; });
+    const byProd = !cs.length && multi && !!prod;
+    if (byProd) {
+      cs = choices.filter(function (c) { return bare(c).indexOf(k(prod)) >= 0; });
+      const cb = cs.filter(function (c) { return b && bare(c).indexOf(b) >= 0; });   // 그 상품 보기 중 옵션 글자가 들어간 것
+      if (cb.length) cs = cb;
+    }
     // 짧은 이름이 같은 상품이 여럿이면(10/27 거치대 3종: 맥세이프 휴대폰 / 대쉬보드 시야확보 / 계기판 집게형) 그 가이드의 키워드·상품명 낱말이 가장 많이 겹치는 보기
     if (cs.length > 1 && full) {
       const toks = String(full).split(/[\s,()\[\]\/·]+/).map(k).filter(function (t, i, arr) { return t.length >= 2 && arr.indexOf(t) === i; });
@@ -2491,6 +2511,8 @@ function parseAssign_(text, choices) {
       const best = Math.max.apply(null, cs.map(sc)), top = cs.filter(function (c) { return sc(c) === best; });
       if (best > 0 && top.length === 1) cs = top;
     }
+    // 상품 이름으로만 찾았는데 보기가 여럿이면(블랙, 그레이, 네이비 중 택1) 하나를 찍지 않음 → 닉네임으로만 셈 (10/27 보냉백)
+    if (byProd && cs.length > 1) return '';
     return cs[0] || '';
   };
   const add = function (names, label, choice) {
@@ -2572,7 +2594,7 @@ function parseAssign_(text, choices) {
       if (!t) { cur = null; return; }
       const m = t.match(/^(.*?)\(?\s*(\d+)\s*명\s*\)?(.*)$/);
       if (m) {
-        const opt = m[1].replace(/^\d+\)\s*/, '').replace(/^🐥\s*옵션\s*[:：]?\s*/, '').trim();
+        const opt = m[1].replace(/^\d+\)\s*/, '').replace(/^🐥\s*옵션\s*[:：]?\s*/, '').replace(/^🐥\s*/, '').trim();
         // '1) 2명 - 임수진 이혜미(타)': 옵션이 하나인 상품은 머리줄에 이름 (옵션 줄에 (N명)이 없을 때만)
         if (!opt && /^\d+\)/.test(t) && m[3].replace(/^[\s\-–—:]+/, '').trim()) {
           const oi = lines.findIndex(function (l) { return /🐥\s*옵션\s*[:：]/.test(l); });
@@ -2853,6 +2875,7 @@ function checkFullInner_() {
   if (!props.getProperty('EXPFEE_AB_V1')) try { expFeeAbOnce_(); } catch (e) { note_('기대평 폼 리뷰비 보기 바꾸기 실패: ' + e); }
   if (!props.getProperty('HYOJA_ROOM_V1')) try { hyojaRoomOnce_(); } catch (e) { note_('효자손 방제 줄이기 실패: ' + e); }
   if (!props.getProperty('ASGFIX1027_V1')) try { assignFix1027Once_(); } catch (e) { note_('배정 옵션 빈칸 채우기 실패: ' + e); }
+  if (!props.getProperty('BAGASG1027_V1')) try { bagAssign1027Once_(); } catch (e) { note_('치약걸이 보냉백 배정 다시 읽기 실패: ' + e); }
   if (!props.getProperty('HYOJA_ASG_V1')) try { hyojaAssignOnce_(); } catch (e) { note_('효자손 배정 옵션 고치기 실패: ' + e); }
   if (!props.getProperty('TUMB1027_V1')) try { tumbler1027Once_(); } catch (e) { note_('텀블러 옵션 인원 채우기 실패: ' + e); }
   if (!props.getProperty('FIX1027_V1')) try { fix1027Once_(); } catch (e) { note_('10/27 보낼메시지 정리 실패: ' + e); }
@@ -8342,6 +8365,18 @@ function assignFix1027Once_() {
   });
   for (let j = del.length - 1; j >= 0; j--) as.deleteRow(del[j]);
   note_('✓ 배정 옵션 빈칸 채움 ' + log.length + '줄' + (del.length ? ', 이름이 아닌 \'마감\' 줄 ' + del.length + '개 지움' : ''));
+}
+// (10/27 한 번) '#10.27 실/빈 치약걸이 보냉백 5' 배정: 공지의 '🐥[실배송 3명 - 현지 슬기 선우승]'을 한 사람으로 읽었던 것 → 고친 읽기로 다시
+function bagAssign1027Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('BAGASG1027_V1')) return;
+  props.setProperty('BAGASG1027_V1', '1');
+  const r = readRuns_().filter(function (x) { return /^#10\.27 실\/빈 치약걸이 보냉백 5/.test(String(x['명단 제목'])); })[0];
+  if (!r) { note_('치약걸이 보냉백 10.27 진행을 못 찾음 (배정 그대로)'); return; }
+  const ob = outboxSheet_(), ol = ob.getLastRow();
+  const t = ol >= 2 ? ob.getRange(2, 5, ol - 1, 1).getValues().map(function (v) { return String(v[0]); }).filter(function (x) { return /실배송 3명 - 현지 슬기 선우승/.test(x); })[0] : '';
+  if (!t) { note_('치약걸이 보냉백 10.27 공지를 못 찾음 (배정 그대로)'); return; }
+  note_('✓ 치약걸이 보냉백 10.27 배정 다시 읽음: ' + String(assignRun_(r, t)).split('\n')[0]);
 }
 // (10/27 한 번, 사용자 요청) 효자손외 배정 탭: 거치대 줄 7개가 모두 '맥세이프 휴대폰 거치대'로, 효자손 줄은 빈칸으로 연결돼 있었음
 //  (공지 상품 이름을 끝 낱말 '거치대'로만 줄여 3종류를 구분 못 함). 효자손 줄 → 코코스무 효자손 우드, 신현규·신윤정·슬기·워니 → 대쉬보드 시야확보 거치대(폼에 낸 것)
