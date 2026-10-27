@@ -2876,6 +2876,7 @@ function checkFullInner_() {
   if (!props.getProperty('HYOJA_ROOM_V1')) try { hyojaRoomOnce_(); } catch (e) { note_('효자손 방제 줄이기 실패: ' + e); }
   if (!props.getProperty('ASGFIX1027_V1')) try { assignFix1027Once_(); } catch (e) { note_('배정 옵션 빈칸 채우기 실패: ' + e); }
   if (!props.getProperty('BAGASG1027_V1')) try { bagAssign1027Once_(); } catch (e) { note_('치약걸이 보냉백 배정 다시 읽기 실패: ' + e); }
+  if (!props.getProperty('CABBAGE_DEL_V1')) try { cabbageRocketDelOnce_(); } catch (e) { note_('양배추채칼외 로켓 응답 지우기 실패: ' + e); }
   if (!props.getProperty('HYOJA_ASG_V1')) try { hyojaAssignOnce_(); } catch (e) { note_('효자손 배정 옵션 고치기 실패: ' + e); }
   if (!props.getProperty('TUMB1027_V1')) try { tumbler1027Once_(); } catch (e) { note_('텀블러 옵션 인원 채우기 실패: ' + e); }
   if (!props.getProperty('FIX1027_V1')) try { fix1027Once_(); } catch (e) { note_('10/27 보낼메시지 정리 실패: ' + e); }
@@ -5677,7 +5678,8 @@ function autoNextDay_() {
     const daily = Number(c.runs[0]['목표인원']) || Number(last['목표인원']) || left;
     // 남는 건수가 일 건수의 절반보다 적으면 마지막 날에 같이 (총 50 / 일 7 → 마지막 날 8, 사용자 요청 10/20. 생성기 numDays와 같은 규칙)
     const n = left > daily && left - daily < daily / 2 ? left : Math.min(daily, left);
-    note_('✓ 다음 날 진행: ' + addMoreRun_(last, n, { next: true }));
+    const made = addMoreRun_(last, n, { next: true });
+    if (!/^⚠ 공지가 비어/.test(made)) note_('✓ 다음 날 진행: ' + made);   // 공지가 빈 건 할 일로 한 번만 알림 (15분마다 같은 글 안 쌓이게)
     // 오늘 진행은 실제 산 인원으로 방제·목표를 줄임 (# 10.20 고구마말랭이 10 → 8, 사용자 요청 10/20) + 카톡방 이름·명단 메시지 고치기 할 일
     // 위에서 다음 날 진행을 만들면 진행목록이 다시 정렬돼서 줄 번호가 바뀜 → 이 진행을 다시 읽어서 (옛 줄 번호로 다른 진행 이름을 고치던 것, 10/23)
     const cur = readRuns_().filter(function (x) { return String(x['명단 제목']) === String(last['명단 제목']) && String(x['시트ID']) === String(last['시트ID']); })[0];
@@ -5725,6 +5727,15 @@ function addMoreRun_(r, n, opt) {
   // 새로 모집하는 공지라 옵션 줄 뒤의 이름(어제 사람)은 지움
   const notice = stripNames_(sum ? noticeForMore_(desc, short) : desc.split('\n').map(function (l) { return l.replace(/(\(\s*\d*\s*명\s*\)|\d+\s*명).*$/, '(  명)'); }).join('\n'));
   if (sum && !n) n = sum;
+  // 공지(폼 설명)가 비었으면 만들지 않음: 빈 방 공지가 나감 (10/27 효자손외·양배추채칼외는 폼 설명이 빈 채로 만들어졌음). 할 일로 한 번 알림
+  if (!String(notice).split('\n').some(function (l) { return l.trim() && !isSlotLine_(l); })) {
+    const fk = 'NOTICEEMPTY_' + r['시트ID'] + '_' + iso, pp = PropertiesService.getScriptProperties();
+    if (!pp.getProperty(fk)) {
+      pp.setProperty(fk, '1');
+      queueMsg_('내 할 일', '[' + md + ' 진행 못 만듦] ' + bareTitle_(r['명단 제목']) + '\n구글폼 설명(공지)이 비어 있어서 ' + md + ' 진행·공지를 안 만들었어요.\n→ 오늘 방에 올린 공지를 구글폼 설명에 붙여 넣으면 다음 자동 확인 때 만들어요.', '할 일');
+    }
+    return '⚠ 공지가 비어서 ' + md + ' 진행을 안 만들었어요: ' + bareTitle_(r['명단 제목']);
+  }
   // 의뢰서 하나 = 폼 하나: 첫 날 폼을 계속 씀 (공지 안 폼 링크도 첫 날 폼으로)
   const first = firstSheetRun_(r);
   let res;
@@ -8377,6 +8388,32 @@ function bagAssign1027Once_() {
   const t = ol >= 2 ? ob.getRange(2, 5, ol - 1, 1).getValues().map(function (v) { return String(v[0]); }).filter(function (x) { return /실배송 3명 - 현지 슬기 선우승/.test(x); })[0] : '';
   if (!t) { note_('치약걸이 보냉백 10.27 공지를 못 찾음 (배정 그대로)'); return; }
   note_('✓ 치약걸이 보냉백 10.27 배정 다시 읽음: ' + String(assignRun_(r, t)).split('\n')[0]);
+}
+// (10/27 한 번, 사용자 요청) #10.27 실 양배추채칼외: 음식물거름망을 로켓(7,900원)으로 잘못 산 응답을 지움 (롼롼이 빼고 → 45건)
+//  지울 사람이 예상한 사람(ㅁㅈ, 박소정, 워니, 박민아, 종이/jenny)이고 결제금액이 7,900원인 것만. 그 밖의 것은 안 지우고 알림
+function cabbageRocketDelOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('CABBAGE_DEL_V1')) return;
+  props.setProperty('CABBAGE_DEL_V1', '1');
+  const runs = readRuns_();
+  const r = runs.filter(function (x) { return /^#10\.27 실 양배추채칼외/.test(String(x['명단 제목'])) && x['폼ID'] && x['시트ID']; })[0];
+  if (!r) { note_('⚠ 양배추채칼외 10.27 진행을 못 찾음 (응답 안 지움)'); return; }
+  const info = rawInfo_(r['시트ID'], r['폼ID']), w = windowOf_(runs, r);
+  if (!info.nickCol || !info.optCol || !info.priceCol) { note_('⚠ 양배추채칼외 응답에서 닉네임·옵션·결제금액 칸을 못 찾음 (응답 안 지움)'); return; }
+  const src = info.src || info.raw, st = info.start || 2, lr = src.getLastRow();
+  const nk = function (x) { return String(x || '').toLowerCase().replace(/\s+/g, ''); };
+  const want = ['ㅁㅈ', '박소정', '워니', '박민아', '종이/jenny'].map(nk);
+  const del = [], skip = [];
+  if (lr >= st) src.getRange(st, 1, lr - st + 1, info.head.length).getValues().forEach(function (x) {
+    if (!(x[0] instanceof Date) || x[0].getTime() < w.from || x[0].getTime() >= w.to) return;
+    if (!/음식물거름망/.test(String(x[info.optCol - 1]))) return;
+    const n = String(x[info.nickCol - 1]).trim(), price = Number(String(x[info.priceCol - 1]).replace(/[^\d]/g, '')) || 0;
+    if (nk(n) === nk('롼롼이')) return;
+    if (want.indexOf(nk(n)) >= 0 && price === 7900) del.push({ t: x[0], n: n }); else skip.push(n + ' ' + price + '원');
+  });
+  if (!del.length || del.length > 5) { note_('⚠ 양배추채칼외 음식물거름망 로켓 응답: 지울 것 ' + del.length + '개라 안 지움' + (skip.length ? ' (그 밖: ' + skip.join(', ') + ')' : '')); return; }
+  const res = deleteRunTimes_(r, del.map(function (x) { return x.t; }));
+  note_('✓ 양배추채칼외 음식물거름망 로켓(7,900원) 응답 지움: ' + del.map(function (x) { return x.n; }).join(', ') + ' → ' + res + (skip.length ? ' / 안 지운 것: ' + skip.join(', ') : ''));
 }
 // (10/27 한 번, 사용자 요청) 효자손외 배정 탭: 거치대 줄 7개가 모두 '맥세이프 휴대폰 거치대'로, 효자손 줄은 빈칸으로 연결돼 있었음
 //  (공지 상품 이름을 끝 낱말 '거치대'로만 줄여 3종류를 구분 못 함). 효자손 줄 → 코코스무 효자손 우드, 신현규·신윤정·슬기·워니 → 대쉬보드 시야확보 거치대(폼에 낸 것)
