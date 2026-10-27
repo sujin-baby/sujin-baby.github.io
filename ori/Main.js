@@ -2949,6 +2949,7 @@ function checkFullInner_() {
   if (!props.getProperty('FIX1027B_V1')) try { fix1027bOnce_(); } catch (e) { note_('10/27 저녁 고치기 실패: ' + e); }
   if (!props.getProperty('PROTECT_V1')) try { protectSystemOnce_(); } catch (e) { note_('자동 칸 경고 잠금 실패: ' + e); }
   if (!props.getProperty('RVGUIDE1027_V1')) try { rvGuide1027Once_(); } catch (e) { note_('10.27 리뷰 가이드 다시 쓰기 실패: ' + e); }
+  if (!props.getProperty('TUMBRV_V1')) try { tumbRvOnce_(); } catch (e) { note_('텀블러 리뷰 설정 실패: ' + e); }
   if (!props.getProperty('CABBAGE_SOJ_V1')) try { cabbageSojungOnce_(); } catch (e) { note_('양배추채칼외 소정 배정 지우기 실패: ' + e); }
   if (!props.getProperty('HYOJA_ASG_V1')) try { hyojaAssignOnce_(); } catch (e) { note_('효자손 배정 옵션 고치기 실패: ' + e); }
   if (!props.getProperty('TUMB1027_V1')) try { tumbler1027Once_(); } catch (e) { note_('텀블러 옵션 인원 채우기 실패: ' + e); }
@@ -3284,12 +3285,24 @@ function reviewGuideMsg_(rv, ppl, counts, k) {
   });
   const multi = prods.length > 1 && prods.every(function (p) { return p.name; });
   const used = [];
+  // 색상(옵션)마다 포토 한 명 (사용자 요청 10/27 텀블러): 포토 몫은 아직 포토가 없는 옵션을 산 사람부터 먼저 고름. rv.photoUsed = 이미 포토가 나간 옵션
+  const pre = {}, photoUsed = (rv.photoUsed || []).slice(), photoOpts = [];
+  if (rv.photoPerOpt) totals.forEach(function (t, i) {
+    if (!/포토|사진/.test(t.label) || /대기/.test(t.label)) return;
+    let need = today[i]; pre[i] = [];
+    queue.slice().forEach(function (p) {
+      if (need <= 0 || !p.opt || photoUsed.indexOf(p.opt) >= 0) return;
+      queue.splice(queue.indexOf(p), 1); pre[i].push(p); need -= p.n; photoUsed.push(p.opt); photoOpts.push(p.opt);
+    });
+  });
   totals.forEach(function (t, i) {
-    let need = today[i]; const who = [];
+    const who = (pre[i] || []).slice();
+    let need = today[i] - who.reduce(function (a, y) { return a + y.n; }, 0);
     while (need > 0 && queue.length) { const p = queue.shift(); who.push(p); need -= p.n; }
     if (today[i] <= 0) return;
     if (/포토\s*대기/.test(t.label)) { pw = pw.concat(who); return; }
-    lines.push(pretty(t.label) + '(' + today[i] + '명) : ' + who.map(nm).join(' '));
+    const note = rv.lineNote && rv.lineNote[pretty(t.label)];   // 종류 줄 밑 한 줄 설명 (→ 별점 5점만 …)
+    lines.push(pretty(t.label) + '(' + today[i] + '명) : ' + who.map(nm).join(' ') + (note ? '\n' + note : ''));
     used.push.apply(used, who);
   });
   if (!totals.length) { if (queue.length) { lines.push((rv.kind === 'self' || rv.kind === 'photo' || /사진|촬영|컷|포토/.test(rv.guide || '') ? '포토리뷰' : '텍스트리뷰') + '(' + queue.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + queue.map(nm).join(' ')); used.push.apply(used, queue); } }
@@ -3324,11 +3337,11 @@ function reviewGuideMsg_(rv, ppl, counts, k) {
   const guideOf = function (head, people) { return ['🐥리뷰내용 가이드🐥', ''].concat(spread(head), [''], prods.length ? mkBody(people) : noGuide ? [] : ['(리뷰 가이드: 사장님께 물어보고 채우기)', ''], foot(sumN(people))).join('\n'); };
   const pwLine = pw.length ? '포토리뷰(' + pw.reduce(function (a, y) { return a + y.n; }, 0) + '명) : ' + pw.map(nm).join(' ') : '';
   // 한 방에 텍스트와 포토(업체 사진 대기)가 섞이면 가이드 하나에 둘 다, 맨 밑 0/그 방 인원 (사용자 요청 10/26: 실링팬 2인데 0/1로 나뉘어 나옴)
-  if (lines.length && pw.length) return { msg: guideOf([pwLine].concat(lines), pw.concat(used)), ask: ask, photoWait: true, pwMsg: '' };
+  if (lines.length && pw.length) return { msg: guideOf([pwLine].concat(lines), pw.concat(used)), ask: ask, photoWait: true, pwMsg: '', photoOpts: photoOpts };
   const msg = lines.length ? guideOf(lines, used) : '';
   // 방 사람이 모두 업체 사진 대기면 가이드는 미리 만들어 두고 사진 전달 뒤 보냄 (사용자 요청 10/21)
   const pwMsg = pw.length ? guideOf([pwLine], pw) : '';
-  return { msg: msg, ask: ask, photoWait: pw.length > 0, pwMsg: pwMsg };
+  return { msg: msg, ask: ask, photoWait: pw.length > 0, pwMsg: pwMsg, photoOpts: photoOpts };
 }
 // 그날 응답의 수령인(계정) 이름 순서대로 [{nm, n:1}] (한 사람이 두 계정이면 계정마다 따로). 수령인 칸: 수령인·수취인·이름·성함
 function receivers_(r, w) {
@@ -3364,7 +3377,7 @@ function ensureReviewGuideMsgs_(runs) {
       if (r['진행 상태'] === '종료' || !(r['마감 시각'] instanceof Date) || now - r['마감 시각'].getTime() > 2 * 86400000) return;
       // V2(10/19): 카톡 이름 대신 수령인(계정) 이름으로. 예전(카톡 이름) 메시지가 아직 대기면 새 글로 바꿈, 보냈으면 그대로
       const key0 = 'RVMSG_' + String(r['명단 제목']).replace(/\s+/g, ''), key = 'RVMSG2_' + String(r['명단 제목']).replace(/\s+/g, '');
-      if (props.getProperty(key)) return;
+      if (props.getProperty(key)) { try { refreshGuide_(r, k, c); } catch (e) { note_('리뷰 가이드 다시 맞추기 실패: ' + e); } return; }
       // 방제를 바꿔도 같은 날 같은 명단이면 한 번만 (10/21 부유단감 두 번 들어간 것)
       const keyD = 'RVMSGD_' + r['시트ID'] + '_' + Utilities.formatDate(r['진행일'] instanceof Date ? r['진행일'] : new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
       if (props.getProperty(keyD)) { props.setProperty(key, '1'); return; }
@@ -3403,6 +3416,10 @@ function ensureReviewGuideMsgs_(runs) {
       const dm = rv.dayMix && rv.dayMix[bareTitle_(r['명단 제목']).replace(/\s+/g, '')];
       const res = dm ? reviewGuideMsg_(Object.assign({}, rv, { mix: dm }), ppl, [counts[k]], 0) : reviewGuideMsg_(rv, ppl, counts, k);
       const room = String(r['카톡방'] || bareTitle_(r['명단 제목']));
+      // 나중에 명단이 바뀌면(중복 지움·늦게 낸 사람) 대기 중인 가이드를 다시 맞추려고 그때 이름·글을 저장 (10/27 텀블러: 허예인 두 번·구정선 빠짐)
+      props.setProperty('RVSIG_' + keyD, ppl.map(function (p) { return p.nm + '/' + p.opt; }).join('|'));
+      if (res.msg && !photoAll && !res.photoWait) props.setProperty('RVTXT_' + keyD, res.msg);
+      if (res.photoOpts && res.photoOpts.length) { savePhotoUsed_(first['시트ID'], res.photoOpts, []); props.setProperty('RVPH_' + keyD, JSON.stringify(res.photoOpts)); }
       if (old) {
         // 예전 카톡 이름 글: 아직 안 보냈으면 이 글로 바꾸고, 보냈으면 그대로 둠
         const ob = outboxSheet_(), ol = ob.getLastRow();
@@ -3419,6 +3436,47 @@ function ensureReviewGuideMsgs_(runs) {
       note_('✓ 리뷰 가이드 메시지 넣음: ' + room + (res.ask.length ? ' (사장님께 물어볼 것: ' + res.ask.join(', ') + ')' : ''));
     });
   });
+}
+
+// 포토가 나간 옵션 목록 고치기 (RV_.photoUsed): add는 넣고 drop은 뺌
+function savePhotoUsed_(sid, add, drop) {
+  const props = PropertiesService.getScriptProperties();
+  let rv = null; try { rv = JSON.parse(props.getProperty('RV_' + sid) || 'null'); } catch (e) {}
+  if (!rv) return;
+  let u = (rv.photoUsed || []).filter(function (o) { return (drop || []).indexOf(o) < 0; });
+  (add || []).forEach(function (o) { if (u.indexOf(o) < 0) u.push(o); });
+  rv.photoUsed = u;
+  props.setProperty('RV_' + sid, JSON.stringify(rv));
+}
+// 대기 중인 리뷰 가이드: 명단(수령인)이 처음 만들 때와 달라졌고 글을 손으로 안 고쳤으면 지금 명단으로 다시 (사용자 요청 10/27: 한눈에 명단이 최종)
+function refreshGuide_(r, k, c) {
+  const props = PropertiesService.getScriptProperties();
+  const keyD = 'RVMSGD_' + r['시트ID'] + '_' + Utilities.formatDate(r['진행일'] instanceof Date ? r['진행일'] : new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
+  const old = props.getProperty('RVTXT_' + keyD), sig0 = props.getProperty('RVSIG_' + keyD);
+  if (!old || sig0 === null) return;
+  const room = String(r['카톡방'] || bareTitle_(r['명단 제목']));
+  const ob = outboxSheet_(), ol = ob.getLastRow();
+  if (ol < 2) return;
+  const row = ob.getRange(2, 1, ol - 1, 6).getValues().filter(function (v) { return v[2] === '방 공지' && v[5] === '대기' && String(v[4]) === old; })[0];
+  if (!row) return;   // 보냈거나 손으로 고쳤으면 그대로
+  const runs = readRuns_();
+  const ppl = receivers_(r, windowOf_(runs, r));
+  const sig = ppl.map(function (p) { return p.nm + '/' + p.opt; }).join('|');
+  if (!ppl.length || sig === sig0) return;
+  const first = c.runs.filter(function (x) { return x['시트ID']; })[0] || r;
+  let rv = null; try { rv = JSON.parse(props.getProperty('RV_' + first['시트ID']) || 'null'); } catch (e) {}
+  if (!rv) rv = { kind: 'text', mix: '', guide: '' };
+  let ph = []; try { ph = JSON.parse(props.getProperty('RVPH_' + keyD) || '[]'); } catch (e) {}
+  rv.photoUsed = (rv.photoUsed || []).filter(function (o) { return ph.indexOf(o) < 0; });   // 이 날 몫은 다시 고름
+  const counts = c.runs.slice(0, k + 1).map(function (x, d) { return d === k ? ppl.reduce(function (a, y) { return a + y.n; }, 0) : (Number(x['인원']) || Number(x['목표인원']) || 0); });
+  rv.days = !r['플랫폼'] || /쿠팡|네이버/.test(String(r['플랫폼'])) ? 7 : 10;
+  const dm = rv.dayMix && rv.dayMix[bareTitle_(r['명단 제목']).replace(/\s+/g, '')];
+  const res = dm ? reviewGuideMsg_(Object.assign({}, rv, { mix: dm }), ppl, [counts[k]], 0) : reviewGuideMsg_(rv, ppl, counts, k);
+  if (!res.msg || res.photoWait) return;
+  obSet_(ob, row[0], 5, res.msg);
+  props.setProperty('RVTXT_' + keyD, res.msg); props.setProperty('RVSIG_' + keyD, sig);
+  savePhotoUsed_(first['시트ID'], res.photoOpts || [], ph); props.setProperty('RVPH_' + keyD, JSON.stringify(res.photoOpts || []));
+  note_('✓ 리뷰 가이드 명단 다시 맞춤: ' + room + ' (' + ppl.map(function (p) { return p.nm; }).join(' ') + ')');
 }
 
 function dupSummary_(sheetId) {
@@ -8669,6 +8727,31 @@ function rvGuide1027Once_() {
     if (/^#10\.27 실 효자손외/.test(String(v[3]))) { obSet_(ob, v[0], 5, hy); log.push('효자손외'); }
   });
   note_('✓ 10.27 리뷰 가이드 다시: ' + (log.join(', ') || '대기 중인 글 없음'));
+}
+// (10/27 한 번, 사용자 요청) 실 런치버스 텀블러(10.27~): 하루 5명 중 포토 1명·별점 4명, 색상마다 포토 한 명 (10.27 연그린 = 이선순 이미 함)
+function tumbRvOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('TUMBRV_V1')) return;
+  props.setProperty('TUMBRV_V1', '1');
+  const runs = readRuns_(), me = runs.filter(function (x) { return /^#10\.27 실 런치버스 텀블러/.test(String(x['명단 제목'])); })[0];
+  if (!me) { note_('⚠ 텀블러 10.27 진행을 못 찾음'); return; }
+  const c = chainsOf_(runs).filter(function (ch) { return ch.runs.some(function (x) { return x.row === me.row; }); })[0];
+  const sids = {};
+  [(c && c.runs.filter(function (x) { return x['시트ID']; })[0]) || me, me].forEach(function (x) { if (x['시트ID']) sids[x['시트ID']] = 1; });
+  const dayMix = {};
+  ['10.28', '10.29', '10.30'].forEach(function (d) { runs.forEach(function (x) { if (new RegExp('^#' + d.replace('.', '\\.') + ' 실 런치버스 텀블러').test(String(x['명단 제목']))) dayMix[bareTitle_(x['명단 제목']).replace(/\s+/g, '')] = '포토리뷰 1, 별점 4'; }); });
+  Object.keys(sids).forEach(function (sid) {
+    let rv = {}; try { rv = JSON.parse(props.getProperty('RV_' + sid) || '{}') || {}; } catch (e) {}
+    rv.kind = 'mix'; rv.guide = '없음'; rv.photoPerOpt = true; rv.photoUsed = ['연그린'];
+    rv.dayMix = Object.assign({}, rv.dayMix || {}, dayMix);
+    rv.lineNote = { '포토리뷰': '→ 사진 1~2장  + 짧은 글', '별점': '→ 별점 5점만 (글, 사진 없이 !!!)' };
+    props.setProperty('RV_' + sid, JSON.stringify(rv));
+  });
+  // 10.27 대기 가이드는 사용자가 보낸 글로 (제가 다시 쓴 글은 이름이 틀렸음)
+  const SENT = ['🐥리뷰내용 가이드🐥', '', '포토리뷰(1명) : 이선순', '→ 사진 1~2장  + 짧은 글', '', '별점(4명) : 허예인 김누리 구정선 김광태', '→ 별점 5점만 (글, 사진 없이 !!!)', '', '🐥🐥🐥🐥🐥🐥🐥🐥🐥🐥', '배송완료 후 7일이내로 작성해주시되', '몰리지 않게 리뷰 부탁드려요!', '감사합니다 🫶🏻', '🐥🐥🐥🐥🐥🐥🐥🐥🐥🐥', '', '전체 리뷰완료 후 @회오리 태그걸어주세요!', '0/5'].join('\n');
+  const ob = outboxSheet_(), ol = ob.getLastRow();
+  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (v[2] === '방 공지' && v[5] === '대기' && /^#10\.27 실 런치버스 텀블러/.test(String(v[3])) && /^🐥리뷰내용 가이드🐥/.test(String(v[4]))) obSet_(ob, v[0], 5, SENT); });
+  note_('✓ 텀블러 리뷰: 날마다 포토 1·별점 4, 색상마다 포토 한 명 (' + Object.keys(dayMix).join(', ') + ')');
 }
 // (10/27 한 번, 사용자 요청) #10.27 실 양배추채칼외 배정 탭에서 '소정' 줄 지움 (안 사고 나감. 박소정은 다른 사람이라 그대로)
 function cabbageSojungOnce_() {
