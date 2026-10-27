@@ -2944,6 +2944,7 @@ function checkFullInner_() {
   if (!props.getProperty('ASGFIX1027_V1')) try { assignFix1027Once_(); } catch (e) { note_('배정 옵션 빈칸 채우기 실패: ' + e); }
   if (!props.getProperty('BAGASG1027_V1')) try { bagAssign1027Once_(); } catch (e) { note_('치약걸이 보냉백 배정 다시 읽기 실패: ' + e); }
   if (!props.getProperty('CABBAGE_DEL_V1')) try { cabbageRocketDelOnce_(); } catch (e) { note_('양배추채칼외 로켓 응답 지우기 실패: ' + e); }
+  if (!props.getProperty('EXPSCHED_V1')) try { expSchedOnce_(); } catch (e) { note_('기대평 2주차 일정 바꾸기 실패: ' + e); }
   if (!props.getProperty('CABBAGE_SOJ_V1')) try { cabbageSojungOnce_(); } catch (e) { note_('양배추채칼외 소정 배정 지우기 실패: ' + e); }
   if (!props.getProperty('HYOJA_ASG_V1')) try { hyojaAssignOnce_(); } catch (e) { note_('효자손 배정 옵션 고치기 실패: ' + e); }
   if (!props.getProperty('TUMB1027_V1')) try { tumbler1027Once_(); } catch (e) { note_('텀블러 옵션 인원 채우기 실패: ' + e); }
@@ -7963,6 +7964,7 @@ function expNoticeMix_(a, b, who) {
     '[짱 개념수학] 시험에 필요한 개념과 유형을 체계적으로 / 개념북 세분화 학습 + 익힘북 반복·복습 / 개념부터 유형까지 확실히 대비할 것 같아 풀어 보고 싶다'];
   [['A', '🔵'], ['B', '🟢']].forEach(function (s0) {
     const k = s0[0], links = EXP_SETS[k];
+    if (!(k === 'A' ? a : b)) return;   // 그날 아무도 안 하는 묶음은 링크를 안 보임 (11.2는 B묶음만)
     L.push('', '', s0[1] + ' ' + k + '묶음 (' + links.length + '개 링크)' + (who[k] ? ' - ' + who[k] : ''));
     ['예스24', '알라딘', '교보문고'].forEach(function (pl) {
       const xs = links.filter(function (x) { return x[0] === pl; });
@@ -7988,7 +7990,11 @@ function expPer_(r) { return Math.round((Number((String(r && r['가격'] || '').
 // 기대평 하루 계획 (사용자 요청 10/26): 매일 27개 링크가 다 나가게 하루 3계정을 A묶음(14개)·B묶음(13개)으로 나눔.
 //  한 계정은 한 주에 한 묶음, 다음 주에 같은 계정이 나머지 묶음 → 링크마다 15개 = 405건, 11/6까지. [A묶음 계정 수, B묶음 계정 수]
 //  10.26(월)은 이미 A묶음 3계정(윤주영)으로 끝남. 다음 주는 이번 주 계정이 반대 묶음 + 10.26 계정 3은 B묶음
-const EXP_MIX = { '10.26': [3, 0], '10.27': [2, 1], '10.28': [1, 2], '10.29': [2, 1], '10.30': [1, 2], '11.2': [1, 2], '11.3': [1, 2], '11.4': [1, 2], '11.5': [1, 2], '11.6': [2, 1] };
+//  (10/27 사용자 요청) 2주차 = 1주차와 같은 요일에 같은 계정이 반대 묶음 → 11.2~11.6은 10.26~10.30을 뒤집은 것
+const EXP_MIX = { '10.26': [3, 0], '10.27': [2, 1], '10.28': [1, 2], '10.29': [1, 2], '10.30': [2, 1], '11.2': [0, 3], '11.3': [1, 2], '11.4': [2, 1], '11.5': [2, 1], '11.6': [1, 2] };
+// 2주차 날 공지에 넣을 사람 (1주차 같은 요일 사람이 반대 묶음)
+const EXP_WHO = { '10.28': { A: '김미주', B: '임혜영 주은' }, '11.2': { B: '윤주영 3계정' }, '11.3': { A: '10.27 B묶음 하신 분', B: '윤주영 2계정' },
+  '11.4': { A: '임혜영 주은', B: '김미주' }, '11.5': { A: '10.29 B묶음 하신 2분', B: '10.29 A묶음 하신 분' }, '11.6': { A: '10.30 B묶음 하신 분', B: '10.30 A묶음 하신 2분' } };
 const EXP_SET_Q = '작성한 링크 묶음', EXP_SET_CH = ['A묶음 (14개 링크)', 'B묶음 (13개 링크)'];
 // 계획대로 n명이면 몇 건 (A묶음 자리 먼저). 계획 없는 날이면 null
 function expPlanCount_(tok, n) {
@@ -8531,6 +8537,33 @@ function cabbageRocketDelOnce_() {
   if (!del.length || del.length > 5) { note_('⚠ 양배추채칼외 음식물거름망 로켓 응답: 지울 것 ' + del.length + '개라 안 지움' + (skip.length ? ' (그 밖: ' + skip.join(', ') + ')' : '')); return; }
   const res = deleteRunTimes_(r, del.map(function (x) { return x.t; }));
   note_('✓ 양배추채칼외 음식물거름망 로켓(7,900원) 응답 지움: ' + del.map(function (x) { return x.n; }).join(', ') + ' → ' + res + (skip.length ? ' / 안 지운 것: ' + skip.join(', ') : ''));
+}
+// (10/27 한 번, 사용자 요청) 기대평 일정: 2주차는 1주차 같은 요일 계정이 반대 묶음 (EXP_MIX·EXP_WHO). 대기 계획 공지·방제 건수, 10.28 대기 공지에 이름
+function expSchedOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('EXPSCHED_V1')) return;
+  props.setProperty('EXPSCHED_V1', '1');
+  const log = [];
+  const ps = planSheet_(), pl = ps.getLastRow();
+  if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x, i) {
+    if (x[8] !== '대기' || String(x[0]).indexOf('exp-100-4-v5-') !== 0) return;
+    const tok = dateTok_(x[5]), mx = EXP_MIX[tok];
+    if (!mx) return;
+    const cnt = expPlanCount_(tok, mx[0] + mx[1]), cfg = JSON.parse(x[9]);
+    cfg.desc = expNoticeMix_(mx[0], mx[1], EXP_WHO[tok] || null);
+    ps.getRange(i + 2, 5, 1, 2).setValues([[String(x[4]).replace(/\d+\s*$/, String(cnt)), String(x[5]).replace(/\d+(\s*(?:\([^)]*\))?\s*)$/, cnt + '$1')]]);
+    ps.getRange(i + 2, 10).setValue(JSON.stringify(cfg));
+    log.push(tok + ' A' + mx[0] + '·B' + mx[1] + ' ' + cnt + '건');
+  });
+  // 10.28 대기 공지: 누가 어느 묶음인지
+  const ob = outboxSheet_(), ol = ob.getLastRow(), w = EXP_WHO['10.28'];
+  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
+    if (v[2] !== '방 공지' || v[5] !== '대기' || !/^10\.28 백발백중 도서 기대평/.test(String(v[3]))) return;
+    const t = String(v[4]).replace(/(A묶음\(\d+개 링크\) \d+명)(?! -)/, '$1 - ' + w.A).replace(/(B묶음\(\d+개 링크\) \d+명)(?! -)/, '$1 - ' + w.B)
+      .replace(/(🔵 A묶음 \(\d+개 링크\))(?! -)/, '$1 - ' + w.A).replace(/(🟢 B묶음 \(\d+개 링크\))(?! -)/, '$1 - ' + w.B);
+    if (t !== String(v[4])) { obSet_(ob, v[0], 5, t); log.push('10.28 공지 이름'); }
+  });
+  note_('✓ 기대평 2주차 일정: ' + log.join(', '));
 }
 // (10/27 한 번, 사용자 요청) #10.27 실 양배추채칼외 배정 탭에서 '소정' 줄 지움 (안 사고 나감. 박소정은 다른 사람이라 그대로)
 function cabbageSojungOnce_() {
