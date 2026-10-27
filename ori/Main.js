@@ -2944,6 +2944,7 @@ function checkFullInner_() {
   if (!props.getProperty('ASGFIX1027_V1')) try { assignFix1027Once_(); } catch (e) { note_('배정 옵션 빈칸 채우기 실패: ' + e); }
   if (!props.getProperty('BAGASG1027_V1')) try { bagAssign1027Once_(); } catch (e) { note_('치약걸이 보냉백 배정 다시 읽기 실패: ' + e); }
   if (!props.getProperty('CABBAGE_DEL_V1')) try { cabbageRocketDelOnce_(); } catch (e) { note_('양배추채칼외 로켓 응답 지우기 실패: ' + e); }
+  if (!props.getProperty('CABBAGE_SOJ_V1')) try { cabbageSojungOnce_(); } catch (e) { note_('양배추채칼외 소정 배정 지우기 실패: ' + e); }
   if (!props.getProperty('HYOJA_ASG_V1')) try { hyojaAssignOnce_(); } catch (e) { note_('효자손 배정 옵션 고치기 실패: ' + e); }
   if (!props.getProperty('TUMB1027_V1')) try { tumbler1027Once_(); } catch (e) { note_('텀블러 옵션 인원 채우기 실패: ' + e); }
   if (!props.getProperty('FIX1027_V1')) try { fix1027Once_(); } catch (e) { note_('10/27 보낼메시지 정리 실패: ' + e); }
@@ -8530,6 +8531,19 @@ function cabbageRocketDelOnce_() {
   if (!del.length || del.length > 5) { note_('⚠ 양배추채칼외 음식물거름망 로켓 응답: 지울 것 ' + del.length + '개라 안 지움' + (skip.length ? ' (그 밖: ' + skip.join(', ') + ')' : '')); return; }
   const res = deleteRunTimes_(r, del.map(function (x) { return x.t; }));
   note_('✓ 양배추채칼외 음식물거름망 로켓(7,900원) 응답 지움: ' + del.map(function (x) { return x.n; }).join(', ') + ' → ' + res + (skip.length ? ' / 안 지운 것: ' + skip.join(', ') : ''));
+}
+// (10/27 한 번, 사용자 요청) #10.27 실 양배추채칼외 배정 탭에서 '소정' 줄 지움 (안 사고 나감. 박소정은 다른 사람이라 그대로)
+function cabbageSojungOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('CABBAGE_SOJ_V1')) return;
+  props.setProperty('CABBAGE_SOJ_V1', '1');
+  const as = assignSheet_(), al = as.getLastRow();
+  if (al < 2) return;
+  const del = [];
+  as.getRange(2, 1, al - 1, 2).getValues().forEach(function (v, i) { if (/^#10\.27 실 양배추채칼외/.test(String(v[0])) && String(v[1]).trim() === '소정') del.push(i + 2); });
+  if (del.length !== 1) { note_('⚠ 양배추채칼외 배정에서 소정 줄이 ' + del.length + '개라 안 지움'); return; }
+  as.deleteRow(del[0]);
+  note_('✓ 양배추채칼외 배정에서 소정 줄 지움 (안 사고 나감)');
 }
 // (10/27 한 번, 사용자 요청) 효자손외 배정 탭: 거치대 줄 7개가 모두 '맥세이프 휴대폰 거치대'로, 효자손 줄은 빈칸으로 연결돼 있었음
 //  (공지 상품 이름을 끝 낱말 '거치대'로만 줄여 3종류를 구분 못 함). 효자손 줄 → 코코스무 효자손 우드, 신현규·신윤정·슬기·워니 → 대쉬보드 시야확보 거치대(폼에 낸 것)
