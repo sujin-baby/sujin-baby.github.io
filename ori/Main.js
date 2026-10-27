@@ -876,6 +876,7 @@ function payCheck_(ss, add) {
   const num = function (x) { return Number(String(x == null ? '' : x).replace(/[^0-9]/g, '')) || 0; };
   const won = function (n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '원'; };
   const bad = {};
+  const pm = optPriceMap_(mine.map(function (m) { return String(m['명단 제목']); }));
   add.forEach(function (x) {
     const keys = Object.keys(x.o);
     const kPay = keys.filter(function (k) { return /결제\s*금액|결제\s*가격|구매\s*금액|결제한\s*금액/.test(k); })[0];
@@ -885,6 +886,8 @@ function payCheck_(ss, add) {
     const kOpt = keys.filter(function (k) { return MATCH.opt.test(k); })[0];
     const om = kOpt ? String(x.o[kOpt]).match(/\(\s*([\d,]+)\s*원\s*\)/) : null;
     let exp = om ? num(om[1]) : 0;
+    // 폼 보기에 가격이 없으면(여러 상품 의뢰) 배정 탭의 그 보기 가격 (10/27 양배추채칼외 변기솔 8,300인데 8,500 결제를 못 잡음)
+    if (!exp && kOpt) exp = pm[String(x.o[kOpt]).trim()] || 0;
     if (!exp) { const ps = runPrices_(r['가격']); if (ps.length && ps.every(function (p) { return p === ps[0]; })) exp = ps[0]; }
     if (!exp) return;
     for (let k = 1; k <= 5; k++) if (paid === exp * k) return;
@@ -896,6 +899,21 @@ function payCheck_(ss, add) {
     queueMsg_('내 할 일', '[결제금액 확인] ' + room + '\n' + bad[room].join('\n') + '\n→ 결제 캡처를 보고, 다르면 그분께 따로 물어보기 (쿠폰·할인이면 그대로 둬도 돼요)', '할 일');
     note_('결제금액 다른 사람 ' + bad[room].length + '명: ' + room);
   });
+}
+// 폼 보기 → 공지 가격 (배정 탭 H 폼 보기 → I 가격, 같은 보기면 가장 많이 나온 값). 폼 보기에 가격이 없는 여러 상품 의뢰용 (10/27)
+function optPriceMap_(titles) {
+  const out = {}, cnt = {};
+  try {
+    const as = assignSheet_(), al = as.getLastRow();
+    if (al >= 2) as.getRange(2, 1, al - 1, 9).getValues().forEach(function (v) {
+      if (titles.indexOf(String(v[0])) < 0) return;
+      const c = String(v[7]).trim(), p = Number(String(v[8]).replace(/[^0-9]/g, '')) || 0;
+      if (!c || !p) return;
+      cnt[c + '|' + p] = (cnt[c + '|' + p] || 0) + 1;
+      if (!out[c] || cnt[c + '|' + p] > cnt[c + '|' + out[c]]) out[c] = p;
+    });
+  } catch (e) {}
+  return out;
 }
 // 진행목록 '가격' 칸 → 숫자 목록. 예전 의뢰는 '17, 200, 23, 400'처럼 쉼표가 갈라져 저장돼서 세 자리 조각은 앞 숫자에 붙임
 function runPrices_(s) {
@@ -2950,6 +2968,7 @@ function checkFullInner_() {
   if (!props.getProperty('PROTECT_V1')) try { protectSystemOnce_(); } catch (e) { note_('자동 칸 경고 잠금 실패: ' + e); }
   if (!props.getProperty('RVGUIDE1027_V1')) try { rvGuide1027Once_(); } catch (e) { note_('10.27 리뷰 가이드 다시 쓰기 실패: ' + e); }
   if (!props.getProperty('TUMBRV_V1')) try { tumbRvOnce_(); } catch (e) { note_('텀블러 리뷰 설정 실패: ' + e); }
+  if (!props.getProperty('PAYRETRO_V1')) try { payRetroOnce_(); } catch (e) { note_('지난 결제금액 다시 보기 실패: ' + e); }
   if (!props.getProperty('CABBAGE_SOJ_V1')) try { cabbageSojungOnce_(); } catch (e) { note_('양배추채칼외 소정 배정 지우기 실패: ' + e); }
   if (!props.getProperty('HYOJA_ASG_V1')) try { hyojaAssignOnce_(); } catch (e) { note_('효자손 배정 옵션 고치기 실패: ' + e); }
   if (!props.getProperty('TUMB1027_V1')) try { tumbler1027Once_(); } catch (e) { note_('텀블러 옵션 인원 채우기 실패: ' + e); }
@@ -7843,10 +7862,14 @@ function buildDashboard_(force) {
     const prices = [];
     x.prods.forEach(function (p) { p.prices.forEach(function (v) { if (prices.indexOf(v) === -1) prices.push(v); }); });
     (String(x.runs[0]['가격'] || '').match(/\d{3,}/g) || []).forEach(function (v) { v = Number(v); if (prices.indexOf(v) === -1) prices.push(v); });
-    if (prices.length && x.layout[6][1]) {
-      const num = 'VALUE(REGEXREPLACE(TO_TEXT(G' + r0 + '),"[^0-9]",""))';
+    // 옵션마다 가격을 알면(배정 탭) 그 옵션 가격과 비교 (10/27: 상품 여럿이면 다른 상품 가격과 같기만 해도 넘어가던 것)
+    const pm = optPriceMap_(x.runs.map(function (m) { return String(m['명단 제목']); })), pc = Object.keys(pm);
+    if ((prices.length || pc.length) && x.layout[6][1]) {
+      const num = 'VALUE(REGEXREPLACE(TO_TEXT(G' + r0 + '),"[^0-9]",""))', F = 'TRIM(F' + r0 + ')';
+      const any = prices.length ? 'NOT(OR(' + prices.map(function (v) { return num + '=' + v; }).join(',') + '))' : 'FALSE';
+      const byOpt = pc.length && x.layout[5] && x.layout[5][1] ? 'IF(OR(' + pc.map(function (c) { return F + '=' + q(c); }).join(',') + '),NOT(OR(' + pc.map(function (c) { return 'AND(' + F + '=' + q(c) + ',OR(' + [1, 2, 3].map(function (k) { return num + '=' + pm[c] * k; }).join(',') + '))'; }).join(',') + ')),' + any + ')' : any;
       rules.push(SpreadsheetApp.newConditionalFormatRule()
-        .whenFormulaSatisfied('=AND(G' + r0 + '<>"",NOT(OR(' + prices.map(function (v) { return num + '=' + v; }).join(',') + ')))')
+        .whenFormulaSatisfied('=AND(G' + r0 + '<>"",' + byOpt + ')')
         .setBackground('#f9cb9c').setFontColor('#7a3a00').setRanges([colRange(7)]).build());
     }
   });
@@ -8752,6 +8775,24 @@ function tumbRvOnce_() {
   const ob = outboxSheet_(), ol = ob.getLastRow();
   if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (v[2] === '방 공지' && v[5] === '대기' && /^#10\.27 실 런치버스 텀블러/.test(String(v[3])) && /^🐥리뷰내용 가이드🐥/.test(String(v[4]))) obSet_(ob, v[0], 5, SENT); });
   note_('✓ 텀블러 리뷰: 날마다 포토 1·별점 4, 색상마다 포토 한 명 (' + Object.keys(dayMix).join(', ') + ')');
+}
+// (10/27 한 번) 결제금액 확인을 배정 가격으로 다시: 10.26~ 진행 응답 전부 (그때는 폼 보기에 가격이 없어 못 본 것)
+function payRetroOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('PAYRETRO_V1')) return;
+  props.setProperty('PAYRETRO_V1', '1');
+  const seen = {};
+  readRuns_().forEach(function (r) {
+    if (!r['시트ID'] || seen[r['시트ID']] || isExpect_(r) || !(r['진행일'] instanceof Date) || r['진행일'] < new Date(2026, 9, 26)) return;
+    seen[r['시트ID']] = 1;
+    try {
+      const info = rawInfo_(r['시트ID'], r['폼ID']), raw = info.raw, lr = raw.getLastRow();
+      if (lr < 2) return;
+      const head = headers_(raw), add = [];
+      raw.getRange(2, 1, lr - 1, head.length).getValues().forEach(function (v) { if (!(v[0] instanceof Date)) return; const o = {}; head.forEach(function (h, j) { o[h] = v[j]; }); add.push({ t: v[0].getTime(), o: o }); });
+      payCheck_(SpreadsheetApp.openById(r['시트ID']), add);
+    } catch (e) { note_('결제금액 다시 보기 실패 ' + bareTitle_(r['명단 제목']) + ': ' + e); }
+  });
 }
 // (10/27 한 번, 사용자 요청) #10.27 실 양배추채칼외 배정 탭에서 '소정' 줄 지움 (안 사고 나감. 박소정은 다른 사람이라 그대로)
 function cabbageSojungOnce_() {
