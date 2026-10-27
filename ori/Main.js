@@ -1521,6 +1521,9 @@ function diag_(p) {
       const cN = ci(MATCH.nick), cA = ci(/수령인|계정명/), cP = ci(/전화|연락처|휴대폰/), cO = ci(MATCH.opt, MATCH.nick);
       t.getRange(2, 1, lr - 1, h.length).getValues().forEach(function (x) { if (!(x[0] instanceof Date)) return; out.resp.push([t.getName(), Utilities.formatDate(x[0], CONFIG.TIMEZONE, 'MM-dd HH:mm:ss'), cN >= 0 ? x[cN] : '', cA >= 0 ? x[cA] : '', cP >= 0 ? String(x[cP]).slice(-4) : '', cO >= 0 ? x[cO] : ''].join(' | ')); });
     });
+    // 결제금액 확인 기준 보기 (10/27): 배정 가격표와 응답 머리글
+    if (rr) { out.respPm = optPriceMap_(readRuns_().filter(function (x) { return String(x['시트ID']) === String(rr['시트ID']); }).map(function (x) { return String(x['명단 제목']); }));
+      try { out.respHead = headers_(rawInfo_(rr['시트ID'], rr['폼ID']).raw); } catch (e) {} }
   } catch (e) { out.respErr = String(e); }
   // &rvj=글자: 진행 제목에 그 글자가 든 의뢰의 리뷰 정보(RV_: 종류·개수·가이드) (읽기만)
   if (p.rvj) try { const pr = PropertiesService.getScriptProperties(), seen = {}; out.rvj = []; readRuns_().forEach(function (r) { const sid = String(r['시트ID'] || ''); if (!sid || seen[sid] || String(r['명단 제목']).indexOf(String(p.rvj)) < 0) return; seen[sid] = 1; out.rvj.push(bareTitle_(r['명단 제목']) + ' | ' + String(pr.getProperty('RV_' + sid) || '').slice(0, 600)); }); } catch (e) { out.rvjErr = String(e); }
