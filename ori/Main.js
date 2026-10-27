@@ -2948,6 +2948,7 @@ function checkFullInner_() {
   if (!props.getProperty('HYOJA1028_V1')) try { hyoja1028Once_(); } catch (e) { note_('효자손외 10.28 만들기 실패: ' + e); }
   if (!props.getProperty('FIX1027B_V1')) try { fix1027bOnce_(); } catch (e) { note_('10/27 저녁 고치기 실패: ' + e); }
   if (!props.getProperty('PROTECT_V1')) try { protectSystemOnce_(); } catch (e) { note_('자동 칸 경고 잠금 실패: ' + e); }
+  if (!props.getProperty('RVGUIDE1027_V1')) try { rvGuide1027Once_(); } catch (e) { note_('10.27 리뷰 가이드 다시 쓰기 실패: ' + e); }
   if (!props.getProperty('CABBAGE_SOJ_V1')) try { cabbageSojungOnce_(); } catch (e) { note_('양배추채칼외 소정 배정 지우기 실패: ' + e); }
   if (!props.getProperty('HYOJA_ASG_V1')) try { hyojaAssignOnce_(); } catch (e) { note_('효자손 배정 옵션 고치기 실패: ' + e); }
   if (!props.getProperty('TUMB1027_V1')) try { tumbler1027Once_(); } catch (e) { note_('텀블러 옵션 인원 채우기 실패: ' + e); }
@@ -8648,6 +8649,26 @@ function protectSystemOnce_() {
     });
   } catch (e) { note_('월급시트 잠금 실패: ' + e); }
   note_('✓ 자동 칸 경고 잠금 ' + done.length + '곳: ' + done.join(', '));
+}
+// (10/27 한 번, 사용자 요청) 10.27 리뷰 가이드 다시: 텀블러 = 포토 2명·별점 3명 (의뢰서 '2개 정도만 사진, 나머지는 별점'),
+//  효자손외 = 상품마다 포토3·글2 (의뢰서), 거치대 3종 가이드를 상품별로 (전엔 다 같은 사람·텍스트리뷰 14명으로 나감)
+function rvGuide1027Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('RVGUIDE1027_V1')) return;
+  props.setProperty('RVGUIDE1027_V1', '1');
+  const F = ['🐥🐥🐥🐥🐥🐥🐥🐥🐥🐥', '배송완료 후 7일이내로 작성해주시되', '몰리지 않게 리뷰 부탁드려요!', '감사합니다 🫶🏻', '🐥🐥🐥🐥🐥🐥🐥🐥🐥🐥', '', '전체 리뷰완료 후 @회오리 태그걸어주세요!'];
+  const tumb = ['🐥리뷰내용 가이드🐥', '', '포토리뷰(2명) : 이선순 김광태', '→ 사진 2장 이상 + 짧은 글 (텀블러 사용하는 모습, 색상 잘 보이게)', '', '별점(3명) : 허예인 허예인 김누리', '→ 별점 5점만 (글·사진 없이)', ''].concat(F, ['0/5', '', '🐥🐥🐥🐥🐥🐥🐥🐥🐥🐥']).join('\n');
+  const hy = ['🐥리뷰내용 가이드🐥', '', '포토리뷰(8명) : 강효수 박소영 장정원 서민영 김채은 신윤정 양슬기 안종원', '텍스트리뷰(6명) : 김애자 정기혜 김미숙 장혜연 신현규 류가영', '',
+    '🐥효자손 리뷰내용 가이드 (코코스무 효자손)', '포토리뷰(3명) : 강효수 박소영 장정원', '텍스트리뷰(2명) : 김애자 정기혜', '글100자이상', '1. 2개구성으로 거실하나 방하나 두고 편하게 쓸수있어서 좋다', '2. 길이가 넉넉해서 원하는곳 가능', '',
+    '🐥맥세이프 휴대폰 거치대 리뷰내용 가이드', '포토리뷰(2명) : 서민영 김채은', '텍스트리뷰(2명) : 김미숙 장혜연', '글100자이상', '1. 강력흡착으로 차량아니어도 사용가능 단단한 고정력', '2. 360도 회전으로 자유로운 각도조절', '3. 깔끔한디자인 휴대편리', '',
+    '🐥대쉬보드 시야확보 거치대 리뷰내용 가이드', '포토리뷰(3명) : 신윤정 양슬기 안종원', '텍스트리뷰(2명) : 신현규 류가영', '글100자이상', '1. 강력한 흡착력 유리,대쉬보드 다가능', '2. 시야확보 멘트 무조건', '3. 폭포수 유선 디자인', '4. 각도조절 자유롭다', ''].concat(F, ['0/14', '', '🐥🐥🐥🐥🐥🐥🐥🐥🐥🐥']).join('\n');
+  const ob = outboxSheet_(), ol = ob.getLastRow(), log = [];
+  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
+    if (v[2] !== '방 공지' || v[5] !== '대기' || !/^🐥리뷰내용 가이드🐥/.test(String(v[4]))) return;
+    if (/^#10\.27 실 런치버스 텀블러/.test(String(v[3]))) { obSet_(ob, v[0], 5, tumb); log.push('텀블러'); }
+    if (/^#10\.27 실 효자손외/.test(String(v[3]))) { obSet_(ob, v[0], 5, hy); log.push('효자손외'); }
+  });
+  note_('✓ 10.27 리뷰 가이드 다시: ' + (log.join(', ') || '대기 중인 글 없음'));
 }
 // (10/27 한 번, 사용자 요청) #10.27 실 양배추채칼외 배정 탭에서 '소정' 줄 지움 (안 사고 나감. 박소정은 다른 사람이라 그대로)
 function cabbageSojungOnce_() {
