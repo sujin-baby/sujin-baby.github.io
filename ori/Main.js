@@ -877,6 +877,22 @@ function payCheck_(ss, add) {
   const won = function (n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '원'; };
   const bad = {};
   const pm = optPriceMap_(mine.map(function (m) { return String(m['명단 제목']); }));
+  // 배정 가격도 없으면 같은 옵션 다른 사람들이 가장 많이 낸 금액 (3명 이상, 절반 넘게 같은 값일 때만. 10/27 양배추 배정이 비어 있어서 못 잡음)
+  let maj = null;
+  const majOf = function (opt) {
+    if (!maj) {
+      maj = {};
+      try {
+        const info = rawInfo_(sid, mine[0]['폼ID']), raw = info.raw, lr = raw.getLastRow(), hd = headers_(raw);
+        const co = hd.findIndex(function (h) { return MATCH.opt.test(h) && !MATCH.nick.test(h); }), cp = hd.findIndex(function (h) { return /결제\s*금액|결제\s*가격|구매\s*금액|결제한\s*금액/.test(h); });
+        if (lr >= 2 && co >= 0 && cp >= 0) raw.getRange(2, 1, lr - 1, hd.length).getValues().forEach(function (v) { const o = String(v[co]).trim(), p = num(v[cp]); if (!o || !p) return; (maj[o] = maj[o] || {})[p] = (maj[o][p] || 0) + 1; });
+      } catch (e) {}
+    }
+    const c = maj[String(opt).trim()];
+    if (!c) return 0;
+    const tot = Object.keys(c).reduce(function (a, p) { return a + c[p]; }, 0), top = Object.keys(c).sort(function (a, b) { return c[b] - c[a]; })[0];
+    return tot >= 3 && c[top] * 2 > tot ? Number(top) : 0;
+  };
   add.forEach(function (x) {
     const keys = Object.keys(x.o);
     const kPay = keys.filter(function (k) { return /결제\s*금액|결제\s*가격|구매\s*금액|결제한\s*금액/.test(k); })[0];
@@ -888,6 +904,7 @@ function payCheck_(ss, add) {
     let exp = om ? num(om[1]) : 0;
     // 폼 보기에 가격이 없으면(여러 상품 의뢰) 배정 탭의 그 보기 가격 (10/27 양배추채칼외 변기솔 8,300인데 8,500 결제를 못 잡음)
     if (!exp && kOpt) exp = pm[String(x.o[kOpt]).trim()] || 0;
+    if (!exp && kOpt) exp = majOf(x.o[kOpt]);
     if (!exp) { const ps = runPrices_(r['가격']); if (ps.length && ps.every(function (p) { return p === ps[0]; })) exp = ps[0]; }
     if (!exp) return;
     for (let k = 1; k <= 5; k++) if (paid === exp * k) return;
@@ -2971,6 +2988,7 @@ function checkFullInner_() {
   if (!props.getProperty('PROTECT_V1')) try { protectSystemOnce_(); } catch (e) { note_('자동 칸 경고 잠금 실패: ' + e); }
   if (!props.getProperty('RVGUIDE1027_V1')) try { rvGuide1027Once_(); } catch (e) { note_('10.27 리뷰 가이드 다시 쓰기 실패: ' + e); }
   if (!props.getProperty('TUMBRV_V1')) try { tumbRvOnce_(); } catch (e) { note_('텀블러 리뷰 설정 실패: ' + e); }
+  if (!props.getProperty('PAYRETRO_V2')) try { payRetro2Once_(); } catch (e) { note_('양배추 결제금액 다시 보기 실패: ' + e); }
   if (!props.getProperty('PAYRETRO_V1')) try { payRetroOnce_(); } catch (e) { note_('지난 결제금액 다시 보기 실패: ' + e); }
   if (!props.getProperty('CABBAGE_SOJ_V1')) try { cabbageSojungOnce_(); } catch (e) { note_('양배추채칼외 소정 배정 지우기 실패: ' + e); }
   if (!props.getProperty('HYOJA_ASG_V1')) try { hyojaAssignOnce_(); } catch (e) { note_('효자손 배정 옵션 고치기 실패: ' + e); }
@@ -8778,6 +8796,20 @@ function tumbRvOnce_() {
   const ob = outboxSheet_(), ol = ob.getLastRow();
   if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (v[2] === '방 공지' && v[5] === '대기' && /^#10\.27 실 런치버스 텀블러/.test(String(v[3])) && /^🐥리뷰내용 가이드🐥/.test(String(v[4]))) obSet_(ob, v[0], 5, SENT); });
   note_('✓ 텀블러 리뷰: 날마다 포토 1·별점 4, 색상마다 포토 한 명 (' + Object.keys(dayMix).join(', ') + ')');
+}
+// (10/27 한 번) 양배추채칼외 결제금액 다시 (배정 줄이 비어서 V1에서 못 본 것 → 같은 옵션 다수 금액으로)
+function payRetro2Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('PAYRETRO_V2')) return;
+  props.setProperty('PAYRETRO_V2', '1');
+  const r = readRuns_().filter(function (x) { return /^#10\.27 실 양배추채칼외/.test(String(x['명단 제목'])) && x['시트ID']; })[0];
+  if (!r) return;
+  const info = rawInfo_(r['시트ID'], r['폼ID']), raw = info.raw, lr = raw.getLastRow();
+  if (lr < 2) return;
+  const head = headers_(raw), add = [];
+  raw.getRange(2, 1, lr - 1, head.length).getValues().forEach(function (v) { if (!(v[0] instanceof Date)) return; const o = {}; head.forEach(function (h, j) { o[h] = v[j]; }); add.push({ t: v[0].getTime(), o: o }); });
+  payCheck_(SpreadsheetApp.openById(r['시트ID']), add);
+  note_('✓ 양배추채칼외 결제금액 다시 봄 (응답 ' + add.length + '개)');
 }
 // (10/27 한 번) 결제금액 확인을 배정 가격으로 다시: 10.26~ 진행 응답 전부 (그때는 폼 보기에 가격이 없어 못 본 것)
 function payRetroOnce_() {
