@@ -2945,6 +2945,7 @@ function checkFullInner_() {
   if (!props.getProperty('BAGASG1027_V1')) try { bagAssign1027Once_(); } catch (e) { note_('치약걸이 보냉백 배정 다시 읽기 실패: ' + e); }
   if (!props.getProperty('CABBAGE_DEL_V1')) try { cabbageRocketDelOnce_(); } catch (e) { note_('양배추채칼외 로켓 응답 지우기 실패: ' + e); }
   if (!props.getProperty('EXPSCHED_V1')) try { expSchedOnce_(); } catch (e) { note_('기대평 2주차 일정 바꾸기 실패: ' + e); }
+  if (!props.getProperty('HYOJA1028_V1')) try { hyoja1028Once_(); } catch (e) { note_('효자손외 10.28 만들기 실패: ' + e); }
   if (!props.getProperty('CABBAGE_SOJ_V1')) try { cabbageSojungOnce_(); } catch (e) { note_('양배추채칼외 소정 배정 지우기 실패: ' + e); }
   if (!props.getProperty('HYOJA_ASG_V1')) try { hyojaAssignOnce_(); } catch (e) { note_('효자손 배정 옵션 고치기 실패: ' + e); }
   if (!props.getProperty('TUMB1027_V1')) try { tumbler1027Once_(); } catch (e) { note_('텀블러 옵션 인원 채우기 실패: ' + e); }
@@ -5818,7 +5819,7 @@ function addMoreRun_(r, n, opt) {
   // 다음 날 진행이 오늘 모자란 것만이면(한 날 의뢰 등) 공지 옵션 인원을 그 수로 (10/27 양배추채칼외 → 스트랩 4·음식물거름망 4·방수테이프 2)
   if (opt.next && opt.short) { short = {}; opt.short.forEach(function (x) { short[x[2]] = (short[x[2]] || 0) + x[1]; }); }
   let sum = Object.keys(short).reduce(function (a, o) { return a + short[o]; }, 0);
-  const desc = String(form.getDescription() || '');
+  const desc = String(opt.desc || form.getDescription() || '');   // opt.desc: 폼 설명이 빈 진행에 쓸 공지 (10/27 효자손외)
   // 새로 모집하는 공지라 옵션 줄 뒤의 이름(어제 사람)은 지움
   const blankCounts = function () { return desc.split('\n').map(function (l) { return l.replace(/(\(\s*\d*\s*명\s*\)|\d+\s*명).*$/, '(  명)'); }).join('\n'); };
   let notice = stripNames_(sum ? noticeForMore_(desc, short) : blankCounts());
@@ -8564,6 +8565,21 @@ function expSchedOnce_() {
     if (t !== String(v[4])) { obSet_(ob, v[0], 5, t); log.push('10.28 공지 이름'); }
   });
   note_('✓ 기대평 2주차 일정: ' + log.join(', '));
+}
+// (10/27 한 번, 사용자 요청) #10.28 실 효자손외 6: 폼 설명(공지)이 비어서 자동으로 못 만든 것. 맥세이프 1 + 계기판 5
+//  쿠팡 링크·상품번호·키워드·위치·계기판 가격은 모르는 값이라 [확인 필요]로 둠 (보낼메시지 공지에서 채워서 보내기)
+function hyoja1028Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('HYOJA1028_V1')) return;
+  props.setProperty('HYOJA1028_V1', '1');
+  const r = readRuns_().filter(function (x) { return /^#10\.27 실 효자손외/.test(String(x['명단 제목'])) && x['폼ID']; })[0];
+  if (!r) { note_('⚠ 효자손외 10.27 진행을 못 찾음'); return; }
+  const prod = function (nm, kw, cnt, price) { return ['링크타고 검색▼( 상번이 네이버일때 무시)', '[쿠팡 링크 확인 필요]', '🐥판매처 : 유앤아이푸드', '🐥상품명 : ' + nm, '🐥상품번호 : [확인 필요]', '🐥★키워드 : ' + kw, '🐥위치 : [확인 필요]', '🐥옵션 : 블랙 (' + cnt + '명)', '🐥가격 : ' + price].join('\n'); };
+  const desc = ['가격이 높으면 사지 마세요!', '★ 광고(AD) 상품으로 주문 절대 금지 ★', '★ 스중 상중 불가 ★ (가능하면 진행자가 따로 안내합니다)', '▶ 리뷰는 배송완료 후 7일 이내 작성', '▶ 결제 스크린샷은 필수입니다', '',
+    '※오리방 페이백 리뷰비 안내※', '리뷰비는 방전원 다 쓰셔야지 진행자가', '요청완료 기준으로 3일 뒤에 입금되는 점', '참고하여 주세요!', '실배송은 방에 인원이 다쓰셔야 페이백 요청됩니다', '일정기간 지나면 회오리가 방탈합니다!', '지급이 어려울수 있으니 안내된 기간은 지켜주세요! 감사합니다', '★사업자 4971201389 ★', '',
+    '☆★☆★ 양식 작성 폼 ☆★☆★', String(r['폼 링크']), '', prod('코코스무 맥세이프 휴대폰 거치대 블랙', '[확인 필요]', 1, '12,900'), '', prod('코코스무 계기판 대쉬보드 집게형 거치대 블랙', '[확인 필요]', 5, '[확인 필요]')].join('\n');
+  const so = [['코코스무 맥세이프 휴대폰 거치대 블랙', 1, '코코스무 맥세이프 휴대폰 거치대 블랙|블랙'], ['코코스무 계기판 대쉬보드 집게형 거치대 블랙', 5, '코코스무 계기판 대쉬보드 집게형 거치대 블랙|블랙']];
+  note_('✓ 효자손외 10.28: ' + addMoreRun_(r, 6, { next: true, short: so, desc: desc }));
 }
 // (10/27 한 번, 사용자 요청) #10.27 실 양배추채칼외 배정 탭에서 '소정' 줄 지움 (안 사고 나감. 박소정은 다른 사람이라 그대로)
 function cabbageSojungOnce_() {
