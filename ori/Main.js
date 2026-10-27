@@ -305,11 +305,12 @@ function changeDaily_(anchor, from, n) {
 }
 
 // 스크립트가 방제를 바꿨을 때(인원 줄임, 날짜 옮김) 보낼메시지 '할 일': 카톡방 이름 바꾸기 + (명단을 이미 보냈으면) 오리명단방 명단 메시지 고치기. 그날 할 일
-function renameTodo_(r, oldBare, newBare) {
+function renameTodo_(r, oldBare, newBare, fresh) {
   if (!oldBare || oldBare === newBare) return;
   const lines = ['[방제 바뀜] ' + oldBare + ' → ' + newBare, '1. 카톡방 이름을 ' + newBare + ' 로 바꾸기'];
-  // 진행일이 지났거나 오늘이면 명단을 이미 보냈을 수 있어서 고칠 글도 같이
-  if (r['시트 링크'] && r['진행일'] instanceof Date && dayStart_(r['진행일']) <= today_().getTime()) lines.push('2. 오리명단방에 보낸 명단 카톡 메시지를 아래 글로 수정 (새로 보내지 말고 수정)', '', r['시트 링크'] + '\n\n' + newBare + ((String(r['명단 제목']).match(/\s*\([^)]*\)\s*$/) || [''])[0]));
+  // 진행일이 지났거나 오늘이면 명단을 이미 보냈을 수 있어서 고칠 글도 같이 (명단 전달을 방금 새로 넣었으면 고칠 글이 없음)
+  if (fresh) lines.push('2. 오리명단방 명단 글(모자란 건수 포함)은 보낼메시지에 넣어 뒀어요');
+  else if (r['시트 링크'] && r['진행일'] instanceof Date && dayStart_(r['진행일']) <= today_().getTime()) lines.push('2. 오리명단방에 보낸 명단 카톡 메시지를 아래 글로 수정 (새로 보내지 말고 수정)', '', r['시트 링크'] + '\n\n' + newBare + ((String(r['명단 제목']).match(/\s*\([^)]*\)\s*$/) || [''])[0]));
   queueMsg_('내 할 일', lines.join('\n'), '할 일');
 }
 
@@ -2423,6 +2424,59 @@ function shortByOption_(runs, r) {
   return out;
 }
 
+// 그날 공지: 보낼메시지의 그 방 공지(폼 링크가 든 것 중 마지막), 없거나 비었으면 폼 설명
+function dayNotice_(r) {
+  const room = String(r['카톡방'] || bareTitle_(r['명단 제목'])), link = String(r['폼 링크'] || '');
+  const full = function (t) { return String(t || '').split('\n').some(function (l) { return l.trim() && !isSlotLine_(l); }); };
+  let t = '';
+  try {
+    const ob = outboxSheet_(), ol = ob.getLastRow();
+    if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (v[2] === '방 공지' && String(v[3]) === room && (!link || String(v[4]).indexOf(link) >= 0) && full(v[4])) t = String(v[4]); });
+  } catch (e) {}
+  if (!full(t)) try { t = String(FormApp.openById(r['폼ID']).getDescription() || ''); } catch (e) {}
+  return t;
+}
+// 그날 모자란 옵션 [[보일 이름, 남은 수, 공지 열쇠(상품명|옵션 또는 공지 옵션)]] (명단방 글·다음 날 공지용, 사용자 요청 10/27)
+//  옵션 인원 = 그날 공지의 (N명), 산 수 = 그날 응답의 옵션. 공지에서 못 읽으면 배정(그날 인원을 다 배정했을 때만). 그래도 모르면 null
+function shortOpts_(runs, r) {
+  const k = function (x) { return String(x || '').toLowerCase().replace(/\s+/g, ''); };
+  const show = function (c) { return String(c).replace(/\s*\([\d,\s]+원\)\s*$/, '').replace(/\s*\(\s*옵션\s*단일\s*\)\s*$/, '').trim(); };
+  const info = rawInfo_(r['시트ID'], r['폼ID']), w = windowOf_(runs, r);
+  let choices = [];
+  try { choices = formChoices_(FormApp.openById(r['폼ID'])); } catch (e) {}
+  const opts = (parseAssign_(dayNotice_(r), choices).opts || []).filter(function (o) { return o[2] > 0 && !REVIEW_OPT_RE.test(o[0]); });
+  if (opts.length && info.optCol) {
+    const src = info.src || info.raw, st = info.start || 2, lr = src.getLastRow();
+    const got = (lr < st ? [] : src.getRange(st, 1, lr - st + 1, info.head.length).getValues())
+      .filter(function (x) { return x[0] instanceof Date && x[0].getTime() >= w.from && x[0].getTime() < w.to; }).map(function (x) { return k(x[info.optCol - 1]); });
+    const by = {}, order = [];
+    for (let i = 0; i < opts.length; i++) {
+      const o = opts[i], key = o[1] ? 'c' + k(o[1]) : o[3] ? 'p' + k(o[3]) : '';
+      if (!key) return null;   // 어느 보기인지 모르는 옵션이 있으면 셀 수 없음
+      if (!by[key]) { by[key] = { show: o[1] ? show(o[1]) : o[0], label: o[4] || o[0], n: 0 }; order.push(key); }
+      by[key].n += o[2];
+    }
+    return order.map(function (key) {
+      const x = by[key], c = key.slice(1), n = got.filter(function (v) { return key[0] === 'c' ? v === c : v.indexOf(c) >= 0; }).length;
+      return [x.show, x.n - n, x.label];
+    }).filter(function (x) { return x[1] > 0; });
+  }
+  const st2 = assignState_(runs, r);
+  if (!st2) return null;
+  const by2 = optionCounts_(st2), labs = Object.keys(by2);
+  if (labs.reduce(function (a, l) { return a + by2[l].need + by2[l].canc; }, 0) !== Number(r['목표인원'])) return null;   // 배정 안 된 자리가 있으면 모름
+  return labs.map(function (l) { return [by2[l].choice ? show(by2[l].choice) : l.replace(/\s*(마감|완료|품절)\s*$/, ''), Math.max(by2[l].need - by2[l].got, 0) + by2[l].canc, l]; })
+    .filter(function (x) { return x[1] > 0; });
+}
+// 명단방 글 아래 붙일 모자란 건수 (사용자 캡처 모양): 구매요청55건 진행45건 잔여10건 / [내일 구매로 진행] / 옵션>잔여4건
+//  옵션별 수를 다 더한 게 잔여와 다르면 옵션 줄은 뺌 (틀린 숫자를 보내지 않게)
+function shortBlock_(goal, got, so) {
+  const left = goal - got, L = ['구매요청' + goal + '건 진행' + got + '건 잔여' + left + '건', '[내일 구매로 진행]'];
+  if (so && so.length && so.reduce(function (a, x) { return a + x[1]; }, 0) === left) so.forEach(function (x) { L.push(x[0] + '>잔여' + x[1] + '건'); });
+  return L.join('\n');
+}
+function listShortKey_(r) { return 'LISTSHORT_' + r['시트ID'] + '_' + (r['진행일'] instanceof Date ? Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd') : ''); }
+
 // 예전 방식(명단 시트 안 '배정' 탭, '옵션 확인' 칸)이 있으면 관리 시트로 옮기고 명단 시트에서 지움
 function moveOldAssign_(ss) {
   const old = ss.getSheetByName(ASSIGN_TAB);
@@ -2459,6 +2513,22 @@ function noticeProducts_(text) {
   }).filter(function (x) { return x.name; });
 }
 
+// 구분선 없이 상품 정보가 여러 개 이어진 글(링크타고 검색▼ … 🐥상품명 … 가 두 번 이상)을 상품마다 나눔 (10/27)
+//  둘째 상품부터, 그 상품명 줄 바로 위 빈 줄에서 자름 (앞 상품 가격 줄 뒤에 붙은 이름 줄은 앞 상품 것)
+function splitByProduct_(b) {
+  const ls = String(b).split('\n'), at = [];
+  ls.forEach(function (l, i) { if (/상품명\s*[:：]/.test(l)) at.push(i); });
+  if (at.length < 2) return [String(b)];
+  const out = []; let s = 0;
+  for (let j = 1; j < at.length; j++) {
+    let c = at[j];
+    for (let i = at[j] - 1; i > at[j - 1]; i--) if (!ls[i].trim()) { c = i; break; }
+    out.push(ls.slice(s, c).join('\n')); s = c;
+  }
+  out.push(ls.slice(s).join('\n'));
+  return out;
+}
+
 // 공지 글에서 '옵션 → 이름들' 읽기 (사용자 공지 모양)
 //  1) 1kg*1 2명 (박지수(취소) 정수연)          ← 'N명' 뒤 괄호 안 이름
 //  🐥옵션 : 1kg×3 (2명) 송기주 2              ← '(N명)' 뒤 이름, 이름 뒤 숫자(띄어 써도) = 계정 수
@@ -2474,24 +2544,12 @@ function parseAssign_(text, choices) {
   const k = function (x) { return String(x || '').toLowerCase().replace(/[\s\u2060]+/g, ''); };
   const bare = function (c) { return k(String(c).replace(/\s*\([\d,\s]+원\)\s*$/, '')); };
   // 상품 구분선: ---- 또는 ———— (카톡에서 긴 줄로 바뀜, 10/21 오즈네즈)
-  //  구분선 없이 상품 정보가 여러 개 이어진 공지(링크타고 검색▼ … 🐥상품명 … 가 두 번)는 상품마다 나눔: 이름 줄은 바로 위 상품 것 (10/27 치약걸이 보냉백)
-  const byProduct = function (b) {
-    const ls = b.split('\n'), at = [];
-    ls.forEach(function (l, i) { if (/상품명\s*[:：]/.test(l)) at.push(i); });
-    if (at.length < 2) return [b];
-    const out = []; let s = 0;
-    for (let j = 1; j < at.length; j++) {
-      let c = at[j];
-      for (let i = at[j] - 1; i > at[j - 1]; i--) if (!ls[i].trim()) { c = i; break; }
-      out.push(ls.slice(s, c).join('\n')); s = c;
-    }
-    out.push(ls.slice(s).join('\n'));
-    return out;
-  };
-  const blocks = [].concat.apply([], String(text || '').split(/\n\s*[-—─_]{5,}\s*\n?/).map(byProduct));
+  //  구분선 없이 상품 정보가 여러 개 이어진 공지는 상품마다 나눔: 이름 줄은 바로 위 상품 것 (10/27 치약걸이 보냉백)
+  const blocks = [].concat.apply([], String(text || '').split(/\n\s*[-—─_]{5,}\s*\n?/).map(splitByProduct_));
   const multi = noticeProducts_(text).length > 1 || blocks.length > 1;
   const junk = /http|★|☆|▶|▼|※|🐥|[:!?]|\d\s*원|\d{1,3},\d{3}|구매|리뷰|링크|가격|배송|검색|사업자|입금|참고|안내/;
   const rows = [], at = {}, priceMemo = {};
+  const opts = [];   // 옵션 줄마다 [공지 옵션, 폼 보기, N명, 상품 짧은 이름, 상품명|옵션] (이름이 없어도): 그날 모자란 옵션 셈·다음 날 공지용 (10/27)
   const toChoice = function (label, opt, full, prod) {
     const a = k(label), b = k(opt);
     let cs = choices.filter(function (c) { return bare(c) === a || bare(c) === b; });
@@ -2561,6 +2619,8 @@ function parseAssign_(text, choices) {
     const prod = multi ? (noticeProducts_(b)[0] || {}).name || '' : '';
     // 그 가이드의 키워드·상품명 전체 (짧은 이름이 같은 상품 구분용)
     const full = multi ? ((b.match(/키워드\s*[:：]\s*(.+)/) || [])[1] || '') + ' ' + ((b.match(/상품명\s*[:：]\s*(.+)/) || [])[1] || '') : '';
+    // 상품마다 다른 열쇠 (짧은 이름이 같은 상품이 여럿일 때: 거치대 3종): 상품명 전체 + '|' + 옵션
+    const pkey = function (o) { return ((b.match(/상품명\s*[:：]\s*(.+)/) || [])[1] || '').trim() + '|' + o; };
     const lines = b.split(/\r?\n/);
     // 옵션 가격: '🐥옵션 : X (N명)' 다음 '🐥가격 : 20500', 또는 '1kg*1 : 17200원 / 1kg*2개 : 29200' 같은 줄
     //  생성기 공지처럼 가격 칸이 여러 줄이면('🐥가격 : 1kg*1 17,200' 다음 줄 '1kg*2개 29,800') 이어진 줄도 가격 줄로 봄
@@ -2596,20 +2656,26 @@ function parseAssign_(text, choices) {
       if (m) {
         const opt = m[1].replace(/^\d+\)\s*/, '').replace(/^🐥\s*옵션\s*[:：]?\s*/, '').replace(/^🐥\s*/, '').trim();
         // '1) 2명 - 임수진 이혜미(타)': 옵션이 하나인 상품은 머리줄에 이름 (옵션 줄에 (N명)이 없을 때만)
-        if (!opt && /^\d+\)/.test(t) && m[3].replace(/^[\s\-–—:]+/, '').trim()) {
+        //  이름이 없는 '1) 5명' 머리 줄도 옵션 인원으로는 셈 (다음 날 공지 인원 확인용, 10/27)
+        if (!opt && /^\d+\)/.test(t)) {
+          const nm = m[3].replace(/^[\s\-–—:]+/, '').trim();
           const oi = lines.findIndex(function (l) { return /🐥\s*옵션\s*[:：]/.test(l); });
           const ol = oi >= 0 ? lines[oi] : '';
           if (ol && !/\(\s*\d*\s*명\s*\)/.test(ol)) {
-            const o2 = ol.replace(/^.*?옵션\s*[:：]\s*/, '').trim(), label2 = [prod, o2].filter(Boolean).join(' ');
-            add(m[3].replace(/^[\s\-–—:]+/, ''), label2, toChoice(label2, o2, full, prod));
-            const pr2 = priceOf(o2, oi);
-            rows.forEach(function (x) { if (x[1] === label2 && !x[4]) x[4] = pr2; });
+            const o2 = ol.replace(/^.*?옵션\s*[:：]\s*/, '').trim(), label2 = [prod, o2].filter(Boolean).join(' '), ch2 = toChoice(label2, o2, full, prod);
+            opts.push([label2, ch2, Number(m[2]), prod, pkey(o2)]);
+            if (nm) {
+              add(nm, label2, ch2);
+              const pr2 = priceOf(o2, oi);
+              rows.forEach(function (x) { if (x[1] === label2 && !x[4]) x[4] = pr2; });
+            }
           }
           cur = null; return;
         }
         if (!opt || /가격|원$/.test(opt)) { cur = null; return; }
         const label = [prod, opt].filter(Boolean).join(' ');
         cur = { label: label, choice: toChoice(label, opt, full, prod) };
+        opts.push([label, cur.choice, Number(m[2]), prod, pkey(opt)]);
         const before = rows.length;
         add(m[3], cur.label, cur.choice);
         const pr = priceOf(opt, idx);
@@ -2622,6 +2688,7 @@ function parseAssign_(text, choices) {
     });
   });
   if (!rows.length) namesOnly();
+  rows.opts = opts;
   return rows;
 }
 
@@ -3121,7 +3188,10 @@ function listMsgText_(r) {
       tail = sib.length === 1 ? '마지막' : md(sib[0]) + '~ ' + md(me) + '  ' + (isExpect_(me) ? EXP_LINKS.length * 15 + '건 작성완료' : total + '건 구매완료');
     }
   } catch (e) {}
-  return r['시트 링크'] + '\n\n' + t + (tail ? '\n' + tail : '');
+  // 그날 모자라서 다음 날로 넘긴 건수 (shrinkToGot_이 저장, 10/27 사용자 캡처 모양)
+  let sk = '';
+  try { sk = PropertiesService.getScriptProperties().getProperty(listShortKey_(r)) || ''; } catch (e) {}
+  return r['시트 링크'] + '\n\n' + t + (tail ? '\n' + tail : '') + (sk ? '\n\n' + sk : '');
 }
 // 이 진행의 명단 전달이 아직 안 보내고 대기 중이면 새로 넣지 않고 그 글을 지금 내용으로 고침 (인원을 늘려 다시 마감될 때 두 줄 생기지 않게, 10/26)
 function pendingListMsg_(r) {
@@ -5621,7 +5691,7 @@ function firstSheetRun_(r) {
 // 의뢰 총건수가 남았는데 내일 진행이 없으면(일정 탭 계획이 없는 의뢰 등) 오늘 오전 10시(NEXT_DAY_HOUR)부터 내일 진행을 자동으로
 //  같은 폼·같은 명단 시트, 공지는 오늘 공지(폼 설명)에서 이름을 뺀 것, 건수 = min(일 진행 건수, 남은 건수)
 const SHORT_NEXT_HOUR = 14;
-function shrinkToGot_(r) {
+function shrinkToGot_(r, blk) {
   const got = Number(r['인원']) || 0, goal = Number(r['목표인원']) || 0;
   if (!got || got >= goal) return;
   const oldBare = bareTitle_(r['명단 제목']), nb = oldBare.replace(/\d+\s*$/, String(titleCount_(r, got)));
@@ -5635,7 +5705,23 @@ function shrinkToGot_(r) {
     const ob = outboxSheet_(), ol = ob.getLastRow();
     if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v, i) { if (v[2] === '명단 전달' && String(v[4]).indexOf(oldBare) >= 0) obSet_(ob, v[0], 5, String(v[4]).split(oldBare).join(nb)); });
   } catch (e) {}
-  renameTodo_(r, oldBare, nb);
+  // 명단방 글에 모자란 건수 붙이기 (10/28 진행부터, 사용자 요청 10/27): 명단 전달이 아직 없으면 새로 넣고(모자란 날은 마감이 안 돼서 안 들어갔음), 대기 중이면 고침
+  let fresh = false;
+  if (blk && r['진행일'] instanceof Date && dayStart_(r['진행일']) >= new Date(2026, 9, 28).getTime()) try {
+    PropertiesService.getScriptProperties().setProperty(listShortKey_(r), blk);
+    const me = readRuns_().filter(function (x) { return String(x['시트ID']) === String(r['시트ID']) && bareTitle_(x['명단 제목']) === nb; })[0];
+    if (me && me['시트 링크']) {
+      const want = listMsgText_(me), ob = outboxSheet_(), ol = ob.getLastRow();
+      let found = false;
+      if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
+        if (v[2] !== '명단 전달' || !String(v[4]).split('\n').some(function (l) { return l.trim() && sameRunTitle_(l, me['명단 제목']); })) return;
+        found = true;
+        if (v[5] === '대기' && String(v[4]) !== want) obSet_(ob, v[0], 5, want);
+      });
+      if (!found) { queueListMsgs_(me, true); fresh = true; }
+    }
+  } catch (e) { note_('명단방 글 모자란 건수 실패: ' + e); }
+  renameTodo_(r, oldBare, nb, fresh);
   note_('✓ 인원 맞춤: ' + oldBare + ' → ' + nb);
 }
 // (한 번, 10/20) 이미 모자란 만큼 다음 날 진행을 만든 진행(# 10.20 고구마말랭이 10, 8명)도 방제를 실제 인원으로
@@ -5678,12 +5764,17 @@ function autoNextDay_() {
     const daily = Number(c.runs[0]['목표인원']) || Number(last['목표인원']) || left;
     // 남는 건수가 일 건수의 절반보다 적으면 마지막 날에 같이 (총 50 / 일 7 → 마지막 날 8, 사용자 요청 10/20. 생성기 numDays와 같은 규칙)
     const n = left > daily && left - daily < daily / 2 ? left : Math.min(daily, left);
-    const made = addMoreRun_(last, n, { next: true });
+    // 오늘 모자란 옵션 (공지 (N명) - 산 수): 내일이 오늘 모자란 것만이면 내일 공지 옵션 인원으로, 명단방 글에도 (사용자 요청 10/27)
+    const goal0 = Number(last['목표인원']) || 0, got0 = Number(last['인원']) || 0;
+    let so = null;
+    if (pastEnd_(last)) try { so = shortOpts_(runs, last); } catch (e) { so = null; }
+    const soSum = so ? so.reduce(function (a, x) { return a + x[1]; }, 0) : 0;
+    const made = addMoreRun_(last, n, { next: true, short: so && soSum && soSum === n ? so : null });
     if (!/^⚠ 공지가 비어/.test(made)) note_('✓ 다음 날 진행: ' + made);   // 공지가 빈 건 할 일로 한 번만 알림 (15분마다 같은 글 안 쌓이게)
     // 오늘 진행은 실제 산 인원으로 방제·목표를 줄임 (# 10.20 고구마말랭이 10 → 8, 사용자 요청 10/20) + 카톡방 이름·명단 메시지 고치기 할 일
     // 위에서 다음 날 진행을 만들면 진행목록이 다시 정렬돼서 줄 번호가 바뀜 → 이 진행을 다시 읽어서 (옛 줄 번호로 다른 진행 이름을 고치던 것, 10/23)
     const cur = readRuns_().filter(function (x) { return String(x['명단 제목']) === String(last['명단 제목']) && String(x['시트ID']) === String(last['시트ID']); })[0];
-    if (cur) shrinkToGot_(cur);
+    if (cur) shrinkToGot_(cur, got0 < goal0 ? shortBlock_(goal0, got0, so) : '');
   });
 }
 
@@ -5721,11 +5812,20 @@ function addMoreRun_(r, n, opt) {
   const room = roomOld.replace(/\d{1,2}\.\d{1,2}/, md).replace(/\d+\s*$/, String(titleCount_(r, n)));
   const form = FormApp.openById(r['폼ID']);
   // 모자란 옵션별 인원 = 배정에서 안 산 계정 + 취소한 사람 (배정이 없으면 옵션 인원은 비워 둠)
-  const short = opt.next ? {} : shortByOption_(readRuns_(), r);
-  const sum = Object.keys(short).reduce(function (a, o) { return a + short[o]; }, 0);
+  let short = opt.next ? {} : shortByOption_(readRuns_(), r);
+  // 다음 날 진행이 오늘 모자란 것만이면(한 날 의뢰 등) 공지 옵션 인원을 그 수로 (10/27 양배추채칼외 → 스트랩 4·음식물거름망 4·방수테이프 2)
+  if (opt.next && opt.short) { short = {}; opt.short.forEach(function (x) { short[x[2]] = (short[x[2]] || 0) + x[1]; }); }
+  let sum = Object.keys(short).reduce(function (a, o) { return a + short[o]; }, 0);
   const desc = String(form.getDescription() || '');
   // 새로 모집하는 공지라 옵션 줄 뒤의 이름(어제 사람)은 지움
-  const notice = stripNames_(sum ? noticeForMore_(desc, short) : desc.split('\n').map(function (l) { return l.replace(/(\(\s*\d*\s*명\s*\)|\d+\s*명).*$/, '(  명)'); }).join('\n'));
+  const blankCounts = function () { return desc.split('\n').map(function (l) { return l.replace(/(\(\s*\d*\s*명\s*\)|\d+\s*명).*$/, '(  명)'); }).join('\n'); };
+  let notice = stripNames_(sum ? noticeForMore_(desc, short) : blankCounts());
+  // 오늘 모자란 수로 채운 다음 날 공지는 다시 읽어서 인원 합이 맞을 때만 씀. 안 맞으면 예전처럼 (  명) 빈칸 (틀린 인원 공지가 안 나가게, 10/27)
+  if (opt.next && sum) {
+    let back = -1;
+    try { back = (parseAssign_(notice, []).opts || []).reduce(function (a, o) { return a + (REVIEW_OPT_RE.test(o[0]) ? 0 : o[2]); }, 0); } catch (e) {}
+    if (back !== sum) { note_('다음 날 공지 옵션 인원을 못 채움(' + back + '/' + sum + '): ' + bareTitle_(r['명단 제목']) + ' → (  명) 빈칸으로'); notice = stripNames_(blankCounts()); short = {}; sum = 0; }
+  }
   if (sum && !n) n = sum;
   // 공지(폼 설명)가 비었으면 만들지 않음: 빈 방 공지가 나감 (10/27 효자손외·양배추채칼외는 폼 설명이 빈 채로 만들어졌음). 할 일로 한 번 알림
   if (!String(notice).split('\n').some(function (l) { return l.trim() && !isSlotLine_(l); })) {
@@ -5751,7 +5851,7 @@ function addMoreRun_(r, n, opt) {
   if (opt.next) {
     MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[체험단] ' + md + ' 진행 준비됐어요: ' + room, [
       room + ' (' + n + '건, 같은 폼·같은 명단 시트)',
-      '카톡방을 이 방제로 만들고 아래 공지를 올리세요. 보낼 메시지함에도 들어가 있어요. 옵션이 여러 개면 옵션 인원 (  명)은 채워 주세요.',
+      '카톡방을 이 방제로 만들고 아래 공지를 올리세요. 보낼 메시지함에도 들어가 있어요. ' + (sum ? '옵션 인원은 오늘 모자란 수로 채웠어요.' : '옵션이 여러 개면 옵션 인원 (  명)은 채워 주세요.'),
       '폼은 ' + md + ' 0시에 다시 열려요.',
       '',
       res.notice,
@@ -6272,33 +6372,49 @@ function noticeForMore_(desc, short) {
   const k = function (x) { return String(x || '').toLowerCase().replace(/\s+/g, ''); };
   const want = {};
   Object.keys(short).forEach(function (o) { want[k(o)] = short[o]; });
-  const parts = String(desc).split(/(\n\s*-{5,}\s*\n)/);
+  // 구분선(-----)으로, 구분선이 없으면 상품명 줄로 상품마다 나눔 (생성기 공지는 구분선이 없음, 10/27)
+  const parts = [].concat.apply([], String(desc).split(/\n\s*-{5,}\s*\n/).map(splitByProduct_));
   const multi = parts.length > 1;
   const kept = [];
-  for (let i = 0; i < parts.length; i += 2) {
+  let headOnly = false;
+  for (let i = 0; i < parts.length; i++) {
     const prod = multi ? (noticeProducts_(parts[i])[0] || {}).name || '' : '';
     let total = 0, header = -1;
     const lines = parts[i].split('\n'), out = [];
+    const pn = ((parts[i].match(/상품명\s*[:：]\s*(.+)/) || [])[1] || '').trim();
+    const cnt = function (o) { return want[k(pn + '|' + o)] || want[k([prod, o].filter(Boolean).join(' '))] || want[k(o)] || 0; };
     for (let j = 0; j < lines.length; j++) {
       const t = lines[j];
       const m = t.match(/^(\s*(?:\d+\)\s*)?(?:🐥\s*옵션\s*[:：]?\s*)?)(.*?)\s*(?:\(\s*\d*\s*명\s*\)|\d+\s*명)(.*)$/);   // (3명), (  명), 3명
-      if (!m) { out.push(t); continue; }
-      const opt = m[2].trim();
+      if (!m) {
+        // 인원이 머리 줄('3) 5명 - 이름')에 있고 옵션 줄엔 없는 공지: 옵션 줄로 그 상품 수를 셈 (줄은 그대로, 10/27)
+        const om = t.match(/^\s*🐥\s*옵션\s*[:：]\s*(.+?)\s*$/);
+        if (om && !/\d\s*명/.test(om[1])) total += cnt(om[1]);
+        out.push(t); continue;
+      }
+      // '🐥[실배송 3명 - 이름]'처럼 옵션 앞에 🐥·괄호가 붙은 줄 (10/27 치약걸이 보냉백)
+      const lead = !m[1] && /^\s*🐥/.test(m[2]) ? '🐥' : '';
+      const opt = m[2].replace(/^\s*🐥\s*/, '').replace(/^\[\s*/, '').trim();
       if (!opt) { header = out.length; out.push(t); continue; }   // '1) 5명' 가이드 머리
       if (/가격|원$/.test(opt)) { out.push(t); continue; }
-      const c = want[k([prod, opt].filter(Boolean).join(' '))] || want[k(opt)] || 0;
+      const c = cnt(opt);
       if (!c) { if (/^\s*🐥\s*가격/.test(lines[j + 1] || '') && ((lines[j + 1].match(/\d{1,3}(?:,\d{3})+|\d{4,}/g) || []).length === 1)) j++; continue; }
       total += c;
-      out.push(m[1] + opt + (/\(\s*\d*\s*명/.test(t) ? ' (' + c + '명)' : ' ' + c + '명'));   // 원래 모양 그대로 (N명) 또는 N명
+      out.push(m[1] + lead + opt + (/\(\s*\d*\s*명/.test(t) ? ' (' + c + '명)' : ' ' + c + '명'));   // 원래 모양 그대로 (N명) 또는 N명
     }
     if (multi && !total && i > 0) continue;
-    if (multi && !total) { /* 첫 가이드는 상단 공지가 들어 있어서 옵션 줄만 빠진 채로 둠 */ }
+    // 첫 덩어리는 위쪽 공지(폼 링크 등)가 들어 있어서 남김. 그 안 첫 상품이 이번에 필요 없으면 상품 정보는 빼고 위쪽 공지만 (10/27)
+    if (multi && !total) {
+      const pi = out.findIndex(function (l) { return /상품명\s*[:：]/.test(l); });
+      if (pi >= 0) { let c = pi; for (let j = pi - 1; j >= 0; j--) if (!out[j].trim()) { c = j; break; } out.splice(c); headOnly = true; if (header >= c) header = -1; }
+    }
     if (header >= 0) out[header] = out[header].replace(/\d+\s*명/, total + '명');
     kept.push(out.join('\n'));
   }
   let g = 0;
-  return kept.map(function (b) { return b.replace(/^(\s*)\d+\)/m, function (x, sp) { return sp + (++g) + ')'; }); })
-    .join('\n\n------------------------------------------------\n\n').replace(/\n{3,}/g, '\n\n');
+  const num = kept.map(function (b) { return b.replace(/^(\s*)\d+\)/m, function (x, sp) { return sp + (++g) + ')'; }); });
+  const SEP = '\n\n------------------------------------------------\n\n';
+  return (headOnly ? num[0].replace(/\s+$/, '') + '\n\n' + num.slice(1).join(SEP) : num.join(SEP)).replace(/\n{3,}/g, '\n\n');
 }
 
 // 과일(자정 ~ 오전 7시): 7시에 배정에서 아직 안 산 사람을 모아 보낼 메시지함 + 메일, 7시 30분에 한 번 더 메일
