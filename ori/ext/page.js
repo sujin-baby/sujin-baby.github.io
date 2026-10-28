@@ -105,6 +105,7 @@
       if (!pm) return { err: "쿠팡 상품 상세 페이지에서 눌러 주세요." };
       const qs = new URLSearchParams(L.search);
       let item = qs.get("itemId") || qs.get("itemid") || "";
+      if (!item) { const cm = String(txt || "").match(/쿠팡\s*상품\s*번호\s*[:：]?\s*(\d+)\s*-\s*(\d{6,})/); if (cm && cm[1] === pm[1]) item = cm[2]; }   /* 화면의 '쿠팡상품번호: 상품 - 아이템'이 먼저 (페이지 안 첫 itemId는 추천·광고 상품일 수 있음, 10/28) */
       if (!item) { const m = html.match(/["']?itemId["']?\s*[:=]\s*["']?(\d{8,})/); if (m) item = m[1]; }
       let name = visibleTitle();
       if (!name) name = (og("title") || document.title).replace(/\s*[-|]\s*쿠팡!?\s*$/, "").replace(/\s+-\s+[^-]{1,20}$/, "").trim();
