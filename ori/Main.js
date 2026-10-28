@@ -2998,6 +2998,7 @@ function checkFullInner_() {
   if (!props.getProperty('RVGUIDE1027_V1')) try { rvGuide1027Once_(); } catch (e) { note_('10.27 리뷰 가이드 다시 쓰기 실패: ' + e); }
   if (!props.getProperty('TUMBRV_V1')) try { tumbRvOnce_(); } catch (e) { note_('텀블러 리뷰 설정 실패: ' + e); }
   if (!props.getProperty('EXPWHO1029_V1')) try { expWho1029Once_(); } catch (e) { note_('기대평 10.29 이름 넣기 실패: ' + e); }
+  if (!props.getProperty('EXPWHO1029_V2')) { props.deleteProperty('EXPWHO1029_V1'); props.setProperty('EXPWHO1029_V2', '1'); }   // 10.29 B: '.' → 김혜란 (11.5 공지 다시)
   if (!props.getProperty('OPTPRICE_SEED_V1')) try { optPriceSeedOnce_(); } catch (e) { note_('옵션 가격 기억 실패: ' + e); }
   if (!props.getProperty('PAYRETRO_V2')) try { payRetro2Once_(); } catch (e) { note_('양배추 결제금액 다시 보기 실패: ' + e); }
   if (!props.getProperty('PAYRETRO_V1')) try { payRetroOnce_(); } catch (e) { note_('지난 결제금액 다시 보기 실패: ' + e); }
@@ -3244,6 +3245,15 @@ function listMsgText_(r) {
     if (total && sib.length && sib[sib.length - 1].row === me.row && got >= total) {
       const md = function (x) { return (x['진행일'].getMonth() + 1) + '.' + String(x['진행일'].getDate()).padStart(2, '0'); };
       tail = sib.length === 1 ? '마지막' : md(sib[0]) + '~ ' + md(me) + '  ' + (isExpect_(me) ? EXP_LINKS.length * 15 + '건 작성완료' : total + '건 구매완료');
+    }
+  } catch (e) {}
+  // 앞 진행일보다 공지 가격이 바뀌었으면 '가격변동 9100 > 9200' (사용자 요청 10/28 마켓담온 귤). 그날 방 공지(없으면 폼 설명)의 🐥가격
+  if (!/가격변동/.test(tail)) try {
+    const runs2 = readRuns_(), me2 = runs2.filter(function (x) { return x.row === r.row; })[0] || r, sib2 = siblings_(runs2, me2), i2 = sib2.findIndex(function (x) { return x.row === me2.row; });
+    if (i2 > 0) {
+      const pr = function (x) { const ps = (noticeProducts_(dayNotice_(x))[0] || {}).prices || []; return ps.length === 1 ? ps[0] : 0; };
+      const a = pr(sib2[i2 - 1]), b = pr(me2);
+      if (a && b && a !== b) tail = (tail ? tail + '\n' : '') + '가격변동 ' + a + ' > ' + b;
     }
   } catch (e) {}
   // 그날 모자라서 다음 날로 넘긴 건수 (shrinkToGot_이 저장, 10/27 사용자 캡처 모양)
@@ -8111,7 +8121,7 @@ function expPer_(r) { return Math.round((Number((String(r && r['가격'] || '').
 const EXP_MIX = { '10.26': [3, 0], '10.27': [2, 1], '10.28': [1, 2], '10.29': [1, 2], '10.30': [2, 1], '11.2': [0, 3], '11.3': [1, 2], '11.4': [2, 1], '11.5': [2, 1], '11.6': [1, 2] };
 // 2주차 날 공지에 넣을 사람 (1주차 같은 요일 사람이 반대 묶음)
 const EXP_WHO = { '10.28': { A: '김미주', B: '임혜영 주은' }, '11.2': { B: '윤주영 3계정' }, '11.3': { A: '10.27 B묶음 하신 분', B: '윤주영 2계정' },
-  '11.4': { A: '임혜영 주은', B: '김미주' }, '10.29': { A: '조아린', B: '. 방윤아' }, '11.5': { A: '. 방윤아', B: '조아린' }, '11.6': { A: '10.30 B묶음 하신 분', B: '10.30 A묶음 하신 2분' } };
+  '11.4': { A: '임혜영 주은', B: '김미주' }, '10.29': { A: '조아린', B: '김혜란 방윤아' }, '11.5': { A: '김혜란 방윤아', B: '조아린' }, '11.6': { A: '10.30 B묶음 하신 분', B: '10.30 A묶음 하신 2분' } };
 const EXP_SET_Q = '작성한 링크 묶음', EXP_SET_CH = ['A묶음 (14개 링크)', 'B묶음 (13개 링크)'];
 // 계획대로 n명이면 몇 건 (A묶음 자리 먼저). 계획 없는 날이면 null
 function expPlanCount_(tok, n) {
