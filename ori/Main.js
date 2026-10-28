@@ -1522,6 +1522,12 @@ function diag_(p) {
   } catch (e) { out.pnErr = String(e); }
   if (p.rv) try { out.rvExplain = rvExplain_(); } catch (e) { out.rvErr = String(e); }
   try { out.obUserEdit = JSON.parse(CacheService.getScriptCache().get('OB_USEREDIT') || '[]'); } catch (e) {}
+  // &dashrow=N: 한눈에 탭 N행부터 4줄 수식·보이는 값 (읽기만, 10/28 #REF! 원인 보기)
+  if (p.dashrow) try {
+    const dsh = adminSs_().getSheetByName(DASH_TAB), r0 = Number(p.dashrow), lc = Math.min(dsh.getLastColumn(), 14);
+    const fm = dsh.getRange(r0, 1, 4, lc).getFormulas(), dv = dsh.getRange(r0, 1, 4, lc).getDisplayValues();
+    out.dashRows = fm.map(function (row, i) { return (r0 + i) + ': ' + row.map(function (f, j) { return colLetter_(j + 1) + '=' + String(dv[i][j]).slice(0, 30) + (f ? ' {' + f.slice(0, 600) + '}' : ''); }).join(' | '); });
+  } catch (e) { out.dashErr = String(e); }
   // &pay=글자: 월급시트에서 캠페인명에 그 글자가 든 줄 (읽기만, 같은 진행이 두 줄인지 보기)
   if (p.pay) try {
     out.payRows = [];
