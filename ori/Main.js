@@ -7710,7 +7710,8 @@ function buildDashboard_(force) {
     const x = sheets[id];
     const goal = Number(x.runs[0]['목표인원']) || 0;
     x.n = Math.max(Math.ceil((x.count + 5) / 5) * 5, 6);   // 5줄 단위라 응답 몇 개마다만 다시 만듦
-    if (goal) x.n = Math.min(x.n, Math.max(goal + 3, x.count + 2));
+    // 목표 인원을 알면 처음부터 그만큼 자리 (응답이 한꺼번에 들어와 다음 덩어리 머리줄에 막혀 #REF! 나던 것, 10/28 유러피안샐러드외)
+    if (goal) x.n = Math.max(goal + 3, x.count + 2);
   });
   const rvItems = rvItems_(allRuns, props);
   const sig = JSON.stringify(rvItems) + '|' + DASH_VER + '|' + show.join(',') + '|' + runs.map(dashStatus_).join(',') + '|' + props.getProperty('RUN_ERRORS') + '|' + order.map(function (id) { return id + ':' + sheets[id].n; }).join(',') + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태'] + ':' + r['진행일'] + ':' + r['택배 옮김']; }).join('|');
