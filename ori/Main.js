@@ -1810,7 +1810,7 @@ function createRunInner_(d) {
   // 생성기가 넘긴 리뷰 정보(상품별 리뷰 종류·개수, 리뷰 안내, 공지 종류)를 의뢰(명단 시트)마다 저장 → 리뷰 배정 페이지가 씀
   // 상품 페이지 주소 (한눈에 탭 '상품' 칸 링크)
   if (d.urls) { try { PropertiesService.getScriptProperties().setProperty('PURL_' + ss.getId(), String(d.urls).slice(0, 2000)); } catch (e) {} }
-  // 장바구니건 (10/28): 한 사람이 상품 N개를 한 번에. 인원·총건수·방 제목·한눈에는 사람, 월급시트 건수(건당 500원)는 사람 × N
+  // 장바구니건 (10/28): 한 사람이 상품 N개를 한 번에. 진행목록 인원·총건수는 사람, 방 제목·명단 시트 이름·한눈에·월급시트 건수는 물건 수(사람 × N)
   if (Number(d.cart) > 1) { try { PropertiesService.getScriptProperties().setProperty('CART_' + ss.getId(), String(Number(d.cart))); } catch (e) {} }
   if (d.rv) { try { const pk = 'RV_' + ss.getId(), pr = PropertiesService.getScriptProperties(); if (!pr.getProperty(pk)) pr.setProperty(pk, String(d.rv).slice(0, 8000)); } catch (e) {} }
   return { notice: notice, formUrl: formUrl, sheetUrl: ss.getUrl(), folderUrl: folder.getUrl() };
@@ -7779,8 +7779,8 @@ function buildDashboard_(force) {
   runs.forEach(function (r, i) {
     const rr = i + 2, x = sheets['b' + i];
     // 기대평은 건수로 (의뢰 총건수 405, 그날 목표·신청 = 사람 × 그 주 건수, 사용자 요청 10/24)
-    const per = isExpect_(r) ? expPer_(r) : 1, mixDay = isExpect_(r) && !!EXP_MIX[dateTok_(r['명단 제목'])];   // A·B묶음 섞인 기대평 날은 건수를 직접 셈 (10/26)
-    sh.getRange(rr, 1, 1, 5).setValues([[r['진행일'], String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''), dashStatus_(r), isExpect_(r) ? EXP_LINKS.length * 15 : (Number(r['총건수']) || ''), (mixDay ? expCount_(r, Number(r['목표인원']) || 0, allRuns) : (Number(r['목표인원']) || 0) * per) || r['목표인원']]]);
+    const per = isExpect_(r) ? expPer_(r) : cartN_(r), mixDay = isExpect_(r) && !!EXP_MIX[dateTok_(r['명단 제목'])];   // A·B묶음 섞인 기대평 날은 건수를 직접 셈 (10/26)
+    sh.getRange(rr, 1, 1, 5).setValues([[r['진행일'], String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''), dashStatus_(r), isExpect_(r) ? EXP_LINKS.length * 15 : ((Number(r['총건수']) || 0) * per || ''), (mixDay ? expCount_(r, Number(r['목표인원']) || 0, allRuns) : (Number(r['목표인원']) || 0) * per) || r['목표인원']]]);
     const w = windowOf_(allRuns, r);
     const ts = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A' + x.start + ':A') + ')';
     // 명단 시트 하나를 여러 날이 같이 쓰면 그날 몫(진행일 0시 ~ 다음 진행 0시)만 셈
@@ -8174,7 +8174,7 @@ function expAnswers_(r, runs) {
   return out;
 }
 // 방제 끝 숫자: 기대평은 사람 × 건수, 나머지는 사람 수 (월급시트 수량·총액도 기대평은 건수)
-function titleCount_(r, n) { return isExpect_(r) ? expCount_(r, n) : n; }   // 장바구니건도 방 제목은 사람 수 (사용자 10/28)
+function titleCount_(r, n) { return isExpect_(r) ? expCount_(r, n) : n * cartN_(r); }   // 장바구니건 방 제목 = 물건 수 (사람 × 상품 수, 사용자 10/28)
 // 장바구니건 상품 수 (아니면 1)
 function cartN_(r) { try { return Number(PropertiesService.getScriptProperties().getProperty('CART_' + (r && r['시트ID']))) || 1; } catch (e) { return 1; } }
 function setupExpectOnce_() {
