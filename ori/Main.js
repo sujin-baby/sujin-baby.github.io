@@ -1372,7 +1372,7 @@ function cp(id){var t=document.getElementById(id||'notice');t.select();
 function go(){
   var d={daily:document.getElementById('daily').value.trim(),title:document.getElementById('title').value.trim(),type:document.getElementById('type').value,
     takdae:document.getElementById('takdae').checked,realship:document.getElementById('realship').checked,
-    platform:document.getElementById('platform').value,desc:document.getElementById('desc').value,fname:window.__FNAME||'',k:window.__K||'',n:window.__N||'',opts:window.__OPTS||'',shop:window.__SHOP||'',slot:window.__SLOT||'',photo:window.__PHOTO||'',date:window.__DATE||'',plan:window.__PLAN||'',slot2:window.__SLOT2||'',day:window.__DAY||'',total:window.__TOTAL||'',room:window.__ROOM||'',croom:window.__CROOM||'',rv:window.__RV||''};
+    platform:document.getElementById('platform').value,desc:document.getElementById('desc').value,fname:window.__FNAME||'',k:window.__K||'',n:window.__N||'',opts:window.__OPTS||'',shop:window.__SHOP||'',slot:window.__SLOT||'',photo:window.__PHOTO||'',date:window.__DATE||'',plan:window.__PLAN||'',slot2:window.__SLOT2||'',day:window.__DAY||'',total:window.__TOTAL||'',room:window.__ROOM||'',croom:window.__CROOM||'',rv:window.__RV||'',cart:window.__CART||''};
   if(!d.title){document.getElementById('msg').textContent='명단 제목을 넣어 주세요.';return;}
   document.getElementById('go').disabled=true;
   var t0=Date.now(),tick=function(){var s=Math.round((Date.now()-t0)/1000);document.getElementById('msg').textContent='만드는 중이에요… '+s+'초\\n(보통 30초~1분. 15분 자동 확인이 돌고 있으면 그게 멈출 때까지 1~2분 더 걸릴 수 있어요. 창을 닫지 마세요)';};
@@ -1618,7 +1618,7 @@ function doGet(e) {
     delete p.z64;
   }
   // 생성기 버튼으로 열면(auto=1) 값이 다 채워진 채로 바로 만들기 실행. 같은 요청ID는 한 번만 만들어짐
-  const pre = '<script>window.__N=' + JSON.stringify(p.n || '') + ';window.__ROOM=' + JSON.stringify(p.room || '') + ';window.__DATE=' + JSON.stringify(p.date || '') + ';window.__SHOP=' + JSON.stringify(p.shop || '') + ';window.__OPTS=' + JSON.stringify(p.opts || '') + ';window.__SLOT=' + JSON.stringify(p.slot || '') + ';window.__PHOTO=' + JSON.stringify(p.photo || '') + ';window.__PLAN=' + JSON.stringify(p.plan || '') + ';window.__SLOT2=' + JSON.stringify(p.slot2 || '') + ';window.__DAY=' + JSON.stringify(p.day || '') + ';window.__TOTAL=' + JSON.stringify(p.total || '') + ';window.__CROOM=' + JSON.stringify(p.croom || '') + ';window.__RV=' + JSON.stringify(p.rv || '') + ';window.__AUTO=' + (p.auto === '1' && p.title ? 'true' : 'false') + ';</' + 'script>';
+  const pre = '<script>window.__CART=' + JSON.stringify(p.cart || '') + ';window.__N=' + JSON.stringify(p.n || '') + ';window.__ROOM=' + JSON.stringify(p.room || '') + ';window.__DATE=' + JSON.stringify(p.date || '') + ';window.__SHOP=' + JSON.stringify(p.shop || '') + ';window.__OPTS=' + JSON.stringify(p.opts || '') + ';window.__SLOT=' + JSON.stringify(p.slot || '') + ';window.__PHOTO=' + JSON.stringify(p.photo || '') + ';window.__PLAN=' + JSON.stringify(p.plan || '') + ';window.__SLOT2=' + JSON.stringify(p.slot2 || '') + ';window.__DAY=' + JSON.stringify(p.day || '') + ';window.__TOTAL=' + JSON.stringify(p.total || '') + ';window.__CROOM=' + JSON.stringify(p.croom || '') + ';window.__RV=' + JSON.stringify(p.rv || '') + ';window.__AUTO=' + (p.auto === '1' && p.title ? 'true' : 'false') + ';</' + 'script>';
   const fill = pre + '<script>window.__K=' + JSON.stringify(CONFIG.KEY) + ';window.__FNAME=' + JSON.stringify(p.fname || '') + ';(function(){var p=' + JSON.stringify(p).replace(/</g, '\\u003c') + ';var $=function(i){return document.getElementById(i)};if(p.title)$("title").value=p.title;if(p.daily)$("daily").value=p.daily;if(p.desc)$("desc").value=p.desc;if(p.type)$("type").value=p.type;if(p.platform)$("platform").value=p.platform;$("takdae").checked=p.takdae==="1";$("realship").checked=p.realship==="1";autoGo();})();</' + 'script>';
   return HtmlService.createHtmlOutput(DIALOG_HTML + fill).setTitle('새 진행 만들기').addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
@@ -3002,6 +3002,7 @@ function checkFullInner_() {
   if (!props.getProperty('TUMBRV_V1')) try { tumbRvOnce_(); } catch (e) { note_('텀블러 리뷰 설정 실패: ' + e); }
   if (!props.getProperty('EXPWHO1029_V1')) try { expWho1029Once_(); } catch (e) { note_('기대평 10.29 이름 넣기 실패: ' + e); }
   if (!props.getProperty('EXPWHO1029_V2')) { props.deleteProperty('EXPWHO1029_V1'); props.setProperty('EXPWHO1029_V2', '1'); }   // 10.29 B: '.' → 김혜란 (11.5 공지 다시)
+  if (!props.getProperty('SALAD1028_V1')) try { salad1028Once_(); } catch (e) { note_('유러피안샐러드외 장바구니 고치기 실패: ' + e); }
   if (!props.getProperty('OPTPRICE_SEED_V1')) try { optPriceSeedOnce_(); } catch (e) { note_('옵션 가격 기억 실패: ' + e); }
   if (!props.getProperty('PAYRETRO_V2')) try { payRetro2Once_(); } catch (e) { note_('양배추 결제금액 다시 보기 실패: ' + e); }
   if (!props.getProperty('PAYRETRO_V1')) try { payRetroOnce_(); } catch (e) { note_('지난 결제금액 다시 보기 실패: ' + e); }
@@ -8849,6 +8850,23 @@ function expWho1029Once_() {
     if (t !== String(v[4])) { obSet_(ob, v[0], 5, t); log.push('10.29 대기 공지'); }
   });
   note_('✓ 기대평 10.29·11.5 이름: ' + (log.join(', ') || '바꿀 것 없음'));
+}
+// (10/28 한 번, 사용자 요청) #10.28 유러피안샐러드외: 장바구니건(3종)인데 장바구니 표시가 서버까지 안 와서 방제 20·결제금액 10,380원으로 봄
+//  → 장바구니 3, 방제·명단 시트·월급시트 60, 잘못 들어간 결제금액 확인 할 일(대기) 지움
+function salad1028Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('SALAD1028_V1')) return;
+  props.setProperty('SALAD1028_V1', '1');
+  const r = readRuns_().filter(function (x) { return /^#10\.28 유러피안샐러드외/.test(String(x['명단 제목'])) && x['시트ID']; })[0];
+  if (!r) { note_('⚠ 유러피안샐러드외 진행을 못 찾음'); return; }
+  props.setProperty('CART_' + r['시트ID'], '3');
+  try { const pk = 'OPTPRICE_' + r['시트ID'], mp = JSON.parse(props.getProperty(pk) || '{}'); Object.keys(mp).forEach(function (c) { if (/\+/.test(c)) mp[c] = 32020; }); props.setProperty(pk, JSON.stringify(mp)); } catch (e) {}
+  const nb = bareTitle_(r['명단 제목']).replace(/\d+\s*$/, '60');
+  const ok = renameRun_(r, nb, '장바구니 60건');
+  const ob = outboxSheet_(), ol = ob.getLastRow(), del = [];
+  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v, i) { if (v[2] === '할 일' && v[5] === '대기' && /\[결제금액 확인\] #10\.28 유러피안샐러드외/.test(String(v[4])) && /공지 10,380원/.test(String(v[4]))) del.push(i + 2); });
+  for (let j = del.length - 1; j >= 0; j--) ob.deleteRow(del[j]);
+  note_('✓ 유러피안샐러드외 장바구니: ' + (ok ? '방제 ' + nb : '방제 그대로') + ', 잘못된 결제금액 확인 ' + del.length + '줄 지움');
 }
 // (10/27 한 번) 지금 배정 탭에 남은 줄의 옵션 가격을 시트마다 기억 (앞으로는 배정을 쓸 때마다 기억)
 function optPriceSeedOnce_() {
