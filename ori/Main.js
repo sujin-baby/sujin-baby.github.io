@@ -326,7 +326,7 @@ function renameRun_(r, title, why) {
   if (twin) { note_('⛔ 방제 안 바꿈: ' + bareTitle_(r['명단 제목']) + ' → ' + title + ' (같은 날짜 진행 ' + bareTitle_(twin['명단 제목']) + '이 아직 있어서)' + (why ? ' [' + why + ']' : '')); return false; }
   note_('방제 바꿈' + (why ? '(' + why + ')' : '') + ': ' + bareTitle_(r['명단 제목']) + ' → ' + title);
   const cm = title.match(/(\d+)\s*$/);
-  if (cm && Number(cm[1]) > 0 && !isExpect_(r)) { setRun_(r.row, '목표인원', Number(cm[1])); r['목표인원'] = Number(cm[1]); }   // 기대평은 방제 끝이 건수(사람 × 27)
+  if (cm && Number(cm[1]) > 0 && !isExpect_(r)) { const g = Math.round(Number(cm[1]) / cartN_(r)); setRun_(r.row, '목표인원', g); r['목표인원'] = g; }   // 장바구니건은 방제 끝이 물건 수(사람 × 상품 수)   // 기대평은 방제 끝이 건수(사람 × 27)
   const nick = (String(r['명단 제목']).match(/\s*\([^)]*\)\s*$/) || [''])[0];
   const oldRoom = String(r['카톡방'] || bareTitle_(r['명단 제목']));
   const oldTitle = String(r['명단 제목']);
@@ -1196,8 +1196,9 @@ function normalizeRuns_() {
     if (!String(r['캠페인']).trim() && r['명단 제목']) { r['캠페인'] = campOf_(r['명단 제목']); setRun_(r.row, '캠페인', r['캠페인']); }
     // 방제 끝 숫자 = 그날 목표 인원 (끝 숫자를 고치면 목표도 같이. 다 찼으면 조용히 마감 표시)
     const tm = bareTitle_(r['명단 제목']).match(/(\d+)\s*$/);
-    if (tm && Number(tm[1]) > 0 && Number(r['목표인원']) !== Number(tm[1]) && r['진행 상태'] !== '종료' && !isExpect_(r)) {   // 기대평은 방제 끝이 건수
-      r['목표인원'] = Number(tm[1]); setRun_(r.row, '목표인원', r['목표인원']);
+    const tmN = tm ? Math.round(Number(tm[1]) / cartN_(r)) : 0;   // 장바구니건은 방제 끝이 물건 수 → 사람 수로
+    if (tm && tmN > 0 && Number(r['목표인원']) !== tmN && r['진행 상태'] !== '종료' && !isExpect_(r)) {   // 기대평은 방제 끝이 건수
+      r['목표인원'] = tmN; setRun_(r.row, '목표인원', r['목표인원']);
       if (!r['마감 시각'] && Number(r['인원']) >= r['목표인원'] && pastEnd_(r)) setRun_(r.row, '마감 시각', new Date());
     }
     // 진행목록에서 명단 제목 끝 숫자를 고치면 카톡방도 같이
