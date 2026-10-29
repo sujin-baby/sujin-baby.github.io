@@ -381,8 +381,13 @@ function renameRunFiles_(r, oldN, newN) {
 // 의뢰서 하나 = 명단 시트(폼) 하나. 날짜마다 카톡방만 새로 만들고 같은 폼, 같은 명단 시트에 이어서 받음
 // 같은 명단 시트를 쓰는 진행들 (진행일 순)
 function siblings_(runs, r) {
-  return runs.filter(function (x) { return x['시트ID'] && String(x['시트ID']) === String(r['시트ID']) && x['진행일'] instanceof Date; })
-    .sort(function (a, b) { return (a['진행일'] - b['진행일']) || (a.row - b.row); });
+  return runs.filter(function (x) {
+    if (!x['시트ID'] || String(x['시트ID']) !== String(r['시트ID']) || !(x['진행일'] instanceof Date)) return false;
+    if (x.row === r.row) return true;
+    // 취소(종료)되었고 실적이 없는 진행은 제외 (10/30 밀크텐정 11.02 취소 건이 남아 마지막 표시를 막은 문제)
+    if (x['진행 상태'] === '종료' && !(Number(x['인원']) > 0)) return false;
+    return true;
+  }).sort(function (a, b) { return (a['진행일'] - b['진행일']) || (a.row - b.row); });
 }
 
 // 진행 안 하는 날: 토, 일, 공휴일 (대체공휴일 포함). 자동으로 만드는 다음 날·추가 모집·다음 일차는 이 날을 건너뜀.
@@ -3280,7 +3285,7 @@ function listMsgText_(r) {
   let tail = '';
   try {
     const runs = readRuns_(), me = runs.filter(function (x) { return x.row === r.row; })[0] || r;
-    const sib = siblings_(runs, me), total = Number(me['총건수']) || 0;
+    const sib = siblings_(runs, me), total = Number(me['총건수']) || sib.reduce(function (a, x) { return a + (Number(x['목표인원']) || 0); }, 0);
     const got = sib.reduce(function (a, x) { return a + (Number(x['인원']) || 0); }, 0);
     if (total && sib.length && sib[sib.length - 1].row === me.row && got >= total) {
       const md = function (x) { return (x['진행일'].getMonth() + 1) + '.' + String(x['진행일'].getDate()).padStart(2, '0'); };
