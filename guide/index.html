@@ -1089,11 +1089,20 @@ button.ghost { background: #fff; color: var(--ink); }
     r.takdae = /^\s*Y/i.test(f.takdaeYN || "");
     // 검색 키워드: "모릅니다", 빈칸이면 비워 두고 상품명으로 추천. "A/ B, C" 이면 A가 대표, B·C는 서브
     // <<실링팬>>, [실링팬], "실링팬" 같은 꾸밈 기호는 빼고 (사용자 요청 10/21)
-    const kwRaw = ((f.keyword || "").split("\n").map(x => x.trim()).filter(Boolean)[0] || "").replace(/[<>«»《》〈〉【】\[\]"'“”‘’]/g, "").trim();
+    let kwRaw = ((f.keyword || "").split("\n").map(x => x.trim()).filter(Boolean)[0] || "").replace(/[<>«»《》〈〉【】\[\]"'“”‘’]/g, "").trim();
+    if (UNKNOWN.test(kwRaw) || !kwRaw) {
+      // 의뢰서에 검색 키워드가 없으면 쿠팡 URL의 q= 파라미터에서 추출
+      const uq = text.match(/[?&]q=([^&\s]+)/i);
+      if (uq) try { const dec = decodeURIComponent(uq[1]).trim(); if (dec && !UNKNOWN.test(dec)) kwRaw = dec; } catch(e) {}
+    }
     const kwParts = UNKNOWN.test(kwRaw) ? [] : kwRaw.split(/[\/,，]/).map(x => x.trim()).filter(Boolean);
     r.keyword = kwParts[0] || "";
     r.kwAlts = kwParts.slice(1);
-    r.rank = (f.rank || "").replace(/\n/g, " ");
+    r.rank = (f.rank || "").replace(/\n/g, " ").trim();
+    if (!r.rank || UNKNOWN.test(r.rank) || /비워|모르/.test(r.rank)) {
+      const urk = text.match(/[?&](?:searchRank|rank)=(\d+)/i);
+      if (urk) r.rank = urk[1] + "위";
+    }
     r.total = ((f.total || "").match(/\d+/) || [""])[0];
     r.photo = (f.photo || "").replace(/\n/g, " ");
     // '포토 제공 6/ 없음 4' = 업체 사진 받아 쓰는 포토 6(포토대기) + 텍스트리뷰 4. 날마다 한 종류씩 나눠 줌 (10/21 실링팬)
@@ -1129,6 +1138,15 @@ button.ghost { background: #fff; color: var(--ink); }
       while ((um = re.exec(l))) { urls.push({ label: l.slice(last, um.index).replace(/[:：\s]+$/, "").trim(), url: um[1] }); last = re.lastIndex; }
     });
     r.url = urls.map(u => (u.label ? u.label + " " : "") + u.url).join("\n");
+    // 구매옵션에 상품 전체 제목이 함께 들어온 경우 분리 ("엔라지맨 밀크텐정 ... 2개, 30정")
+    const optRaw = String(f.option || "").trim();
+    if (optRaw.length > 20 && /[\s,]\d+\s*개/.test(optRaw)) {
+      const mOpt = optRaw.match(/^(.*?)[,\s]+(\d+\s*개.*)$/);
+      if (mOpt) {
+        if (!r.pname) r.pname = mOpt[1].trim();
+        f.option = mOpt[2].trim();
+      }
+    }
     // '소프트그레이 L 남성용, M 여성용 리뷰어 선택' → 옵션 2개(소프트그레이 L 남성용 / 소프트그레이 M 여성용), '리뷰어 선택'은 빼기 (10/22)
     { const o0 = String(f.option || ""), pick = /(리뷰어|구매자|체험단)\s*(선택|자율|맘대로)|중\s*(택\s*1|선택)/;
       if (pick.test(o0) && o0.indexOf("\n") === -1 && /,/.test(o0)) {
@@ -1290,17 +1308,21 @@ button.ghost { background: #fff; color: var(--ink); }
     if (brand) toks = toks.slice(1);
     const spec = t => /^\d|\d+(mg|g|kg|ml|l|개|캡슐|정|매|p|도|cm|mm|인치|w)\b|x\d/i.test(t) && !/^[가-힣a-z]+\d+$/i.test(t);
     const isMod = t => /(는|한|된|용)$/.test(t) && t.length <= 4;
-    const cand = toks.filter(t => !spec(t) && !KW_STOP.test(t) && !isMod(t) && t.length >= 2);
+    // 성분명, 화학기호, 영문-숫자 혼합 약어(IGF-1, CBP, NMN, DHA 등)는 키워드 제외
+    const isCode = t => /^[A-Za-z0-9\-_]+$/i.test(t) || /단백질|추출물|성분|함유|유래|농축|영양제|포뮬러/.test(t);
+    const cand = toks.filter(t => !spec(t) && !KW_STOP.test(t) && !isMod(t) && !isCode(t) && t.length >= 2);
     const mods = toks.filter(t => /용$/.test(t) && t.length <= 4);
-    // 쿠팡 상품명 " - 텀블러/..." 뒤 말이 상품 종류인 경우가 많음
     const cat = dash[1] ? dash[1].split(/[\/,]/)[0].trim() : "";
-    // 끝말이 다른 단어와 같은 것(휴대폰거치대·핸드폰거치대) → 그게 상품
+    // 진짜 한글 상품 명사 우선 (정, 환, 거치대, 텀블러, 마사지기 등)
+    const NOUN_SUFFIX = /(정|환|캡슐|스틱|분말|가루|원액|즙|차|오일|세럼|크림|로션|샴푸|패치|패드|거치대|매트|선풍기|텀블러|청소기|마사지기|워시|토너|앰플|마스크|비누|티슈|세제|치약|칫솔|홀더|걸이|선반|트레이|보틀|쿠션|방석|베개|슬리퍼|양말|장갑|모자|밴드)$/;
     let main = "";
     const tail = t => t.slice(-3);
     const rep = cand.filter(t => t.length >= 4 && cand.some(u => u !== t && u.length >= 4 && tail(u) === tail(t)));
-    if (rep.length) main = rep[0];
+    const nounMatch = cand.find(t => NOUN_SUFFIX.test(t));
+    if (nounMatch) main = nounMatch;
+    else if (rep.length) main = rep[0];
     else if (cat && cat.length >= 2 && !spec(cat) && !/일반|기타/.test(cat)) main = cat;
-    else main = cand.filter(t => !/^[A-Za-z0-9]+$/.test(t)).slice(0, 4).pop() || cand.slice(0, 4).pop() || toks[0] || "";   // 영문 약자(EMS·LED)는 대표 키워드가 아님 (10/28 '#택10.28 EMS')
+    else main = cand.find(t => /^[가-힣]{2,}$/.test(t) && !/남성|여성|활력/.test(t)) || cand[0] || toks[0] || "";
     if (force) { force = String(force).trim(); if (force.indexOf(" ") === -1) main = force; }
     const mainAlts = rep.filter(t => t !== main);
     const subs = [];
