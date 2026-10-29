@@ -3980,8 +3980,24 @@ function obSetInner_(ob, id, col, val) {
 function queueMsgInner_(room, msg, kind) {
   if (!msg) return;
   try {
-    // 최신 메시지가 맨 위
     const ob = outboxSheet_();
+    const ol = ob.getLastRow();
+    if (ol >= 2) {
+      const existing = ob.getRange(2, 1, ol - 1, 6).getValues();
+      const trimMsg = String(msg || '').trim();
+      // 1. 이미 동일한 내용의 대기 메시지가 있으면 중복 추가 금지
+      const hasPending = existing.some(function (v) {
+        return v[2] === (kind || '') && String(v[3] || '') === String(room || '') && String(v[4] || '').trim() === trimMsg && (v[5] === '대기' || v[5] === '방 못 찾음');
+      });
+      if (hasPending) return;
+
+      // 2. 이미 보낸 메시지(보냄) 중에서도 완전히 동일한 방/종류/내용인 경우 중복 재투입 방지
+      const hasSent = existing.some(function (v) {
+        return v[2] === (kind || '') && String(v[3] || '') === String(room || '') && String(v[4] || '').trim() === trimMsg && v[5] === '보냄';
+      });
+      if (hasSent) return;
+    }
+    // 최신 메시지가 맨 위
     ob.insertRowBefore(2);
     // 포토 가이드: 보낼 날짜 대신 '포토전달대기' (사진 받은 뒤 보냄, 맨 위에 보이게)
     ob.getRange(2, 1, 1, 6).setValues([[newObId_(), kind === '포토 가이드' ? '포토전달대기' : sendDate_(room, msg, kind), kind || '', String(room || ''), String(msg), '대기']]);
@@ -5513,7 +5529,7 @@ function reviewDone_(runs) {
       if (allDone && !props.getProperty(rk)) {
         props.setProperty(rk, '1');
         // 리뷰이미지 폴더가 있으면 보고 글은 압축 파일이 생길 때 링크와 같이 넣음 (먼저 보내고 나중에 링크 글이 또 가지 않게, 10/26)
-        if (!init && !capF) queueMsg_('사장님', rvReportLine_(name), '리뷰 보고');
+        if (!init && !capF) queueMsg_('사장님', rvReportMsg_('', mine, name), '리뷰 보고');
         if (!init) note_('✓ 의뢰 리뷰 다 끝남: ' + name);
       }
       // 의뢰 리뷰가 다 끝나면 한 번: 리뷰 캡처를 의뢰 폴더 '리뷰이미지'에 전부 올리라는 할 일 (폴더 링크, 사용자 요청 10/26 '한 캠페인이 모두 완료되면 그때 취합')
@@ -5541,7 +5557,34 @@ function rvFolder_(mine, props, sid) {
   return { parent: parent, img: img };
 }
 const RV_TYPES = ['포토', '텍스트', '별점'];
-// 사장님 리뷰 완료 보고 첫 줄 (명단 시트 이름에서 예전 '(응답)'은 뺌)
+// 사장님 리뷰 완료 보고 문구 (사용자 요청: 구글드라이브 폴더 링크 + 날짜 캠페인명 + 총 N건 리뷰 취합본 전달드립니다!)
+function rvReportMsg_(link, mine, name) {
+  const dList = (mine || []).map(function (r) {
+    return dateTok_(r['명단 제목']) || (r['진행일'] instanceof Date ? ((r['진행일'].getMonth() + 1) + '.' + r['진행일'].getDate()) : '');
+  }).filter(Boolean);
+  const uniqD = [];
+  dList.forEach(function (d) { if (uniqD.indexOf(d) === -1) uniqD.push(d); });
+  uniqD.sort(function (a, b) {
+    const ap = a.split('.').map(Number), bp = b.split('.').map(Number);
+    return (ap[0] * 100 + ap[1]) - (bp[0] * 100 + bp[1]);
+  });
+  const dateStr = uniqD.length > 1 ? (uniqD[0] + '~' + uniqD[uniqD.length - 1]) : (uniqD[0] || '');
+
+  const first = (mine && mine[0]) || {};
+  let tag = '';
+  if (first['택대'] === 'Y' || /#?택/.test(String(first['명단 제목'] || ''))) tag = '#택 ';
+  else if (first['실배송'] === 'Y' || /#?실/.test(String(first['명단 제목'] || ''))) tag = '#실 ';
+
+  const camp = campOf_(first['명단 제목'] || name);
+  const campTitle = (dateStr ? dateStr + ' ' : '') + tag + camp;
+
+  const total = (mine || []).reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0) || (mine || []).reduce(function (s, x) { return s + (Number(x['인원']) || 0); }, 0);
+
+  const lines = [];
+  if (link) lines.push(String(link).trim(), '');
+  lines.push(campTitle.trim(), '총 ' + total + '건 리뷰 취합본 전달드립니다!');
+  return lines.join('\n');
+}
 function rvReportLine_(name) { return '안녕하세요 ' + String(name).replace(/\s*\(응답\)\s*$/, '').trim() + ' 리뷰완료되어 보고드립니다 !'; }
 function rvTypeOf_(folderName) { const m = String(folderName || '').trim().match(/^(포토|텍스트|별점)/); return m ? m[1] : ''; }
 // 의뢰서(생성기 리뷰 정보 RV_)의 종류별 개수 → 압축 개수와 다르면 할 일에 알림. 모르면 null
@@ -5664,11 +5707,17 @@ function rvZip_(f, name, props, sid, mine) {
   props.setProperty('RVZIP_' + sid, sig);   // 압축을 다 만든 뒤에 기억 (중간에 끊기면 다음 확인에서 다시)
   props.setProperty('RVZIPURL_' + sid, zip.getUrl());
   const cntTxt = cnt ? rvCntText_(cnt) : '개수 모름';
-  // 사장님께 보낼 글 하나: 리뷰 완료 보고 + 압축 파일 링크 (사용자 요청 10/26 '하나로 붙여'). 안 보낸 보고 글이 있으면 거기에 링크를 붙이거나 새 링크로 바꿈
-  const line = rvReportLine_(name), msg = line + '\n' + zip.getUrl();
+  // 사장님께 보낼 글 하나: 리뷰 완료 보고 + 폴더/압축 파일 링크 (사용자 요청: 폴더 링크 + 날짜 캠페인명 + 총 N건 리뷰 취합본 전달드립니다!)
+  const link = (f && f.img) ? f.img.getUrl() : zip.getUrl();
+  const msg = rvReportMsg_(link, mine, name);
   const ob = outboxSheet_(), ol = ob.getLastRow();
   let done = false;
-  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (!done && v[2] === '리뷰 보고' && v[5] !== '보냄' && String(v[4]).split('\n')[0].replace(/\s*\(응답\)/, '') === line) { obSet_(ob, v[0], 5, msg); done = true; } });
+  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
+    if (!done && v[2] === '리뷰 보고' && v[5] !== '보냄' && (/리뷰\s*취합본\s*전달드립니다/.test(String(v[4])) || /리뷰완료되어 보고드립니다/.test(String(v[4])))) {
+      obSet_(ob, v[0], 5, msg);
+      done = true;
+    }
+  });
   if (!done) queueMsg_('사장님', msg, '리뷰 보고');
   if (warn.length) queueMsg_('내 할 일', '[' + base + '] 리뷰 압축 확인 (사진 ' + files.length + '장 · ' + cntTxt + ')\n' + warn.join('\n'), '할 일');
   note_('✓ 리뷰 압축: ' + zipName + ' (사진 ' + files.length + '장 · ' + cntTxt + (from ? ', ' + from + ' 기준' : '') + ')' + (warn.length ? ' ' + warn.join(' ') : ''));
