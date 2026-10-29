@@ -2277,18 +2277,30 @@ const NORM = function (r) { return 'LOWER(REGEXREPLACE(TO_TEXT(' + r + '),"\\(\\
 // 옵션 확인 수식 (한눈에 탭 명단 옆 칸). nkR, okR: 닉네임, 옵션 칸 범위, rows: 줄 수, sid: 명단 시트ID
 //  관리 시트 '배정' 탭에서 같은 명단 시트 줄만 가져와 비교. 닉네임과 옵션은 띄어쓰기, 대소문자 무시
 //  한 사람이 두 계정이면 계정수 2, 또는 옵션마다 한 줄씩
-function checkFormula_(nkR, okR, rows, sid, title) {
+function checkFormula_(nkR, okR, rows, sid, title, nmR) {
   const A = "'" + ASSIGN_TAB + "'!";
   const cond = title ? A + 'A2:A="' + String(title).replace(/"/g, '""') + '"' : A + 'G2:G="' + sid + '"';   // 그 진행(날짜) 배정만
   const f = function (c) { return 'FILTER(' + A + c + '2:' + c + ',' + cond + ')'; };
+  if (!nmR) {
+    return '=IFERROR(LET(' +
+      'an,ARRAYFORMULA(' + NORM(f('B')) + '),ao,ARRAYFORMULA(' + NORM(f('H')) + '),ac,ARRAYFORMULA(IF(' + f('D') + '="",1,IFERROR(VALUE(' + f('D') + '),1))),' +
+      'nk,ARRAYFORMULA(' + NORM(nkR) + '),ok,ARRAYFORMULA(' + NORM(okR) + '),ix,SEQUENCE(' + rows + '),' +
+      'MAP(nk,ok,ix,LAMBDA(nn,oo,ii,IF(nn="","",LET(' +
+        'hasn,SUMPRODUCT((an=nn)*1),' +
+        'got,SUMPRODUCT((an=nn)*(((ao=oo)+(ao=""))>0)*ac),' +
+        'used,SUMPRODUCT((ix<=ii)*(nk=nn)*(ok=oo)),' +
+        'canc,SUMPRODUCT((an=nn)*(ac=0)),' +
+        'IF(hasn=0,"닉네임 확인",IF(AND(got=0,canc>0),"취소한 사람",IF(got=0,"옵션 틀림",IF(used>got,"초과 구매","✔"))))))))),"")';
+  }
   return '=IFERROR(LET(' +
     'an,ARRAYFORMULA(' + NORM(f('B')) + '),ao,ARRAYFORMULA(' + NORM(f('H')) + '),ac,ARRAYFORMULA(IF(' + f('D') + '="",1,IFERROR(VALUE(' + f('D') + '),1))),' +
-    'nk,ARRAYFORMULA(' + NORM(nkR) + '),ok,ARRAYFORMULA(' + NORM(okR) + '),ix,SEQUENCE(' + rows + '),' +
-    'MAP(nk,ok,ix,LAMBDA(nn,oo,ii,IF(nn="","",LET(' +
-      'hasn,SUMPRODUCT((an=nn)*1),' +
-      'got,SUMPRODUCT((an=nn)*(((ao=oo)+(ao=""))>0)*ac),' +
-      'used,SUMPRODUCT((ix<=ii)*(nk=nn)*(ok=oo)),' +
-      'canc,SUMPRODUCT((an=nn)*(ac=0)),' +
+    'nk,ARRAYFORMULA(' + NORM(nkR) + '),nm,ARRAYFORMULA(' + NORM(nmR) + '),ok,ARRAYFORMULA(' + NORM(okR) + '),ix,SEQUENCE(' + rows + '),' +
+    'MAP(nk,nm,ok,ix,LAMBDA(nn,mm,oo,ii,IF(AND(nn="",mm=""),"",LET(' +
+      'key,IF(SUMPRODUCT((an=nn)*1)>0,nn,IF(SUMPRODUCT((an=mm)*1)>0,mm,nn)),' +
+      'hasn,SUMPRODUCT((an=key)*1),' +
+      'got,SUMPRODUCT((an=key)*(((ao=oo)+(ao=""))>0)*ac),' +
+      'used,SUMPRODUCT((ix<=ii)*((nk=key)+(nm=key)>0)*(ok=oo)),' +
+      'canc,SUMPRODUCT((an=key)*(ac=0)),' +
       'IF(hasn=0,"닉네임 확인",IF(AND(got=0,canc>0),"취소한 사람",IF(got=0,"옵션 틀림",IF(used>got,"초과 구매","✔"))))))))),"")';
 }
 
@@ -2318,18 +2330,23 @@ function assignSheet_() {
 }
 
 // 배정 줄의 '산 수' 수식: 그 명단 시트에서 이 진행 기간에 이 닉네임(+옵션)으로 낸 응답 수
+//  (10/30 사용자 요청: 닉네임이나 수령인/계정명 둘 중 하나가 맞으면 인정)
 function boughtFormula_(row, info) {
   const imp = function (c) { return 'IMPORTRANGE("' + info.url + '","' + info.ref + c + (info.start || 2) + ':' + c + '3000")'; };
   const day = function (t) { return isFinite(t) && t > 0 ? 'DATE(' + Utilities.formatDate(new Date(t), CONFIG.TIMEZONE, 'yyyy,M,d') + ')' : (t > 0 ? '99999' : '0'); };
-  return '=IFERROR(LET(t,' + imp('A') + ',nk,' + imp(info.nick) + ',ok,' + imp(info.opt || info.nick) + ',' +
-    // 그 기간 응답에 닉네임이 하나도 없으면(닉네임 질문 전 응답) 셀 수 없어서 빈칸
-    'IF(SUMPRODUCT(ISNUMBER(t)*(t>=' + day(info.from) + ')*(t<' + day(info.to) + ')*(LEN(nk)>0))=0,"",' +
-    // 닉네임이 같거나, 배정 닉네임 뒤에 기호로 덧붙여 낸 것도 같은 사람 (10/27 '종이' → 폼 '종이/jenny', '백이왕자' → '백이왕자❤️찐쇼우쯔')
-    //  덧붙임 계산이 시트에서 오류가 나도 IFERROR로 0 → 원래(닉네임 같음) 계산은 그대로
-    'SUMPRODUCT(ISNUMBER(t)*(t>=' + day(info.from) + ')*(t<' + day(info.to) + ')*(((ARRAYFORMULA(' + NORM('nk') + ')=' + NORM('$B' + row) + ')+' +
+  const nameCol = info.name || info.nick;
+  return '=IFERROR(LET(t,' + imp('A') + ',nk,' + imp(info.nick) + ',nm,' + imp(nameCol) + ',ok,' + imp(info.opt || info.nick) + ',' +
+    // 그 기간 응답에 닉네임과 이름이 모두 없으면 셀 수 없어서 빈칸
+    'IF(SUMPRODUCT(ISNUMBER(t)*(t>=' + day(info.from) + ')*(t<' + day(info.to) + ')*((LEN(nk)>0)+(LEN(nm)>0)>0))=0,"",' +
+    // 닉네임이 같거나, 수령인(계정명)이 같거나, 배정 닉네임 뒤에 기호로 덧붙여 낸 것도 같은 사람
+    //  덧붙임 계산이 시트에서 오류가 나도 IFERROR로 0 → 원래(닉네임/이름 같음) 계산은 그대로
+    'SUMPRODUCT(ISNUMBER(t)*(t>=' + day(info.from) + ')*(t<' + day(info.to) + ')*' +
+      '(((ARRAYFORMULA(' + NORM('nk') + ')=' + NORM('$B' + row) + ')+' +
+      '(ARRAYFORMULA(' + NORM('nm') + ')=' + NORM('$B' + row) + ')+' +
       'IFERROR(ARRAYFORMULA((LEFT(' + NORM('nk') + ',LEN(' + NORM('$B' + row) + '))=' + NORM('$B' + row) + ')*(LEN(' + NORM('nk') + ')>LEN(' + NORM('$B' + row) + '))*(LEN(' + NORM('$B' + row) + ')>0)*' +
       'REGEXMATCH(MID(' + NORM('nk') + ',LEN(' + NORM('$B' + row) + ')+1,1),"[^가-힣ㄱ-ㅎa-z0-9]")),0))>0)*' +
-    '(((ARRAYFORMULA(' + NORM('ok') + ')=' + NORM('$H' + row) + ')+($H' + row + '=""))>0)))),"")';
+      '(((ARRAYFORMULA(' + NORM('ok') + ')=' + NORM('$H' + row) + ')+($H' + row + '=""))>0)' +
+    '))),"")';
 }
 
 function needFormula_(row) {
@@ -2355,9 +2372,11 @@ function rawInfo0_(sheetId, formId) {
   }
   // 닉네임 질문이 없는 예전 폼은 사람별 확인은 못 하고(수취인 이름은 공지 이름과 다름) 옵션별 인원만 셈
   const n = head.findIndex(function (h) { return MATCH.nick.test(h); }) + 1;
+  const nameCol = head.findIndex(function (h) { return MATCH.name.test(h) && !MATCH.nick.test(h) && !/예금주/.test(h); }) + 1;
   const pc = head.findIndex(function (h) { return /결제\s*금액|금액|가격/.test(h); }) + 1;
   const o = head.findIndex(function (h) { return MATCH.opt.test(h) && !MATCH.nick.test(h); }) + 1;
-  return { raw: raw, src: src, start: start, head: head, nickCol: n, optCol: o, priceCol: pc, nick: n ? colLetter_(n) : '', opt: o ? colLetter_(o) : '',
+  return { raw: raw, src: src, start: start, head: head, nickCol: n, nameCol: nameCol, optCol: o, priceCol: pc,
+    nick: n ? colLetter_(n) : '', name: nameCol ? colLetter_(nameCol) : '', opt: o ? colLetter_(o) : '',
     ref: "'" + src.getName().replace(/'/g, "''") + "'!", url: 'https://docs.google.com/spreadsheets/d/' + sheetId + '/edit' };
 }
 
@@ -2464,7 +2483,11 @@ function notBought_(runs, r) {
     st.mine.forEach(function (x) {
       if (x[3] !== '' && Number(x[3]) === 0) return;
       const need = Number(x[3]) || 1;
-      const got = st.data.filter(function (y) { return k(y[st.info.nickCol - 1]) === k(x[1]) && (!String(x[7]).trim() || !st.info.optCol || k(y[st.info.optCol - 1]) === k(x[7])); }).length;
+      const got = st.data.filter(function (y) {
+        const nkMatch = k(y[st.info.nickCol - 1]) === k(x[1]);
+        const nmMatch = st.info.nameCol ? k(y[st.info.nameCol - 1]) === k(x[1]) : false;
+        return (nkMatch || nmMatch) && (!String(x[7]).trim() || !st.info.optCol || k(y[st.info.optCol - 1]) === k(x[7]));
+      }).length;
       if (got < need) out.push([String(x[1]).trim(), need - got, String(x[2])]);
     });
     return out;
@@ -8110,7 +8133,7 @@ function buildDashboard_(force) {
     if (x.chk) {
       const L = function (k) { return colLetter_(k) + r0 + ':' + colLetter_(k) + r1; };
       sh.getRange(top + 1, x.chk).setValue(CHECK_HEAD); void('관리 시트 배정 탭과 비교. ✔ 맞음 / 옵션 틀림 / 초과 구매 / 닉네임 확인(배정에 없음) / 취소한 사람. 배정이 없으면 빈칸');
-      sh.getRange(r0, x.chk).setFormula(checkFormula_(L(x.nick), L(x.opt), n, x.sid, String(x.runs[0]['명단 제목'])));
+      sh.getRange(r0, x.chk).setFormula(checkFormula_(L(x.nick), L(x.opt), n, x.sid, String(x.runs[0]['명단 제목']), L(2)));
       const X = colLetter_(x.chk);
       const rg = [x.nick, x.opt, x.chk].map(colRange);
       rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=OR($' + X + r0 + '="옵션 틀림",$' + X + r0 + '="초과 구매")')
