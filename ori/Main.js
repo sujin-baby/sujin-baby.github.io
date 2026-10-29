@@ -3807,10 +3807,23 @@ function sortOutbox_(sh) {
   const dk = function (x) { const t = dateTok_(x[3]) || dateTok_(String(x[4]).slice(0, 300)); if (!t) return 9999; const p = t.split('.'); return Number(p[0]) * 100 + Number(p[1]); };
   const tm = function (x) { return x[1] instanceof Date ? x[1].getTime() : 0; };
   const wait = function (x) { return x[5] === '대기' || x[5] === '방 못 찾음'; };
+  const t0 = dayStart_(today_()).getTime();
+  const prio = function (x) {
+    if (!wait(x)) return 4;   // 보냄 (맨 아래)
+    if (x[1] instanceof Date) {
+      if (x[1].getTime() >= t0) return 1;   // 오늘·앞으로 보낼 메시지 (최상단)
+      return 3;   // 지난 날짜 미처리 건
+    }
+    if (x[1] === '포토전달대기') return 2;   // 사진 도착 대기
+    return 3;
+  };
   const sorted = v.slice().sort(function (a, b) {
-    if (wait(a) !== wait(b)) return wait(a) ? -1 : 1;
-    if (wait(a)) return (tm(a) - tm(b)) || (dk(a) - dk(b));   // 보낼 날짜(B) 이른 것 먼저
-    return tm(b) - tm(a);
+    const pa = prio(a), pb = prio(b);
+    if (pa !== pb) return pa - pb;
+    if (pa === 1) return (tm(a) - tm(b)) || (dk(a) - dk(b));   // 오늘·앞으로: 이른 날짜 먼저
+    if (pa === 2) return dk(a) - dk(b);                         // 포토대기: 캠페인 일차 순
+    if (pa === 3) return (tm(b) - tm(a)) || (dk(a) - dk(b));   // 지난 건: 최근 날짜 먼저
+    return tm(b) - tm(a);                                       // 보냄: 최근 것 먼저
   });
   if (sorted.some(function (x, i) { return x[0] !== v[i][0]; })) {
     rg.setValues(sorted);
