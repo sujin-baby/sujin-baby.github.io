@@ -4785,46 +4785,140 @@ function dupList_(r) {
 
 // String.raw: 안의 \n, \. 같은 글자가 그대로 페이지 코드에 들어가게 (그냥 템플릿이면 줄바꿈으로 바뀌어 페이지 코드가 깨짐)
 const TOOLS_HTML = String.raw`
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;900&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
 <style>
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif;font-size:15px;margin:0;padding:14px;background:#f1f5f9;color:#0f172a;line-height:1.5}
-  .header{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 14px}
-  h1{font-size:20px;font-weight:800;margin:0;color:#1e1b4b;letter-spacing:-0.5px}
-  select,textarea,input{width:100%;font:inherit;font-size:15px;padding:12px;border:1.5px solid #cbd5e1;border-radius:12px;background:#fff;color:#0f172a;outline:none;transition:border-color .15s,box-shadow .15s}
-  select:focus,textarea:focus,input:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,0.15)}
-  textarea{height:150px;resize:vertical}
-  .field-label{font-size:13px;font-weight:700;color:#475569;margin-bottom:6px}
-  .card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:16px;margin:12px 0;box-shadow:0 2px 8px rgba(0,0,0,0.03)}
-  .card-hero{border:2px solid #6366f1;box-shadow:0 4px 16px rgba(99,102,241,0.12)}
-  .card h2{font-size:16px;font-weight:700;margin:0 0 6px;color:#1e1b4b}
-  .hint{color:#64748b;font-size:13px;margin:0 0 8px;line-height:1.45}
-  button{width:100%;margin-top:10px;padding:13px;border-radius:12px;border:0;font:inherit;font-weight:700;font-size:15px;cursor:pointer;transition:transform .08s,opacity .15s}
-  button:active{transform:scale(0.985)}
-  button:disabled{opacity:.5}
-  .btn-primary{background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;box-shadow:0 3px 10px rgba(79,70,229,0.25)}
-  .btn-sub{background:#e0e7ff;color:#3730a3}
-  .btn-danger{background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5}
-  .btn-outline{background:#fff;color:#4f46e5;border:1.5px solid #c7d2fe}
-  .btn-outline-danger{background:#fff;color:#b91c1c;border:1.5px solid #fecaca}
-  .btn-review{display:block;text-align:center;padding:13px;border-radius:12px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;font-weight:700;text-decoration:none;box-shadow:0 3px 10px rgba(124,58,237,0.25)}
-  .btn-review:active{transform:scale(0.985)}
-  .msg{background:#ecfdf5;border:1.5px solid #a7f3d0;border-radius:12px;padding:12px;margin:10px 0;white-space:pre-wrap;display:none;color:#065f46;font-weight:600}
-  label.row{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid #f1f5f9}
-  label.row input{width:22px;height:22px;flex:none;margin-top:2px;accent-color:#4f46e5}
-  .why{color:#dc2626;font-size:13px;font-weight:600}
-  .ok{color:#16a34a;font-weight:600}
-  .ob{border-top:1px solid #f1f5f9;padding:12px 0}
-  .ob .rm{font-weight:700;color:#312e81}.ob .kd{color:#64748b;font-size:13px;margin-left:6px;background:#f1f5f9;padding:2px 6px;border-radius:4px}
-  .ob pre{white-space:pre-wrap;word-break:break-all;margin:8px 0 0;font:inherit;font-size:13px;max-height:80px;overflow:hidden;color:#334155;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px}
-  .two{display:flex;gap:8px}.two button,.two a{flex:1}
-  .two a{display:block;text-align:center;margin-top:10px;padding:13px;border-radius:12px;border:1.5px solid #c7d2fe;background:#eef2ff;color:#4338ca;font-weight:700;text-decoration:none}
+  :root {
+    --pink: #ff8fc0;
+    --pink-deep: #ff5fa8;
+    --pink-bg: #ffe6f2;
+    --pink-line: #ffc6e0;
+    --ink: #4a2b3c;
+    --ink-soft: #8a6076;
+    --ink-faint: #b98aa4;
+    --lav: #c9b8ff;
+    --lav-bg: #efe8ff;
+    --mint: #b8f0dd;
+    --yellow: #fff3b0;
+    --peach: #ffd8a8;
+    --win: #ffffff;
+    --tint: #fff6fa;
+    --alert: #e8475f;
+    --alert-bg: #ffe4e9;
+    --ok: #2f9e6e;
+    --shadow: 4px 4px 0 rgba(255, 95, 168, 0.25);
+    --shadow-btn: 3px 3px 0 var(--ink);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; padding: 12px;
+    background-color: var(--pink-bg);
+    background-image: radial-gradient(var(--pink-line) 1.2px, transparent 1.2px);
+    background-size: 20px 20px;
+    color: var(--ink);
+    font-family: "Noto Sans KR", -apple-system, sans-serif;
+    font-size: 14.5px;
+    line-height: 1.5;
+  }
+  .win-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; margin-bottom: 12px;
+    border: 2px solid var(--ink); border-radius: 14px;
+    background: linear-gradient(90deg, var(--pink), var(--lav));
+    color: #fff; font-family: "Archivo", "Noto Sans KR", sans-serif;
+    font-weight: 900; font-size: 15px;
+    box-shadow: var(--shadow);
+    text-shadow: 0 1px rgba(74, 43, 60, 0.25);
+  }
+  .win-controls { letter-spacing: 2px; font-size: 13px; opacity: 0.9; }
+  .card {
+    background: var(--win); border: 2px solid var(--ink);
+    border-radius: 16px; padding: 16px; margin: 12px 0;
+    box-shadow: var(--shadow);
+  }
+  .card h2 {
+    font-size: 16px; font-weight: 900; margin: 0 0 6px;
+    color: var(--ink); display: flex; align-items: center; gap: 6px;
+  }
+  .card-hero {
+    background: linear-gradient(160deg, #fff 0%, #fff6fb 60%, #f3edff 100%);
+    border: 2.5px solid var(--ink);
+    box-shadow: 5px 5px 0 rgba(255, 95, 168, 0.35);
+  }
+  .hint { color: var(--ink-soft); font-size: 12.5px; margin: 0 0 8px; line-height: 1.45; }
+  .field-label { font-size: 12.5px; font-weight: 900; color: var(--ink); margin-bottom: 5px; }
+  select, textarea, input {
+    width: 100%; font: inherit; font-size: 14.5px; padding: 11px;
+    border: 2px solid var(--ink); border-radius: 12px;
+    background: #fff; color: var(--ink); outline: none;
+    transition: outline .15s;
+  }
+  select:focus, textarea:focus, input:focus {
+    outline: 3px solid rgba(255, 95, 168, 0.5); outline-offset: 2px;
+  }
+  textarea { height: 140px; resize: vertical; }
+  button {
+    width: 100%; margin-top: 10px; padding: 12px 14px;
+    border-radius: 12px; border: 2px solid var(--ink);
+    font: inherit; font-weight: 900; font-size: 15px;
+    cursor: pointer; transition: transform .08s, box-shadow .08s, opacity .15s;
+    box-shadow: var(--shadow-btn);
+  }
+  button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-primary { background: var(--pink-deep); color: #fff; }
+  .btn-sub { background: var(--lav); color: var(--ink); }
+  .btn-mint { background: var(--mint); color: var(--ink); }
+  .btn-danger { background: var(--alert-bg); color: var(--alert); border-color: var(--alert); }
+  .btn-outline { background: #fff; color: var(--ink); border-color: var(--ink); }
+  .btn-outline-danger { background: #fff; color: var(--alert); border-color: var(--alert); }
+  .btn-review {
+    display: block; text-align: center; padding: 12px 14px;
+    border-radius: 12px; border: 2px solid var(--ink);
+    background: linear-gradient(90deg, var(--lav), var(--pink));
+    color: #fff; font-weight: 900; text-decoration: none;
+    box-shadow: var(--shadow-btn); text-shadow: 0 1px rgba(74, 43, 60, 0.25);
+  }
+  .btn-review:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+  .msg {
+    background: var(--tint); border: 2px solid var(--pink-deep);
+    border-radius: 12px; padding: 12px; margin: 10px 0;
+    white-space: pre-wrap; display: none; color: var(--ink); font-weight: 700;
+    box-shadow: 3px 3px 0 rgba(255, 95, 168, 0.2);
+  }
+  label.row { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-bottom: 1.5px solid var(--pink-bg); }
+  label.row input { width: 20px; height: 20px; flex: none; margin-top: 2px; accent-color: var(--pink-deep); }
+  .why { color: var(--alert); font-size: 12.5px; font-weight: 700; }
+  .ok { color: var(--ok); font-weight: 700; }
+  .ob { border-top: 1.5px solid var(--pink-bg); padding: 12px 0; }
+  .ob .rm { font-weight: 900; color: var(--ink); }
+  .ob .kd {
+    color: var(--ink); font-size: 11.5px; font-weight: 700; margin-left: 6px;
+    background: var(--yellow); padding: 2px 7px; border-radius: 999px; border: 1.5px solid var(--ink);
+  }
+  .ob pre {
+    white-space: pre-wrap; word-break: break-all; margin: 8px 0 0;
+    font: inherit; font-size: 12.5px; max-height: 80px; overflow: hidden;
+    color: var(--ink); background: var(--tint); border: 1.5px solid var(--pink-line);
+    border-radius: 10px; padding: 10px;
+  }
+  .two { display: flex; gap: 8px; }
+  .two button, .two a { flex: 1; }
+  .two a {
+    display: block; text-align: center; margin-top: 10px; padding: 12px;
+    border-radius: 12px; border: 2px solid var(--ink);
+    background: var(--mint); color: var(--ink); font-weight: 900; text-decoration: none;
+    box-shadow: var(--shadow-btn);
+  }
+  .two a:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
 </style>
-<div class="header">
-  <h1>진행 도우미</h1>
+
+<div class="win-bar">
+  <span>🐤 뽀짝오리 진행 도우미</span>
+  <span class="win-controls">─ □ ✕</span>
 </div>
 <div class="msg" id="msg"></div>
-<div class="card" id="altcard" style="display:none;border-color:#fca5a5;background:#fef2f2">
-  <h2 style="color:#b91c1c">⚠️ 날짜가 틀렸으면 눌러서 옮기기</h2>
+<div class="card" id="altcard" style="display:none;border-color:var(--alert);background:var(--alert-bg)">
+  <h2 style="color:var(--alert)">⚠️ 날짜가 틀렸으면 눌러서 옮기기</h2>
   <p class="hint">방금 저장한 이름들을 아래 날짜 진행으로 옮겨요. (다시 붙여넣을 필요 없음)</p>
   <div id="alts"></div>
 </div>
@@ -4854,7 +4948,7 @@ const TOOLS_HTML = String.raw`
 <div class="card" id="card4" style="display:none">
   <h2 id="h4">④ 다음 날 추가 모집</h2>
   <p class="hint">취소나 미구매 인원만큼 <b>다음 날 진행</b>에 추가해요. 이미 진행이 있으면 인원만 늘어납니다.</p>
-  <p class="hint" id="short" style="font-weight:600;color:#4f46e5"></p>
+  <p class="hint" id="short" style="font-weight:700;color:var(--pink-deep)"></p>
   <input id="n" type="number" min="1" placeholder="추가할 인원수">
   <button id="b3" class="btn-sub">다음 날 추가 모집 만들기</button>
 </div>
@@ -4888,9 +4982,6 @@ const TOOLS_HTML = String.raw`
   <div id="stat"></div>
 </div>
 <script>
-// 화면에 처음부터 서버가 채운 내용(INIT)을 보여 줌 → 서버를 기다리느라 버튼이 막히는 일 없음
-//  휴대폰·웹(MODE web): 버튼을 누르면 페이지가 그대로 새로 열리며 처리 (google.script.run을 안 씀. 아이폰 사파리 등에서 응답이 안 오는 문제 피함)
-//  시트 옆 사이드바(MODE side): google.script.run
 var K = __K__, INIT = __INIT__, MODE = __MODE__, EXEC = __EXEC__, PV = __PV__, $ = function (i) { return document.getElementById(i); }, running = false, tick = null, NEXTMD = , JUST = false;
 try { $('rvlink').href = EXEC + '?p=review&k=' + encodeURIComponent(K); if (MODE !== 'web') $('rvlink').target = '_blank'; } catch (e) {}
 function say(t) { $('msg').style.display = t ? 'block' : 'none'; $('msg').textContent = t || ''; if (t) $('msg').scrollIntoView({ block: 'nearest' }); }
@@ -4900,13 +4991,11 @@ function busy(on, label) {
   clearInterval(tick);
   if (on && label) { var t0 = Date.now(); say(label); tick = setInterval(function () { say(label + ' ' + Math.round((Date.now() - t0) / 1000) + '초'); }, 1000); }
 }
-// 지우기처럼 되돌리기 어려운 건 두 번 눌러야 실행 (confirm 창은 휴대폰에서 막히는 경우가 있어서)
 function twice(btn, text, fn) {
   if (btn.getAttribute('data-arm') === '1') { btn.setAttribute('data-arm', ''); btn.textContent = btn.getAttribute('data-txt'); fn(); return; }
   btn.setAttribute('data-txt', btn.textContent); btn.setAttribute('data-arm', '1'); btn.textContent = text + ' (한 번 더 누르면 실행)';
   setTimeout(function () { if (btn.getAttribute('data-arm') === '1') { btn.setAttribute('data-arm', ''); btn.textContent = btn.getAttribute('data-txt'); } }, 6000);
 }
-// 카톡 공지에서 필요한 부분만 (폼 링크부터 끝까지, 쿠팡 링크 줄 빼고) → 주소가 너무 길어지지 않게
 function slim(t) {
   var L = String(t).split('\n'), i = L.findIndex(function (l) { return /forms\.gle|docs\.google\.com\/forms/.test(l); });
   if (i > 0) L = L.slice(i);
@@ -4938,7 +5027,7 @@ function outbox(list) {
   if (!(list || []).length) { box.innerHTML = '<span class="ok">✔ 보낼 거 없어요</span>'; return; }
   list.forEach(function (x) {
     var c = document.createElement('div'); c.className = 'ob';
-    c.innerHTML = '<span class="rm"></span><span class="kd"></span><pre></pre><div class="two"><button class="btn-sub">복사</button><a href="kakaotalk://">카톡 열기</a></div>';
+    c.innerHTML = '<span class="rm"></span><span class="kd"></span><pre></pre><div class="two"><button class="btn-mint">복사</button><a href="kakaotalk://">카톡 열기</a></div>';
     c.querySelector('.rm').textContent = x.room || '(방 이름 없음)'; c.querySelector('.kd').textContent = x.kind; c.querySelector('pre').textContent = x.msg;
     var b = c.querySelector('button');
     b.onclick = function () {
@@ -4955,12 +5044,11 @@ function outbox(list) {
 }
 function show(o) {
   if (o.outbox) outbox(o.outbox);
-  // 방금 저장·옮기기 했으면 같은 의뢰 다른 날로 옮기는 버튼
   var alts = ((o.msg && /저장했어요|옮겼어요/.test(o.msg)) || JUST) ? (o.alts || []) : [];
   $('altcard').style.display = alts.length ? '' : 'none';
   var ab = $('alts'); ab.innerHTML = '';
   alts.forEach(function (a) {
-    var b = document.createElement('button'); b.style.background = '#fff'; b.style.color = '#a3271b'; b.style.border = '1px solid #a3271b';
+    var b = document.createElement('button'); b.style.background = '#fff'; b.style.color = 'var(--alert)'; b.style.borderColor = 'var(--alert)';
     b.textContent = '→ ' + a.label + ' 로 옮기기';
     b.onclick = function () { twice(b, a.label + ' 로 옮겨요', function () { go({ act: 'move', title: o.title, to: a.title }, '옮기는 중…'); }); };
     ab.appendChild(b);
@@ -4968,16 +5056,16 @@ function show(o) {
   if (o.status) {
     var sb = $('stat'); sb.innerHTML = '';
     if (o.last) $('statlast').textContent = '마지막 확인: ' + o.last;
-    if (o.black && o.black.length) { var bl = document.createElement('div'); bl.textContent = '⛔ 블랙리스트 (받으면 안 됨): ' + o.black.join(', '); bl.style.cssText = 'font-weight:700;color:#a3271b;background:#fde8e6;border-radius:8px;padding:8px;margin:6px 0'; sb.appendChild(bl); }
+    if (o.black && o.black.length) { var bl = document.createElement('div'); bl.textContent = '⛔ 블랙리스트 (받으면 안 됨): ' + o.black.join(', '); bl.style.cssText = 'font-weight:900;color:var(--alert);background:var(--alert-bg);border:2px solid var(--alert);border-radius:10px;padding:8px 10px;margin:6px 0'; sb.appendChild(bl); }
     var heads = ['오늘', '앞으로', '지난 진행'], lastG = -1;
     o.status.forEach(function (x) {
-      if (x.g !== lastG) { var h = document.createElement('div'); h.textContent = heads[x.g]; h.style.cssText = 'font-weight:700;font-size:15px;margin:10px 0 4px;color:#4f46e5'; sb.appendChild(h); lastG = x.g; }
+      if (x.g !== lastG) { var h = document.createElement('div'); h.textContent = heads[x.g]; h.style.cssText = 'font-weight:900;font-size:14px;margin:12px 0 4px;color:var(--pink-deep);letter-spacing:.03em'; sb.appendChild(h); lastG = x.g; }
       var row = document.createElement('div'), left = x.goal ? x.goal - x.got : 0;
-      row.style.cssText = 'display:flex;gap:8px;padding:8px 4px;border-bottom:1px solid #f1f5f9;font-size:15px' + (x.real ? ';background:#fffbeb' : '');
-      var a = document.createElement('span'); a.textContent = x.d; a.style.cssText = 'min-width:44px;color:#64748b;font-weight:500';
-      var b = document.createElement('span'); b.textContent = x.t; b.style.cssText = 'flex:1;font-weight:600';
+      row.style.cssText = 'display:flex;gap:8px;padding:8px 4px;border-bottom:1.5px solid var(--pink-bg);font-size:14.5px' + (x.real ? ';background:var(--yellow);border-radius:8px;padding:8px' : '');
+      var a = document.createElement('span'); a.textContent = x.d; a.style.cssText = 'min-width:44px;color:var(--ink-soft);font-weight:700';
+      var b = document.createElement('span'); b.textContent = x.t; b.style.cssText = 'flex:1;font-weight:700';
       var c = document.createElement('span'); c.textContent = x.done ? '마감 ' + x.got + '/' + x.goal : x.got + '/' + x.goal + (left > 0 ? ' (남은 ' + left + ')' : '');
-      c.style.cssText = 'white-space:nowrap;font-weight:700;color:' + (x.done ? '#16a34a' : left > 0 && x.g === 0 ? '#dc2626' : '#334155');
+      c.style.cssText = 'white-space:nowrap;font-weight:900;color:' + (x.done ? 'var(--ok)' : left > 0 && x.g === 0 ? 'var(--alert)' : 'var(--ink)');
       row.appendChild(a); row.appendChild(b); row.appendChild(c); sb.appendChild(row);
     });
   }
