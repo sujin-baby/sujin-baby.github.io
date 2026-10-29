@@ -5061,7 +5061,7 @@ function onAdminEdit(e) {
   // 손으로 하는 동작(폼수정 탭 칸, 진행목록 진행일, 한눈에 방제·택배 옮김)은 15분 자동 확인이 돌고 있어도 양보받아서 함
   //  (예전엔 30초만 기다리고 조용히 안 해서 공지 붙여넣기가 배정에 안 들어갔음, 10/20)
   const sh0 = e.range.getSheet(), nm0 = sh0.getName(), a10 = e.range.getA1Notation();
-  const action = (nm0 === EDIT_TAB && /^(B1|E1|E2|G2|I2)$/.test(a10)) || (nm0 === CONFIG.LIST_SHEET && e.range.getColumn() === lc_('진행일')) ||
+  const action = (nm0 === EDIT_TAB && /^(B1|E1|E2|G2|I2)$/.test(a10)) || (nm0 === CONFIG.LIST_SHEET && (e.range.getColumn() === lc_('진행일') || e.range.getColumn() === lc_('목표인원'))) ||
     (nm0 === DASH_TAB && (e.range.getColumn() === 2 || e.range.getColumn() === 13)) || (nm0 === DASH_TAB && e.range.getColumn() === 1 && isRvRow_(e.range.getRow()));
   if (!action) return;
   const props = PropertiesService.getScriptProperties();

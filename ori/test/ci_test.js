@@ -37,4 +37,8 @@ const shouldSkipToday = todayRun['진행일'] < today && (todayRun['마감 시�
 if (!shouldSkipPast) throw new Error('pastRun with 마감 시각 should be skipped');
 if (shouldSkipToday) throw new Error('todayRun should NOT be skipped');
 
+console.log('Testing lc_ column indexes...');
+if (G("lc_('진행일')") !== 2) throw new Error("lc_('진행일') should be 2");
+if (G("lc_('목표인원')") !== 8) throw new Error("lc_('목표인원') should be 8");
+
 console.log('✓ All CI tests passed successfully!');
