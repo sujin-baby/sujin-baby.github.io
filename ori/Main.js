@@ -116,6 +116,11 @@ function readRuns_() {
   return list.getRange(2, 1, last - 1, LIST_HEADER.length).getValues().map(function (v, i) {
     const o = { row: i + 2 };
     LIST_HEADER.forEach(function (h, k) { o[h] = v[k]; });
+    if (!(o['진행일'] instanceof Date) && o['진행일']) {
+      const m = String(o['진행일']).match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (m) o['진행일'] = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+      else { const d = new Date(o['진행일']); if (!isNaN(d.getTime())) o['진행일'] = d; }
+    }
     return o;
   });
 }
@@ -3807,7 +3812,7 @@ function sortOutbox_(sh) {
   const dk = function (x) { const t = dateTok_(x[3]) || dateTok_(String(x[4]).slice(0, 300)); if (!t) return 9999; const p = t.split('.'); return Number(p[0]) * 100 + Number(p[1]); };
   const tm = function (x) { return x[1] instanceof Date ? x[1].getTime() : 0; };
   const wait = function (x) { return x[5] === '대기' || x[5] === '방 못 찾음'; };
-  const t0 = dayStart_(today_()).getTime();
+  const t0 = dayStart_(today_());
   const prio = function (x) {
     if (!wait(x)) return 4;   // 보냄 (맨 아래)
     if (x[1] instanceof Date) {
