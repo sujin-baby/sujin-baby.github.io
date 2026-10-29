@@ -4786,70 +4786,112 @@ function dupList_(r) {
 // String.raw: 안의 \n, \. 같은 글자가 그대로 페이지 코드에 들어가게 (그냥 템플릿이면 줄바꿈으로 바뀌어 페이지 코드가 깨짐)
 const TOOLS_HTML = String.raw`
 <style>
-  *{box-sizing:border-box}
-  body{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;margin:0;padding:16px;background:#f4f4f8;color:#1d1a24}
-  h1{font-size:20px;margin:0 0 10px}
-  select,textarea,input{width:100%;font:inherit;font-size:15px;padding:10px;border:1px solid #cfc9db;border-radius:8px;background:#fff}
-  textarea{height:150px}
-  .card{background:#fff;border:1px solid #e1dee8;border-radius:12px;padding:14px;margin:12px 0}
-  .card h2{font-size:16px;margin:0 0 8px;color:#5b2a86}
-  .hint{color:#676274;font-size:13px;margin:0 0 8px}
-  button{width:100%;margin-top:10px;padding:13px;border-radius:8px;border:0;background:#5b2a86;color:#fff;font:inherit;font-weight:700;font-size:15px}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif;font-size:15px;margin:0;padding:14px;background:#f1f5f9;color:#0f172a;line-height:1.5}
+  .header{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 14px}
+  h1{font-size:20px;font-weight:800;margin:0;color:#1e1b4b;letter-spacing:-0.5px}
+  select,textarea,input{width:100%;font:inherit;font-size:15px;padding:12px;border:1.5px solid #cbd5e1;border-radius:12px;background:#fff;color:#0f172a;outline:none;transition:border-color .15s,box-shadow .15s}
+  select:focus,textarea:focus,input:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,0.15)}
+  textarea{height:150px;resize:vertical}
+  .field-label{font-size:13px;font-weight:700;color:#475569;margin-bottom:6px}
+  .card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:16px;margin:12px 0;box-shadow:0 2px 8px rgba(0,0,0,0.03)}
+  .card-hero{border:2px solid #6366f1;box-shadow:0 4px 16px rgba(99,102,241,0.12)}
+  .card h2{font-size:16px;font-weight:700;margin:0 0 6px;color:#1e1b4b}
+  .hint{color:#64748b;font-size:13px;margin:0 0 8px;line-height:1.45}
+  button{width:100%;margin-top:10px;padding:13px;border-radius:12px;border:0;font:inherit;font-weight:700;font-size:15px;cursor:pointer;transition:transform .08s,opacity .15s}
+  button:active{transform:scale(0.985)}
   button:disabled{opacity:.5}
-  .msg{background:#eef8ee;border:1px solid #b6d7a8;border-radius:8px;padding:10px;margin-top:10px;white-space:pre-wrap;display:none}
-  label.row{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #f0eef4}
-  label.row input{width:22px;height:22px;flex:none;margin-top:2px}
-  .why{color:#a3271b;font-size:13px}
-  .ok{color:#2f7a2f}
-  .ob{border-top:1px solid #f0eef4;padding:10px 0}
-  .ob .rm{font-weight:700;color:#5b2a86}.ob .kd{color:#676274;font-size:13px;margin-left:6px}
-  .ob pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font:inherit;font-size:13px;max-height:74px;overflow:hidden;color:#444;background:#f7f6fa;border-radius:8px;padding:8px}
+  .btn-primary{background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;box-shadow:0 3px 10px rgba(79,70,229,0.25)}
+  .btn-sub{background:#e0e7ff;color:#3730a3}
+  .btn-danger{background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5}
+  .btn-outline{background:#fff;color:#4f46e5;border:1.5px solid #c7d2fe}
+  .btn-outline-danger{background:#fff;color:#b91c1c;border:1.5px solid #fecaca}
+  .btn-review{display:block;text-align:center;padding:13px;border-radius:12px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;font-weight:700;text-decoration:none;box-shadow:0 3px 10px rgba(124,58,237,0.25)}
+  .btn-review:active{transform:scale(0.985)}
+  .msg{background:#ecfdf5;border:1.5px solid #a7f3d0;border-radius:12px;padding:12px;margin:10px 0;white-space:pre-wrap;display:none;color:#065f46;font-weight:600}
+  label.row{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid #f1f5f9}
+  label.row input{width:22px;height:22px;flex:none;margin-top:2px;accent-color:#4f46e5}
+  .why{color:#dc2626;font-size:13px;font-weight:600}
+  .ok{color:#16a34a;font-weight:600}
+  .ob{border-top:1px solid #f1f5f9;padding:12px 0}
+  .ob .rm{font-weight:700;color:#312e81}.ob .kd{color:#64748b;font-size:13px;margin-left:6px;background:#f1f5f9;padding:2px 6px;border-radius:4px}
+  .ob pre{white-space:pre-wrap;word-break:break-all;margin:8px 0 0;font:inherit;font-size:13px;max-height:80px;overflow:hidden;color:#334155;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px}
   .two{display:flex;gap:8px}.two button,.two a{flex:1}
-  .two a{display:block;text-align:center;margin-top:10px;padding:13px;border-radius:8px;border:1px solid #5b2a86;color:#5b2a86;font-weight:700;text-decoration:none}
+  .two a{display:block;text-align:center;margin-top:10px;padding:13px;border-radius:12px;border:1.5px solid #c7d2fe;background:#eef2ff;color:#4338ca;font-weight:700;text-decoration:none}
 </style>
-<h1>진행 도우미</h1>
+<div class="header">
+  <h1>진행 도우미</h1>
+</div>
 <div class="msg" id="msg"></div>
-<div class="card"><h2>현황 (한눈에 탭 요약)</h2>
-  <p class="hint" id="statlast">15분마다 자동 확인이 인원을 셉니다.</p>
-  <div id="stat"></div></div>
-<div class="card" id="altcard" style="display:none;border-color:#e0b4b4"><h2 style="color:#a3271b">날짜가 틀렸으면 눌러서 옮기기</h2>
+<div class="card" id="altcard" style="display:none;border-color:#fca5a5;background:#fef2f2">
+  <h2 style="color:#b91c1c">⚠️ 날짜가 틀렸으면 눌러서 옮기기</h2>
   <p class="hint">방금 저장한 이름들을 아래 날짜 진행으로 옮겨요. (다시 붙여넣을 필요 없음)</p>
-  <div id="alts"></div></div>
-<div class="card"><h2>① 카톡에 보낼 것</h2>
-  <p class="hint">[복사]를 누르면 보낸 걸로 표시돼요. 카톡 방에 붙여넣고 보내기는 직접 눌러 주세요.</p>
-  <div id="ob"></div></div>
-<div class="card"><h2>리뷰 공지 (구매·폼이 다 끝난 뒤)</h2>
-  <p class="hint">의뢰를 고르면 모든 날 명단의 <b>수취인 이름</b>과 산 상품을 보고 리뷰 종류(별점·텍스트·포토)를 날마다 고르게 나눠서, 카톡방마다 보낼 리뷰 공지를 만들어요.</p>
-  <a id="rvlink" href="#" target="_top" style="display:block;text-align:center;padding:12px;border-radius:8px;background:#5b2a86;color:#fff;font-weight:700;text-decoration:none">리뷰 배정 열기</a></div>
-<div class="card"><h2>② 카톡 공지 저장 (누가 어떤 옵션 샀는지)</h2>
-  <p class="hint"><b>순서</b><br>
-  1. 아래 칸에서 <b>이 공지가 어느 진행인지</b> 고르세요. 카톡방 이름(방제)과 같은 걸 고르면 돼요. 예) 10.16 모두의농수산 방 공지 → "#택10.16 모두의농수산…"<br>
-  &nbsp;&nbsp;&nbsp;잘 모르겠으면 "자동으로 찾기"로 두세요 (폼 링크·날짜로 찾아요).<br>
-  2. 카톡방에서 이름까지 다 적힌 공지를 통째로 복사해서 붙여넣기<br>
-  3. 저장 → 맨 위 초록 칸에 <b>어느 진행에 누가 저장됐는지</b> 나와요. 틀렸으면 빨간 칸의 "옮기기"를 두 번 누르면 돼요.</p>
+  <div id="alts"></div>
+</div>
+
+<!-- 최상단: 카톡 공지 저장 (배정 등록) -->
+<div class="card card-hero" id="card-notice">
+  <h2>📋 카톡 공지 저장 (배정 등록)</h2>
+  <p class="hint">카톡방의 배정 완료 공지를 복사해서 아래 칸에 붙여넣고 <b>[이 진행에 저장]</b>을 누르면 시트 배정 탭에 쏙 들어갑니다.</p>
+  <div class="field-label">진행 선택 (카톡방 이름)</div>
   <select id="run"></select>
   <p class="hint" id="asg" style="margin-top:6px"></p>
-  <textarea id="txt" placeholder="여기에 카톡 공지 붙여넣기" style="margin-top:6px"></textarea>
-  <button id="b1">이 진행에 저장</button></div>
-<p class="hint" id="pick" style="margin:0 4px"></p>
-<div class="card" id="card3"><h2>③ 응답 목록 · 지우기 (②에서 고른 진행)</h2>
-  <p class="hint">그날 폼 응답 전부예요. <b>빨간 글씨 = 중복</b>(계정, 전화번호, 주소가 먼저 낸 사람과 같음)이라 미리 체크돼 있어요.<br>
-  방을 나간 사람 등 지울 사람이 있으면 체크하고 '체크한 것 지우기'를 두 번 누르세요. 폼과 명단 시트에서 같이 지워지고, 인원이 모자라면 폼이 다시 열려요.</p>
+  <div class="field-label" style="margin-top:10px">카톡 공지 내용</div>
+  <textarea id="txt" placeholder="여기에 카톡 공지를 붙여넣어 주세요"></textarea>
+  <button id="b1" class="btn-primary">이 진행에 저장</button>
+</div>
+<p class="hint" id="pick" style="margin:4px 6px"></p>
+
+<!-- 특정 진행 선택 시 나타나는 상세 관리 카드들 -->
+<div class="card" id="card3" style="display:none">
+  <h2>③ 응답 목록 · 지우기</h2>
+  <p class="hint">그날 폼 응답 목록입니다. <b>빨간 글씨 = 중복</b>(계정/연락처/주소 중복)이라 미리 체크되어 있어요.<br>
+  취소자나 나간 사람을 체크하고 <b>'체크한 것 지우기'</b>를 두 번 누르면 폼과 명단 시트에서 함께 삭제됩니다.</p>
   <div id="dups"></div>
-  <button id="b2">체크한 것 지우기</button></div>
-<div class="card" id="card4"><h2 id="h4">④ 다음 날 추가 모집</h2>
-  <p class="hint">②에서 고른 진행에서 취소·안 산 사람만큼 <b>그 진행 다음 날</b>에 더 받아요. 그날 진행이 이미 있으면 새로 안 만들고 그 진행 인원을 늘려요. 공지를 올리는 지금 단계에서는 누를 필요 없어요.</p>
-  <p class="hint" id="short"></p>
-  <input id="n" type="number" min="1" placeholder="인원">
-  <button id="b3">다음 날 추가 모집 만들기</button></div>
-<div class="card" id="card5"><h2>잘못 넣었을 때</h2>
-  <button id="b4" style="background:#fff;color:#5b2a86;border:1px solid #5b2a86">이 진행 배정 비우기</button>
-  <button id="b5" style="background:#fff;color:#a3271b;border:1px solid #a3271b">이 진행 지우기 (응답 0명일 때만)</button></div>
+  <button id="b2" class="btn-danger">체크한 것 지우기</button>
+</div>
+
+<div class="card" id="card4" style="display:none">
+  <h2 id="h4">④ 다음 날 추가 모집</h2>
+  <p class="hint">취소나 미구매 인원만큼 <b>다음 날 진행</b>에 추가해요. 이미 진행이 있으면 인원만 늘어납니다.</p>
+  <p class="hint" id="short" style="font-weight:600;color:#4f46e5"></p>
+  <input id="n" type="number" min="1" placeholder="추가할 인원수">
+  <button id="b3" class="btn-sub">다음 날 추가 모집 만들기</button>
+</div>
+
+<div class="card" id="card5" style="display:none">
+  <h2>⚙️ 진행 관리</h2>
+  <div style="display:flex;gap:8px;margin-top:8px">
+    <button id="b4" class="btn-outline">이 진행 배정 비우기</button>
+    <button id="b5" class="btn-outline-danger">이 진행 지우기 (0명일 때만)</button>
+  </div>
+</div>
+
+<!-- 보낼 것 -->
+<div class="card">
+  <h2>💬 카톡에 보낼 공지</h2>
+  <p class="hint"><b>[복사]</b>를 누르면 보낸 것으로 자동 체크됩니다. 카톡방에 붙여넣고 전송해 주세요.</p>
+  <div id="ob"></div>
+</div>
+
+<!-- 리뷰 공지 -->
+<div class="card">
+  <h2>⭐ 리뷰 공지 (구매·폼 종료 후)</h2>
+  <p class="hint">의뢰를 선택하면 수취인 이름과 상품을 확인하여 리뷰 종류(별점/텍스트/포토)를 고르게 배정합니다.</p>
+  <a id="rvlink" href="#" target="_top" class="btn-review">리뷰 배정 열기</a>
+</div>
+
+<!-- 현황 -->
+<div class="card">
+  <h2>📊 진행 현황 (한눈에)</h2>
+  <p class="hint" id="statlast">15분마다 자동으로 최신 인원을 확인합니다.</p>
+  <div id="stat"></div>
+</div>
 <script>
 // 화면에 처음부터 서버가 채운 내용(INIT)을 보여 줌 → 서버를 기다리느라 버튼이 막히는 일 없음
 //  휴대폰·웹(MODE web): 버튼을 누르면 페이지가 그대로 새로 열리며 처리 (google.script.run을 안 씀. 아이폰 사파리 등에서 응답이 안 오는 문제 피함)
 //  시트 옆 사이드바(MODE side): google.script.run
-var K = __K__, INIT = __INIT__, MODE = __MODE__, EXEC = __EXEC__, PV = __PV__, $ = function (i) { return document.getElementById(i); }, running = false, tick = null, NEXTMD = '', JUST = false;
+var K = __K__, INIT = __INIT__, MODE = __MODE__, EXEC = __EXEC__, PV = __PV__, $ = function (i) { return document.getElementById(i); }, running = false, tick = null, NEXTMD = , JUST = false;
 try { $('rvlink').href = EXEC + '?p=review&k=' + encodeURIComponent(K); if (MODE !== 'web') $('rvlink').target = '_blank'; } catch (e) {}
 function say(t) { $('msg').style.display = t ? 'block' : 'none'; $('msg').textContent = t || ''; if (t) $('msg').scrollIntoView({ block: 'nearest' }); }
 function busy(on, label) {
@@ -4896,7 +4938,7 @@ function outbox(list) {
   if (!(list || []).length) { box.innerHTML = '<span class="ok">✔ 보낼 거 없어요</span>'; return; }
   list.forEach(function (x) {
     var c = document.createElement('div'); c.className = 'ob';
-    c.innerHTML = '<span class="rm"></span><span class="kd"></span><pre></pre><div class="two"><button>복사</button><a href="kakaotalk://">카톡 열기</a></div>';
+    c.innerHTML = '<span class="rm"></span><span class="kd"></span><pre></pre><div class="two"><button class="btn-sub">복사</button><a href="kakaotalk://">카톡 열기</a></div>';
     c.querySelector('.rm').textContent = x.room || '(방 이름 없음)'; c.querySelector('.kd').textContent = x.kind; c.querySelector('pre').textContent = x.msg;
     var b = c.querySelector('button');
     b.onclick = function () {
@@ -4929,20 +4971,20 @@ function show(o) {
     if (o.black && o.black.length) { var bl = document.createElement('div'); bl.textContent = '⛔ 블랙리스트 (받으면 안 됨): ' + o.black.join(', '); bl.style.cssText = 'font-weight:700;color:#a3271b;background:#fde8e6;border-radius:8px;padding:8px;margin:6px 0'; sb.appendChild(bl); }
     var heads = ['오늘', '앞으로', '지난 진행'], lastG = -1;
     o.status.forEach(function (x) {
-      if (x.g !== lastG) { var h = document.createElement('div'); h.textContent = heads[x.g]; h.style.cssText = 'font-weight:700;font-size:15px;margin:10px 0 4px;color:#5b2a86'; sb.appendChild(h); lastG = x.g; }
+      if (x.g !== lastG) { var h = document.createElement('div'); h.textContent = heads[x.g]; h.style.cssText = 'font-weight:700;font-size:15px;margin:10px 0 4px;color:#4f46e5'; sb.appendChild(h); lastG = x.g; }
       var row = document.createElement('div'), left = x.goal ? x.goal - x.got : 0;
-      row.style.cssText = 'display:flex;gap:8px;padding:6px 4px;border-bottom:1px solid #eee;font-size:16px' + (x.real ? ';background:#fff2a8' : '');
-      var a = document.createElement('span'); a.textContent = x.d; a.style.cssText = 'min-width:40px;color:#676274';
-      var b = document.createElement('span'); b.textContent = x.t; b.style.cssText = 'flex:1';
+      row.style.cssText = 'display:flex;gap:8px;padding:8px 4px;border-bottom:1px solid #f1f5f9;font-size:15px' + (x.real ? ';background:#fffbeb' : '');
+      var a = document.createElement('span'); a.textContent = x.d; a.style.cssText = 'min-width:44px;color:#64748b;font-weight:500';
+      var b = document.createElement('span'); b.textContent = x.t; b.style.cssText = 'flex:1;font-weight:600';
       var c = document.createElement('span'); c.textContent = x.done ? '마감 ' + x.got + '/' + x.goal : x.got + '/' + x.goal + (left > 0 ? ' (남은 ' + left + ')' : '');
-      c.style.cssText = 'white-space:nowrap;font-weight:700;color:' + (x.done ? '#2f7a2f' : left > 0 && x.g === 0 ? '#d00000' : '#333');
+      c.style.cssText = 'white-space:nowrap;font-weight:700;color:' + (x.done ? '#16a34a' : left > 0 && x.g === 0 ? '#dc2626' : '#334155');
       row.appendChild(a); row.appendChild(b); row.appendChild(c); sb.appendChild(row);
     });
   }
   var sel = $('run'); sel.innerHTML = '<option value="">자동으로 찾기 (모르면 이대로)</option>';
   (o.runs || []).forEach(function (r) { var op = document.createElement('option'); op.value = r.title; op.textContent = r.label; sel.appendChild(op); });
   if (o.title) sel.value = o.title;
-  $('pick').textContent = sel.value ? '' : '③ 중복, ④ 추가 모집은 ②에서 진행을 고르면 나와요.';
+  $('pick').textContent = sel.value ? '' : '💡 중복 확인과 추가 모집은 위에서 진행을 고르면 아래에 나타나요.';
   if (o.msg) say(o.msg);
   ['card3','card4','card5'].forEach(function (c) { $(c).style.display = sel.value ? '' : 'none'; });
   if (!sel.value) { $('asg').textContent = ''; return; }
@@ -4973,10 +5015,14 @@ $('b2').onclick = function () {
   if (!t.length) return say('지울 걸 체크해 주세요.');
   twice($('b2'), t.length + '개 지워요', function () { go({ act: 'delete', times: t }, '지우는 중…'); });
 };
-$('b3').onclick = function () { var n = Number($('n').value); if (!n) return say('인원을 적어 주세요.'); twice($('b3'), (NEXTMD || '다음 날') + ' ' + n + '명 만들어요', function () { go({ act: 'more', n: n }, '만드는 중…'); }); };
-$('b4').onclick = function () { twice($('b4'), '배정 비워요', function () { go({ act: 'unassign' }, '비우는 중…'); }); };
-$('b5').onclick = function () { twice($('b5'), '이 진행 지워요', function () { go({ act: 'remove' }, '지우는 중…'); }); };
-show(INIT || {});
+$('b3').onclick = function () {
+  var n = Number($('n').value);
+  if (!n || n < 1) return say('추가할 인원수를 넣어 주세요.');
+  twice($('b3'), (NEXTMD || '다음 날') + '에 ' + n + '명 추가해요', function () { go({ act: 'addNext', n: n }, '추가 모집 만드는 중…'); });
+};
+$('b4').onclick = function () { twice($('b4'), '이 진행 배정(카톡 공지)을 전부 비워요', function () { go({ act: 'clearAsg' }, '배정 비우는 중…'); }); };
+$('b5').onclick = function () { twice($('b5'), '이 진행을 아예 지워요 (응답 0명일 때만)', function () { go({ act: 'deleteRun' }, '진행 지우는 중…'); }); };
+show(INIT);
 </script>`;
 
 function outboxUrl_() { return (CONFIG.WEBAPP_URL || '') + '?p=outbox&k=' + CONFIG.KEY; }
