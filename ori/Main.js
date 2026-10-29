@@ -5333,7 +5333,16 @@ function onRunSubmit_(e) {
       if (!tm[sid]) { try { tm[sid] = allRespTimes_(sid, formId, ft); } catch (err) { tm[sid] = ft; } }
       const n = runCount_(runs, r, tm[sid]);
       if (Number(r['인원']) !== n) setRun_(r.row, '인원', n);
-      if (r['목표인원'] && !r['마감 시각'] && n >= Number(r['목표인원'])) full = true;
+      if (r['목표인원'] && !r['마감 시각'] && n >= Number(r['목표인원'])) {
+        full = true;
+        // 즉시 마감 패스트트랙: 목표 인원이 찬 순간 즉시 마감 시각 기록 & 명단방 글 보낼메시지에 투입
+        try {
+          r['마감 시각'] = new Date();
+          setRun_(r.row, '마감 시각', r['마감 시각']);
+          if (!pendingListMsg_(r)) queueListMsgs_(r);
+          try { ensureReviewGuideMsgs_(runs); } catch (e) {}
+        } catch (e) { note_('즉시 마감 패스트트랙 실패: ' + e); }
+      }
     });
     // 명단 탭(값)에 새 응답 줄을 바로 (15분 기다리지 않게, 사용자 요청 10/20). 몇 초면 됨
     // 명단 탭에 바로 (기다리지 않음: 10/22 30초 기다리기가 자동 확인을 막아서 뺌)
@@ -8488,8 +8497,23 @@ function pruneOutboxInner_() {
   let n = 0;
   // 방 날짜가 오늘 이후인 메시지(앞으로 진행할 방 공지)는 보냈어도 안 지움 (10/24 #10.26 공지가 안 보였던 것)
   const roomDay = function (x) { const t = dateTok_(x[3]); if (!t) return 0; const p = t.split('.'), now = new Date(); return new Date(now.getFullYear(), Number(p[0]) - 1, Number(p[1])).getTime(); };
+  const parseSendTime = function (x) {
+    if (x[1] instanceof Date) return x[1].getTime();
+    const t = dateTok_(x[1]) || dateTok_(x[3]);
+    if (!t) return 0;
+    const p = t.split('.'), now = new Date();
+    return new Date(now.getFullYear(), Number(p[0]) - 1, Number(p[1])).getTime();
+  };
   const t0 = today_().getTime();
-  for (let i = v.length - 1; i >= 0; i--) if (v[i][5] === '보냄' && v[i][1] instanceof Date && v[i][1].getTime() < cut && roomDay(v[i]) < t0) { ob.deleteRow(i + 2); n++; }
+  for (let i = v.length - 1; i >= 0; i--) {
+    if (v[i][5] === '보냄') {
+      const tm = parseSendTime(v[i]);
+      if (tm && tm < cut && roomDay(v[i]) < t0) {
+        ob.deleteRow(i + 2);
+        n++;
+      }
+    }
+  }
   if (n) note_('✓ 보낸 지 오래된 메시지 ' + n + '줄 지움');
 }
 // (10/24 한 번) 안 보낸 방 공지의 보낼 날짜를 지금 규칙(전 진행일)으로 다시
