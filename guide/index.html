@@ -1657,8 +1657,13 @@ button.ghost { background: var(--surface); }
       // 아이폰은 그냥 누르면 쿠팡 앱이 열려서 북마크를 못 씀 → 누르면 키워드만 복사하고, 열기는 길게 눌러 '새 탭에서 열기' (사파리에서 열림)
       a.addEventListener("click", ev => {
         const k0 = kw.split("|")[0];
-        // 아이폰: 누르면 상품 주소를 복사 → 사파리 새 탭 주소창에 붙여넣고 이동 (주소창에 직접 넣으면 쇼핑 앱이 안 열림. 길게 누르기가 안 되는 화면이 있어서, 10/21)
-        if (isIOS()) { ev.preventDefault(); copyText(a.href, "상품 주소를 복사했어요. 사파리에서 새 탭(+)을 열고 주소창에 붙여넣고 이동 → 상품 페이지에서 북마크"); return; }
+        // 아이폰: 앱 튕김 방지 우회 페이지(open.html)로 새 탭 열기 + 키워드 자동 복사
+        if (isIOS()) {
+          ev.preventDefault();
+          if (k0) copyText(k0, "키워드 복사 완료 (" + k0 + ")");
+          window.open("open.html?url=" + encodeURIComponent(a.href), "_blank");
+          return;
+        }
         if (k0) copyText(k0, "검색 키워드를 복사했어요: " + k0);
       });
       a.textContent = (u.label || (urls.length > 1 ? "상품 " + (i + 1) : "상품")) + " 페이지 열기";
