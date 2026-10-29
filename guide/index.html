@@ -125,6 +125,43 @@ button.ghost { background: #fff; color: var(--ink); }
 }
 #make-run:active { transform: translate(2px, 2px) !important; box-shadow: 2px 2px 0 var(--ink) !important; }
 
+
+/* 도움말 숨김/표시 토글 */
+.note-guide { display: none; }
+body.show-notes .note-guide { display: block; }
+details.help-box {
+  margin: 6px 0; padding: 6px 12px;
+  border: 1.5px solid var(--pink-line); border-radius: 10px;
+  background: var(--tint); font-size: 12px; color: var(--ink-soft);
+}
+details.help-box summary {
+  cursor: pointer; font-weight: 700; color: var(--pink-deep); user-select: none;
+}
+#price-warn-box {
+  background: var(--alert-bg); border: 2.5px solid var(--alert);
+  border-radius: 14px; padding: 12px 14px; margin-bottom: 12px;
+  color: var(--alert); box-shadow: 3px 3px 0 rgba(232, 71, 95, 0.25);
+}
+#price-warn-box .pw-title {
+  font-weight: 900; font-size: 14px; display: flex; align-items: center; gap: 6px;
+}
+#price-warn-box .pw-body {
+  font-size: 12.5px; margin-top: 5px; line-height: 1.45; color: #7f1d1d; font-weight: 600;
+}
+
+
+.warn {
+  background: var(--alert-bg) !important;
+  color: var(--alert) !important;
+  border: 2px solid var(--alert) !important;
+  border-radius: 12px !important;
+  padding: 12px 14px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  line-height: 1.5 !important;
+  margin: 10px 0 !important;
+}
+
 </style>
 </head>
 <body>
@@ -140,7 +177,7 @@ button.ghost { background: #fff; color: var(--ink); }
         <h2 id="in-h">의뢰서</h2>
         <span class="tag" id="sample-tag">예시 의뢰서</span>
       </div>
-      <p class="note"><b>카톡에서 의뢰서 복사 → 아래 칸 클릭 → Ctrl+V</b> (휴대폰은 칸을 길게 눌러 붙여넣기). 붙여넣으면 칸 안의 글이 통째로 바뀌고 바로 읽어요.</p>
+      <p class="note note-guide"><b>카톡에서 의뢰서 복사 → 아래 칸 클릭 → Ctrl+V</b> (휴대폰은 칸을 길게 눌러 붙여넣기). 붙여넣으면 바로 읽어요.</p>
       <textarea id="req" spellcheck="false" aria-label="업체 의뢰서"></textarea>
       <div class="row">
         <button class="ghost" id="parse">다시 읽기 (칸을 직접 고친 뒤)</button>
@@ -166,7 +203,7 @@ button.ghost { background: #fff; color: var(--ink); }
       </div>
       <div class="bm" id="batch-box">
         <div class="row"><button type="button" id="batch-go">한 번에 가져오기</button></div>
-        <div class="note">의뢰서 붙여넣기 → 구매 시간 고르기 → 이 버튼. 가이드마다 상품 정보·위치·썸네일·가격을 차례로 가져와요 (상품마다 1분쯤). 다 되면 공지를 확인하고 아래 [이 내용으로 새 진행 만들기]를 직접 눌러 주세요. 가져오는 동안 가이드 탭은 누르지 마세요. (PC 크롬 + 확장 프로그램)</div>
+        <div class="note note-guide">의뢰서 붙여넣기 → 구매 시간 고르기 → 이 버튼 (PC 크롬 + 확장 프로그램)</div>
         <div class="note" id="batch-st" role="status" style="white-space:pre-line"></div>
       </div>
 
@@ -1991,6 +2028,19 @@ button.ghost { background: #fff; color: var(--ink); }
       const gn = guides.length > 1 ? "가이드 " + (i + 1) + " " : "";
       warns.push(miss.length === 1 && miss[0] === "가격" ? gn + "가격이 없어요." : gn + "가격 없음: " + miss.join(", ") + " → 위 '옵션마다 가격' 칸에 넣어 주세요 (옵션마다 가격이 달라요)." + (g.pagePrice ? " 상품 페이지에서 읽은 가격 " + g.pagePrice + "은 어느 옵션 가격인지 몰라서 안 넣었어요." : ""));
     });
+    // 가격 및 옵션 불일치 경고 (사용자 요청 10/30)
+    const hp = (head && head.headPrices && head.headPrices[0]) || "";
+    guides.forEach((g, i) => {
+      const gn = guides.length > 1 ? "가이드 " + (i + 1) + ": " : "";
+      const gPrices = lines(g.price || "").map(x => x.replace(/,/g, "")).filter(Boolean);
+      if (hp && gPrices.length && gPrices.some(p => p !== hp)) {
+        warns.push("⚠️ " + gn + "입금가(" + Number(hp).toLocaleString() + "원)와 옵션 가격(" + gPrices.map(p => Number(p).toLocaleString() + "원").join(", ") + ")이 다릅니다!");
+      }
+      if (hp && /2\s*개/.test(g.option || "") && Number(hp) < 95000) {
+        warns.push("⚠️ " + gn + "옵션에 '2개'가 적혀 있지만 의뢰서 입금가는 " + Number(hp).toLocaleString() + "원(1개 가격대)입니다. 업체가 1개 옵션 대신 2개 옵션 링크를 잘못 보냈는지 확인하세요!");
+      }
+    });
+
     if (guides.some(g => /\(\s+명\)/.test(g.option || ""))) warns.push("옵션별 오늘 인원 (  명)을 채워 주세요.");
     $("o-warn").hidden = warns.length === 0;
     $("o-warn").textContent = warns.join(" ");
