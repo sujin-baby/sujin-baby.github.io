@@ -3055,7 +3055,8 @@ function checkFullInner_() {
     yieldIfWanted_();   // 폼수정 탭 같은 직접 하는 일이 기다리면 진행 하나 끝날 때마다 바로 넘김 (10/26 '폼 인원' 한 단계가 100초 넘어 붙여넣기가 실패)
     if (r['진행 상태'] === '종료' || !r['폼ID']) return;
     // 어제 이전에 끝난 진행은 15분마다 안 봄 (폼을 열 때마다 느리고 구글 쪽 시간 초과가 남. 인원은 매일 9시 현황 업데이트가 다시 셈)
-    if (r['진행일'] instanceof Date && r['진행일'] < today_() && runOver_(runs, r)) return;
+    //  단일 진행 또는 마지막 일차 진행은 windowOf_.to가 Infinity라 runOver_가 false이므로 마감 시각 또는 구매 마감(pastEnd_)도 함께 확인 (10/29 최적화)
+    if (r['진행일'] instanceof Date && r['진행일'] < today_() && (r['마감 시각'] || runOver_(runs, r) || pastEnd_(r))) return;
     // 진행 하나에서 오류가 나도 다른 진행은 계속 (오류는 한눈에 탭 '확인 필요' 칸에 보임)
     try { checkRun_(r); } catch (e) { errs[r['명단 제목']] = String(e.message || e).slice(0, 120); note_('진행 확인 실패 ' + r['명단 제목'] + ': ' + e); }
   });
