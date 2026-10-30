@@ -5723,24 +5723,23 @@ function reviewDone_(runs) {
         ].join('\n'), '리뷰 독촉');
         note_('✓ 리뷰 독촉 넣음: ' + bareTitle_(r['명단 제목']) + ' ' + names.length + '명');
       });
-      // A-1. 그날(그 방) 사람 전부 체크 → 취완
-      mine.forEach(function (r) {
-        if (!(r['마감 시각'] instanceof Date) && !pastEnd_(r)) return;
-        const w = windowOf_(runs, r);
-        const rows = live.filter(function (i) { const t = v[i][cT].getTime(); return t >= w.from && t < w.to; });
-        if (!rows.length || !rows.every(function (i) { return v[i][cc] === true; })) return;
-        const k = 'RVDONE_' + String(r['명단 제목']).replace(/\s+/g, '');
-        if (props.getProperty(k)) return;
-        props.setProperty(k, '1');
-        if (init) return;
-        queueMsg_(String(r['카톡방'] || bareTitle_(r['명단 제목'])), '취완', '취완');
-        // 리뷰 사진은 날마다 말고 의뢰가 다 끝난 뒤 한 번에 취합 (사용자 요청 10/26) → 아래 A-2에서 '리뷰 캡처 올리기' 할 일
-        note_('✓ 취완 메시지 넣음: ' + bareTitle_(r['명단 제목']));
-      });
-      // A-2. 의뢰 전체 끝 + 전부 체크 → 사장님 보고
+      // A-1. 의뢰 전체 끝 + 전부 체크 → 취완 (캠페인당 1회) 및 사장님 보고 (사용자 요청 10/30: 방마다 날마다 뜨면 너무 많이 떠서, 캠페인 리뷰 취합 완료 시 1회만)
       const total = mine.reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0);
       const got = mine.reduce(function (a, x) { return a + (Number(x['인원']) || 0); }, 0);
       const allDone = (!total || got >= total) && !pend[campKey_(mine[0]['캠페인'] || mine[0]['명단 제목'])] && live.every(function (i) { return v[i][cc] === true; });
+      const dk = 'RVDONE_' + sid;
+      if (allDone && !props.getProperty(dk)) {
+        props.setProperty(dk, '1');
+        if (!init) {
+          const campTitle = String(mine[0]['캠페인'] || bareTitle_(mine[0]['명단 제목']));
+          const roomList = mine.map(function (r) { return String(r['카톡방'] || bareTitle_(r['명단 제목'])); }).filter(Boolean);
+          const uniqRooms = [];
+          roomList.forEach(function (rm) { if (uniqRooms.indexOf(rm) === -1) uniqRooms.push(rm); });
+          const roomLabel = uniqRooms.length > 1 ? (campTitle + ' (전체 ' + uniqRooms.length + '개 방)') : (uniqRooms[0] || campTitle);
+          queueMsg_(roomLabel, '취완', '취완');
+          note_('✓ 캠페인 취완 메시지 넣음: ' + campTitle);
+        }
+      }
       const rk = 'RVRPT_' + sid;
       // 구매확정만 의뢰는 리뷰 캡처가 없음 → 캡처 올리기·압축 없이 보고 글 바로
       let rvKind = ''; try { rvKind = (JSON.parse(props.getProperty('RV_' + sid) || '{}') || {}).kind || ''; } catch (e) {}
