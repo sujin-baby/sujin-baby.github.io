@@ -7222,26 +7222,47 @@ function payCarry_(all, month) {
   if (!L || !L.note) return;
   const year = payYear_(month), start = new Date(year, month - 1, 1), end = new Date(year, month, 1), prevStart = new Date(year, month - 2, 1);
   const got = function (x) { return x['인원'] === '' || x['인원'] === null ? (Number(x['목표인원']) || 0) : Number(x['인원']) || 0; };
-  const read = function () { const last = Math.max(sh.getLastRow(), L.head + 1); return { names: sh.getRange(L.head + 1, L.name, last - L.head, 1).getValues().map(function (x) { return String(x[0]); }), notes: sh.getRange(L.head + 1, L.note, last - L.head, 1).getValues().map(function (x) { return String(x[0]); }) }; };
-  let t = read();
+
+  // 1) 이번 달에 유효하게 이월되어야 하는 캠페인 체인 수집 (지난달에 진행 있었고, 이번 달 진행 없고, 아직 총건수 미달인 것만)
+  const validCarries = {};
   chainsOf_(all).forEach(function (c) {
     if (!c.total) return;
     const before = c.runs.filter(function (r) { return r['진행일'] < start; });
     const inMonth = c.runs.some(function (r) { return r['진행일'] >= start && r['진행일'] < end; });
     const done = before.reduce(function (a, x) { return a + got(x); }, 0);
-    const existingIdx = t.names.findIndex(function (nm, k) { return nm && /이월/.test(t.notes[k]) && campKey_(nm) === c.key; });
-    // 이미 지난달에 전량 완료되었거나 이번 달에 직접 진행이 있는 경우: 남아있는 이월 줄이 있으면 삭제
-    if (!before.length || inMonth || done >= c.total) {
-      if (existingIdx !== -1) {
-        const delRow = L.head + 1 + existingIdx;
-        try { sh.deleteRow(delRow); } catch (e) { sh.getRange(delRow, 1, 1, sh.getLastColumn()).clearContent(); }
-        t = read();
-      }
-      return;
-    }
+    if (!before.length || inMonth || done >= c.total) return;
     const lastRun = before[before.length - 1];
-    if (lastRun['진행일'] < prevStart) return;   // 지난달에 진행이 있던 것만 (오래 멈춘 캠페인은 안 넘김)
-    let i = existingIdx;
+    if (lastRun['진행일'] < prevStart) return;   // 오래 멈춘 캠페인은 안 넘김
+    validCarries[c.key] = { c: c, lastRun: lastRun, done: done };
+  });
+
+  // 2) 시트 내 기존 이월 줄 전수 점검: 유효 이월이 아니거나(완료/당월진행생김/캠페인삭제), 중복된 이월 줄은 전면 삭제
+  const seenCarry = {};
+  const maxR = sh.getLastRow();
+  if (maxR > L.head) {
+    const n = maxR - L.head;
+    const names = sh.getRange(L.head + 1, L.name, n, 1).getValues().map(function (x) { return String(x[0]); });
+    const notes = sh.getRange(L.head + 1, L.note, n, 1).getValues().map(function (x) { return String(x[0]); });
+    for (let i = n - 1; i >= 0; i--) {
+      const nm = names[i], nt = notes[i];
+      if (/이월/.test(nt)) {
+        const k = campKey_(nm);
+        if (!validCarries[k] || seenCarry[k]) {
+          const delRow = L.head + 1 + i;
+          try { sh.deleteRow(delRow); } catch (e) { sh.getRange(delRow, 1, 1, sh.getLastColumn()).clearContent(); }
+        } else {
+          seenCarry[k] = 1;
+        }
+      }
+    }
+  }
+
+  // 3) 유효 이월 중 시트에 아직 없는 것은 빈 줄이나 맨 아래에 기재/갱신
+  const read = function () { const last = Math.max(sh.getLastRow(), L.head + 1); return { names: sh.getRange(L.head + 1, L.name, last - L.head, 1).getValues().map(function (x) { return String(x[0]); }), notes: sh.getRange(L.head + 1, L.note, last - L.head, 1).getValues().map(function (x) { return String(x[0]); }) }; };
+  let t = read();
+  Object.keys(validCarries).forEach(function (k) {
+    const item = validCarries[k], c = item.c, lastRun = item.lastRun, done = item.done;
+    let i = t.names.findIndex(function (nm, idx) { return nm && /이월/.test(t.notes[idx]) && campKey_(nm) === k; });
     if (i === -1) i = t.names.findIndex(function (nm) { return !nm.trim(); });
     const row = i === -1 ? Math.max(sh.getLastRow(), L.head) + 1 : L.head + 1 + i;
     const set = function (col, val) { if (col && !sh.getRange(row, col).getFormula() && sh.getRange(row, col).getValue() !== val) sh.getRange(row, col).setValue(val); };
