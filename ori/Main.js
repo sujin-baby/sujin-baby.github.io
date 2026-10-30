@@ -1070,7 +1070,7 @@ function pricesFromNotice_(text) {
 // 진행목록 빈칸 자동 채우기: 캠페인, 총건수(같은 캠페인에서), 가격(폼 공지에서), 날짜 모양
 function normalizeRuns_() {
   const list = ensureListSheet_();
-  formatList_(list);
+  subTime_('진행목록 정리: 서식', function () { formatList_(list); });
   const runs = readRuns_();
   runs.forEach(function (r) {
     if (!String(r['캠페인']).trim() && r['명단 제목']) { r['캠페인'] = campOf_(r['명단 제목']); setRun_(r.row, '캠페인', r['캠페인']); }
@@ -1091,7 +1091,7 @@ function normalizeRuns_() {
   // 업체, 구매시간, 포토가 비었으면 폼 공지(설명)에서 채움 → 월급시트 스토어, 진행시간, 특이사항에 씀
   // (10/23 정리) 폼을 여는 건 느려서 같은 진행은 6시간에 한 번만 (포토 칸처럼 공지에서 못 찾는 칸이 있으면 매번 폼을 열었음)
   const fcache = CacheService.getScriptCache();
-  runs.forEach(function (r) {
+  subTime_('진행목록 정리: 공지에서 채움', function () { runs.forEach(function (r) {
     if (!r['폼ID'] || r['진행 상태'] === '종료' || (String(r['업체']).trim() && String(r['구매시간']).trim() && String(r['포토']).trim())) return;
     if (fcache.get('NF_' + r['폼ID'] + '_' + r.row)) return;
     fcache.put('NF_' + r['폼ID'] + '_' + r.row, '1', 21600);
@@ -1110,7 +1110,7 @@ function normalizeRuns_() {
       const m = desc.match(/포토[^\n]{0,12}?(없음|미제공|무|있음|제공|유|필수)/);
       if (m) { r['포토'] = /없음|미제공|무/.test(m[1]) ? '무' : '유'; setRun_(r.row, '포토', r['포토']); }
     }
-  });
+  }); });
   // 의뢰서 하나 = 명단 시트 하나: 같은 의뢰(총건수가 있는 묶음)의 날들은 첫 날 명단 시트로 모음
   //  (폼은 날마다 달라도 됨. 15분 확인에서 폼 응답이 이 시트로 가게 연결하고 명단 탭이 합쳐 보여 줌)
   chainsOf_(runs).forEach(function (c) {
@@ -1146,12 +1146,20 @@ function normalizeRuns_() {
         if (ps.length) setRun_(r.row, '가격', ps.join(', '));
       } catch (e) {}
     }
-    // '택배 옮김' 체크칸은 택대 진행만 (택배시트에 옮길 게 없는 진행은 빈칸)
-    const tc = ensureListSheet_().getRange(r.row, lc_('택배 옮김'));
-    if (r['택대'] === 'Y') { if (!tc.getDataValidation()) tc.insertCheckboxes(); }
-    else if (tc.getDataValidation() || tc.getValue() !== '') { tc.clearDataValidations(); tc.clearContent(); }
   });
-  sortList_();
+  // '택배 옮김' 체크칸은 택대 진행만 (택배시트에 옮길 게 없는 진행은 빈칸). 한 번에 읽고 바뀐 칸만 씀
+  //  (10/30: 줄마다 칸을 따로 읽어 진행목록 정리가 15분마다 40초)
+  subTime_('진행목록 정리: 택배 옮김 칸', function () {
+    if (!runs.length) return;
+    const top = Math.min.apply(null, runs.map(function (r) { return r.row; })), bot = Math.max.apply(null, runs.map(function (r) { return r.row; }));
+    const rg = list.getRange(top, lc_('택배 옮김'), bot - top + 1, 1), dv = rg.getDataValidations(), tv = rg.getValues();
+    runs.forEach(function (r) {
+      const i = r.row - top, tc = list.getRange(r.row, lc_('택배 옮김'));
+      if (r['택대'] === 'Y') { if (!dv[i][0]) tc.insertCheckboxes(); }
+      else if (dv[i][0] || tv[i][0] !== '') { tc.clearDataValidations(); tc.clearContent(); }
+    });
+  });
+  subTime_('진행목록 정리: 정렬', sortList_);
 }
 
 function today_() { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }
@@ -5421,24 +5429,40 @@ function reviewDone_(runs) {
   Object.keys(bySheet).forEach(function (sid) {
     const mine = bySheet[sid].sort(function (a, b) { return a['진행일'] - b['진행일']; });
     if (!mine.some(function (r) { return r['마감 시각'] instanceof Date; })) return;   // 아직 명단이 하나도 안 끝난 의뢰
+    // 빠른 길 (10/30: 이 단계가 의뢰마다 명단 시트를 열어 117초): 명단 시트가 지난번 본 뒤로 안 바뀌었고, 같은 날(새벽 5시 기준)이고,
+    //  진행목록 값(마감·인원·총건수·남은 일정)도 같으면 체크칸을 다시 읽을 필요가 없음. 다 끝난 의뢰는 리뷰이미지 폴더 압축만 계속 봄
+    const seenK = 'RVSEEN_' + sid;
+    let mod = 0, fname = '';
+    try { const f = DriveApp.getFileById(sid); mod = f.getLastUpdated().getTime(); fname = f.getName(); } catch (e) {}
+    const sig = [mod, Utilities.formatDate(new Date(Date.now() - 5 * 3600000), CONFIG.TIMEZONE, 'yyyyMMdd'), pend[campKey_(mine[0]['캠페인'] || mine[0]['명단 제목'])] ? 1 : 0]
+      .concat(mine.map(function (r) { return [r.row, r['마감 시각'] instanceof Date ? r['마감 시각'].getTime() : '', r['인원'], r['총건수']].join(','); })).join('|');
+    if (mod && props.getProperty(seenK) === sig) {
+      if (!props.getProperty('RVRPT_' + sid)) return;
+      try {
+        let rk0 = ''; try { rk0 = (JSON.parse(props.getProperty('RV_' + sid) || '{}') || {}).kind || ''; } catch (e) {}
+        const f0 = rk0 === 'confirm' ? null : subTime_('정리: 리뷰 폴더', function () { return rvFolder_(mine, props, sid); });
+        if (f0) subTime_('정리: 리뷰 압축', function () { rvZip_(f0, fname, props, sid, mine); });
+      } catch (e) { note_('리뷰 완료 확인 실패 ' + sid + ': ' + e.message); }
+      return;
+    }
     try {
       const lss = SpreadsheetApp.openById(sid), name = lss.getName();
-      const folder = rvFolder_(mine, props, sid);
+      const folder = subTime_('정리: 리뷰 폴더', function () { return rvFolder_(mine, props, sid); });
       const sh = lss.getSheetByName(LIST_TAB);
-      if (!sh || !props.getProperty('LISTV_' + sid) || sh.getLastRow() < 3) return;
+      if (!sh || !props.getProperty('LISTV_' + sid) || sh.getLastRow() < 3) { if (mod) props.setProperty(seenK, sig); return; }
       const lc = Math.max(sh.getLastColumn(), 1), hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_);
       const cT = hdr.indexOf('타임스탬프');
-      if (cT < 0) return;
+      if (cT < 0) { if (mod) props.setProperty(seenK, sig); return; }
       const rg = sh.getRange(3, 1, sh.getLastRow() - 2, lc), v = rg.getValues(), nt = sh.getRange(3, cT + 1, sh.getLastRow() - 2, 1).getNotes();
       // 체크칸: 값이 있는 줄이 전부 참/거짓인 칸 (머리글에 체크·확인·리뷰가 있으면 그 칸 먼저)
       const live = v.map(function (x, i) { return x[cT] instanceof Date && !nt[i][0] ? i : -1; }).filter(function (i) { return i >= 0; });
-      if (!live.length) return;
+      if (!live.length) { if (mod) props.setProperty(seenK, sig); return; }
       const isChk = function (c) { return live.every(function (i) { return typeof v[i][c] === 'boolean'; }); };
       const rc = rvCol_(sh, lc);
       let cc = rc > 0 && isChk(rc - 1) ? rc - 1 : -1;
       // 없으면 맨 오른쪽 체크칸 (값이 전부 참/거짓인 칸)
       for (let c = lc - 1; cc < 0 && c >= 0; c--) if (isChk(c)) cc = c;
-      if (cc < 0) return;
+      if (cc < 0) { if (mod) props.setProperty(seenK, sig); return; }
       // 포토 받음: 그날 사람 중 한 명이라도 리뷰 확인(체크)이 되면 업체 포토를 받아 전달한 것 → '업체 포토 아직' 알림 끔
       //  (10/24 부유단감: 포토를 카톡으로 받아 카톡으로 전달해서 시스템이 몰랐음)
       mine.forEach(function (r) {
@@ -5503,7 +5527,9 @@ function reviewDone_(runs) {
         if (!init) queueMsg_('내 할 일', rvUploadMsg_(name, capF.img.getUrl()), '할 일');
       }
       // B1. 리뷰이미지 폴더 사진 → 압축 (다 끝난 뒤에 한 번에 업체로)
-      if (capF && props.getProperty(rk)) rvZip_(capF, name, props, sid, mine);
+      if (capF && props.getProperty(rk)) subTime_('정리: 리뷰 압축', function () { rvZip_(capF, name, props, sid, mine); });
+      // 끝까지 봤으면 기억 (위에서 return 한 건 다음에 다시 봄). 이 단계에서 명단 시트에 쓴 게 있으면 수정 시각이 바뀌어 다음에 한 번 더 봄
+      if (mod) props.setProperty(seenK, sig);
     } catch (e) { note_('리뷰 완료 확인 실패 ' + sid + ': ' + e.message); }
   });
   if (init) props.setProperty('RVDONE_INIT', '1');
