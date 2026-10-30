@@ -1017,11 +1017,14 @@ function adoptOrphanForms_(runs) {
   runs.forEach(function (r) { if (r['폼ID']) known[String(r['폼ID'])] = 1; });
   const pnos = function (d) { const out = []; String(d || '').split('\n').forEach(function (l) { if (/상품\s*번호/.test(l)) (l.match(/\d{8,}/g) || []).forEach(function (x) { out.push(x); }); }); return out; };
   const names = function (d) { return noticeProducts_(d).map(function (p) { return String(p.name || '').replace(/\s+/g, ''); }).filter(Boolean); };
-  const live = runs.filter(function (r) { return r['진행 상태'] !== '종료' && r['폼ID'] && r['시트ID'] && r['진행일'] instanceof Date; }).map(function (r) {
-    const d = formDescRead_(r['폼ID']);   // 1시간 캐시 (10/31: 진행마다 폼을 열어 이 단계가 60초)
-    return { r: r, nums: pnos(d), names: names(d) };
-  });
-  if (!live.length) return;
+  const liveRuns = runs.filter(function (r) { return r['진행 상태'] !== '종료' && r['폼ID'] && r['시트ID'] && r['진행일'] instanceof Date; });
+  if (!liveRuns.length) return;
+  // 진행 중인 폼 공지는 응답 있는 옛 폼을 찾았을 때만 읽음 (10/31: 옛 폼이 없어도 매번 진행마다 폼을 열어 이 단계가 20초)
+  let live = null;
+  const liveOf = function () {
+    if (!live) live = liveRuns.map(function (r) { const d = formDescRead_(r['폼ID']); return { r: r, nums: pnos(d), names: names(d) }; });
+    return live;
+  };
   const since = Date.now() - 10 * 86400000, me = Session.getEffectiveUser().getEmail();
   const it = rootFolder_().getFolders();
   while (it.hasNext()) {
@@ -1038,7 +1041,7 @@ function adoptOrphanForms_(runs) {
       try { subTime_('없는 폼: 폼 열기', function () { form = FormApp.openById(fid); cnt = form.getResponses().length; }); } catch (e) { continue; }
       if (!cnt) continue;
       const d = form.getDescription(), nums = pnos(d), nms = names(d), made = file.getDateCreated().getTime();
-      const hit = live.filter(function (x) {
+      const hit = liveOf().filter(function (x) {
         return nums.some(function (n) { return x.nums.indexOf(n) !== -1; }) || (!nums.length && nms.some(function (n) { return x.names.indexOf(n) !== -1; }));
       }).sort(function (a, b) { return Math.abs(a.r['진행일'].getTime() - made) - Math.abs(b.r['진행일'].getTime() - made); })[0];
       if (!hit) {
