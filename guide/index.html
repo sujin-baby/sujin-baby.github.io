@@ -196,7 +196,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v119 (일부제공 포토대기·서술형 분할·입금대행 누출 방어) · 확장 1.5.0</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v120 (빠른 작업 바·방제/공지 1초 복사·파서 단위시험 하네스 연동) · 확장 1.5.0</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -334,6 +334,11 @@ details.help-box summary {
 
     <section class="panel" aria-labelledby="out-h">
       <h2 id="out-h">복사해서 쓰기</h2>
+      <div class="quick-bar" style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+        <button type="button" class="primary" data-copy="o-room" style="flex:1; min-width:105px; padding:10px 8px; font-size:13.5px; font-weight:800; border-radius:10px;">📋 방제 복사</button>
+        <button type="button" class="primary" data-copy="o-notice" style="flex:1.4; min-width:125px; padding:10px 8px; font-size:13.5px; font-weight:800; border-radius:10px; background:var(--pink-deep,#d63384);">📢 공지 전체 복사</button>
+        <button type="button" id="quick-thumb-btn" class="ghost" style="flex:1; min-width:105px; padding:10px 8px; font-size:13.5px; font-weight:800; border-radius:10px;">🖼️ 썸네일 열기</button>
+      </div>
       <div class="titles">
         <div class="title-line"><span class="k">카톡 방제</span><code id="o-room"></code><span class="note" id="room-len"></span><button class="small ghost" data-copy="o-room">복사</button></div>
         <div class="title-line"><span class="k">명단 제목</span><code id="o-list"></code><button class="small ghost" data-copy="o-list">복사</button></div>
@@ -2670,8 +2675,23 @@ details.help-box summary {
     const fail = () => { const t = document.createElement("textarea"); t.value = code; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); done(); } catch (e) { toast("복사가 막혔어요. 끌어다 놓기를 써 주세요"); } t.remove(); };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(done, fail); else fail();
   };
+  const qtb = $("quick-thumb-btn");
+  if (qtb) {
+    qtb.addEventListener("click", () => {
+      const g = guides[cur] || {}, u = (g.thumb || $("thumb").value || "").trim();
+      if (u) { window.open(u, "_blank"); toast("썸네일을 새 탭에서 열었어요 🖼️"); }
+      else toast("등록된 썸네일 주소가 없어요");
+    });
+  }
+
   $("bm-copy").addEventListener("click", () => copyBm(bmShort));
   $("bm-copy-full").addEventListener("click", () => copyBm(bmCode));
+
+  if (typeof globalThis !== "undefined") {
+    globalThis.__PARSER__ = {
+      parseAll, parseHead, fieldsOf, parseOptions, parse, parseCoupang, optionText, baseName, makeRoom, shortName
+    };
+  }
 })();
 
 </script>

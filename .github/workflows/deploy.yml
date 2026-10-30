@@ -1,0 +1,40 @@
+# 실서비스 반영: ori-dev 브랜치에 올리면 시험을 돌리고, 다 통과해야 실서비스 브랜치로 넘김 (10/30 사용자 승인)
+#  관리 시트의 Apps Script는 실서비스 브랜치의 ori/Main.js를 받아서 돌림 → 시험에 떨어진 코드는 시트에 안 감
+#  실서비스 브랜치에 직접 push 하지 말 것 (그러면 여기서 앞으로 넘기기가 막힘)
+name: deploy
+
+on:
+  push:
+    branches: [ori-dev]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      LIVE: claude/tasting-group-notice-automation-1x1kur
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 시험
+        run: bash ori/test/run_ci.sh
+      - name: 실서비스 브랜치로 넘기기 (앞으로 감기만, 합치기 안 함)
+        run: |
+          git fetch origin "$LIVE"
+          if ! git merge-base --is-ancestor "origin/$LIVE" HEAD; then
+            echo "::error::실서비스 브랜치에 ori-dev에 없는 커밋이 있어요. ori-dev에서 git pull origin $LIVE 로 합친 뒤 다시 올려 주세요."
+            exit 1
+          fi
+          git push origin "HEAD:refs/heads/$LIVE"
+          echo "✓ 실서비스 반영: $(git rev-parse --short HEAD) (Apps Script는 10~20분 안에 새 코드 사용)"

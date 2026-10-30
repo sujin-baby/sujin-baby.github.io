@@ -25,7 +25,9 @@
 
 - **관리 시트(Google Sheets) + Apps Script**: `ori/Code.gs`(로더)가 GitHub의 `ori/Main.js`를 받아서 실행 (캐시 10분).
   - 받아 오는 곳 = Settings의 `UPDATE_BASE` = 이 브랜치 `claude/tasting-group-notice-automation-1x1kur`의 `ori/`.
-  - 그래서 **이 브랜치에 push = 10~20분 뒤 실서비스 반영**. 따로 배포 없음.
+  - ⚠ **(10/30부터) 이 브랜치에 직접 push 금지.** 작업은 **`ori-dev` 브랜치에 push** → GitHub Actions `deploy.yml`이 시험(`ori/test/run_ci.sh`)을 돌리고 **다 통과해야** 이 실서비스 브랜치로 앞으로 감기(fast-forward) → 10~20분 뒤 시트 반영.
+  - 시작할 때: `git fetch origin && git checkout ori-dev && git pull origin ori-dev`. 실서비스 브랜치에 ori-dev에 없는 커밋이 있으면 deploy가 실패함 → `git pull origin claude/tasting-group-notice-automation-1x1kur` 후 다시 push.
+  - 시험에 떨어지면 시트에 안 감 (Actions 탭에서 빨간 X 확인). 버그를 고칠 땐 그 상황을 `ori/test/*_test.js` 시험으로 남기고 `run_ci.sh`에 추가.
 - **15분 자동 확인** `checkFull` → `checkFullInner_`: 폼 인원, 명단 시트, 마감, 보낼메시지, 한눈에, 월급시트(`updatePay_`, 나눠서 이어 함), 한 번만 고치기(once-fix, 속성 플래그).
 - **가이드 생성기**: `guide/index.html` (GitHub Pages, https://sujin-baby.github.io/guide/). 예전 클로드 아티팩트 판은 더 안 고침 → **생성기는 guide/ 하나만**.
 - **크롬 확장** `ori/ext/` (상품 정보·위치 가져오기). 묶음 `ori/product-locator.zip`은 생성기 안에 `EXT_ZIP`으로도 들어감. 확장을 고치면 zip과 생성기 안 `EXT_ZIP`, 버전 표시를 같이 바꿈.
@@ -35,7 +37,7 @@
 
 - 웹 앱 `?k=KEY&p=diag` (읽기 전용 JSON). 쓰는 경로(createRun 등)는 확인용으로 부르지 않음.
   - `days=N`, `full=1`(보낼메시지 전문), `asg=글자`(배정 줄), `resp=요청ID`(응답: 닉네임·옵션, 결제 기준 가격표 `respPm`, 머리글 `respHead`), `pay=글자`(월급시트 줄), `dashrow=N`(한눈에 N행부터 4줄 수식·값), `rv=1`, `fo=1`.
-- 하네스 시험: `ori/test/harness.js` + `*_test.js` (`TZ=Asia/Seoul node ori/test/X_test.js ori/Main.js`). CI: `.github/workflows/test.yml` (node -c, Code.gs ESLint, `ci_test.js`).
+- 하네스 시험: `ori/test/harness.js` + `*_test.js` (`TZ=Asia/Seoul node ori/test/X_test.js ori/Main.js`). CI: `ori/test/run_ci.sh` (문법, Code.gs ESLint, ci·pay·selfcheck·expcount·noprice·zip 시험) — `test.yml`(모든 push), `deploy.yml`(ori-dev → 통과 시 실서비스).
 
 ## 4. 최근 바뀐 것 (10/26 ~ 10/30)
 
@@ -58,6 +60,7 @@
 - 공지: 사업자 줄 두 번, 로켓 아닌 쿠팡 상품은 `🐥판매처 : 업체 (판매자변경 로켓xxxxxx)`.
 - 확장 1.5.0: 상품번호는 화면의 `쿠팡상품번호: 상품 - 아이템` 줄 먼저(첫 itemId는 추천·광고일 수 있음), 로켓 표시는 이 상품 칸에서만(추천 상품의 '판매자로켓' 무시).
 - (피클, guide v111~v119) 모바일 UX·사파리 바로가기, `#kw=` 복구, 규격어 제외, 판매처 줄 파싱, 썸네일, 실배송 포토/텍스트 분리, 날짜별 통째 리뷰 배정, 업체 카톡방 칸 숨김, 입금대행 줄 분리.
+- (피클, 10/30 밤 guide v120) **빠른 작업 바**([📋 방제 복사], [📢 공지 전체 복사], [🖼️ 썸네일 열기]) 탑재로 모바일·PC 복사 동선 1초화. `ori/test/guide_parser_test.js` 구축(아텍스, 샐러드, 발마사지기, 텀블러, 번들옵션 5종 실샘플 시험) 및 `run_ci.sh` 연동 완료. 앞으로 생성기 파서 수정 시 회귀 버그 원천 차단.
 
 ## 5. 보안 — 웹앱 열쇠 (10/30 처리 끝)
 
@@ -81,3 +84,18 @@
 - ❌ 진행목록 '종료' 진행의 월급시트 줄 자동 삭제는 **하지 않음** (사용자 결정 10/30: 진행비 누락 위험). 다시 제안하지 말 것.
 - '최대 실행 시간 초과' 창: 시트에서 직접 실행한 기능 중 6분 넘는 것 찾기 (아직 원인 모름).
 - 확장 1.5.0(상품번호·로켓)과 판매처 표시는 실제 쿠팡 페이지에서 사용자 확인 필요.
+
+## 7. 개선 계획 (10/30)
+
+1. ✅ **파일 담당 나누기** (10/30 사용자 확정): **Claude = `ori/Main.js`(서버·월급·결제·보낼 메시지함)**, **피클 = `guide/`, `ori/ext/`(생성기·확장)**. 남의 담당 파일을 고쳐야 하면 직접 고치지 말고 아래 8번 "검토 요청"에 적기.
+2. ✅ **실서비스 전에 시험 통과** (10/30 완료): 위 2번 구조 참고. `ori-dev` → `deploy.yml` → 실서비스.
+3. ✅ **버그 = 시험 하나**: 고친 버그는 그 상황을 시험으로 남겨 `run_ci.sh`에 추가 (가짜 이름 데이터). `pay_test.js`, `selfcheck_test.js`, `guide_parser_test.js`(생성기 파서 5종 샘플 시험).
+4. ✅ **아침 자가 점검** (10/30 완료): 새벽 점검(`morningCheck_`, 5시 넘어 첫 확인) 안에 `selfCheck_` 추가. 방제 숫자 ≠ 목표인원(장바구니 ×N, 기대평 제외), 지난 7일 월급시트 줄 없음·그날 수량 ≠ 인원·스토어/진행시간 빈칸, 한눈에 `#REF!` 등 오류 칸. 읽기만 하고, 있으면 보낼메시지 '내 할 일' + 메일.
+5. **once-fix 정리** (사용자 승인 대기): 끝난 한 번만 고치기 코드를 지워 15분 확인을 가볍게.
+6. (제안, 승인 대기) **카톡 동선**: 보낼 메시지함에 [카톡방 열기] 버튼(오픈채팅 링크를 방마다 한 번 등록) + 방 공지 옆 썸네일(길게 눌러 저장). 피클: 생성기가 썸네일 주소·방 링크를 새 진행 만들 때 같이 넘김 / Claude: 저장·메시지함 표시.
+7. (제안, 승인 대기) **배정 탭 자동 정리**: 지난 날 줄은 지우지 않고 숨김 (사용자가 날마다 손으로 지우던 일).
+8. (제안, 승인 대기) **자가 점검 → 안전한 것만 자동 고침**: 한눈에 오류 칸이면 한눈에를 자동으로 다시 그림 (돈·사용자 데이터는 알리기만).
+
+## 8. 검토 요청 (서로 담당 파일을 고쳤을 때 여기 적기)
+
+- (없음)

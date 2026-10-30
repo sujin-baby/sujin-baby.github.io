@@ -1,4 +1,4 @@
-# 체험단 자동화 스크립트 검사: 문법(node -c), Code.gs ESLint, 단위 테스트(ci_test.js)
+# 체험단 자동화 스크립트 검사 (ori/test/run_ci.sh). 실서비스 반영은 deploy.yml (ori-dev → 통과하면 실서비스 브랜치)
 name: test
 
 on:
@@ -16,13 +16,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: 문법 검사 (node -c)
-        run: |
-          node -c ori/Main.js
-          # .gs는 확장자를 node가 몰라서 .js로 복사해서 검사
-          cp ori/Code.gs "$RUNNER_TEMP/Code.js" && node -c "$RUNNER_TEMP/Code.js"
-          for f in ori/ext/*.js ori/test/*.js; do node -c "$f"; done
-      - name: Code.gs ESLint (문법·파싱 오류)
-        run: npx -y eslint@8.57.0 --no-eslintrc --env es2021 --parser-options ecmaVersion:2022 ori/Code.gs
-      - name: 단위 테스트
-        run: TZ=Asia/Seoul node ori/test/ci_test.js
+      - name: 시험 (문법, Code.gs ESLint, 단위 시험)
+        run: bash ori/test/run_ci.sh
