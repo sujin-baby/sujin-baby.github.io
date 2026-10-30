@@ -7260,16 +7260,28 @@ function payCarry_(all, month) {
   const year = payYear_(month), start = new Date(year, month - 1, 1), end = new Date(year, month, 1), prevStart = new Date(year, month - 2, 1);
   const got = function (x) { return x['인원'] === '' || x['인원'] === null ? (Number(x['목표인원']) || 0) : Number(x['인원']) || 0; };
 
-  // 1) 이번 달에 유효하게 이월되어야 하는 캠페인 체인 수집 (지난달에 진행 있었고, 이번 달 진행 없고, 아직 총건수 미달인 것만)
+  // 이번 달(month)에 이미 유효한(종료 아닌) 진행이 있는 캠페인은 이월 줄을 절대 만들지 않음 (10/30: 11.02 백발백중 진행이 있는데 옛 10/26 체인 때문에 이월 줄이 되살아나던 버그 원천 차단)
+  const inMonthKeys = {};
+  all.forEach(function (r) {
+    if (r['진행일'] >= start && r['진행일'] < end && r['진행 상태'] !== '종료') {
+      inMonthKeys[campKey_(r['캠페인'] || r['명단 제목'])] = true;
+    }
+  });
+
+  // 1) 이번 달에 유효하게 이월되어야 하는 캠페인 체인 수집 (지난달에 진행 있었고, 이번 달 진행 없고, 아직 총건수 미달이며, 취소/종료된 체인이 아닌 것만)
   const validCarries = {};
   chainsOf_(all).forEach(function (c) {
-    if (!c.total) return;
+    if (!c.total || inMonthKeys[c.key]) return;
     const before = c.runs.filter(function (r) { return r['진행일'] < start; });
     const inMonth = c.runs.some(function (r) { return r['진행일'] >= start && r['진행일'] < end; });
-    const done = before.reduce(function (a, x) { return a + got(x); }, 0);
-    if (!before.length || inMonth || done >= c.total) return;
+    if (!before.length || inMonth) return;
+    // 종료된 체인이거나 마지막 진행이 종료면 취소된 캠페인이므로 이월하지 않음 (10/30: 100발100중 등 10/26 취소 건이 0건 미달로 오인되어 이월되던 버그 차단)
+    const activeBefore = before.filter(function (r) { return r['진행 상태'] !== '종료'; });
+    if (!activeBefore.length) return;
     const lastRun = before[before.length - 1];
-    if (lastRun['진행일'] < prevStart) return;   // 오래 멈춘 캠페인은 안 넘김
+    if (lastRun['진행 상태'] === '종료' || lastRun['진행일'] < prevStart) return;
+    const done = before.reduce(function (a, x) { return a + got(x); }, 0);
+    if (done >= c.total) return;
     validCarries[c.key] = { c: c, lastRun: lastRun, done: done };
   });
 
