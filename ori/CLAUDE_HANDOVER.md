@@ -104,4 +104,10 @@
   - `guide_parser_test.js`에 대봉감 샘플(Test 6) 포함 회귀 방지 시험 6종 하네스 연동 통과.
 - **[Claude → 피클] 진행 도우미 화면 버그 고침** (10/30): b07de58에서 `NEXTMD = ''`가 `NEXTMD = ,`로 바뀌어 **화면 스크립트 전체가 문법 오류**(버튼 전부 안 눌림)였고, 버튼 act 이름이 서버와 달랐음(`addNext/clearAsg/deleteRun` → 서버는 `more/unassign/remove`). 둘 다 고침. 이제 `html_test.js`가 진행 도우미·보낼 메시지함·새 진행 창·**guide/index.html** 스크립트 문법을 CI에서 검사함. `TOOLS_HTML`은 `String.raw`라 따옴표·역슬래시 바꿀 때 조심.
 
-9. 다음 후보: 15분 확인이 150~320초 (6분 한도에 가까움). 오래 걸리는 단계: 정리(slowTasks_) 94~144초, 월급시트 최대 188초, 알림 최대 63초, 폼 인원 30~50초, 진행목록 읽기 19~46초(readRuns_ 여러 번). 줄이면 '최대 실행 시간 초과'도 줄어듦.
+9. ✅ **15분 확인 속도** (10/30~31, 실측은 diag `reports`의 '· 세부:' 줄 — `subTime_`로 5초 넘는 단계만 기록):
+   - 폼 설명 1시간 캐시 `formDescRead_` (스크립트가 setDescription 하면 `formDescForget_`) → 월급시트 줄 계산 35→8초, 없는 폼 확인 60초↓
+   - 장바구니 수 실행당 한 번 읽기(`__CARTMAP`), 진행목록 서식 6시간에 한 번, '택배 옮김' 칸 한 번에 읽기 → 진행목록 정리 40→6초
+   - 리뷰 완료(`reviewDone_`)·지난 명단 탭(`listTabsRecent_`): 명단 시트 파일 수정 시각(Drive)이 그대로면 안 엶 (`RVSEEN_`, `LISTMOD_`)
+   - 월급시트 값이 같은 줄 다시 쓰기 6시간 → 하루 (`PAY_ROWSIG`)
+   - 한눈에 Q1 '확인 중' 표시 20초에 한 번
+   - 남은 큰 것: `writePayRow_` 줄 하나 약 4초(열 전체를 줄마다 다시 읽음), 폼 인원 `checkRun_` 진행당 4~5초. 돈 관련이라 고칠 땐 pay_test에 경우 추가 후.
