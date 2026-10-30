@@ -298,7 +298,7 @@ function changeDaily_(anchor, from, n) {
         if (Number(r['목표인원']) === c && /\d+\s*$/.test(old) && Number(old.match(/(\d+)\s*$/)[1]) === titleCount_(r, c)) return;
         const room = String(r['카톡방'] || old);
         renameRun_(r, cnt(old, titleCount_(r, c))); setRun_(r.row, '목표인원', c);
-        try { if (r['폼ID']) { const f = FormApp.openById(r['폼ID']); f.setDescription(one(f.getDescription(), c)); } } catch (e) {}
+        try { if (r['폼ID']) { const f = FormApp.openById(r['폼ID']); f.setDescription(one(f.getDescription(), c)); formDescForget_(r['폼ID']); } } catch (e) {}
         try { const ob = outboxSheet_(), ol = ob.getLastRow(); if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if ((String(v[3]) === room || String(v[3]) === cnt(old, c)) && v[2] === '방 공지' && v[5] !== '보냄') obSet_(ob, v[0], 5, one(v[4], c)); }); } catch (e) {}
         done.push(old + ' → ' + cnt(old, c));
       } else {
@@ -503,13 +503,34 @@ function runCount_(runs, r, times) {
 }
 
 // 이 진행의 구매 시간 글: 폼 설명(공지) 맨 윗줄이 시간 글이면 그걸(직접 고친 공지 반영), 아니면 진행목록 구매시간
+// 폼 설명 읽기: 실행 안에서 한 번 + 1시간 캐시 (10/30: 월급시트 줄 계산이 줄마다 폼을 두 번씩 열어 15분 확인마다 35초)
+//  스크립트가 설명을 바꾸는 곳(setDescription)에서는 formDescForget_로 바로 지움. 폼에서 직접 고치면 길어야 1시간 뒤 반영
+const FDESC_MEMO = {};
+function formDescRead_(id) {
+  id = String(id || '');
+  if (!id) return '';
+  if (FDESC_MEMO[id] !== undefined) return FDESC_MEMO[id];
+  let d = null;
+  try { d = CacheService.getScriptCache().get('FDESC_' + id); } catch (e) {}
+  if (d === null) {
+    d = '';
+    try { d = String(FormApp.openById(id).getDescription() || ''); } catch (e) { return (FDESC_MEMO[id] = ''); }
+    try { if (d.length < 90000) CacheService.getScriptCache().put('FDESC_' + id, d, 3600); } catch (e) {}
+  }
+  return (FDESC_MEMO[id] = d);
+}
+function formDescForget_(id) {
+  id = String(id || '');
+  delete FDESC_MEMO[id]; delete SLOT_CACHE[id]; delete DESC_CACHE[id];
+  try { CacheService.getScriptCache().remove('FDESC_' + id); } catch (e) {}
+}
 const SLOT_CACHE = {};
 function runSlot_(r) {
   const id = String(r['폼ID'] || '');
   if (id && SLOT_CACHE[id] === undefined) {
     SLOT_CACHE[id] = '';
     try {
-      const first = String(FormApp.openById(id).getDescription() || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean)[0] || '';
+      const first = formDescRead_(id).split('\n').map(function (x) { return x.trim(); }).filter(Boolean)[0] || '';
       if (/자정|바로구매|오전|오후/.test(first) && first.length < 40) SLOT_CACHE[id] = first;
     } catch (e) {}
   }
@@ -532,7 +553,7 @@ const DESC_CACHE = {};
 function isFruit_(r) {
   if (/자정[^\n]*오전\s*7\s*시/.test(runSlot_(r))) return true;
   const id = String(r['폼ID'] || '');
-  if (id && DESC_CACHE[id] === undefined) { DESC_CACHE[id] = ''; try { DESC_CACHE[id] = FormApp.openById(id).getDescription() || ''; } catch (e) {} }
+  if (id && DESC_CACHE[id] === undefined) { DESC_CACHE[id] = ''; try { DESC_CACHE[id] = formDescRead_(id); } catch (e) {} }
   const words = [];
   noticeProducts_(DESC_CACHE[id] || '').forEach(function (p) { words.push(p.name); });
   (String(DESC_CACHE[id] || '').match(/(?:키워드|상품명)\s*[:：][^\n]*/g) || []).forEach(function (l) { l.replace(/^.*?[:：]/, '').split(/[\s,]+/).forEach(function (w) { words.push(w); }); });
@@ -1150,6 +1171,10 @@ function dayFromTitle_(title) {
 // 날짜 칸 모양 통일: 등록일, 진행일은 2026-10-14, 마감 시각은 10/14 10:02, 가격은 글자 그대로
 function formatList_(sh) {
   const n = sh.getMaxRows() - 1;
+  // 줄 수가 그대로면 6시간에 한 번만 (서식 칠하기가 15분마다 몇 초씩, 10/30)
+  const pr = PropertiesService.getScriptProperties(), sig = String(n), last = String(pr.getProperty('LISTFMT') || '').split('|');
+  if (last[0] === sig && Date.now() - Number(last[1] || 0) < 6 * 3600000) return;
+  pr.setProperty('LISTFMT', sig + '|' + Date.now());
   sh.getRange(2, lc_('등록일'), n, 1).setNumberFormat('yyyy-mm-dd');
   sh.getRange(2, lc_('진행일'), n, 1).setNumberFormat('yyyy-mm-dd');
   sh.getRange(2, lc_('마감 시각'), n, 1).setNumberFormat('M/d HH:mm');
@@ -1555,6 +1580,7 @@ function refreshNotice_(r, d) {
   if (!r || !r['폼ID'] || !String(d.desc || '').trim()) return '';
   const notice = withSlotLine_(String(d.desc).split('(구글폼 링크)').join(r['폼 링크']), d.slot, d.fruit || chainFruit_(r));
   FormApp.openById(r['폼ID']).setDescription(formDesc_(notice));
+  formDescForget_(r['폼ID']);
   const room = String(r['카톡방'] || bareTitle_(r['명단 제목'])), ob = outboxSheet_(), last = ob.getLastRow();
   if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) { if (String(v[3]) === room && v[2] === '방 공지' && v[5] !== '보냄') obSet_(ob, v[0], 5, notice); });
   return notice;
@@ -1672,7 +1698,7 @@ function createRunInner_(d) {
   // 공지의 '(구글폼 링크)' 자리에 폼 링크를 넣어서 폼 설명과 카톡 공지를 한 번에 완성
   const fruit0 = d.fruit || (reuse && chainFruit_(reuse));
   const notice = withSlotLine_(String(d.desc || '').split('(구글폼 링크)').join(formUrl), d.slot, fruit0);
-  if (notice) form.setDescription(formDesc_(notice));
+  if (notice) { form.setDescription(formDesc_(notice)); formDescForget_(form.getId()); }
   if (d.platform !== '기대평') try { fixFormQuestions_(form, !!d.realship); } catch (e) { note_('폼 질문 필수/선택 실패: ' + e.message); }
   if (notice && d.room) queueMsg_(d.room, notice, '방 공지');
   // 여러 날 진행이면 다음 일차 계획 저장 (공지는 폼 링크 넣기 전 원본을 템플릿으로)
@@ -1686,7 +1712,7 @@ function createRunInner_(d) {
   // 상품 페이지 주소 (한눈에 탭 '상품' 칸 링크)
   if (d.urls) { try { PropertiesService.getScriptProperties().setProperty('PURL_' + ss.getId(), String(d.urls).slice(0, 2000)); } catch (e) {} }
   // 장바구니건 (10/28): 한 사람이 상품 N개를 한 번에. 진행목록 인원·총건수는 사람, 방 제목·명단 시트 이름·한눈에·월급시트 건수는 물건 수(사람 × N)
-  if (Number(d.cart) > 1) { try { PropertiesService.getScriptProperties().setProperty('CART_' + ss.getId(), String(Number(d.cart))); } catch (e) {} }
+  if (Number(d.cart) > 1) { try { PropertiesService.getScriptProperties().setProperty('CART_' + ss.getId(), String(Number(d.cart))); globalThis.__CARTMAP = null; } catch (e) {} }
   // 썸네일 주소·카톡방 링크 (생성기가 넘기면): 보낼 메시지함 방 공지 옆 사진, [이 방 열기] (10/30)
   if (/^https:\/\/\S+$/.test(String(d.thumb || ''))) { try { PropertiesService.getScriptProperties().setProperty('THUMB_' + ss.getId(), String(d.thumb).slice(0, 500)); } catch (e) {} }
   if (d.roomlink) { try { saveRoomLink_(d.room || d.title, d.roomlink); } catch (e) {} }
@@ -7944,7 +7970,13 @@ function expAnswers_(r, runs) {
 // 방제 끝 숫자: 기대평은 사람 × 건수, 나머지는 사람 수 (월급시트 수량·총액도 기대평은 건수)
 function titleCount_(r, n) { return isExpect_(r) ? expCount_(r, n) : n * cartN_(r); }   // 장바구니건 방 제목 = 물건 수 (사람 × 상품 수, 사용자 10/28)
 // 장바구니건 상품 수 (아니면 1)
-function cartN_(r) { try { return Number(PropertiesService.getScriptProperties().getProperty('CART_' + (r && r['시트ID']))) || 1; } catch (e) { return 1; } }
+// 장바구니 상품 수: 실행마다 속성을 한 번에 읽어 둠 (진행마다 getProperty 하면 15분 확인에서 수백 번, 10/30)
+function cartN_(r) {
+  try {
+    if (!globalThis.__CARTMAP) { const all = PropertiesService.getScriptProperties().getProperties(), m = {}; Object.keys(all).forEach(function (k) { if (k.indexOf('CART_') === 0) m[k] = all[k]; }); globalThis.__CARTMAP = m; }
+    return Number(globalThis.__CARTMAP['CART_' + (r && r['시트ID'])]) || 1;
+  } catch (e) { return 1; }
+}
 
 
 // 원고제공·자율 의뢰 리뷰 가이드 (사용자가 단체방에 보낸 글 그대로, 10/23). 원고는 사용자가 업체에서 받아 직접 나눠 줌
