@@ -204,5 +204,62 @@ if (opts.length !== 2) throw new Error('Options should parse 2 items, got: ' + o
 if (opts[0].label !== '10개') throw new Error('Option[0] should be 10개, got: ' + opts[0].label);
 if (opts[1].label !== '20개') throw new Error('Option[1] should be 20개, got: ' + opts[1].label);
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (5개 샘플 전원 일치)');
+// ==========================================
+// Test 6: 대봉감 (쿠팡 5 + 토스 7: 소과 5 / 로얄중대과 2 분할)
+// ==========================================
+console.log('-- Test 6: 대봉감 (쿠팡 5 + 토스 7: 소과 5 / 로얄중대과 2 분할)');
+const reqDaebong = `#입금대행 택대
+
+1. 검색 키워드 : 대봉감
+2. 키워드 검색 시 현재 순위 : 신규 등록 상품이라 미노출 (키워드 추출 부탁드립니다)
+3. 총 구매 건수 : 5건
+4. 일 진행 건수 :  1일간 진행
+5. 상품주소(URL) 
+상품명:
+가을제철 햇감 달콤말랑 시즌한정 홍시용대봉감
+https://link.coupang.com/a/ifs285AXwO
+6. 구매옵션 : 
+홍시용 대봉감 소과 3kg 5건
+7. 포토제공 유 무 : Y
+8. 리뷰내용 가이드 : 키워드 조합 참고
+9. 입금하실 입금자명 : 전선화
+10. 택배대행 Y/N : Y
+11. ㅡㅡㅡㅡㅡㅡㅡㅡㅡ
+
+1. 검색 키워드 : 대봉감
+2. 키워드 검색 시 현재 순위 : 신규 등록 상품이라 미노출 (키워드 추출 부탁드립니다)
+3. 총 구매 건수 : 7건
+4. 일 진행 건수 :  1일간 진행
+5. 상품주소(URL) 
+상품명:
+홍시용 대봉감 소과 3kg 5건
+https://service.toss.im/shopping-discovery/c/2704063799
+
+홍시용 대봉감 로얄중대과 3kg 2건
+https://service.toss.im/shopping-discovery/c/2704063801
+6. 구매옵션 : 
+홍시용 대봉감 소과 3kg 5건
+홍시용 대봉감 로얄중대과 3kg 2건
+7. 포토제공 유 무 : Y
+8. 리뷰내용 가이드 : 키워드 조합 참고
+9. 입금하실 입금자명 : 전선화
+10. 택배대행 Y/N : Y`;
+
+const headDaebong = P.parseAll(reqDaebong);
+if (headDaebong.guides.length !== 3) throw new Error('Daebong should have 3 guides, got: ' + headDaebong.guides.length);
+if (headDaebong.guides[0].platform !== '쿠팡') throw new Error('Daebong guide 0 platform should be 쿠팡, got: ' + headDaebong.guides[0].platform);
+if (headDaebong.guides[0].total !== '5') throw new Error('Daebong guide 0 total should be 5, got: ' + headDaebong.guides[0].total);
+if (headDaebong.guides[0].option !== '홍시용 대봉감 소과 3kg') throw new Error('Daebong guide 0 option should be stripped of 5건, got: ' + headDaebong.guides[0].option);
+
+if (headDaebong.guides[1].platform !== '토스') throw new Error('Daebong guide 1 platform should be 토스, got: ' + headDaebong.guides[1].platform);
+if (headDaebong.guides[1].total !== '5') throw new Error('Daebong guide 1 total should be 5, got: ' + headDaebong.guides[1].total);
+if (headDaebong.guides[1].pno !== '2704063799') throw new Error('Daebong guide 1 pno should be 2704063799, got: ' + headDaebong.guides[1].pno);
+if (headDaebong.guides[1].page !== '1p') throw new Error('Daebong guide 1 page should default to 1p, got: ' + headDaebong.guides[1].page);
+
+if (headDaebong.guides[2].platform !== '토스') throw new Error('Daebong guide 2 platform should be 토스, got: ' + headDaebong.guides[2].platform);
+if (headDaebong.guides[2].total !== '2') throw new Error('Daebong guide 2 total should be 2, got: ' + headDaebong.guides[2].total);
+if (headDaebong.guides[2].pno !== '2704063801') throw new Error('Daebong guide 2 pno should be 2704063801, got: ' + headDaebong.guides[2].pno);
+if (headDaebong.guides[2].page !== '1p') throw new Error('Daebong guide 2 page should default to 1p, got: ' + headDaebong.guides[2].page);
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (6개 샘플 전원 일치)');
 process.exit(0);
