@@ -23,6 +23,23 @@
  */
 
 
+// 웹앱 열쇠 (10/30): Settings의 옛 KEY는 공개 페이지·GitHub 기록에 남아서 안 씀. 처음 한 번 새 열쇠를 만들어 스크립트 속성(WEBKEY)에 두고 그걸 씀
+//  새 열쇠가 든 링크: 한눈에 탭 표 아래 '▶ 가이드 생성기', 사용법 탭 맨 위 (폰 바꾸면 그 링크를 한 번 누르기). 열쇠 글자는 GitHub에 절대 안 올림
+//  DIAGKEY: 점검(p=diag, 읽기만)에만 쓰는 따로 열쇠 (Claude에게 점검 링크를 줘도 진행 만들기·보내기는 못 함)
+(function () {
+  try {
+    const pr = PropertiesService.getScriptProperties();
+    ['WEBKEY', 'DIAGKEY'].forEach(function (name) {
+      if (!pr.getProperty(name)) { pr.setProperty(name, Utilities.getUuid().replace(/-/g, '')); if (name === 'WEBKEY') globalThis.__WEBKEY_NEW = true; }
+    });
+    CONFIG.KEY = pr.getProperty('WEBKEY');   // 다시 읽음 (두 실행이 동시에 만들면 나중 것으로 맞춤)
+    globalThis.__DIAGKEY = pr.getProperty('DIAGKEY');
+  } catch (e) {}
+})();
+const GUIDE_URL = 'https://sujin-baby.github.io/guide/';
+function guideUrl_() { return GUIDE_URL + '#k=' + encodeURIComponent(CONFIG.KEY); }
+function diagUrl_() { return (CONFIG.WEBAPP_URL || '') + '?p=diag&k=' + encodeURIComponent(globalThis.__DIAGKEY || ''); }
+
 // 응답 시트 헤더에서 찾는 이름들 (폼 질문 제목에 이 말이 들어 있으면 인식)
 const MATCH = {
   order: /주문\s*번호/,
@@ -1466,6 +1483,12 @@ function rvExplain_() {
   return out;
 }
 // 읽기 전용 점검 데이터. 시트·폼·속성을 읽기만 함 (쓰기·정렬·트리거 변경 없음)
+// 점검 결과 글: 보낼메시지 안 링크 등에 든 열쇠는 *** 로 가림
+function diagText_(p) {
+  let t = JSON.stringify(diag_(p), null, 1);
+  [CONFIG.KEY, globalThis.__DIAGKEY].forEach(function (k) { if (k && String(k).length >= 8) t = t.split(String(k)).join('***'); });
+  return t;
+}
 function diag_(p) {
   const tz = CONFIG.TIMEZONE, f = function (d, fmt) { return d instanceof Date ? Utilities.formatDate(d, tz, fmt || 'yyyy-MM-dd') : d; };
   const out = { now: f(new Date(), 'yyyy-MM-dd HH:mm:ss') };
@@ -1612,10 +1635,11 @@ function diag_(p) {
 /* 아이폰 등에서 쓰는 웹 앱: 배포 링크로 열면 '새 진행 만들기' 창이 뜸 (주소 뒤 값으로 미리 채움) */
 function doGet(e) {
   const p = (e && e.parameter) || {};
-  if (p.k !== CONFIG.KEY) return HtmlService.createHtmlOutput('링크가 올바르지 않아요. 체험단 가이드 생성기의 버튼으로 열어 주세요.');
+  if (p.p === 'diag' && globalThis.__DIAGKEY && p.k === globalThis.__DIAGKEY) return ContentService.createTextOutput(diagText_(p)).setMimeType(ContentService.MimeType.JSON);
+  if (p.k !== CONFIG.KEY) return HtmlService.createHtmlOutput('<p style="font-size:18px">열쇠가 바뀌었거나 링크가 올바르지 않아요.<br>관리 시트 <b>한눈에</b> 탭 표 아래 <b>▶ 가이드 생성기</b> 링크(또는 <b>사용법</b> 탭 맨 위 링크)를 한 번 눌러 주세요.</p>');
   if (p.p === 'queue') return ContentService.createTextOutput(queueText_());
   // 읽기 전용 점검 (10/24): 진행목록·일정·보낼메시지·트리거·최근 확인 결과를 JSON으로. 아무것도 안 바꿈 (원격으로 버그 원인 찾기용)
-  if (p.p === 'diag') return ContentService.createTextOutput(JSON.stringify(diag_(p), null, 1)).setMimeType(ContentService.MimeType.JSON);
+  if (p.p === 'diag') return ContentService.createTextOutput(diagText_(p)).setMimeType(ContentService.MimeType.JSON);
   if (p.p === 'sent') { markMsg_(p.id, p.st === 'fail' ? '대기' : '보냄'); return ContentService.createTextOutput('ok'); }
   if (p.p === 'rank') return rankPage_(p);
   if (p.p === 'review') return reviewPage_(p);
@@ -5962,7 +5986,8 @@ const USAGE_ROWS = [
 function ensureUsageTab_() {
   const props = PropertiesService.getScriptProperties(), ss = adminSs_();
   let sh = ss.getSheetByName(USAGE_TAB);
-  if (sh && props.getProperty('USAGE_VER') === USAGE_VER) return;
+  const ver = USAGE_VER + '|' + String(CONFIG.KEY).slice(-4) + String(globalThis.__DIAGKEY || '').slice(-4);   // 열쇠가 바뀌면 링크도 다시
+  if (sh && props.getProperty('USAGE_VER') === ver) return;
   if (!sh) { sh = ss.insertSheet(USAGE_TAB, 0); sh.setTabColor('#5b2a86'); }
   sh.clear();
   sh.getRange(1, 1, USAGE_ROWS.length, 2).setValues(USAGE_ROWS).setWrap(true).setVerticalAlignment('top');
@@ -5973,7 +5998,17 @@ function ensureUsageTab_() {
     else if (r[0] && i > 0) sh.getRange(i + 1, 1).setFontWeight('bold');
   });
   sh.getRange(1, 2).setFontColor('#888888');
-  props.setProperty('USAGE_VER', USAGE_VER);
+  // 맨 위 링크 (열쇠가 들어 있어 이 시트에만. 폰 바꾸면 여기 링크를 한 번 누르면 그 폰에 기억됨)
+  sh.insertRowsBefore(2, 4);
+  const lk = [['▶ 가이드 생성기', guideUrl_(), '폰·컴퓨터 바꾸면 이 링크를 한 번 누르기 (그 기기에 열쇠가 기억돼요)'],
+    ['▶ 보낼 메시지함', outboxUrl_(), '카톡에 보낼 글 (아이폰 홈 화면에 추가)'],
+    ['Claude 점검 링크', diagUrl_(), 'Claude가 점검 링크를 달라고 하면 이 칸 주소를 복사해서 주기 (읽기만 됨)']];
+  lk.forEach(function (x, i) {
+    sh.getRange(2 + i, 1).setValue(x[0]).setFontWeight('bold').setBackground('#fff2cc');
+    if (i < 2) sh.getRange(2 + i, 2).setFormula('=HYPERLINK(' + JSON.stringify(x[1]) + ',' + JSON.stringify(x[2]) + ')').setBackground('#fff2cc');
+    else sh.getRange(2 + i, 2).setValue(x[1] + '\n(' + x[2] + ')').setBackground('#fff2cc');
+  });
+  props.setProperty('USAGE_VER', ver);
 }
 
 /* ---------------- 블랙리스트: 받으면 안 되는 리뷰어 (사용자 요청 10/20) ----------------
@@ -8120,6 +8155,7 @@ function buildDashboard_(force) {
   sh.getRange(bar, 1, 1, 2).setBackground('#efe6f7');
   sh.getRange(bar, 2).setValue('◀ 체크하면 진행 도우미가 시트 오른쪽에 열려요').setFontWeight('bold').setFontColor('#5b2a86').setHorizontalAlignment('left');
   if (CONFIG.WEBAPP_URL) sh.getRange(bar, 4).setFormula('=HYPERLINK(' + q(toolsUrl_()) + ',"휴대폰: ▶ 진행 도우미")').setFontWeight('bold').setHorizontalAlignment('left');
+  sh.getRange(bar, 5).setFormula('=HYPERLINK(' + q(guideUrl_()) + ',"▶ 가이드 생성기")').setFontWeight('bold').setHorizontalAlignment('left');
   if (payUrl) sh.getRange(bar, 6).setFormula('=HYPERLINK(' + q(payUrl) + ',"▶ 월급시트")').setFontWeight('bold').setHorizontalAlignment('left');
   if (CONFIG.TAKBAE_SHEET_URL) sh.getRange(bar, 7).setFormula('=HYPERLINK(' + q(CONFIG.TAKBAE_SHEET_URL) + ',"▶ 택배시트")').setFontWeight('bold').setHorizontalAlignment('left');
   try { sh.getRange(bar, 8).setValue(String(props.getProperty('LAST_REPORT') || '')).setFontWeight('bold').setHorizontalAlignment('left').setWrap(false); } catch (e) {}
