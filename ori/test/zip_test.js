@@ -6,7 +6,7 @@ const it = a => { let i = 0; return { hasNext: () => i < a.length, next: () => a
 let k = 0, age = 3600e3;
 const img = () => { const n = 'KakaoTalk_' + (++k % 7) + '.jpg', id = 'F' + k, t = new Date(Date.now() - age); return { getId: () => id, getName: () => n, getMimeType: () => 'image/jpeg', getLastUpdated: () => t, getDateCreated: () => t, getSize: () => 400000, getBlob: () => ({ setName: x => x }) }; };
 const imgs = n => Array.from({ length: n }, img);
-const folder = (name, files, subs) => ({ getName: () => name, getFiles: () => it(files || []), getFolders: () => it(subs || []) });
+const folder = (name, files, subs) => ({ getUrl: () => 'https://drive/' + name, getName: () => name, getFiles: () => it(files || []), getFolders: () => it(subs || []) });
 let zipped = null, txt = null, msgs = [], obSets = [];
 env.Utilities.zip = (blobs, name) => { zipped = { name, blobs }; return {}; };
 env.Utilities.newBlob = (s, type, name) => { txt = { name, s }; return name; };

@@ -3045,6 +3045,7 @@ function checkFullInner_() {
   if (!props.getProperty('TUMBRV_V1')) try { tumbRvOnce_(); } catch (e) { note_('텀블러 리뷰 설정 실패: ' + e); }
   if (!props.getProperty('EXPWHO1029_V1')) try { expWho1029Once_(); } catch (e) { note_('기대평 10.29 이름 넣기 실패: ' + e); }
   if (!props.getProperty('EXPWHO1029_V2')) { props.deleteProperty('EXPWHO1029_V1'); props.setProperty('EXPWHO1029_V2', '1'); }   // 10.29 B: '.' → 김혜란 (11.5 공지 다시)
+  if (!props.getProperty('NPROD_CLEAN_V1')) try { props.setProperty('NPROD_CLEAN_V1', '1'); Object.keys(props.getProperties()).forEach(function (k) { if (/^NPROD_/.test(k)) props.deleteProperty(k); }); } catch (e) {}   // 옛 공지 상품 기억(영구) 지움 → 6시간 캐시로
   if (!props.getProperty('SALAD1028_V1')) try { salad1028Once_(); } catch (e) { note_('유러피안샐러드외 장바구니 고치기 실패: ' + e); }
   if (!props.getProperty('OPTPRICE_SEED_V1')) try { optPriceSeedOnce_(); } catch (e) { note_('옵션 가격 기억 실패: ' + e); }
   if (!props.getProperty('PAYRETRO_V2')) try { payRetro2Once_(); } catch (e) { note_('양배추 결제금액 다시 보기 실패: ' + e); }
@@ -7905,13 +7906,14 @@ function grantImport_(destId, srcId) {
 
 function cachedNoticeProducts_(fid) {
   if (!fid) return [];
-  const key = 'NPROD_' + fid, props = PropertiesService.getScriptProperties();
-  const c = props.getProperty(key);
+  // 6시간만 기억 (스크립트 속성에 영구로 두면 공지 가격이 바뀌어도(귤 9100 → 9200) 옛 가격으로 주황색 칠함, 10/30)
+  const key = 'NPROD_' + fid, cache = CacheService.getScriptCache();
+  const c = cache.get(key);
   if (c) { try { return JSON.parse(c); } catch (e) {} }
   let p = [];
   try {
     p = noticeProducts_(FormApp.openById(fid).getDescription());
-    if (p && p.length) props.setProperty(key, JSON.stringify(p));
+    if (p && p.length) cache.put(key, JSON.stringify(p), 21600);
   } catch (e) {}
   return p;
 }
@@ -8118,6 +8120,8 @@ function buildDashboard_(force) {
   show.forEach(function (id) {
     const x = sheets[id], top = x.top, n = x.n, width = Math.max(x.layout.length + (x.chk ? 1 : 0), 6);
     const titles = x.runs.map(function (r) { return String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''); }).reverse();
+    // 덩어리 자리는 쓰기 전에 그 자리만 비움 (통째 지우기를 없앤 뒤 예전 덩어리 머리줄·값이 새 명단이 펼쳐질 자리에 남아 #REF! 날 수 있어서, 10/30)
+    try { sh.getRange(top, 1, n + 2, sh.getMaxColumns()).clear().clearDataValidations().clearNote(); } catch (e) {}
     sh.getRange(top, 1, 1, width).setBackground('#f0e8f8');
     // 제목 + 안 산 사람 (관리 시트 배정 탭에서 '아직'인 사람, 응답이 들어오면 바로 바뀜)
     const label = '■ ' + titles[0] + '   (명단 시트: ' + sheetName_(titles[0]) + ')';

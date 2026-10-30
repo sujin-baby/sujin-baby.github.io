@@ -369,7 +369,7 @@ details.help-box summary {
           <span style="font-size: 13px; font-weight: 700; opacity: 0.9;">(폼, 시트 자동 생성)</span>
         </a>
         <p class="note" id="make-note" style="text-align:center; font-weight:bold; margin-bottom:8px;"></p>
-        <a class="btn ghost" id="outbox" href="https://script.google.com/macros/s/AKfycbwTiBWERe1-NhFMLn29m_BtI5JLmTPuLFC4mjJttvEunCljQX1C-xV3AH9O5nrq-Da1Mw/exec?p=outbox&k=XY5WorKYu-tx31nT" target="_blank" rel="noopener" style="display:block; text-align:center; padding:12px; font-size:13.5px; border-radius:12px;">💬 보낼 메시지함 열기 (아이폰 카톡 전송용)</a>
+        <a class="btn ghost" id="outbox" href="https://script.google.com/macros/s/AKfycbwTiBWERe1-NhFMLn29m_BtI5JLmTPuLFC4mjJttvEunCljQX1C-xV3AH9O5nrq-Da1Mw/exec?p=outbox" target="_blank" rel="noopener" style="display:block; text-align:center; padding:12px; font-size:13.5px; border-radius:12px;">💬 보낼 메시지함 열기 (아이폰 카톡 전송용)</a>
       </div>
       <div class="out" data-pane="client" hidden>
         <p class="note">명단 전달, 공지용 명단, 중복 검사는 관리 시트(보낼메시지, 진행 도우미, 한눈에)가 자동으로 해서 여기엔 없어요.</p>
@@ -957,7 +957,14 @@ details.help-box summary {
   }
 
   const WEBAPP = "https://script.google.com/macros/s/AKfycbwTiBWERe1-NhFMLn29m_BtI5JLmTPuLFC4mjJttvEunCljQX1C-xV3AH9O5nrq-Da1Mw/exec";
-  const WEBKEY = "XY5WorKYu-tx31nT";
+  // 웹 앱 열쇠는 공개 페이지에 넣지 않음 (누구나 볼 수 있음, 10/30). 처음 한 번 주소 끝 #k=열쇠 로 열거나 물어보면 이 브라우저에만 기억
+  const WEBKEY = (function () {
+    let k = "";
+    try { const m = location.hash.match(/(?:^#|&)k=([^&]+)/); if (m) { k = decodeURIComponent(m[1]); localStorage.setItem("ori-webkey", k); history.replaceState(null, "", location.pathname + location.search); } } catch (e) {}
+    if (!k) { try { k = localStorage.getItem("ori-webkey") || ""; } catch (e) {} }
+    if (!k) { k = (prompt("관리 웹 앱 열쇠(KEY)를 한 번 넣어 주세요. 이 기기 브라우저에만 저장돼요.") || "").trim(); try { if (k) localStorage.setItem("ori-webkey", k); } catch (e) {} }
+    return k;
+  })();
   const LINKS = {
     "쿠팡": "https://coupa.ng/b59klT",
     "11번가": "https://oneany.shop/DDIqzS",
