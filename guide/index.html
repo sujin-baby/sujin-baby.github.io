@@ -196,7 +196,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v111 · 확장 1.5.0</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v112 (공지 자동 완성 복구) · 확장 1.5.0</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -898,6 +898,7 @@ details.help-box summary {
   const SAMPLE = "#입금대행 택대 \n\n1. 검색 키워드 : 유기농 공주 햇 옥광밤 대과\n2. 키워드 검색 시 현재 순위 : 2kg1위/1kg2위\n1. 총 구매 건수 : 10건 \n2. 일 진행 건수 : 1일차 5건(1kg:3개/2kg2개)            2일차 5건(1kg:2개/2kg3개)            \n3. 상품주소(URL) : \n1kg https://link.coupang.com/a/hNKNgK6UCq\n2kg https://link.coupang.com/a/hNKHcVYRqu   \n\n1. 구매옵션 : 1kg*1 /1kg*2개\n2.  포토유 무 : 무(각각 별점2개,글씨리뷰3개 씩)\n3. 리뷰내용 가이드 : 너무 길지 않게 간단하게 부탁드려요\n4. 입금하실 입금자명 : 주세영\n5. 10.택배대행 Y/N : Y\n===============\n\n1. 검색 키워드 : GAP인증 프리미엄 제주산 황금향\n1. 키워드 검색 시 현재 순위 : 현재 GAP인증 제주산 황금향 검색 시 1위\n2. 총 구매 건수 : 14건 \n3. 일 진행 건수 : 1일차 7건/2일차 7건 \n4. 상품주소(URL) : https://link.coupang.com/a/hNLmUNERTU\n5.  구매옵션 : 1kg×1 5개\n1kg×2 4개  / 1kg×3 3개  /1kg×4 2개 (총14개)\n\n1. 포토제공 유 무 : 무(별점5건 리뷰9건)\n2. 리뷰내용 가이드 : 너무 길지 않게 간단하게 부탁드려요\n3. 입금하실 입금자명 : 주세영\n4. 10.택배대행 Y/N : Y";
   const GF = ["keyword","guide","daily","total","price","ship","platform","seller","option","pname","url","pno","short","page","pageM","similar","photo","thumb"];
   let guides = [{}], cur = 0;
+  let lastHead = null;
   function saveCur() { const g = {}; GF.forEach(k => { g[k] = $(k).value; }); guides[cur] = Object.assign({}, guides[cur], g); }
   function loadGuide(i) {
     cur = i; const g = guides[i] || {};
@@ -1569,6 +1570,7 @@ details.help-box summary {
   let dateFromReq = false;
   function autoDate() { const t = todayKST(); return v("slot") === "midnight" ? nextWorkday(t) : workdayOnOrAfter(t); }
   function fill(r) {
+    lastHead = r;
     noticeEdited = false;
     runNonce = Math.random().toString(36).slice(2, 10);
     $("t-ip").checked = r.type === "입대";
@@ -1785,8 +1787,11 @@ details.help-box summary {
       const a = document.createElement("a");
       // 키워드를 주소 뒤(#kw=)에 붙여서 북마크가 바로 쓰게 하고, 클릭하면 클립보드에도 복사
       const g = guides[cur] || {}, kw = kwList(g).join("|"), pr = prOf(i);
+      const isShortLink = /link\.coupang\.com|coupa\.ng/.test(u.url);
       a.className = "btn ghost"; a.target = "_blank"; a.rel = "noopener";
-      a.href = u.url + (kw && u.url.indexOf("#") === -1 ? "#kw=" + encodeURIComponent(kw) + (pr ? "&pr=" + pr : "") + (ft ? "&fn=" + encodeURIComponent(ft) : "") : "");
+      a.href = (!isShortLink && kw && u.url.indexOf("#") === -1)
+        ? u.url + "#kw=" + encodeURIComponent(kw) + (pr ? "&pr=" + pr : "") + (ft ? "&fn=" + encodeURIComponent(ft) : "")
+        : u.url;
       // 아이폰은 그냥 누르면 쿠팡 앱이 열려서 북마크를 못 씀 → 누르면 키워드만 복사하고, 열기는 길게 눌러 '새 탭에서 열기' (사파리에서 열림)
       a.addEventListener("click", ev => {
         const k0 = kw.split("|")[0];
@@ -2081,7 +2086,7 @@ details.help-box summary {
       warns.push(miss.length === 1 && miss[0] === "가격" ? gn + "가격이 없어요." : gn + "가격 없음: " + miss.join(", ") + " → 위 '옵션마다 가격' 칸에 넣어 주세요 (옵션마다 가격이 달라요)." + (g.pagePrice ? " 상품 페이지에서 읽은 가격 " + g.pagePrice + "은 어느 옵션 가격인지 몰라서 안 넣었어요." : ""));
     });
     // 가격 및 옵션 불일치 경고 (사용자 요청 10/30)
-    const hp = (head && head.headPrices && head.headPrices[0]) || "";
+    const hp = (lastHead && lastHead.headPrices && lastHead.headPrices[0]) || "";
     guides.forEach((g, i) => {
       const gn = guides.length > 1 ? "가이드 " + (i + 1) + ": " : "";
       const gPrices = lines(g.price || "").map(x => x.replace(/,/g, "")).filter(Boolean);

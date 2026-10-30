@@ -34,7 +34,10 @@
   </div>
   <script>
     const qs = new URLSearchParams(location.search);
-    const target = qs.get("url") || "";
+    let target = qs.get("url") || "";
+    if (/link\.coupang\.com|coupa\.ng/.test(target)) {
+      target = target.replace(/#(kw|pr|fn)=.*$/, "");
+    }
     if (target) {
       document.getElementById("go").href = target;
       if (navigator.clipboard && navigator.clipboard.writeText) {
