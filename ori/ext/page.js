@@ -125,9 +125,12 @@
       if (!optPrices.length) optPrices = readOptItems(price);
       /* 고른 옵션을 못 읽었으면 목록에서 지금 가격과 같은 옵션 (하나일 때만) */
       if (optPrices.length && !optPrices.some(x => x.o === opt)) { const hit = optPrices.filter(x => x.p === price); opt = hit.length === 1 ? hit[0].o : ""; }
-      /* 로켓 표시는 이 상품 칸에서만: 아래 추천 상품(이런건 어때요)의 판매자로켓을 이 상품으로 읽던 것 (10/28) */
+      /* 로켓 배송: 배지 이미지, 클래스, 본문 키워드로 정확히 감지 (10/30: 텍스트에 안 나오는 SVG/이미지 배지 감지 보강) */
       const rkTxt = (function (t, nm) { const c = t.search(/쿠팡\s*상품\s*번호|이런\s*건\s*어때요|함께\s*비교하면|다른\s*고객이\s*함께/); if (c > 0) t = t.slice(0, c); const ni = nm ? t.indexOf(String(nm).slice(0, 12)) : -1; if (ni > 0) t = t.slice(ni); return t.slice(0, 8000); })(txt, name);
-      return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, opt: opt || "단일옵션", price: price, optPrices: optPrices, ship: /로켓\s*(배송|와우|그로스|직구|프레시)|판매자\s*로켓/.test(rkTxt) ? "무료 (로켓배송)" : shipOf(txt, name, price), rocket: /로켓\s*(배송|와우|그로스|직구|프레시)|판매자\s*로켓/.test(rkTxt), img: img };
+      const isRocket = !!document.querySelector('.prod-badge__rocket, [class*="badge-rocket"], [class*="rocket-badge"], img[alt*="로켓"], [class*="delivery-badge-rocket"]') ||
+        /로켓\s*(배송|와우|그로스|직구|프레시)|판매자\s*로켓/i.test(rkTxt) ||
+        /로켓\s*(배송|와우|그로스|직구|프레시)|판매자\s*로켓/i.test(html.slice(0, 20000));
+      return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, opt: opt || "단일옵션", price: price, optPrices: optPrices, ship: isRocket ? "무료 (로켓배송)" : shipOf(txt, name, price), rocket: isRocket, img: img };
     }
     const pm = L.pathname.match(/products\/(\d+)/);
     if (!pm) return { err: "네이버는 스마트스토어(또는 브랜드스토어) 상품 페이지에서 눌러 주세요." };
