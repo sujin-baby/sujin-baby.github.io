@@ -196,7 +196,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v118 (업체카톡방 제외 & 날짜별 통째 리뷰 배정) · 확장 1.5.0</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v119 (일부제공 포토대기·서술형 분할·입금대행 누출 방어) · 확장 1.5.0</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -1140,6 +1140,7 @@ details.help-box summary {
         if (c2 > 0 && !/^https?:\/\//i.test(l)) { f[curKey] = l.slice(c2 + 1).trim(); return; }
         f[curKey] = l.replace(/^[-–—•·*]\s*/, ""); return;   // '- 유러피안샐러드'처럼 다음 줄에 값만 (10/28)
       }
+      if (/^(?:입금|택배)\s*대행/i.test(l)) return;   // 9. 입금대행 줄이 앞선 빈 가이드에 섞여 들어가지 않게 방어
       if (curKey) f[curKey] = (f[curKey] ? f[curKey] + "\n" : "") + l;
     });
     return f;
@@ -1198,10 +1199,10 @@ details.help-box summary {
     }
     r.total = ((f.total || "").match(/\d+/) || [""])[0];
     r.photo = (f.photo || "").replace(/\n/g, " ");
-    // '포토 제공 6/ 없음 4', '유 10개, 무10개' = 포토 N + 텍스트 M. 실배송·로켓이면 직접 찍는 포토리뷰 (10/30)
+    // '포토 제공 6/ 없음 4', '유 10개, 무10개', '하루 1명씩 3명 제공 / 7명은 포토없음' = 포토 N + 텍스트 M. 실배송·로켓이면 직접 찍는 포토리뷰 (10/30)
     {
-      const pm = r.photo.match(/(?:포토\s*(?:제공|리뷰)?|유)\s*(\d+)\s*(?:명|개|건)?\s*[,/]\s*(?:포토\s*)?(?:없음|미제공|텍스트|글|무)\s*(?:리뷰)?\s*(\d+)\s*(?:명|개|건)?/);
-      if (pm) {
+      const pm = r.photo.match(/(?:하루\s*\S+\s*)?(?:포토\s*(?:제공|리뷰)?|유)?\s*(\d+)\s*(?:명|개|건)?(?:은|는)?\s*(?:제공|포토)?\s*[,/]\s*(?:포토\s*)?(?:없음|미제공|텍스트|글|무)?\s*(\d+)\s*(?:명|개|건)?(?:은|는)?\s*(?:포토\s*없음|텍스트|글|무|미제공)?/);
+      if (pm && pm[1] && pm[2]) {
         const isReal = (head && (head.realship || head.rocket)) || /실배/.test(text) || (typeof $("realship") !== "undefined" && $("realship") && $("realship").checked);
         const pLabel = isReal ? "포토리뷰" : "포토대기";
         r.photo = "무";
@@ -1364,7 +1365,7 @@ details.help-box summary {
   // 리뷰 공지 종류: 리뷰 종류가 나뉘면 '나눠 배정', 포토 유면 포토대기, 구매확정이면 구확, 직접 찍는 포토, 아니면 전체 텍스트
   // 포토제공: '유', 'Y'. 로켓배송·그로스·실배송은 포토대기가 아니라 직접 쓰는 포토리뷰 (10/30)
   let rocketRun = false;
-  function photoWait(g) { return /^\s*(유|y(es)?\b|있)/i.test(g.photo || "") && !rocketRun && !$("realship").checked; }
+  function photoWait(g) { return /^\s*(유|y(es)?\b|있|일부|추후|미정|제공)/i.test(g.photo || "") && !rocketRun && !$("realship").checked; }
   function reviewKind() {
     if (guides.some(g => reviewMix(g).length)) return "mix";
     const t = guides.map(g => [g.photo, g.review].join(" ")).join(" ");
