@@ -321,14 +321,22 @@
   if (!name) name = ((og && og.content) || document.title).replace(/\s*[-|]\s*쿠팡!?\s*$/, "").replace(/\s+-\s+[^-]{1,20}$/, "").trim();
   const txt = document.body.innerText;
   let seller = "";
-  const sm = txt.match(/판매자\s*[:：]?\s*([^\n]{1,60})/);
-  if (sm) seller = sm[1].replace(/\s*(판매자\s*)?(상품\s*)?보러\s*가기.*$/, "").replace(/\s*판매자\s*평가.*$/, "").trim();
+  const be = document.querySelector('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]');
+  if (be) seller = be.textContent.trim();
+  if (!seller) {
+    const sm = txt.match(/판매자\s*[:：]?\s*([^\n]{1,60})/);
+    if (sm) seller = sm[1].replace(/\s*(판매자\s*)?(상품\s*)?보러\s*가기.*$/, "").replace(/\s*판매자\s*평가.*$/, "").trim();
+  }
   /* '판매자 특가', '판매자로켓' 같은 배지 글자는 판매처가 아님 → 페이지 데이터의 판매자 이름 먼저 (10/21 아이폰 '특가') */
   const vn = jv("vendorName");
-  if (vn) seller = vn;
+  if (vn && !seller) seller = vn;
   if (!seller || seller.length > 30 || /가입|보러가기|평가|정보|^특가|로켓|할인|쿠폰|무료|배송|와우/.test(seller)) {
     const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/);
-    seller = s2 ? s2[1].trim() : "";
+    if (s2 && !seller) seller = s2[1].trim();
+  }
+  if (!seller && name) {
+    const bg = name.split(/\s+/)[0];
+    if (bg && /^[가-힣a-zA-Z0-9]{2,10}$/.test(bg) && !/^(로켓|쿠팡|무료|특가|할인|배송)/.test(bg)) seller = bg;
   }
   const ogi = document.querySelector('meta[property="og:image"]');
   let img = ogi ? ogi.content : "";

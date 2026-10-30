@@ -196,7 +196,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v116 (판매처·옵션·썸네일 복구 완료) · 확장 1.5.0</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v117 (북마크 파싱 정규식 수정 & 실배송 포토/텍스트 분리) · 확장 1.5.0</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -1053,7 +1053,7 @@ details.help-box summary {
     const chunks = splitGuides(body);
     const prices = head.headPrices;
     head.guides = (chunks.length ? chunks : [body]).map((c, i) => {
-      const g = parse(c);
+      const g = parse(c, head);
       if (prices.length === chunks.length) g.price = prices[i];
       else if (prices.length && chunks.length === 1) g.price = prices.join("\n");
       else if (prices.length === 1) g.price = prices[0];
@@ -1109,7 +1109,7 @@ details.help-box summary {
   const LABELS = [
     ["keyword", /검색\s*키워드|검색할\s*키워드/], ["rank", /순위/], ["total", /총\s*구매\s*건수|총\s*건수|총\s*결제\S*\s*건수/], ["daily", /일\s*진행\s*건수|일\s*건수|하루\s*진행\s*건수|하루\s*\S*\s*건수/],
     ["url", /상품\s*주소|URL|상품\s*링크/i], ["option", /옵션/], ["photo", /포토/], ["review", /리뷰\s*내용|리뷰\s*가이드|^\s*리뷰\s*(종류|방식)?\s*$/],
-    ["payer", /입금자|입금하실/], ["takdaeYN", /택배\s*대행/]
+    ["payer", /입금자|입금하실/], ["takdaeYN", /택배\s*대행/], ["depositYN", /입금\s*대행/]
   ];
   const KW_SENT = /검색하시고|검색해\s*주|찾아\s*주시/;
   function labelKey(raw) {
@@ -1178,7 +1178,7 @@ details.help-box summary {
   }
 
   const UNKNOWN = /^\s*(모릅|모름|모르겠|없음|없습니다|미정|미노출|-+\s*$|x\s*$)/i;
-  function parse(text) {
+  function parse(text, head) {
     const f = fieldsOf(text);
     const r = {};
     r.takdae = /^\s*Y/i.test(f.takdaeYN || "");
@@ -1200,8 +1200,16 @@ details.help-box summary {
     }
     r.total = ((f.total || "").match(/\d+/) || [""])[0];
     r.photo = (f.photo || "").replace(/\n/g, " ");
-    // '포토 제공 6/ 없음 4' = 업체 사진 받아 쓰는 포토 6(포토대기) + 텍스트리뷰 4. 날마다 한 종류씩 나눠 줌 (10/21 실링팬)
-    { const pm = r.photo.match(/포토\s*(?:제공|리뷰)?\s*(\d+)\s*(?:명|개|건)?\s*\/?\s*(?:포토\s*)?(?:없음|미제공|텍스트|글)\s*(?:리뷰)?\s*(\d+)/); if (pm) { r.photo = "무"; f.review = "포토대기 " + pm[1] + "개 / 텍스트리뷰 " + pm[2] + "개\n" + (f.review || ""); } }
+    // '포토 제공 6/ 없음 4', '유 10개, 무10개' = 포토 N + 텍스트 M. 실배송·로켓이면 직접 찍는 포토리뷰 (10/30)
+    {
+      const pm = r.photo.match(/(?:포토\s*(?:제공|리뷰)?|유)\s*(\d+)\s*(?:명|개|건)?\s*[,/]\s*(?:포토\s*)?(?:없음|미제공|텍스트|글|무)\s*(?:리뷰)?\s*(\d+)\s*(?:명|개|건)?/);
+      if (pm) {
+        const isReal = (head && (head.realship || head.rocket)) || /실배/.test(text) || (typeof $("realship") !== "undefined" && $("realship") && $("realship").checked);
+        const pLabel = isReal ? "포토리뷰" : "포토대기";
+        r.photo = "무";
+        f.review = pLabel + " " + pm[1] + "개 / 텍스트리뷰 " + pm[2] + "개\n" + (f.review || "");
+      }
+    }
     // 리뷰 가이드 줄은 ' / '로 이어 둠 (줄 구분이 사라지지 않게, 10/21)
     r.review = (f.review || "").split("\n").map(x => x.trim().replace(/\/\s*$/, "")).filter(Boolean).join(" / ");
     // 일 진행 건수: "1일차 5건(1kg:3개/2kg2개) 2일차 5건", "19일 10개, 20일 10개", "3/2" (1일 3, 2일 2), "5건"
@@ -1354,13 +1362,13 @@ details.help-box summary {
   }
   const mixText = m => m ? m.map(o => o.label + " " + o.n + "명").join(" / ") : "";
   // 리뷰 공지 종류: 리뷰 종류가 나뉘면 '나눠 배정', 포토 유면 포토대기, 구매확정이면 구확, 직접 찍는 포토, 아니면 전체 텍스트
-  // 포토제공: '유', 'Y'. 로켓배송·그로스는 포토대기가 아니라 바로 포토리뷰 (사용자 요청 10/21)
+  // 포토제공: '유', 'Y'. 로켓배송·그로스·실배송은 포토대기가 아니라 직접 쓰는 포토리뷰 (10/30)
   let rocketRun = false;
-  function photoWait(g) { return /^\s*(유|y(es)?\b|있)/i.test(g.photo || "") && !rocketRun; }
+  function photoWait(g) { return /^\s*(유|y(es)?\b|있)/i.test(g.photo || "") && !rocketRun && !$("realship").checked; }
   function reviewKind() {
     if (guides.some(g => reviewMix(g).length)) return "mix";
     const t = guides.map(g => [g.photo, g.review].join(" ")).join(" ");
-    if (rocketRun && guides.some(g => /^\s*(유|y(es)?\b|있)/i.test(g.photo || ""))) return "self";
+    if ((rocketRun || $("realship").checked) && guides.some(g => /^\s*(유|y(es)?\b|있)/i.test(g.photo || ""))) return "self";
     if (guides.some(photoWait)) return "photo";
     if (/구매\s*확정|구확/.test(t)) return "confirm";
     if (/구매\s*확정|구확/.test(String($("req").value || "").split("\n")[0])) return "confirm";   // 맨 윗줄(#입금대행 구확 …)에 적힌 구확건 (10/23)
@@ -1542,10 +1550,10 @@ details.help-box summary {
     const r = {};
     // 줄바꿈을 건너뛰어 다음 줄(상품번호 등)을 잘못 읽지 않도록 같은 줄만 매칭 (10/30)
     const get = label => {
-      const m = text.match(new RegExp("^[^\S\r\n]*" + label + "[^\S\r\n]*[:：][^\S\r\n]*([^\r\n]+)", "m"));
+      const m = text.match(new RegExp("^[ \\t]*" + label + "[ \\t]*[:：][ \\t]*(.*)$", "m"));
       return m ? m[1].trim() : "";
     };
-    const name = get("상품명"), seller = get("판매처"), pno = get("상품번호"), page = get("찾은\\s*페이지");
+    const name = get("상품명"), seller = get("판매처"), pno = get("상품번호"), page = get("찾은\\s*페이지") || get("위치");
     const dev = get("찾은\\s*기기"), fkw = get("찾은\\s*키워드"), filt = get("필터"), op = get("옵션");
     if (op) r.option = op;
     if (dev) r.dev = /모바일/.test(dev) ? "M" : "P";
@@ -2183,7 +2191,16 @@ details.help-box summary {
       const optLines = samePrice
         ? ["🐥옵션 : " + (opts.length <= 1 ? (opts[0] || "") : opts.join("\n")), "🐥가격 : " + pTxt(prices[0]) + (hasNum(prices[0]) ? shipTxt : "")]
         : ["🐥옵션 : " + (opts.length ? opts.join("\n") : ""), "🐥가격 : " + prices.map((p, k) => (lab[k] || "") + " " + pTxt(p)).join("\n") + shipTxt];
-      const photo = photoWait(g) ? "🐥리뷰 : ★★★포토대기★★★" : rocketRun && /^\s*(유|y(es)?\b|있)/i.test(g.photo || "") ? "🐥리뷰 : 포토리뷰" : null;
+      const mix = reviewMix(g);
+      const dm = dayMix(g, Number($("day").value) || 1);
+      const mixLine = dm && dm.length ? mixText(dm) : mixText(mix);
+      const photo = photoWait(g)
+        ? "🐥리뷰 : ★★★포토대기★★★"
+        : mix.length
+        ? "🐥리뷰 : " + mixLine
+        : (rocketRun || $("realship").checked) && /^\s*(유|y(es)?\b|있)/i.test(g.photo || "")
+        ? "🐥리뷰 : 포토리뷰"
+        : null;
       return [
         confirmRun ? (i + 1) + "." : guides.length > 1 ? (cartInfo() ? (i + 1) + ")" : (i + 1) + ") " + (g.daily ? g.daily + "명" : "")) : null,
         g.short ? "링크타고 검색▼( 상번이 네이버일때 무시)" : null,
