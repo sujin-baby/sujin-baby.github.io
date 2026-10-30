@@ -5723,24 +5723,23 @@ function reviewDone_(runs) {
         ].join('\n'), '리뷰 독촉');
         note_('✓ 리뷰 독촉 넣음: ' + bareTitle_(r['명단 제목']) + ' ' + names.length + '명');
       });
-      // A-1. 그날(그 방) 사람 전부 체크 → 취완
-      mine.forEach(function (r) {
-        if (!(r['마감 시각'] instanceof Date) && !pastEnd_(r)) return;
-        const w = windowOf_(runs, r);
-        const rows = live.filter(function (i) { const t = v[i][cT].getTime(); return t >= w.from && t < w.to; });
-        if (!rows.length || !rows.every(function (i) { return v[i][cc] === true; })) return;
-        const k = 'RVDONE_' + String(r['명단 제목']).replace(/\s+/g, '');
-        if (props.getProperty(k)) return;
-        props.setProperty(k, '1');
-        if (init) return;
-        queueMsg_(String(r['카톡방'] || bareTitle_(r['명단 제목'])), '취완', '취완');
-        // 리뷰 사진은 날마다 말고 의뢰가 다 끝난 뒤 한 번에 취합 (사용자 요청 10/26) → 아래 A-2에서 '리뷰 캡처 올리기' 할 일
-        note_('✓ 취완 메시지 넣음: ' + bareTitle_(r['명단 제목']));
-      });
-      // A-2. 의뢰 전체 끝 + 전부 체크 → 사장님 보고
+      // A-1. 의뢰 전체 끝 + 전부 체크 → 취완 (캠페인당 1회) 및 사장님 보고 (사용자 요청 10/30: 방마다 날마다 뜨면 너무 많이 떠서, 캠페인 리뷰 취합 완료 시 1회만)
       const total = mine.reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0);
       const got = mine.reduce(function (a, x) { return a + (Number(x['인원']) || 0); }, 0);
       const allDone = (!total || got >= total) && !pend[campKey_(mine[0]['캠페인'] || mine[0]['명단 제목'])] && live.every(function (i) { return v[i][cc] === true; });
+      const dk = 'RVDONE_' + sid;
+      if (allDone && !props.getProperty(dk)) {
+        props.setProperty(dk, '1');
+        if (!init) {
+          const campTitle = String(mine[0]['캠페인'] || bareTitle_(mine[0]['명단 제목']));
+          const roomList = mine.map(function (r) { return String(r['카톡방'] || bareTitle_(r['명단 제목'])); }).filter(Boolean);
+          const uniqRooms = [];
+          roomList.forEach(function (rm) { if (uniqRooms.indexOf(rm) === -1) uniqRooms.push(rm); });
+          const roomLabel = uniqRooms.length > 1 ? (campTitle + ' (전체 ' + uniqRooms.length + '개 방)') : (uniqRooms[0] || campTitle);
+          queueMsg_(roomLabel, '취완', '취완');
+          note_('✓ 캠페인 취완 메시지 넣음: ' + campTitle);
+        }
+      }
       const rk = 'RVRPT_' + sid;
       // 구매확정만 의뢰는 리뷰 캡처가 없음 → 캡처 올리기·압축 없이 보고 글 바로
       let rvKind = ''; try { rvKind = (JSON.parse(props.getProperty('RV_' + sid) || '{}') || {}).kind || ''; } catch (e) {}
@@ -7261,16 +7260,28 @@ function payCarry_(all, month) {
   const year = payYear_(month), start = new Date(year, month - 1, 1), end = new Date(year, month, 1), prevStart = new Date(year, month - 2, 1);
   const got = function (x) { return x['인원'] === '' || x['인원'] === null ? (Number(x['목표인원']) || 0) : Number(x['인원']) || 0; };
 
-  // 1) 이번 달에 유효하게 이월되어야 하는 캠페인 체인 수집 (지난달에 진행 있었고, 이번 달 진행 없고, 아직 총건수 미달인 것만)
+  // 이번 달(month)에 이미 유효한(종료 아닌) 진행이 있는 캠페인은 이월 줄을 절대 만들지 않음 (10/30: 11.02 백발백중 진행이 있는데 옛 10/26 체인 때문에 이월 줄이 되살아나던 버그 원천 차단)
+  const inMonthKeys = {};
+  all.forEach(function (r) {
+    if (r['진행일'] >= start && r['진행일'] < end && r['진행 상태'] !== '종료') {
+      inMonthKeys[campKey_(r['캠페인'] || r['명단 제목'])] = true;
+    }
+  });
+
+  // 1) 이번 달에 유효하게 이월되어야 하는 캠페인 체인 수집 (지난달에 진행 있었고, 이번 달 진행 없고, 아직 총건수 미달이며, 취소/종료된 체인이 아닌 것만)
   const validCarries = {};
   chainsOf_(all).forEach(function (c) {
-    if (!c.total) return;
+    if (!c.total || inMonthKeys[c.key]) return;
     const before = c.runs.filter(function (r) { return r['진행일'] < start; });
     const inMonth = c.runs.some(function (r) { return r['진행일'] >= start && r['진행일'] < end; });
-    const done = before.reduce(function (a, x) { return a + got(x); }, 0);
-    if (!before.length || inMonth || done >= c.total) return;
+    if (!before.length || inMonth) return;
+    // 종료된 체인이거나 마지막 진행이 종료면 취소된 캠페인이므로 이월하지 않음 (10/30: 100발100중 등 10/26 취소 건이 0건 미달로 오인되어 이월되던 버그 차단)
+    const activeBefore = before.filter(function (r) { return r['진행 상태'] !== '종료'; });
+    if (!activeBefore.length) return;
     const lastRun = before[before.length - 1];
-    if (lastRun['진행일'] < prevStart) return;   // 오래 멈춘 캠페인은 안 넘김
+    if (lastRun['진행 상태'] === '종료' || lastRun['진행일'] < prevStart) return;
+    const done = before.reduce(function (a, x) { return a + got(x); }, 0);
+    if (done >= c.total) return;
     validCarries[c.key] = { c: c, lastRun: lastRun, done: done };
   });
 
