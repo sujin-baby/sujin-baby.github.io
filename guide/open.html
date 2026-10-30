@@ -5,32 +5,51 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>사파리에서 상품 열기</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f8fafc; color: #1e293b; text-align: center; padding: 20px; box-sizing: border-box; }
-    .card { background: white; padding: 24px; border-radius: 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.06); max-width: 340px; width: 100%; border: 1.5px solid #e2e8f0; }
-    h2 { font-size: 18px; margin: 0 0 10px; color: #5b2a86; }
-    p { font-size: 14px; color: #64748b; line-height: 1.5; margin: 0 0 16px; }
-    .btn { display: block; background: linear-gradient(135deg, #6366f1, #4f46e5); color: white; padding: 14px; border-radius: 12px; text-decoration: none; font-weight: bold; font-size: 16px; box-shadow: 0 4px 12px rgba(79,70,229,0.25); }
-    .btn:active { transform: scale(0.98); }
-    .tip { font-size: 12px; color: #94a3b8; margin-top: 14px; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #fff5f8; color: #3a2230; text-align: center; padding: 20px; box-sizing: border-box; }
+    .card { background: white; padding: 24px 20px; border-radius: 20px; box-shadow: 0 6px 20px rgba(255,95,168,0.15); max-width: 360px; width: 100%; border: 2.5px solid #3a2230; }
+    h2 { font-size: 19px; margin: 0 0 12px; color: #ff5fa8; }
+    .status { background: #e8f9f0; color: #0b7a42; border: 1.5px solid #0b7a42; border-radius: 10px; padding: 10px; font-weight: bold; font-size: 14px; margin-bottom: 16px; }
+    .guide-box { background: #fdf2f6; border: 1.5px solid #3a2230; border-radius: 12px; padding: 14px; text-align: left; font-size: 13px; line-height: 1.6; color: #3a2230; margin-bottom: 16px; }
+    .guide-box b { color: #d63384; }
+    .btn { display: block; background: #ff5fa8; color: white; padding: 13px; border-radius: 12px; text-decoration: none; font-weight: 900; font-size: 15px; border: 2px solid #3a2230; box-shadow: 2px 2px 0 #3a2230; cursor: pointer; margin-bottom: 10px; }
+    .btn.sub { background: #fff; color: #3a2230; font-size: 13px; padding: 10px; }
+    .btn:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 #3a2230; }
+    .tip { font-size: 11.5px; color: #8c7280; margin-top: 10px; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h2>📱 사파리 전용 상품 열기</h2>
-    <p>쿠팡 앱으로 튕기지 않고<br>사파리 브라우저에서 바로 열려요.</p>
-    <a id="go" class="btn" href="#">상품 페이지로 이동</a>
-    <div class="tip">💡 열린 후 주소창/북마크에서 위치 찾기를 실행하세요</div>
+    <h2>📱 쿠팡 앱 튕김 방지 안내</h2>
+    <div class="status" id="cp-st">✓ 상품 주소를 복사했어요!</div>
+    <div class="guide-box">
+      아이폰은 링크를 그냥 누르면 <b>쿠팡 앱</b>으로 자동 이동됩니다.<br><br>
+      <b>사파리 웹 브라우저에서 보는 법:</b><br>
+      1. 맨 위 <b>사파리 주소창</b>을 길게 누르세요.<br>
+      2. <b>[붙여넣기 및 이동]</b>을 누르세요.<br>
+      👉 앱으로 안 튕기고 사파리 웹에서 바로 열립니다!
+    </div>
+    <button type="button" class="btn" id="copy-btn">📋 주소 다시 복사하기</button>
+    <a id="go" class="btn sub" href="#" target="_blank" rel="noopener">새 탭에서 열기 (길게 눌러 새 탭)</a>
+    <div class="tip">💡 사파리 웹에서 열어야 북마크릿 도구를 쓸 수 있어요.</div>
   </div>
   <script>
     const qs = new URLSearchParams(location.search);
-    const target = qs.get("url");
+    const target = qs.get("url") || "";
     if (target) {
       document.getElementById("go").href = target;
-      // location.replace from user gesture or after tiny delay prevents iOS Universal Link app intercept
-      setTimeout(() => {
-        location.replace(target);
-      }, 400);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(target).catch(() => {});
+      }
     }
+    document.getElementById("copy-btn").addEventListener("click", () => {
+      if (target) {
+        navigator.clipboard.writeText(target).then(() => {
+          document.getElementById("cp-st").textContent = "✓ 주소를 다시 복사했어요!";
+        }).catch(() => {
+          prompt("아래 주소를 복사해 주세요:", target);
+        });
+      }
+    });
   </script>
 </body>
 </html>
