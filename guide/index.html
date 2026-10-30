@@ -196,7 +196,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v113 (검증 완료) · 확장 1.5.0</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v114 (PC 키워드 복구 완료) · 확장 1.5.0</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -1785,13 +1785,10 @@ details.help-box summary {
     if (noUrl) urls.push({ label: "", url: "https://www.coupang.com" });
     urls.forEach((u, i) => {
       const a = document.createElement("a");
-      // 키워드를 주소 뒤(#kw=)에 붙여서 북마크가 바로 쓰게 하고, 클릭하면 클립보드에도 복사
+      // 키워드를 주소 뒤(#kw=)에 붙여서 북마크 및 PC 확장 프로그램이 바로 쓰게 하고, 클릭하면 클립보드에도 복사
       const g = guides[cur] || {}, kw = kwList(g).join("|"), pr = prOf(i);
-      const isShortLink = /link\.coupang\.com|coupa\.ng/.test(u.url);
       a.className = "btn ghost"; a.target = "_blank"; a.rel = "noopener";
-      a.href = (!isShortLink && kw && u.url.indexOf("#") === -1)
-        ? u.url + "#kw=" + encodeURIComponent(kw) + (pr ? "&pr=" + pr : "") + (ft ? "&fn=" + encodeURIComponent(ft) : "")
-        : u.url;
+      a.href = u.url + (kw && u.url.indexOf("#") === -1 ? "#kw=" + encodeURIComponent(kw) + (pr ? "&pr=" + pr : "") + (ft ? "&fn=" + encodeURIComponent(ft) : "") : "");
       // 아이폰은 그냥 누르면 쿠팡 앱이 열려서 북마크를 못 씀 → 누르면 키워드만 복사하고, 열기는 길게 눌러 '새 탭에서 열기' (사파리에서 열림)
       a.addEventListener("click", ev => {
         const k0 = kw.split("|")[0];

@@ -126,7 +126,7 @@ const ui = (tabId, s) => { if (s && s.title) pushGen({ status: s.title + (s.msg 
 
 /* ---------- 키워드 추천 (생성기와 같은 규칙) ----------
    네추럴라이즈 플래티넘 오메가3 1100 1,202mgx180캡슐 → 오메가3 | 플래티넘 오메가3 | 네추럴라이즈 오메가3 */
-const KW_STOP = /^(탈부착식|탈부착|착붙는|무타공|세라믹|코팅|프리미엄|고급|대용량|소용량|회전|포함|정품|국내산|수입산|신상|신상품|인기|추천|최신|업그레이드|스마트|터치|겨울|여름|봄|가을|방한|보온보냉|보온|보냉|세척솔|대시보드|특가|증정|무료배송|1\+1|세트|단품|미니|슬림|휴대용|접이식)$/;
+const KW_STOP = /^(탈부착식|탈부착|착붙는|무타공|세라믹|코팅|프리미엄|고급|대용량|소용량|회전|포함|정품|국내산|수입산|신상|신상품|인기|추천|최신|업그레이드|스마트|터치|겨울|여름|봄|가을|방한|보온보냉|보온|보냉|세척솔|대시보드|특가|증정|무료배송|1\+1|세트|단품|미니|슬림|휴대용|접이식|없습니다|없음|오류|권한|사용권한|페이지)$/;
 function suggest(pname) {
   const raw = String(pname || "").replace(/\(.*$/, "").replace(/\[[^\]]*\]/g, " ");
   const dash = raw.split(/\s+-\s+/);
@@ -448,6 +448,10 @@ async function run(tab) {
   const info = await call(tid, "readProduct").catch(() => null);
   if (!info) { await ui(tid, { title: "상품 위치 찾기", msg: "이 화면은 읽을 수 없어요. 쿠팡·네이버·올리브영 상품 페이지에서 눌러 주세요." }); return; }
   if (info.err) { await ui(tid, { title: "상품 위치 찾기", msg: info.err }); return; }
+  if (/사용권한이\s*없|접속이\s*제한|Access\s*Denied/i.test(info.name || "")) {
+    await ui(tid, { title: "상품 페이지 오류", msg: "쿠팡에서 사용권한 없음/차단 오류가 떴어요. 상품 페이지를 직접 확인해 주세요." });
+    return;
+  }
   const site = info.site;
   if (site === "naver") return naverProduct(tab, info);
   PER = 36;
