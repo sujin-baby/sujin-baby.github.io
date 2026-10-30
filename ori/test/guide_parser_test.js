@@ -61,11 +61,23 @@ const sandbox = {
     documentElement: { hasAttribute: () => false },
     addEventListener: () => {}
   },
+  navigator: {
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
+    platform: 'iPhone',
+    maxTouchPoints: 5,
+    clipboard: { writeText: () => Promise.resolve() }
+  },
   window: {
     addEventListener: () => {},
     prompt: () => 'test-key',
     alert: () => {},
-    localStorage: { getItem: () => 'test-key', setItem: () => {} }
+    localStorage: { getItem: () => 'test-key', setItem: () => {} },
+    navigator: {
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
+      platform: 'iPhone',
+      maxTouchPoints: 5,
+      clipboard: { writeText: () => Promise.resolve() }
+    }
   },
   prompt: () => 'test-key',
   alert: () => {},
