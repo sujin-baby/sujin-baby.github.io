@@ -506,18 +506,26 @@ function runCount_(runs, r, times) {
 // 폼 설명 읽기: 실행 안에서 한 번 + 1시간 캐시 (10/30: 월급시트 줄 계산이 줄마다 폼을 두 번씩 열어 15분 확인마다 35초)
 //  스크립트가 설명을 바꾸는 곳(setDescription)에서는 formDescForget_로 바로 지움. 폼에서 직접 고치면 길어야 1시간 뒤 반영
 const FDESC_MEMO = {};
-function formDescRead_(id) {
+//  maxAge(초): 캐시에 넣은 지 이만큼 지났으면 다시 엶. 기본 1시간, 사흘 넘게 지난 진행은 6시간 (descAge_. 10/31: 캐시가 끝날 때마다 월급시트 줄 계산이 옛 진행 폼을 다 열어 20초)
+const FDESC_SEP = '\u0001';
+function formDescRead_(id, maxAge) {
   id = String(id || '');
   if (!id) return '';
   if (FDESC_MEMO[id] !== undefined) return FDESC_MEMO[id];
   let d = null;
-  try { d = CacheService.getScriptCache().get('FDESC_' + id); } catch (e) {}
+  try {
+    const c = CacheService.getScriptCache().get('FDESC_' + id), i = c === null ? -1 : c.indexOf(FDESC_SEP);
+    if (i > 0 && Date.now() - Number(c.slice(0, i)) < (maxAge || 3600) * 1000) d = c.slice(i + 1);
+  } catch (e) {}
   if (d === null) {
     d = '';
     try { d = String(FormApp.openById(id).getDescription() || ''); } catch (e) { return (FDESC_MEMO[id] = ''); }
-    try { if (d.length < 90000) CacheService.getScriptCache().put('FDESC_' + id, d, 3600); } catch (e) {}
+    try { if (d.length < 90000) CacheService.getScriptCache().put('FDESC_' + id, Date.now() + FDESC_SEP + d, 21600); } catch (e) {}
   }
   return (FDESC_MEMO[id] = d);
+}
+function descAge_(r) {
+  return r && r['진행일'] instanceof Date && dayStart_(r['진행일']) < today_().getTime() - 2 * 86400000 ? 21600 : 3600;
 }
 function formDescForget_(id) {
   id = String(id || '');
@@ -530,7 +538,7 @@ function runSlot_(r) {
   if (id && SLOT_CACHE[id] === undefined) {
     SLOT_CACHE[id] = '';
     try {
-      const first = formDescRead_(id).split('\n').map(function (x) { return x.trim(); }).filter(Boolean)[0] || '';
+      const first = formDescRead_(id, descAge_(r)).split('\n').map(function (x) { return x.trim(); }).filter(Boolean)[0] || '';
       if (/자정|바로구매|오전|오후/.test(first) && first.length < 40) SLOT_CACHE[id] = first;
     } catch (e) {}
   }
@@ -553,7 +561,7 @@ const DESC_CACHE = {};
 function isFruit_(r) {
   if (/자정[^\n]*오전\s*7\s*시/.test(runSlot_(r))) return true;
   const id = String(r['폼ID'] || '');
-  if (id && DESC_CACHE[id] === undefined) { DESC_CACHE[id] = ''; try { DESC_CACHE[id] = formDescRead_(id); } catch (e) {} }
+  if (id && DESC_CACHE[id] === undefined) { DESC_CACHE[id] = ''; try { DESC_CACHE[id] = formDescRead_(id, descAge_(r)); } catch (e) {} }
   const words = [];
   noticeProducts_(DESC_CACHE[id] || '').forEach(function (p) { words.push(p.name); });
   (String(DESC_CACHE[id] || '').match(/(?:키워드|상품명)\s*[:：][^\n]*/g) || []).forEach(function (l) { l.replace(/^.*?[:：]/, '').split(/[\s,]+/).forEach(function (w) { words.push(w); }); });
