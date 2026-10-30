@@ -930,12 +930,15 @@ function payCheck_(ss, add) {
   });
 }
 // 폼 보기 → 공지 가격 (배정 탭 H 폼 보기 → I 가격, 같은 보기면 가장 많이 나온 값). 폼 보기에 가격이 없는 여러 상품 의뢰용 (10/27)
-function optPriceMap_(titles, sid) {
+function optPriceMap_(titles, sid, asgVals) {
   const out = {}, cnt = {};
   if (sid) try { Object.assign(out, JSON.parse(PropertiesService.getScriptProperties().getProperty('OPTPRICE_' + sid) || '{}')); } catch (e) {}
   try {
-    const as = assignSheet_(), al = as.getLastRow();
-    if (al >= 2) as.getRange(2, 1, al - 1, 9).getValues().forEach(function (v) {
+    const vals = asgVals || (function () {
+      const as = assignSheet_(), al = as.getLastRow();
+      return al >= 2 ? as.getRange(2, 1, al - 1, 9).getValues() : [];
+    })();
+    vals.forEach(function (v) {
       if (titles.indexOf(String(v[0])) < 0) return;
       const c = String(v[7]).trim(), p = Number(String(v[8]).replace(/[^0-9]/g, '')) || 0;
       if (!c || !p) return;
@@ -7224,12 +7227,21 @@ function payCarry_(all, month) {
   chainsOf_(all).forEach(function (c) {
     if (!c.total) return;
     const before = c.runs.filter(function (r) { return r['진행일'] < start; });
-    if (!before.length || c.runs.some(function (r) { return r['진행일'] >= start && r['진행일'] < end; })) return;
+    const inMonth = c.runs.some(function (r) { return r['진행일'] >= start && r['진행일'] < end; });
+    const done = before.reduce(function (a, x) { return a + got(x); }, 0);
+    const existingIdx = t.names.findIndex(function (nm, k) { return nm && /이월/.test(t.notes[k]) && campKey_(nm) === c.key; });
+    // 이미 지난달에 전량 완료되었거나 이번 달에 직접 진행이 있는 경우: 남아있는 이월 줄이 있으면 삭제
+    if (!before.length || inMonth || done >= c.total) {
+      if (existingIdx !== -1) {
+        const delRow = L.head + 1 + existingIdx;
+        try { sh.deleteRow(delRow); } catch (e) { sh.getRange(delRow, 1, 1, sh.getLastColumn()).clearContent(); }
+        t = read();
+      }
+      return;
+    }
     const lastRun = before[before.length - 1];
     if (lastRun['진행일'] < prevStart) return;   // 지난달에 진행이 있던 것만 (오래 멈춘 캠페인은 안 넘김)
-    const done = before.reduce(function (a, x) { return a + got(x); }, 0);
-    if (done >= c.total) return;
-    let i = t.names.findIndex(function (nm, k) { return nm && /이월/.test(t.notes[k]) && campKey_(nm) === c.key; });
+    let i = existingIdx;
     if (i === -1) i = t.names.findIndex(function (nm) { return !nm.trim(); });
     const row = i === -1 ? Math.max(sh.getLastRow(), L.head) + 1 : L.head + 1 + i;
     const set = function (col, val) { if (col && !sh.getRange(row, col).getFormula() && sh.getRange(row, col).getValue() !== val) sh.getRange(row, col).setValue(val); };
@@ -7891,6 +7903,19 @@ function grantImport_(destId, srcId) {
   } catch (e) {}
 }
 
+function cachedNoticeProducts_(fid) {
+  if (!fid) return [];
+  const key = 'NPROD_' + fid, props = PropertiesService.getScriptProperties();
+  const c = props.getProperty(key);
+  if (c) { try { return JSON.parse(c); } catch (e) {} }
+  let p = [];
+  try {
+    p = noticeProducts_(FormApp.openById(fid).getDescription());
+    if (p && p.length) props.setProperty(key, JSON.stringify(p));
+  } catch (e) {}
+  return p;
+}
+
 function buildDashboard_(force) {
   const allRuns = readRuns_();
   const runs = allRuns.filter(function (r) { return r['진행 상태'] !== '종료' && r['시트ID'] && !dashHidden_(r); })
@@ -7978,21 +8003,19 @@ function buildDashboard_(force) {
   props.deleteProperty('DASH_SIG');
   order.forEach(function (id) { grantImport_(ss.getId(), sheets[id].sid); });
   if (!sh) sh = ss.insertSheet(DASH_TAB, 0);
-  // 1행은 글자만 지우고 서식은 둠 (직접 칠한 색이 안 풀리게)
-  sh.getRange(1, 1, 1, sh.getMaxColumns()).clearContent();
-  sh.getRange(2, 1, sh.getMaxRows() - 1, sh.getMaxColumns()).clear().clearDataValidations();
+  const prevLastRow = Math.max(sh.getLastRow(), 2);
   sh.setFrozenRows(1);
   const q = function (t) { return '"' + String(t).replace(/"/g, '""') + '"'; };
   // D = 의뢰서 총 구매 건수, E = 그날 목표 (그날 하루 받을 인원)
   // K = 상품 페이지 링크(글자는 플랫폼: 쿠팡·네이버·올리브영·토스 …). 택배시트 링크는 아래 줄 월급시트 옆에 하나만 (사용자 요청 10/21)
   const head = ['진행일', '방제', '상태', '의뢰 총건수', '그날 목표', '신청', '남은', '마감 시각', '명단', '폼', '상품', '틀린 옵션', '택배 옮김', '확인 필요'];
   let obNotices = []; try { const ob0 = outboxSheet_(), ol0 = ob0.getLastRow(); if (ol0 >= 2) obNotices = ob0.getRange(2, 4, ol0 - 1, 2).getValues().filter(function (v) { return /🐥\s*상품번호/.test(String(v[1])); }); } catch (e) {}
-  // 칸마다 남아 있던 메모(clear로는 안 지워져서 줄이 바뀌면 엉뚱한 칸에 보임)는 다 지움
-  try { sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).clearNote(); } catch (e) {}
   let errs = {};
   try { errs = JSON.parse(props.getProperty('RUN_ERRORS') || '{}'); } catch (e) {}
   sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold').setBackground('#efe6f7');
   const payUrl = CONFIG.PAY_SHEET_ID ? 'https://docs.google.com/spreadsheets/d/' + CONFIG.PAY_SHEET_ID + '/edit#gid=' + CONFIG.PAY_TAB_GID : '';
+  const allAsgValues = [];
+  try { const as = assignSheet_(), al = as.getLastRow(); if (al >= 2) allAsgValues.push.apply(allAsgValues, as.getRange(2, 1, al - 1, 9).getValues()); } catch (e) {}
   // 아래 덩어리 자리 먼저 계산 (위 표 '틀린 옵션'이 덩어리의 옵션 확인 칸을 셈). 위 표 아래 줄 다음에 '리뷰 취합할 것' 칸이 있으면 그만큼 아래로
   let row = runs.length + 4 + (rvItems.length ? rvItems.length + 2 : 0);
   show.forEach(function (id) {
@@ -8014,8 +8037,7 @@ function buildDashboard_(force) {
     x.opt = T[5][1] ? 6 : 0;
     x.chk = x.nick && x.opt ? x.layout.length + 1 : 0;
     // 택배 상품 = 업체명 + 상품 짧은 이름 (옵션 글자나 결제금액으로 어느 상품인지 찾음)
-    x.prods = [];
-    try { x.prods = noticeProducts_(FormApp.openById(x.runs[0]['폼ID']).getDescription()); } catch (e) {}
+    x.prods = cachedNoticeProducts_(x.runs[0]['폼ID']);
     x.shop = String(x.runs[0]['업체'] || (x.prods[0] || {}).shop || '').replace(/\s+/g, '');
     // 판매 상품 이름: 방제의 상품명(업체명, '외' 뺌) 예) 고구마말랭이, 옥광밤. 상품이 여럿이면 공지의 상품마다 이름
     x.item = campOf_(x.runs[x.runs.length - 1]['명단 제목']).replace(/\s+/g, '');
@@ -8160,7 +8182,7 @@ function buildDashboard_(force) {
     x.prods.forEach(function (p) { p.prices.forEach(function (v) { if (prices.indexOf(v) === -1) prices.push(v); }); });
     (String(x.runs[0]['가격'] || '').match(/\d{3,}/g) || []).forEach(function (v) { v = Number(v); if (prices.indexOf(v) === -1) prices.push(v); });
     // 옵션마다 가격을 알면(배정 탭) 그 옵션 가격과 비교 (10/27: 상품 여럿이면 다른 상품 가격과 같기만 해도 넘어가던 것)
-    const pm = optPriceMap_(x.runs.map(function (m) { return String(m['명단 제목']); }), x.sid), pc = Object.keys(pm);
+    const pm = optPriceMap_(x.runs.map(function (m) { return String(m['명단 제목']); }), x.sid, allAsgValues), pc = Object.keys(pm);
     if ((prices.length || pc.length) && x.layout[6][1]) {
       const num = 'VALUE(REGEXREPLACE(TO_TEXT(G' + r0 + '),"[^0-9]",""))', F = 'TRIM(F' + r0 + ')';
       const any = prices.length ? 'NOT(OR(' + prices.map(function (v) { return num + '=' + v; }).join(',') + '))' : 'FALSE';
@@ -8203,6 +8225,16 @@ function buildDashboard_(force) {
       const c = r.getBooleanCondition(), f = c ? String((c.getCriteriaValues() || [])[0] || '') : '';
       return /WORKDAY\(TODAY\(\),1,\{/.test(f) ? SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(f.replace(/,\{[^}]*\}/, '')).setBackground('#cfe2f3').setRanges(r.getRanges()).build() : r;
     }));
+  }
+  // 맨 끝 정리: 이번에 쓴 범위보다 아래에 남아있는 이전 잔여 행만 정리 (시작 시 전체 clear를 하지 않아 5분 백지화 원천 차단)
+  const maxUsedRow = Math.max(row, bar + 2);
+  if (prevLastRow > maxUsedRow) {
+    try { sh.getRange(maxUsedRow + 1, 1, prevLastRow - maxUsedRow, sh.getMaxColumns()).clear().clearDataValidations().clearNote(); } catch (e) {}
+  }
+  const block0Top = show.length ? sheets[show[0]].top : (bar + 3);
+  const gapStart = rvItems.length ? (bar + 2 + rvItems.length + 1) : (bar + 1);
+  if (block0Top > gapStart) {
+    try { sh.getRange(gapStart, 1, block0Top - gapStart, sh.getMaxColumns()).clear().clearDataValidations().clearNote(); } catch (e) {}
   }
   props.setProperty('DASH_SIG', sig);
   props.setProperty('DASH_TITLES', JSON.stringify(runs.map(function (r) { return bareTitle_(r['명단 제목']); })));
