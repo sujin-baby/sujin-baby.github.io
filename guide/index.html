@@ -308,28 +308,38 @@ details.help-box summary {
       </div>
       <div id="o-warn" class="warn" hidden></div>
 
-      <div class="tabs" role="tablist">
-        <button role="tab" aria-selected="true" data-tab="notice" id="tab-notice">방 공지 (공지+상품)</button>
-        <button role="tab" aria-selected="false" data-tab="client" id="tab-client">기타 문구 (업체 안내·송장·리뷰 가이드)</button>
+      <div class="tabs" role="tablist" style="margin-bottom: 12px;">
+        <button role="tab" aria-selected="true" data-tab="notice" id="tab-notice" style="font-size: 13.5px; padding: 7px 12px;">📢 방 공지 (공지+상품)</button>
+        <button role="tab" aria-selected="false" data-tab="client" id="tab-client" style="font-size: 13.5px; padding: 7px 12px;">📑 기타 문구 (업체·송장·리뷰)</button>
       </div>
 
       <div class="out" data-pane="notice">
-        <div class="out-head"><span>카톡방 상단과 구글폼 설명에 한 번에 붙여넣기 (직접 고쳐도 돼요)</span><span class="row"><button class="small ghost" id="notice-reset" hidden>자동 내용으로 되돌리기</button><button class="small" data-copy="o-notice">복사</button></span></div>
+        <div class="out-head" style="align-items: center; margin-bottom: 6px;">
+          <span style="font-weight: 800; font-size: 13px; color: var(--ink);">📋 카톡방 공지 / 구글폼 설명문</span>
+          <span class="row">
+            <button class="small ghost" id="notice-reset" hidden>되돌리기</button>
+            <button class="primary small" data-copy="o-notice" style="font-size: 12.5px; padding: 6px 12px;">📋 공지 전체 복사</button>
+          </span>
+        </div>
         <div class="thumb" id="thumb-box" hidden>
           <span class="note">상품 이미지</span>
           <a class="btn small ghost" id="thumb-link" href="#" target="_blank" rel="noopener">썸네일 새 탭에서 열기</a>
           <span class="note">썸네일 저장은 북마크 상자의 [썸네일 저장]이 해요 (PC는 바로 다운로드, 휴대폰은 앨범에).</span>
         </div>
-        <textarea id="o-notice" class="notice-ta" spellcheck="false" aria-label="방 공지"></textarea>
-        <div class="bm">
-          <p class="note"><b>살 사람 이름은 위 공지에 바로 적으세요.</b> 옵션 줄 뒤에 띄어쓰기로: <span class="mono">화이트 (2명) 김민희 선우승</span><br>
-          아래 버튼을 누르면 관리 시트 <b>배정</b> 탭에 바로 들어가요. 폼수정 탭에 붙여넣지 않아도 돼요.<br>
-          띄어쓰기 있는 닉네임은 대괄호로 묶기: <span class="mono">그린 (2명) [시묘 심효진] 조혜정</span><br>
-          <b>이름을 나중에 넣을 때</b>: 공지에 이름을 넣고 같은 버튼을 다시 누르세요. 진행은 새로 안 생기고 배정만 저장돼요 (구글폼 설명과 아직 안 보낸 방 공지도 이름 넣은 걸로 바뀜). 생성기를 닫았다 다시 열고 의뢰서를 다시 붙여넣었어도, 날짜와 방제가 같으면 이미 만든 진행으로 알아봐요.</p>
+        <textarea id="o-notice" class="notice-ta" spellcheck="false" aria-label="방 공지" style="min-height: 240px; font-size: 13px; line-height: 1.5; padding: 12px;"></textarea>
+
+        <div class="card-out" style="margin: 12px 0; background: #fff8fb; border: 2px solid var(--ink); border-radius: 12px; padding: 12px 14px;">
+          <div style="font-weight: 900; font-size: 13px; color: var(--pink-deep); margin-bottom: 8px;">💡 살 사람 이름(배정) 입력 팁</div>
+          <div style="font-size: 12.5px; line-height: 1.6; color: var(--ink);">
+            • <b>배정 입력</b>: 위 공지의 옵션 뒤에 이름 적기 <span class="mono" style="background:#f1e4eb; padding:1px 5px; border-radius:4px;">화이트 (2명) 김민희 선우승</span><br>
+            • <b>띄어쓰기 닉네임</b>: 대괄호로 묶기 <span class="mono" style="background:#f1e4eb; padding:1px 5px; border-radius:4px;">그린 (2명) [시묘 심효진] 조혜정</span><br>
+            • <b>배정 수정</b>: 나중에 이름을 채우고 아래 버튼을 다시 누르면 배정 탭만 자동 업데이트돼요!
+          </div>
         </div>
-        <a class="btn" id="make-run" href="#" target="_blank" rel="noopener">이 내용으로 새 진행 만들기 (폼, 시트 자동 생성)</a>
-        <p class="note" id="make-note"></p>
-        <a class="btn ghost" id="outbox" href="#" target="_blank" rel="noopener">보낼 메시지함 열기 (아이폰에서 카톡으로 보낼 때)</a>
+
+        <a class="btn primary" id="make-run" href="#" target="_blank" rel="noopener" style="display:block; text-align:center; padding:15px; font-size:15px; font-weight:900; margin-bottom:10px; border-radius:12px; box-shadow: 2px 2px 0 var(--ink);">🚀 이 내용으로 새 진행 만들기 (폼·시트 자동 생성)</a>
+        <p class="note" id="make-note" style="text-align:center; font-weight:bold; margin-bottom:8px;"></p>
+        <a class="btn ghost" id="outbox" href="#" target="_blank" rel="noopener" style="display:block; text-align:center; padding:12px; font-size:13.5px; border-radius:12px;">💬 보낼 메시지함 열기 (아이폰 카톡 전송용)</a>
       </div>
       <div class="out" data-pane="client" hidden>
         <p class="note">명단 전달, 공지용 명단, 중복 검사는 관리 시트(보낼메시지, 진행 도우미, 한눈에)가 자동으로 해서 여기엔 없어요.</p>
@@ -2450,8 +2460,7 @@ details.help-box summary {
       await bsleep(300);
       saveCur(); render();
       toast("의뢰서에서 상품 정보를 분석해 채웠어요!");
-      batchSay("✓ 의뢰서 정보를 채웠어요. 상품 페이지를 직접 확인하시려면 아래 [페이지 열기] 버튼을 눌러주세요.
-(PC 크롬에 확장 프로그램을 설치하시면 상품 위치까지 완전 자동 크롤링돼요)");
+      batchSay("✓ 의뢰서 정보를 채웠어요. 상품 페이지를 직접 확인하시려면 아래 [페이지 열기] 버튼을 눌러주세요.\\n(PC 크롬 확장 프로그램 사용 시 실시간 크롤링 지원)");
       return;
     }
     if (!guides.length || !String(v("req") || "").trim()) { batchSay("의뢰서를 먼저 붙여넣어 주세요.", true); return; }
