@@ -992,10 +992,16 @@ function listTabsRecent_(runs, skip) {
     if (runs.some(function (x) { return String(x['시트ID']) === sid && x['실배송'] === 'Y'; })) props.setProperty('LISTREAL_' + sid, '1');
     if (Date.now() - Number(props.getProperty(k) || 0) < 25 * 60000) return;
     props.setProperty(k, String(Date.now()));
+    // 지난번 뒤로 명단 시트 파일이 안 바뀌었으면(새 응답·수정 없음) 안 엶 (10/31: 의뢰마다 열어서 88초). 하루 한 번은 그래도 엶
+    const mk = 'LISTMOD_' + sid, day = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
+    let mod = 0;
+    try { mod = DriveApp.getFileById(sid).getLastUpdated().getTime(); } catch (e) {}
+    if (mod && props.getProperty(mk) === mod + '|' + day) return;
     try {
       const lss = SpreadsheetApp.openById(sid);
       if (fixListRef_(lss)) note_('✓ 명단 탭을 값으로 바꿈: ' + lss.getName());
       else syncList_(lss);
+      try { SpreadsheetApp.flush(); props.setProperty(mk, DriveApp.getFileById(sid).getLastUpdated().getTime() + '|' + day); } catch (e) {}
     } catch (e) { note_('명단 탭 값으로 바꾸기 실패 ' + sid + ': ' + e); }
   });
 }
@@ -1012,7 +1018,7 @@ function adoptOrphanForms_(runs) {
   const pnos = function (d) { const out = []; String(d || '').split('\n').forEach(function (l) { if (/상품\s*번호/.test(l)) (l.match(/\d{8,}/g) || []).forEach(function (x) { out.push(x); }); }); return out; };
   const names = function (d) { return noticeProducts_(d).map(function (p) { return String(p.name || '').replace(/\s+/g, ''); }).filter(Boolean); };
   const live = runs.filter(function (r) { return r['진행 상태'] !== '종료' && r['폼ID'] && r['시트ID'] && r['진행일'] instanceof Date; }).map(function (r) {
-    let d = ''; try { d = FormApp.openById(r['폼ID']).getDescription(); } catch (e) {}
+    const d = formDescRead_(r['폼ID']);   // 1시간 캐시 (10/31: 진행마다 폼을 열어 이 단계가 60초)
     return { r: r, nums: pnos(d), names: names(d) };
   });
   if (!live.length) return;
@@ -1025,6 +1031,9 @@ function adoptOrphanForms_(runs) {
     while (fi.hasNext()) {
       const file = fi.next(), fid = file.getId();
       if (known[fid] || file.isTrashed()) continue;
+      // 이미 처리한 옛 폼(새 명단 시트로 연결됨 / 메일 보냄)은 하루 동안 다시 안 엶
+      const oc = CacheService.getScriptCache(), ok0 = 'ORPHOK_' + fid;
+      if (oc.get(ok0)) continue;
       let form, cnt = 0;
       try { form = FormApp.openById(fid); cnt = form.getResponses().length; } catch (e) { continue; }
       if (!cnt) continue;
@@ -1033,6 +1042,7 @@ function adoptOrphanForms_(runs) {
         return nums.some(function (n) { return x.nums.indexOf(n) !== -1; }) || (!nums.length && nms.some(function (n) { return x.names.indexOf(n) !== -1; }));
       }).sort(function (a, b) { return Math.abs(a.r['진행일'].getTime() - made) - Math.abs(b.r['진행일'].getTime() - made); })[0];
       if (!hit) {
+        if (props.getProperty('ORPHANMAIL_' + fid)) oc.put(ok0, '1', 86400);
         if (!props.getProperty('ORPHANMAIL_' + fid)) {
           props.setProperty('ORPHANMAIL_' + fid, '1');
           MailApp.sendEmail(me, '[체험단] 진행목록에 없는 폼에 응답이 들어왔어요: ' + form.getTitle(), '폼 \'' + form.getTitle() + '\'에 응답 ' + cnt + '개가 있어요. 진행목록에는 없는 폼이라 명단·한눈에 탭에 안 보여요.\n카톡방 공지에 옛 폼 링크가 나가 있는지 확인해 주세요.\n폼: ' + file.getUrl());
@@ -1042,7 +1052,7 @@ function adoptOrphanForms_(runs) {
       }
       const sid = String(hit.r['시트ID']);
       let dest = ''; try { dest = form.getDestinationId(); } catch (e) {}
-      if (dest === sid) continue;
+      if (dest === sid) { oc.put(ok0, '1', 86400); continue; }
       form.setDestination(FormApp.DestinationType.SPREADSHEET, sid);
       SpreadsheetApp.flush();
       const ok = 'ORPHANS_' + sid, list = String(props.getProperty(ok) || '').split(',').filter(Boolean);
@@ -7612,6 +7622,8 @@ function buildDashboard_(force) {
   // 위 표 바로 아래 줄(왼쪽): 진행 도우미 체크(시트 오른쪽에 열림), 휴대폰용 링크, 마지막 확인 결과
   const bar = runs.length + 2;
   props.setProperty('DASH_BAR_ROW', String(bar));
+  // 아래 줄·'리뷰 취합할 것' 자리는 먼저 통째로 비움: 위 표가 짧아지면 예전 진행 줄의 수식(F~K)이 남아 '남은' 칸이 #VALUE! 였음 (10/31 G30~G32)
+  try { const rvEnd = rvItems.length ? bar + 2 + rvItems.length : bar + 1; sh.getRange(bar, 1, rvEnd - bar + 1, sh.getMaxColumns()).clear().clearDataValidations().clearNote(); } catch (e) {}
   sh.getRange(bar, 1).insertCheckboxes().setValue(false);
   sh.getRange(bar, 1, 1, 2).setBackground('#efe6f7');
   sh.getRange(bar, 2).setValue('◀ 체크하면 진행 도우미가 시트 오른쪽에 열려요').setFontWeight('bold').setFontColor('#5b2a86').setHorizontalAlignment('left');
