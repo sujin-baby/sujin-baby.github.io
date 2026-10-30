@@ -54,6 +54,10 @@ const sandbox = {
   JSON,
   encodeURIComponent,
   decodeURIComponent,
+  btoa: str => Buffer.from(str, 'binary').toString('base64'),
+  atob: b64 => Buffer.from(b64, 'base64').toString('binary'),
+  unescape: typeof unescape !== 'undefined' ? unescape : decodeURI,
+  escape: typeof escape !== 'undefined' ? escape : encodeURI,
   document: {
     getElementById: getElem,
     querySelectorAll: () => [],
