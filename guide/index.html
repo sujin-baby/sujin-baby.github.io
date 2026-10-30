@@ -193,10 +193,10 @@ details.help-box summary {
 
 </style>
 </head>
-<body>
+<body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v110 · 확장 1.5.0</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v111 · 확장 1.5.0</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -204,10 +204,10 @@ details.help-box summary {
     <section class="panel" aria-labelledby="in-h">
       <div class="row" style="justify-content:space-between">
         <h2 id="in-h">의뢰서</h2>
-        <span class="tag" id="sample-tag">예시 의뢰서</span>
+        <span class="tag" id="sample-tag" hidden>예시 의뢰서</span>
       </div>
-      <p class="note note-guide"><b>카톡에서 의뢰서 복사 → 아래 칸 클릭 → Ctrl+V</b> (휴대폰은 칸을 길게 눌러 붙여넣기). 붙여넣으면 바로 읽어요.</p>
-      <textarea id="req" spellcheck="false" aria-label="업체 의뢰서"></textarea>
+      <p class="note note-guide"><b>카톡에서 의뢰서 복사 → 아래 칸 클릭 → 붙여넣기</b>. 붙여넣으면 바로 분석돼요.</p>
+      <textarea id="req" spellcheck="false" aria-label="업체 의뢰서" placeholder="카톡에서 복사한 의뢰서를 여기에 붙여넣어 주세요."></textarea>
       <div class="row">
         <button class="primary" id="parse" style="font-size:14px;padding:10px 18px;">📋 의뢰서 분석 시작</button>
       </div>
@@ -365,9 +365,12 @@ details.help-box summary {
           </div>
         </div>
 
-        <a class="btn primary" id="make-run" href="#" target="_blank" rel="noopener" style="display:block; text-align:center; padding:15px; font-size:15px; font-weight:900; margin-bottom:10px; border-radius:12px; box-shadow: 2px 2px 0 var(--ink);">🚀 이 내용으로 새 진행 만들기 (폼·시트 자동 생성)</a>
+        <a class="btn primary" id="make-run" href="#" target="_blank" rel="noopener" style="display:block; text-align:center; padding:15px; font-size:15px; font-weight:900; margin-bottom:10px; border-radius:12px; box-shadow: 2px 2px 0 var(--ink); line-height: 1.4;">
+          🚀 이 내용으로 새 진행 만들기<br>
+          <span style="font-size: 13px; font-weight: 700; opacity: 0.9;">(폼, 시트 자동 생성)</span>
+        </a>
         <p class="note" id="make-note" style="text-align:center; font-weight:bold; margin-bottom:8px;"></p>
-        <a class="btn ghost" id="outbox" href="#" target="_blank" rel="noopener" style="display:block; text-align:center; padding:12px; font-size:13.5px; border-radius:12px;">💬 보낼 메시지함 열기 (아이폰 카톡 전송용)</a>
+        <a class="btn ghost" id="outbox" href="https://script.google.com/macros/s/AKfycbwTiBWERe1-NhFMLn29m_BtI5JLmTPuLFC4mjJttvEunCljQX1C-xV3AH9O5nrq-Da1Mw/exec?p=outbox&k=XY5WorKYu-tx31nT" target="_blank" rel="noopener" style="display:block; text-align:center; padding:12px; font-size:13.5px; border-radius:12px;">💬 보낼 메시지함 열기 (아이폰 카톡 전송용)</a>
       </div>
       <div class="out" data-pane="client" hidden>
         <p class="note">명단 전달, 공지용 명단, 중복 검사는 관리 시트(보낼메시지, 진행 도우미, 한눈에)가 자동으로 해서 여기엔 없어요.</p>
@@ -2298,7 +2301,7 @@ details.help-box summary {
     const block = noSlot || noPr.length > 0 || gzWait;
     $("make-run").style.pointerEvents = block ? "none" : ""; $("make-run").style.opacity = block ? "0.4" : "";
  $("make-run").dataset.block = gzWait ? "공지 준비 중이에요. 1초 뒤 다시 눌러 주세요" : noSlot ? "구매 시간을 먼저 고르세요" : noPr.length ? "가격이 빠졌어요 (" + noPr.join(", ") + "). 옵션마다 가격을 넣어 주세요" : "";
- $("make-run").textContent = gzWait ? "공지 준비 중…" : tooLong && !block ? "공지가 너무 길어요: 누르면 공지가 복사돼요 → 열린 화면 폼 설명 칸에 붙여넣고 만들기" : noSlot ? "구매 시간을 먼저 고르세요 (자정건 / 긴급건 / 시간지정)" : noPr.length ? "가격을 먼저 넣어 주세요 (" + noPr.join(", ") + ")" : "이 내용으로 새 진행 만들기 (폼, 시트 자동 생성)";
+ $("make-run").innerHTML = gzWait ? "공지 준비 중…" : tooLong && !block ? "공지가 너무 길어요: 누르면 공지가 복사돼요 → 열린 화면 폼 설명 칸에 붙여넣고 만들기" : noSlot ? "구매 시간을 먼저 고르세요 (자정건 / 긴급건 / 시간지정)" : noPr.length ? "가격을 먼저 넣어 주세요 (" + noPr.join(", ") + ")" : "🚀 이 내용으로 새 진행 만들기<br><span style='font-size:13px;font-weight:700;opacity:0.9'>(폼, 시트 자동 생성)</span>";
     $("outbox").href = WEBAPP + "?p=outbox&k=" + WEBKEY;
     $("make-note").innerHTML = tooLong
       ? "공지가 길어서 폼 설명은 비워 두고 열려요. <b>복사</b>로 공지를 복사해 폼 설명 칸에 붙여넣은 뒤 <b>만들기</b>를 누르세요."
@@ -2394,20 +2397,35 @@ details.help-box summary {
     if ($("make-run").dataset.long) { const t = $("o-notice").value; try { navigator.clipboard.writeText(t).then(() => toast("공지를 복사했어요. 열린 화면 폼 설명 칸에 붙여넣고 만들기"), () => {}); } catch (e) {} }
   }, true);
   $("slot").addEventListener("change", () => { if (!dateFromReq) $("date").value = autoDate(); render(); });
-  document.querySelectorAll("#slot-btns button").forEach(b => b.addEventListener("click", () => {
-    $("slot").value = b.dataset.slot;
-    $("slot").dispatchEvent(new Event("change"));
-    const slotNames = { midnight: "자정건", urgent: "긴급건", time: "시간지정" };
-    toast("✓ 구매 시간: " + (slotNames[b.dataset.slot] || b.dataset.slot));
-  }));
+  document.querySelectorAll("#slot-btns button").forEach(b => {
+    const handleSlot = e => {
+      e.preventDefault();
+      $("slot").value = b.dataset.slot;
+      $("slot").dispatchEvent(new Event("change"));
+      const slotNames = { midnight: "자정건", urgent: "긴급건", time: "시간지정" };
+      toast("✓ 구매 시간: " + (slotNames[b.dataset.slot] || b.dataset.slot));
+    };
+    b.addEventListener("click", handleSlot);
+    b.addEventListener("touchend", handleSlot);
+  });
   $("o-notice").addEventListener("input", () => { noticeEdited = true; fitNotice(); updateMakeRun(); });
   window.addEventListener("resize", fitNotice);
   $("notice-reset").addEventListener("click", () => { noticeEdited = false; render(); toast("자동 내용으로 되돌렸어요"); });
 
-  $("parse").addEventListener("click", () => {
+  const parseBtnAction = () => {
     $("sample-tag").hidden = true;
-    fill(parseAll($("req").value));
+    const val = $("req").value;
+    if (!val || !val.trim()) {
+      toast("의뢰서 내용이 비어 있어요. 먼저 의뢰서를 붙여넣어 주세요!");
+      return;
+    }
+    fill(parseAll(val));
     toast("📋 의뢰서 분석 완료! 아래 공지가 생성되었어요.");
+  };
+  $("parse").addEventListener("click", parseBtnAction);
+  $("parse").addEventListener("touchend", e => {
+    e.preventDefault();
+    parseBtnAction();
   });
   const pasteReplace = (id, after) => $(id).addEventListener("paste", e => {
     const t = (e.clipboardData || window.clipboardData).getData("text");
@@ -2418,10 +2436,10 @@ details.help-box summary {
   });
   pasteReplace("req", t => { $("sample-tag").hidden = true; fill(parseAll(t)); toast("의뢰서를 읽었어요"); });
 
-  // 시작 상태: 예시 의뢰서로 채워 둠
+  // 시작 상태: 빈 의뢰서로 초기화 (기본 예시 제거)
   $("date").value = todayKST();
-  $("req").value = SAMPLE;
-  fill(parseAll(SAMPLE));
+  $("req").value = "";
+  fill(parseAll(""));
 
   // 중복 검사: 같은 값이 두 번 이상 나온 것만, 몇 번째 줄인지와 함께 표시
   $("dup-in").addEventListener("input", () => {
@@ -2564,6 +2582,10 @@ details.help-box summary {
     } finally { batchWait = null; batchHead = ""; batchOn = false; batchStop = false; $("batch-go").textContent = BATCH_LABEL; $("batch-go").disabled = false; }
   }
   $("batch-go").addEventListener("click", runBatch);
+  $("batch-go").addEventListener("touchend", e => {
+    e.preventDefault();
+    runBatch();
+  });
 
   // 북마크 코드
   // 주소로 저장되는 코드라 '%'는 %25로 (사파리는 '100%;' 같은 걸 주소 깨짐으로 보고 북마크가 안 돼서, 10/21)
