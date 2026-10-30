@@ -330,6 +330,7 @@ details.help-box summary {
       <p class="note">구글폼 링크는 '새 진행 만들기'가 폼을 만들면서 공지에 자동으로 넣어요. 따로 안 적어도 돼요.</p>
       <input id="form" type="hidden">
       <input id="croom" type="hidden">
+      <input id="roomlink" type="hidden">
     </section>
 
     <section class="panel" aria-labelledby="out-h">
@@ -2368,6 +2369,10 @@ details.help-box summary {
     if (ciM) { optList.length = 0; optList.push(guides.map(g => (g.guide || g.keyword || "").trim()).filter(Boolean).join(" + ")); base.cart = String(ciM.n); }
     Object.assign(base, { opts: optList.join("\n") });
     Object.assign(base, { shop: (guides[0] || {}).seller || "", slot: slotLine(), photo: guides.some(photoWait) ? "유" : "무" });
+    const thumbUrl = v("thumb") || (guides[0] || {}).thumb || "";
+    const rLink = v("roomlink") || "";
+    if (thumbUrl) Object.assign(base, { thumb: thumbUrl });
+    if (rLink) Object.assign(base, { roomlink: rLink });
     Object.assign(base, { auto: "1", date: v("date"), n: runNonce, room: $("o-room").textContent, croom: v("croom") });
     // 리뷰 배정 페이지(구매·폼 끝난 뒤)가 쓸 리뷰 정보
     // 원고 의뢰는 원고 글이 길어서 주소가 너무 길어져 구글이 400 오류 (10/26 도어스토퍼외 5개 원고). 관리 시트는 '원고' 여부만 쓰니 원고 줄만 보냄

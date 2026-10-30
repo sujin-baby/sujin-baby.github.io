@@ -3045,6 +3045,7 @@ function checkFullInner_() {
   try { ensureRunNotices_(readRuns_()); } catch (e) { note_('방 공지 확인 실패: ' + e); }
   try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
   try { morningCheck_(); } catch (e) { note_('새벽 점검 실패: ' + e); }
+  try { assignCleanDaily_(); } catch (e) { note_('배정 탭 정리 실패: ' + e); }
   if (!props.getProperty('EXPECT_V4')) try { setupExpectOnce_(); } catch (e) { note_('기대평 진행 만들기 실패: ' + e); }
   if (!props.getProperty('EXPECT_V5')) try { fixExpect5Once_(); } catch (e) { note_('기대평 다시 나누기 실패: ' + e); }
   if (!props.getProperty('MORNING_FA_V1')) { props.setProperty('MORNING_FA_V1', '1'); try { const ob = outboxSheet_(), ol = ob.getLastRow(); if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (v[2] === '할 일' && v[5] !== '보냄' && /^🌅 새벽 점검 \(10\/24/.test(String(v[4]))) obSet_(ob, v[0], 6, '보냄'); }); } catch (e) {} }   // 10/24 밤 첫 점검의 잘못된 알림(예전 월급시트 안내를 문제로 셈) 치움
@@ -3074,7 +3075,7 @@ function checkFullInner_() {
   if (!props.getProperty('TUMBRV_V1')) try { tumbRvOnce_(); } catch (e) { note_('텀블러 리뷰 설정 실패: ' + e); }
   if (!props.getProperty('EXPWHO1029_V1')) try { expWho1029Once_(); } catch (e) { note_('기대평 10.29 이름 넣기 실패: ' + e); }
   if (!props.getProperty('EXPWHO1029_V2')) { props.deleteProperty('EXPWHO1029_V1'); props.setProperty('EXPWHO1029_V2', '1'); }   // 10.29 B: '.' → 김혜란 (11.5 공지 다시)
-  if (!props.getProperty('NPROD_CLEAN_V1')) try { props.setProperty('NPROD_CLEAN_V1', '1'); Object.keys(props.getProperties()).forEach(function (k) { if (/^NPROD_/.test(k)) props.deleteProperty(k); }); } catch (e) {}   // 옛 공지 상품 기억(영구) 지움 → 6시간 캐시로
+  if (!props.getProperty('NPROD_CLEAN_V1')) try { props.setProperty('NPROD_CLEAN_V1', '1'); Object.keys(props.getProperties()).forEach(function (k) { if (/^NPROD_/.test(k) && k !== 'NPROD_CLEAN_V1') props.deleteProperty(k); }); } catch (e) {}   // 옛 공지 상품 기억(영구) 지움 → 6시간 캐시로 (표시 이름도 NPROD_로 시작해서 같이 지워지던 것 10/30)
   if (!props.getProperty('SALAD1028_V1')) try { salad1028Once_(); } catch (e) { note_('유러피안샐러드외 장바구니 고치기 실패: ' + e); }
   if (!props.getProperty('OPTPRICE_SEED_V1')) try { optPriceSeedOnce_(); } catch (e) { note_('옵션 가격 기억 실패: ' + e); }
   if (!props.getProperty('PAYRETRO_V2')) try { payRetro2Once_(); } catch (e) { note_('양배추 결제금액 다시 보기 실패: ' + e); }
@@ -3269,6 +3270,16 @@ function checkFullInner_() {
   }
   step_('한눈에');
   try { buildDashboard_(false); } catch (e) { note_('한눈에 탭 실패: ' + e); }
+  // 한눈에에 #REF! 같은 오류 칸이 있으면 통째로 다시 그림 (메뉴 '한눈에 탭 새로 만들기'와 같음, 10/30). 한 시간에 한 번까지, 시간이 넉넉할 때만
+  try {
+    const bad = dashErrorCells_();
+    if (bad.length && !late_(200) && Date.now() - Number(props.getProperty('DASH_AUTOFIX_AT') || 0) > 3600000) {
+      props.setProperty('DASH_AUTOFIX_AT', String(Date.now()));
+      step_('한눈에 다시 그림'); buildDashboard_(true);
+      const left = dashErrorCells_();
+      note_(left.length ? '⚠ 한눈에 오류 칸(' + bad.slice(0, 3).join(', ') + ')을 다시 그렸는데 ' + left.length + '개 남음: ' + left.slice(0, 3).join(', ') : '✓ 한눈에 오류 칸 ' + bad.length + '개(' + bad.slice(0, 3).join(', ') + ') → 다시 그려서 고침');
+    }
+  } catch (e) { note_('한눈에 오류 칸 확인 실패: ' + e); }
   // 월급시트·배정 수식은 진행이 바뀌었을 때(인원·방제·날짜·상태) 또는 30분마다만 (10/23 정리: 매번 하면 확인이 5분 넘게 걸려 명단이 늦게 뜸)
   const rr = readRuns_(), sigOf = function (o) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(o), Utilities.Charset.UTF_8)); };
   const live = rr.filter(function (r) { return r['진행 상태'] !== '종료'; });
@@ -8956,6 +8967,52 @@ function morningCheck_() {
   try { MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[체험단] 새벽 점검: 확인할 것 ' + issues.length + '개', issues.map(function (x) { return '- ' + x; }).join('\n') + '\n\n보낼메시지 탭 할 일에도 넣었어요.'); } catch (e) {}
   note_('⚠ 새벽 점검: 확인할 것 ' + issues.length + '개 (보낼메시지 할 일)');
 }
+// 배정 탭 자동 정리 (사용자 허락 10/30): 하루 한 번(5시 넘어 첫 확인) 진행일이 전 근무일보다 앞인(그저께 이전) 진행의 배정 줄을 지움
+//  사용자가 날마다 손으로 지우던 일. 결제금액 확인은 옵션 가격을 OPTPRICE_로 따로 기억해서 줄이 없어도 됨
+//  진행목록에 없는 제목은 방제 날짜로, 날짜도 없으면 안 지움. 어제(전 근무일)·오늘·앞으로 줄은 그대로
+function assignCleanDaily_() {
+  const props = PropertiesService.getScriptProperties(), now = new Date(), tk = Utilities.formatDate(now, CONFIG.TIMEZONE, 'yyyyMMdd');
+  if (Number(Utilities.formatDate(now, CONFIG.TIMEZONE, 'H')) < 5 || props.getProperty('ASGCLEAN_DAY') === tk) return;
+  props.setProperty('ASGCLEAN_DAY', tk);
+  const sh = assignSheet_(), last = sh.getLastRow();
+  if (last < 2) return;
+  const t0 = today_(), pw = new Date(t0);
+  pw.setHours(12, 0, 0, 0);
+  do { pw.setDate(pw.getDate() - 1); } while (!isWorkday_(pw));
+  pw.setHours(0, 0, 0, 0);
+  const cut = pw.getTime(), dayOf = {};
+  readRuns_().forEach(function (r) { if (r['진행일'] instanceof Date) dayOf[String(r['명단 제목'])] = dayStart_(r['진행일']); });
+  const titleDay = function (t) {
+    const m = dateTok_(t).split('.');
+    if (m.length < 2) return null;
+    const d = new Date(t0.getFullYear(), Number(m[0]) - 1, Number(m[1]));
+    if (d.getTime() - t0.getTime() > 60 * 86400000) d.setFullYear(d.getFullYear() - 1);   // 1월에 보는 12월 방제
+    return d.getTime();
+  };
+  const v = sh.getRange(2, 1, last - 1, 1).getValues(), del = [];
+  v.forEach(function (x, i) {
+    const t = String(x[0]).trim();
+    if (!t) return;
+    const d = dayOf[t] !== undefined ? dayOf[t] : titleDay(t);
+    if (d !== null && d < cut) del.push(i + 2);
+  });
+  if (!del.length) return;
+  // 아래에서부터 붙어 있는 줄끼리 한 번에
+  for (let i = del.length - 1; i >= 0;) {
+    let j = i;
+    while (j > 0 && del[j - 1] === del[j] - 1) j--;
+    sh.deleteRows(del[j], del[i] - del[j] + 1);
+    i = j - 1;
+  }
+  note_('✓ 배정 탭 정리: ' + Utilities.formatDate(pw, CONFIG.TIMEZONE, 'M/d') + ' 전 진행 ' + del.length + '줄 지움');
+}
+// 한눈에 탭의 오류 칸 (#REF! 등) 주소들
+function dashErrorCells_() {
+  const sh = adminSs_().getSheetByName(DASH_TAB), bad = [];
+  if (!sh || !sh.getLastRow()) return bad;
+  sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getDisplayValues().forEach(function (row, i) { row.forEach(function (x, j) { if (/^#(REF!|ERROR!|N\/A|VALUE!|NAME\?|DIV\/0!)/.test(String(x))) bad.push(colLetter_(j + 1) + (i + 1)); }); });
+  return bad;
+}
 // 자가 점검 (10/30): 방제 숫자 ≠ 목표인원, 월급시트 줄 없음·스토어/진행시간 빈칸·그날 수량 다름, 한눈에 #REF! 같은 오류 칸. 고치지 않고 알리기만
 function selfCheck_(runs, t0) {
   const out = [], D = 86400000;
@@ -8999,12 +9056,8 @@ function selfCheck_(runs, t0) {
   }
   // 10. 한눈에 탭 오류 칸
   try {
-    const sh = adminSs_().getSheetByName(DASH_TAB);
-    if (sh && sh.getLastRow()) {
-      const v = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getDisplayValues(), bad = [];
-      v.forEach(function (row, i) { row.forEach(function (x, j) { if (/^#(REF!|ERROR!|N\/A|VALUE!|NAME\?|DIV\/0!)/.test(String(x))) bad.push(colLetter_(j + 1) + (i + 1)); }); });
-      if (bad.length) out.push('한눈에 탭에 오류 칸(' + bad.length + '개): ' + bad.slice(0, 5).join(', ') + ' → 한눈에 탭 새로 만들기');
-    }
+    const bad = dashErrorCells_();
+    if (bad.length) out.push('한눈에 탭에 오류 칸(' + bad.length + '개): ' + bad.slice(0, 5).join(', ') + ' → 한눈에 탭 새로 만들기');
   } catch (e) {}
   return out;
 }
