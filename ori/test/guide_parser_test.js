@@ -63,9 +63,13 @@ const sandbox = {
   },
   window: {
     addEventListener: () => {},
-    localStorage: { getItem: () => null, setItem: () => {} }
+    prompt: () => 'test-key',
+    alert: () => {},
+    localStorage: { getItem: () => 'test-key', setItem: () => {} }
   },
-  localStorage: { getItem: () => null, setItem: () => {} },
+  prompt: () => 'test-key',
+  alert: () => {},
+  localStorage: { getItem: () => 'test-key', setItem: () => {} },
   location: { href: 'https://sujin-baby.github.io/guide/' },
   MutationObserver: function() { return { observe: () => {}, disconnect: () => {} }; }
 };
