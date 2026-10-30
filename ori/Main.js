@@ -6953,9 +6953,11 @@ function updatePay_(resumable) {
   const props = PropertiesService.getScriptProperties();
   let prog = null;
   if (resumable) { try { prog = JSON.parse(props.getProperty('PAY_PROG') || 'null'); } catch (e) {} if (!prog || !prog.done) prog = { done: [], post: 0 }; }
-  // 줄마다 넣을 값이 지난번과 같으면 건너뜀 (10/24: 줄 하나에 10초 넘게 걸려 54줄이 확인 4번에 나뉘었음). 같아도 6시간마다는 다시 씀(손으로 지운 줄 되살리기)
+  // 줄마다 넣을 값이 지난번과 같으면 건너뜀 (10/24: 줄 하나에 10초 넘게 걸려 54줄이 확인 4번에 나뉘었음). 같아도 하루에 한 번은 다시 씀(손으로 지운 줄 되살리기)
   let rowSig = {}; try { rowSig = JSON.parse(props.getProperty('PAY_ROWSIG') || '{}'); } catch (e) {}
-  const fresh = function (rid, sig) { const o = rowSig[rid]; return o && o.s === sig && Date.now() - o.t < 6 * 3600000; };
+  //  (10/31) 6시간 → 하루: 76줄을 다시 쓰는 데 209초 걸려 6시간마다 확인이 5분을 넘김. 값이 바뀐 줄은 지금처럼 바로 씀.
+  //  손으로 지운 줄·바꾼 수량은 하루 안에 되살리고, 새벽 자가 점검이 '월급시트 줄 없음·수량 다름'을 따로 알려 줌
+  const fresh = function (rid, sig) { const o = rowSig[rid]; return o && o.s === sig && Date.now() - o.t < 24 * 3600000; };
   const saveSig = function () { try { const keep = {}; runs.forEach(function (r) { const k = r.row + '|' + nameOf(r); if (rowSig[k]) keep[k] = rowSig[k]; }); props.setProperty('PAY_ROWSIG', JSON.stringify(keep)); } catch (e) {} };
   const stop = function (what) { props.setProperty('PAY_PROG', JSON.stringify(prog)); saveSig(); throw { payLate: what }; };
   const tooLate = function () { return resumable && late_(300); };
