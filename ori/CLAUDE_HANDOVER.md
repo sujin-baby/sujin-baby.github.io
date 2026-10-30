@@ -25,7 +25,9 @@
 
 - **관리 시트(Google Sheets) + Apps Script**: `ori/Code.gs`(로더)가 GitHub의 `ori/Main.js`를 받아서 실행 (캐시 10분).
   - 받아 오는 곳 = Settings의 `UPDATE_BASE` = 이 브랜치 `claude/tasting-group-notice-automation-1x1kur`의 `ori/`.
-  - 그래서 **이 브랜치에 push = 10~20분 뒤 실서비스 반영**. 따로 배포 없음.
+  - ⚠ **(10/30부터) 이 브랜치에 직접 push 금지.** 작업은 **`ori-dev` 브랜치에 push** → GitHub Actions `deploy.yml`이 시험(`ori/test/run_ci.sh`)을 돌리고 **다 통과해야** 이 실서비스 브랜치로 앞으로 감기(fast-forward) → 10~20분 뒤 시트 반영.
+  - 시작할 때: `git fetch origin && git checkout ori-dev && git pull origin ori-dev`. 실서비스 브랜치에 ori-dev에 없는 커밋이 있으면 deploy가 실패함 → `git pull origin claude/tasting-group-notice-automation-1x1kur` 후 다시 push.
+  - 시험에 떨어지면 시트에 안 감 (Actions 탭에서 빨간 X 확인). 버그를 고칠 땐 그 상황을 `ori/test/*_test.js` 시험으로 남기고 `run_ci.sh`에 추가.
 - **15분 자동 확인** `checkFull` → `checkFullInner_`: 폼 인원, 명단 시트, 마감, 보낼메시지, 한눈에, 월급시트(`updatePay_`, 나눠서 이어 함), 한 번만 고치기(once-fix, 속성 플래그).
 - **가이드 생성기**: `guide/index.html` (GitHub Pages, https://sujin-baby.github.io/guide/). 예전 클로드 아티팩트 판은 더 안 고침 → **생성기는 guide/ 하나만**.
 - **크롬 확장** `ori/ext/` (상품 정보·위치 가져오기). 묶음 `ori/product-locator.zip`은 생성기 안에 `EXT_ZIP`으로도 들어감. 확장을 고치면 zip과 생성기 안 `EXT_ZIP`, 버전 표시를 같이 바꿈.
@@ -35,7 +37,7 @@
 
 - 웹 앱 `?k=KEY&p=diag` (읽기 전용 JSON). 쓰는 경로(createRun 등)는 확인용으로 부르지 않음.
   - `days=N`, `full=1`(보낼메시지 전문), `asg=글자`(배정 줄), `resp=요청ID`(응답: 닉네임·옵션, 결제 기준 가격표 `respPm`, 머리글 `respHead`), `pay=글자`(월급시트 줄), `dashrow=N`(한눈에 N행부터 4줄 수식·값), `rv=1`, `fo=1`.
-- 하네스 시험: `ori/test/harness.js` + `*_test.js` (`TZ=Asia/Seoul node ori/test/X_test.js ori/Main.js`). CI: `.github/workflows/test.yml` (node -c, Code.gs ESLint, `ci_test.js`).
+- 하네스 시험: `ori/test/harness.js` + `*_test.js` (`TZ=Asia/Seoul node ori/test/X_test.js ori/Main.js`). CI: `ori/test/run_ci.sh` (문법, Code.gs ESLint, ci·pay·selfcheck·expcount·noprice·zip 시험) — `test.yml`(모든 push), `deploy.yml`(ori-dev → 통과 시 실서비스).
 
 ## 4. 최근 바뀐 것 (10/26 ~ 10/30)
 
@@ -82,12 +84,14 @@
 - '최대 실행 시간 초과' 창: 시트에서 직접 실행한 기능 중 6분 넘는 것 찾기 (아직 원인 모름).
 - 확장 1.5.0(상품번호·로켓)과 판매처 표시는 실제 쿠팡 페이지에서 사용자 확인 필요.
 
-## 7. 개선 계획 (10/30 제안, 사용자 승인 대기 — 승인 전엔 손대지 말 것)
+## 7. 개선 계획 (10/30)
 
-현재 진단: `Main.js` 9,700줄 한 파일, 10/20 이후 커밋 164개 중 고침이 많음, 한 번만 고치기(once-fix) 88개가 15분 확인 안에 쌓여 있음, 시험 14개 중 다수는 실데이터 파일이 없어 CI에서 못 돎, push = 바로 실서비스.
+1. **파일 담당 나누기** (사용자 승인 대기): Claude = `ori/Main.js`(서버·월급·결제), 피클 = `guide/`, `ori/ext/`(생성기·확장). 남의 담당 파일을 고칠 땐 이 파일 "검토 요청"에 적고 담당자가 확인.
+2. ✅ **실서비스 전에 시험 통과** (10/30 완료): 위 2번 구조 참고. `ori-dev` → `deploy.yml` → 실서비스.
+3. **버그 = 시험 하나**: 고친 버그는 그 상황을 시험으로 남겨 `run_ci.sh`에 추가 (가짜 이름 데이터). 시작: `pay_test.js`(월급시트 줄 값), `selfcheck_test.js`.
+4. ✅ **아침 자가 점검** (10/30 완료): 새벽 점검(`morningCheck_`, 5시 넘어 첫 확인) 안에 `selfCheck_` 추가. 방제 숫자 ≠ 목표인원(장바구니 ×N, 기대평 제외), 지난 7일 월급시트 줄 없음·그날 수량 ≠ 인원·스토어/진행시간 빈칸, 한눈에 `#REF!` 등 오류 칸. 읽기만 하고, 있으면 보낼메시지 '내 할 일' + 메일.
+5. **once-fix 정리** (사용자 승인 대기): 끝난 한 번만 고치기 코드를 지워 15분 확인을 가볍게.
 
-1. **파일 담당 나누기**: Claude = `ori/Main.js`(서버·월급·결제), 피클 = `guide/`, `ori/ext/`(생성기·확장). 남의 담당 파일을 고칠 땐 이 파일 "검토 요청"에 적고 담당자가 확인.
-2. **실서비스 전에 시험 통과**: 작업 브랜치에 올리면 GitHub Actions가 시험을 돌리고, 통과한 것만 실서비스 브랜치로 넘김.
-3. **버그 = 시험 하나**: 사용자가 알려 준 버그는 고치면서 그 상황을 시험으로 남김(가짜 이름 데이터). 같은 버그 재발 방지.
-4. **아침 자가 점검**: 매일 아침 시스템이 스스로 이상한 곳을 찾아 한눈에 맨 위에 '⚠ 확인할 것'으로 띄움 (월급시트 스토어·시간 빈칸, 수량 ≠ 인원, 목표인원 ≠ 방제 숫자, #REF!, 빈 공지, 결제금액 다름). 사용자가 찾기 전에 먼저 찾기.
-5. **once-fix 정리**: 이미 끝난 한 번만 고치기 코드를 지워 15분 확인을 가볍게 ('최대 실행 시간 초과' 줄이기).
+## 8. 검토 요청 (서로 담당 파일을 고쳤을 때 여기 적기)
+
+- (없음)

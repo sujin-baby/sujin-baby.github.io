@@ -8871,12 +8871,66 @@ function morningCheck_() {
     const log = JSON.parse(CacheService.getScriptCache().get('REPORT_LOG') || '[]').filter(function (t) { return /^⚠/.test(t) && !/다른 작업 중이라 건너뜀/.test(t) && realProb(t); });
     if (log.length) issues.push('최근 자동 확인에서 문제 ' + log.length + '번 (한눈에 Q열/실행 기록): ' + log[0].split('\n').slice(1, 3).join(' / ').slice(0, 160));
   } catch (e) {}
+  // 8~10 (10/30 자가 점검): 사용자가 직접 찾아냈던 종류를 먼저 찾기. 읽기만 함
+  try { selfCheck_(runs, t0).forEach(function (x) { issues.push(x); }); } catch (e) { issues.push('자가 점검 실패: ' + e); }
   const when = Utilities.formatDate(now, CONFIG.TIMEZONE, 'M/d HH:mm');
   props.setProperty('MORNING_LAST', when + ' ' + (issues.length ? issues.length + '개: ' + issues.join(' | ') : '이상 없음').slice(0, 1500));
   if (!issues.length) { note_('✓ 새벽 점검: 이상 없음'); return; }
   queueMsg_('내 할 일', '🌅 새벽 점검 (' + when + '): 확인할 것 ' + issues.length + '개\n' + issues.map(function (x) { return '- ' + x; }).join('\n'), '할 일');
   try { MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[체험단] 새벽 점검: 확인할 것 ' + issues.length + '개', issues.map(function (x) { return '- ' + x; }).join('\n') + '\n\n보낼메시지 탭 할 일에도 넣었어요.'); } catch (e) {}
   note_('⚠ 새벽 점검: 확인할 것 ' + issues.length + '개 (보낼메시지 할 일)');
+}
+// 자가 점검 (10/30): 방제 숫자 ≠ 목표인원, 월급시트 줄 없음·스토어/진행시간 빈칸·그날 수량 다름, 한눈에 #REF! 같은 오류 칸. 고치지 않고 알리기만
+function selfCheck_(runs, t0) {
+  const out = [], D = 86400000;
+  // 8. 방제 끝 숫자 ≠ 목표인원 (장바구니는 × 상품 수). 기대평은 사람마다 건수가 달라 뺌
+  const badTitle = runs.filter(function (r) {
+    const d = dayStart_(r['진행일']);
+    if (d < t0 - 7 * D || d > t0 + 7 * D || isExpect_(r) || !Number(r['목표인원'])) return false;
+    const m = bareTitle_(r['명단 제목']).match(/(\d+)\s*$/);
+    return m && Number(m[1]) !== titleCount_(r, Number(r['목표인원']));
+  }).map(function (r) { return bareTitle_(r['명단 제목']) + ' (목표인원 ' + r['목표인원'] + ')'; });
+  if (badTitle.length) out.push('방제 숫자와 목표인원이 안 맞음: ' + badTitle.slice(0, 6).join(', '));
+  // 9. 월급시트: 지난 7일(오늘 전) 진행 줄
+  if (CONFIG.PAY_SHEET_ID) {
+    const all = readRuns_().filter(function (x) { return x['시트ID'] && x['진행일'] instanceof Date; });
+    const tabs = {}, miss = [], noStore = [], noTime = [], badQty = [];
+    runs.filter(function (r) { const d = dayStart_(r['진행일']); return r['시트ID'] && d < t0 && d >= t0 - 7 * D && r['인원'] !== '' && r['인원'] !== null; }).forEach(function (r) {
+      const mo = r['진행일'].getMonth() + 1;
+      if (!tabs[mo]) {
+        const sh = payTab_(mo, true), L = sh && payLayout_(sh);
+        if (!L) { tabs[mo] = { none: true }; return; }
+        const n = Math.max(sh.getLastRow() - L.head, 1);
+        tabs[mo] = { L: L, v: sh.getRange(L.head + 1, 1, n, sh.getLastColumn()).getValues() };
+      }
+      const T = tabs[mo];
+      if (T.none) return;
+      const name = payNameOf_(r), key = name.replace(/\s+/g, '');
+      const row = T.v.filter(function (x) { const nm = String(x[T.L.name - 1]).replace(/\s+/g, ''); return nm && (nm === key || sameRunTitle_(nm, name)); })[0];
+      if (!row) { miss.push(name); return; }
+      if (T.L.store && String(row[T.L.store - 1]).trim() === '') noStore.push(name);
+      if (T.L.time && String(row[T.L.time - 1]).trim() === '') noTime.push(name);
+      const col = T.L.days[mo + '-' + r['진행일'].getDate()] || T.L.days[String(r['진행일'].getDate())];
+      if (col) {
+        const sp = payRowSpec_(r, all), want = sp.ex.count != null ? sp.ex.count : (Number(r['인원']) || 0) * (sp.ex.mult || 1), got = Number(row[col - 1]) || 0;
+        if (got !== want) badQty.push(name + ' (월급시트 ' + got + ' / 실제 ' + want + ')');
+      }
+    });
+    if (miss.length) out.push('월급시트에 줄이 없음: ' + miss.slice(0, 6).join(', '));
+    if (badQty.length) out.push('월급시트 그날 수량이 인원과 다름: ' + badQty.slice(0, 6).join(', '));
+    if (noStore.length) out.push('월급시트 스토어 빈칸: ' + noStore.slice(0, 6).join(', '));
+    if (noTime.length) out.push('월급시트 진행시간 빈칸: ' + noTime.slice(0, 6).join(', '));
+  }
+  // 10. 한눈에 탭 오류 칸
+  try {
+    const sh = adminSs_().getSheetByName(DASH_TAB);
+    if (sh && sh.getLastRow()) {
+      const v = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getDisplayValues(), bad = [];
+      v.forEach(function (row, i) { row.forEach(function (x, j) { if (/^#(REF!|ERROR!|N\/A|VALUE!|NAME\?|DIV\/0!)/.test(String(x))) bad.push(colLetter_(j + 1) + (i + 1)); }); });
+      if (bad.length) out.push('한눈에 탭에 오류 칸(' + bad.length + '개): ' + bad.slice(0, 5).join(', ') + ' → 한눈에 탭 새로 만들기');
+    }
+  } catch (e) {}
+  return out;
 }
 // (10/24 한 번) 기대평(exp-100-4) 10/27~ 일정이 '건너뜀 (이미 다 진행)'이 된 것 → 대기로 되돌림 (취소한 예전 기대평 진행 목표인원 27·54가 '다 진행'으로 세졌던 것)
 function expPlanRestoreOnce_() {
