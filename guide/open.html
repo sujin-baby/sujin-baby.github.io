@@ -19,18 +19,19 @@
 </head>
 <body>
   <div class="card">
-    <h2>📱 쿠팡 앱 튕김 방지 안내</h2>
-    <div class="status" id="cp-st">✓ 상품 주소를 복사했어요!</div>
-    <div class="guide-box">
-      아이폰은 링크를 그냥 누르면 <b>쿠팡 앱</b>으로 자동 이동됩니다.<br><br>
-      <b>사파리 웹 브라우저에서 보는 법:</b><br>
-      1. 맨 위 <b>사파리 주소창</b>을 길게 누르세요.<br>
-      2. <b>[붙여넣기 및 이동]</b>을 누르세요.<br>
-      👉 앱으로 안 튕기고 사파리 웹에서 바로 열립니다!
+    <h2>📱 쿠팡 상품 페이지 열기</h2>
+    <div class="status" id="cp-st">✓ 상품 주소 준비 완료</div>
+    
+    <a id="go" class="btn" href="#" target="_blank" rel="noopener">👉 상품 페이지 바로 열기</a>
+    
+    <div class="guide-box" style="margin-top:16px;">
+      <b>⚠️ 주소창 [붙여넣기 및 이동] 금지</b><br>
+      사파리 주소창에 단축링크를 직접 붙여넣으면 쿠팡 보안 방화벽이 차단하여 <b>'사용권한이 없습니다'</b> 오류가 뜹니다.<br><br>
+      <b>💡 사파리 웹에서 바로 여는 법:</b><br>
+      위 <b>[👉 상품 페이지 바로 열기]</b> 버튼을 <b>손가락으로 꾹 길게 눌러</b> 나오는 메뉴에서 <b>[새 탭에서 열기]</b>를 누르시면 앱으로 튕기지 않고 사파리에서 바로 열립니다!
     </div>
-    <button type="button" class="btn" id="copy-btn">📋 주소 다시 복사하기</button>
-    <a id="go" class="btn sub" href="#" target="_blank" rel="noopener">새 탭에서 열기 (길게 눌러 새 탭)</a>
-    <div class="tip">💡 사파리 웹에서 열어야 북마크릿 도구를 쓸 수 있어요.</div>
+    
+    <button type="button" class="btn sub" id="copy-btn">📋 원본 주소 복사하기</button>
   </div>
   <script>
     const qs = new URLSearchParams(location.search);

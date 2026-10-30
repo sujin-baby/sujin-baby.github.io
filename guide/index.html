@@ -196,7 +196,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v112 (공지 자동 완성 복구) · 확장 1.5.0</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v113 (검증 완료) · 확장 1.5.0</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -1813,7 +1813,7 @@ details.help-box summary {
       ab.addEventListener("click", () => { autoIdx = { g: cur, i: i, at: Date.now() }; $("auto-st").textContent = "확장 프로그램에 보냈어요…"; document.dispatchEvent(new CustomEvent("pl-auto", { detail: JSON.stringify({ url: a.href }) })); });
       box.appendChild(ab);
     });
-    if (isIOS()) { const n = document.createElement("div"); n.className = "note"; n.textContent = "아이폰: [상품 페이지 열기]를 누르면 주소가 복사돼요 → 사파리 새 탭 주소창에 붙여넣고 이동 → 북마크"; box.appendChild(n); }
+    if (isIOS()) { const n = document.createElement("div"); n.className = "note"; n.textContent = "아이폰: [상품 페이지 열기] → 버튼을 길게 꾹 눌러 [새 탭에서 열기]를 누르면 앱 튕김 없이 사파리에서 열려요."; box.appendChild(n); }
   }
   function isIOS() { return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); }
 
