@@ -196,7 +196,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v117 (북마크 파싱 정규식 수정 & 실배송 포토/텍스트 분리) · 확장 1.5.0</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v118 (업체카톡방 제외 & 날짜별 통째 리뷰 배정) · 확장 1.5.0</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -328,10 +328,8 @@ details.help-box summary {
 
       <h2>업체 카톡방</h2>
       <p class="note">구글폼 링크는 '새 진행 만들기'가 폼을 만들면서 공지에 자동으로 넣어요. 따로 안 적어도 돼요.</p>
-      <div class="fields">
-        <input id="form" type="hidden">
-        <label class="full">업체 카톡방 이름 (리뷰 전달, 명단을 보낼 방. PC 카톡 목록에 보이는 이름 그대로)<input id="croom" placeholder="예: 올슬랩 업체방"></label>
-      </div>
+      <input id="form" type="hidden">
+      <input id="croom" type="hidden">
     </section>
 
     <section class="panel" aria-labelledby="out-h">
@@ -1340,27 +1338,29 @@ details.help-box summary {
     out.filter(o => o.n > 0).forEach(o => { const same = res.find(x => x.label === o.label); if (same) same.n += o.n; else res.push(Object.assign({}, o)); });
     return res.length >= 2 ? res : [];
   }
-  // 그날 리뷰 종류별 인원: 리뷰 종류가 하루에 쏠리지 않게 날마다 고르게 (포토 5·별점 30, 하루 7명 → 날마다 포토 1·별점 6)
-  //  개수 합이 하루 건수와 같으면(예: 별점2·글씨리뷰3 = 하루 5) 날마다 그대로
+  // 그날 리뷰 종류별 인원: 한 방 안에서 누구는 포토, 누구는 텍스트를 쓰면 불만이 나오므로
+  // 날짜별로 한 종류씩 통째로 배정하고(하루 전체포토, 하루 전체텍리), 넘어가는 날에 남을 때만 섞음 (10/30 사용자 지침)
   function dayMix(g, day) {
     const mix = reviewMix(g);
     if (!mix.length) return null;
-    const sum = mix.reduce((a, o) => a + o.n, 0), tot = Number(g.total) || 0;
-    if (sum === dayCount(g, day) && sum !== tot) return mix.map(o => ({ label: o.label, n: o.n }));
-    const left = mix.map(o => o.n);
-    let res = null;
+    const rem = mix.map(o => ({ label: o.label, n: o.n }));
+    let curDayRes = [];
     for (let k = 1; k <= day; k++) {
-      const n = dayCount(g, k), L = left.reduce((a, x) => a + x, 0);
-      if (!n || !L) { res = mix.map(() => 0); continue; }
-      const exact = left.map(x => x * Math.min(n, L) / L);
-      res = exact.map(Math.floor);
-      let rest = Math.min(n, L) - res.reduce((a, x) => a + x, 0);
-      exact.map((x, i) => [x - Math.floor(x), i]).sort((a, b) => b[0] - a[0]).forEach(([, i]) => { if (rest > 0 && res[i] < left[i]) { res[i]++; rest--; } });
-      res.forEach((x, i) => { left[i] -= x; });
+      let cap = dayCount(g, k);
+      curDayRes = [];
+      for (const item of rem) {
+        if (cap <= 0) break;
+        if (item.n > 0) {
+          const take = Math.min(cap, item.n);
+          curDayRes.push({ label: item.label, n: take });
+          item.n -= take;
+          cap -= take;
+        }
+      }
     }
-    return mix.map((o, i) => ({ label: o.label, n: res[i] })).filter(o => o.n > 0);
+    return curDayRes.filter(o => o.n > 0);
   }
-  const mixText = m => m ? m.map(o => o.label + " " + o.n + "명").join(" / ") : "";
+  const mixText = m => m ? m.map(o => o.label + (m.length > 1 ? " " + o.n + "명" : "")).join(" / ") : "";
   // 리뷰 공지 종류: 리뷰 종류가 나뉘면 '나눠 배정', 포토 유면 포토대기, 구매확정이면 구확, 직접 찍는 포토, 아니면 전체 텍스트
   // 포토제공: '유', 'Y'. 로켓배송·그로스·실배송은 포토대기가 아니라 직접 쓰는 포토리뷰 (10/30)
   let rocketRun = false;
