@@ -1026,7 +1026,7 @@ function adoptOrphanForms_(runs) {
   const it = rootFolder_().getFolders();
   while (it.hasNext()) {
     const fo = it.next();
-    if (fo.getLastUpdated().getTime() < since) continue;
+    if (subTime_('없는 폼: 폴더 보기', function () { return fo.getLastUpdated().getTime(); }) < since) continue;
     const fi = fo.getFilesByType(MimeType.GOOGLE_FORMS);
     while (fi.hasNext()) {
       const file = fi.next(), fid = file.getId();
@@ -1035,7 +1035,7 @@ function adoptOrphanForms_(runs) {
       const oc = CacheService.getScriptCache(), ok0 = 'ORPHOK_' + fid;
       if (oc.get(ok0)) continue;
       let form, cnt = 0;
-      try { form = FormApp.openById(fid); cnt = form.getResponses().length; } catch (e) { continue; }
+      try { subTime_('없는 폼: 폼 열기', function () { form = FormApp.openById(fid); cnt = form.getResponses().length; }); } catch (e) { continue; }
       if (!cnt) continue;
       const d = form.getDescription(), nums = pnos(d), nms = names(d), made = file.getDateCreated().getTime();
       const hit = live.filter(function (x) {
@@ -2935,14 +2935,14 @@ function checkFullInner_() {
   Object.keys(listed).forEach(function (id) {
     yieldIfWanted_();
     try {
-      const lss = SpreadsheetApp.openById(id);
+      const lss = subTime_('명단 시트: 열기', function () { return SpreadsheetApp.openById(id); });
       if (runs.some(function (x) { return String(x['시트ID']) === id && x['실배송'] === 'Y'; })) props.setProperty('LISTREAL_' + id, '1');
-      try { if (fixListRef_(lss)) note_('✓ 명단 탭을 값으로 바꿈 (열을 지워도 유지): ' + lss.getName()); else { const na = syncList_(lss); if (na) note_('✓ 명단 탭에 새 응답 ' + na + '줄: ' + lss.getName()); } } catch (e) { note_('명단 탭 갱신 실패: ' + e); }
+      try { if (subTime_('명단 시트: 값 확인', function () { return fixListRef_(lss); })) note_('✓ 명단 탭을 값으로 바꿈 (열을 지워도 유지): ' + lss.getName()); else { const na = subTime_('명단 시트: 새 응답', function () { return syncList_(lss); }); if (na) note_('✓ 명단 탭에 새 응답 ' + na + '줄: ' + lss.getName()); } } catch (e) { note_('명단 탭 갱신 실패: ' + e); }
       // 총건수 = 이 명단 시트를 쓰는 의뢰의 총건수 (없으면 날마다 목표인원 합)
       const mine = runs.filter(function (x) { return String(x['시트ID']) === id; });
       const total = mine.reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0) ||
         mine.reduce(function (a, x) { return a + (Number(x['목표인원']) || 0); }, 0);
-      listSummary_(lss, total);
+      subTime_('명단 시트: 요약', function () { listSummary_(lss, total); });
       if (!props.getProperty('LISTV_' + id)) { try { dayColors_(lss); } catch (e) { note_('명단 날짜 색 실패: ' + e); } }
     } catch (e) { note_('명단 탭 합치기 실패: ' + e); }
   });
@@ -7483,7 +7483,13 @@ function buildDashboard_(force) {
     const id = String(r['시트ID']);
     if (sheets[id]) { sheets[id].runs.push(r); return; }
     order.push(id);
-    let src = '', start = 2, cols = 12, keep = [], hd = [], count = 0;
+    sheets[id] = { id: id, runs: [r], url: 'https://docs.google.com/spreadsheets/d/' + id + '/edit' };
+  });
+  // 명단 시트 머리줄은 다시 그릴 때만 엶 (10/31: 바뀐 게 없어도 15분마다 진행 수만큼 시트를 열어 이 단계가 20초)
+  const infoMemo = {};
+  const sheetInfo = function (id) {
+    if (infoMemo[id]) return infoMemo[id];
+    let src = '', start = 2, cols = 12, keep = [], hd = [];
     try {
       const rss = SpreadsheetApp.openById(id);
       // 숨은 '응답합본' 탭(수식, 모든 폼 응답)에서 가져옴. 명단 탭은 사람이 열을 지우고 고치는 값이라 안 씀
@@ -7491,17 +7497,15 @@ function buildDashboard_(force) {
       if (lt && lt.getLastColumn() > 0 && String(lt.getRange('A2').getValue()) !== '') {
         src = MERGE_TAB; start = 3; cols = lt.getLastColumn();
         hd = lt.getRange(2, 1, 1, cols).getValues()[0].map(String);
-        count = Math.max(lt.getLastRow() - 2, 0);
       } else {
         const rs = responseSheet_(rss); src = rs.getName(); cols = Math.max(rs.getLastColumn(), 1);
         hd = headers_(rs);
-        count = Math.max(rs.getLastRow() - 1, 0);
       }
       // 계좌, 은행, 예금주 열은 빼고 보여 줌
       hd.forEach(function (h, k) { if (h && !MATCH.account.test(h) && OLD_HELPER.indexOf(h) === -1 && k < 26) keep.push(k + 1); });
     } catch (e) {}
-    sheets[id] = { id: id, runs: [r], keep: keep, hd: hd, count: count, start: start, ref: "'" + src.replace(/'/g, "''") + "'!", cols: Math.min(cols, 26), url: 'https://docs.google.com/spreadsheets/d/' + id + '/edit' };
-  });
+    return (infoMemo[id] = { keep: keep, hd: hd, start: start, ref: "'" + src.replace(/'/g, "''") + "'!", cols: Math.min(cols, 26) });
+  };
   // 진행(날짜)마다 한 덩어리: 같은 명단 시트를 여러 날 써도 그날 응답만 보여 줌 (택배시트에도 그날 것만 옮기게)
   const blk = {}, border = [];
   runs.forEach(function (r, i) {
@@ -7550,6 +7554,7 @@ function buildDashboard_(force) {
   if (!force && sh && props.getProperty('DASH_SIG') === sig && (!runs.length || String(sh.getRange(2, 2).getValue()).trim() !== '')) return;
   // 지우기 전에 서명을 지워 둠: 쓰다가 멈추면 다음 확인이 꼭 다시 만들게
   props.deleteProperty('DASH_SIG');
+  order.forEach(function (k) { Object.assign(sheets[k], sheetInfo(sheets[k].sid)); });
   order.forEach(function (id) { grantImport_(ss.getId(), sheets[id].sid); });
   if (!sh) sh = ss.insertSheet(DASH_TAB, 0);
   const prevLastRow = Math.max(sh.getLastRow(), 2);
