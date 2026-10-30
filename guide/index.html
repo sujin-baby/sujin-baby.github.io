@@ -196,7 +196,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v120 (빠른 작업 바·방제/공지 1초 복사·파서 단위시험 하네스 연동) · 확장 1.5.0</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v121 (대봉감 다중 플랫폼 자동 분할·토스 상품번호/1p 인식·포토대기/공지머리글 정밀 서식) · 확장 1.5.0</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -1073,6 +1073,40 @@ details.help-box summary {
       if (pre.length && i === 0) g.review = [pre.join(" / "), g.review].filter(Boolean).join(" / ");
       return g;
     });
+    // 장바구니건이 아니고, 한 가이드 내에 건수가 명시된 서로 다른 상품 URL이 여러 개 있는 경우 독립 가이드로 자동 분할 (대봉감 쿠팡/토스 등)
+    const expanded = [];
+    head.guides.forEach(g => {
+      const urls = lines(g.url).map(l => { const m = l.match(/^(.*?)\s*(https?:\/\/\S+)/); return m ? { label: m[1].trim(), url: m[2] } : null; }).filter(Boolean);
+      if (!head.cart && urls.length > 1) {
+        const subCounts = urls.map((u, idx) => {
+          const m = u.label.match(/(\d+)\s*(?:건|명|개)/);
+          if (m) return m[1];
+          const o = (g.optBase || [])[idx];
+          return (o && o.qty) ? o.qty : "";
+        });
+        if (subCounts.every(Boolean)) {
+          urls.forEach((u, idx) => {
+            const sub = Object.assign({}, g);
+            const opt = (g.optBase || [])[idx] || { label: u.label.replace(/\s*\d+\s*(?:건|명|개).*$/, "").trim(), qty: subCounts[idx] };
+            const cleanLabel = (opt.label || u.label).replace(/\s*\d+\s*(?:건|명|개).*$/, "").trim();
+            sub.url = (u.label ? u.label + " " : "") + u.url;
+            sub.pno = urlInfo(u.url);
+            sub.pname = cleanLabel;
+            sub.option = cleanLabel;
+            sub.optBase = [{ label: cleanLabel, qty: subCounts[idx] }];
+            sub.total = subCounts[idx];
+            sub.daily = subCounts[idx];
+            sub.days = [{ n: subCounts[idx], br: [] }];
+            sub.platform = platformOf(u.url);
+            if (sub.platform === "토스" && (!sub.page || UNKNOWN.test(sub.page))) sub.page = "1p";
+            expanded.push(sub);
+          });
+          return;
+        }
+      }
+      expanded.push(g);
+    });
+    head.guides = expanded;
     head.takdaeField = head.guides.some(g => g.takdae);
     head.takdae = head.takdae || head.takdaeField;
     // 진행 날짜: "19일 10개" 같은 날짜가 있으면 그 날, 아니면 "@뽀짝오리 월요일", "내일"
@@ -1095,7 +1129,7 @@ details.help-box summary {
   }
   function splitGuides(body) {
     const out = [];
-    body.split(/^\s*={3,}.*$/m).filter(c => c.trim()).forEach(part => {
+    body.split(/^\s*(?:\d+\s*[.)]\s*)?[=ㅡ\-—_~*]{3,}.*$/m).filter(c => c.trim()).forEach(part => {
       const L = part.split("\n");
       let start = 0, seen = {}, lastOne = -1;
       for (let i = 0; i < L.length; i++) {
@@ -1159,6 +1193,8 @@ details.help-box summary {
   }
 
   function urlInfo(u) {
+    const toss = pick(u, /toss\.im\S*\/(\d+)/);
+    if (toss) return toss;
     const pid = pick(u, /products\/(\d+)/);
     const item = pick(u, /[?&]itemId=(\d+)/i);
     return pid ? (item ? pid + " - " + maskItem(item) : pid) : "";
@@ -1173,6 +1209,12 @@ details.help-box summary {
       // '10개 11,500원' 처럼 가격이 함께 적힌 경우 가격(11,500원)을 분리 제거하여 옵션명('10개')만 남김 (10/30)
       const cleanPart = part.replace(/\(?\s*(\d{1,3}(?:,\d{3})+|\d{4,})\s*원\s*\)?/, "").trim();
       const target = cleanPart || part;
+      // 끝에 '5건', '2건', '5명' 처럼 건수가 붙은 경우 옵션명과 건수 분리 (예: '홍시용 대봉감 소과 3kg 5건' -> 옵션 '홍시용 대봉감 소과 3kg', 수량 5)
+      const endCount = target.match(/^(.*?)\s+(\d+)\s*(?:건|명)\s*$/);
+      if (endCount) {
+        out.push({ label: endCount[1].trim(), qty: endCount[2] });
+        return;
+      }
       const toks = target.split(/\s+/);
       if (!toks.some(t => /^\d+\s*개(씩)?$/.test(t))) { out.push({ label: target, qty: "" }); return; }
       if (toks.length === 1 && /^\d+\s*개$/.test(toks[0])) { out.push({ label: toks[0], qty: "" }); return; }
@@ -2207,15 +2249,18 @@ details.help-box summary {
       const mix = reviewMix(g);
       const dm = dayMix(g, Number($("day").value) || 1);
       const mixLine = dm && dm.length ? mixText(dm) : mixText(mix);
-      const photo = photoWait(g)
+      const isReal = (rocketRun || $("realship").checked);
+      const isPhotoYes = /^\s*(유|y(es)?\b|있)/i.test(g.photo || "");
+      const photo = photoWait(g) || (!isReal && isPhotoYes)
         ? "🐥리뷰 : ★★★포토대기★★★"
         : mix.length
         ? "🐥리뷰 : " + mixLine
-        : (rocketRun || $("realship").checked) && /^\s*(유|y(es)?\b|있)/i.test(g.photo || "")
+        : isReal && isPhotoYes
         ? "🐥리뷰 : 포토리뷰"
         : null;
+      const pfx = g.platform ? g.platform + " - " : "";
       return [
-        confirmRun ? (i + 1) + "." : guides.length > 1 ? (cartInfo() ? (i + 1) + ")" : (i + 1) + ") " + (g.daily ? g.daily + "명" : "")) : null,
+        confirmRun ? (i + 1) + "." : guides.length > 1 ? (cartInfo() ? (i + 1) + ")" : (i + 1) + ") " + pfx + (g.daily ? g.daily + "명" : "") + " : ") : null,
         g.short ? "링크타고 검색▼( 상번이 네이버일때 무시)" : null,
         g.short || null,
         "🐥판매처 : " + (g.seller || "") + (g.cpFetched && !g.cpRocket && (g.seller || "").trim() ? " (판매자변경 로켓xxxxxx)" : ""),
@@ -2224,7 +2269,7 @@ details.help-box summary {
         "🐥★키워드 : " + (g.keyword || ""),
         "🐥위치 : " + posText(g)
       ].concat(optLines).concat([photo]).filter(x => x !== null).join("\n");
-    }).join("\n\n------------------------------------------------\n\n");
+    }).join("\n\n————————————————————————\n\n");
     renderKwBox();
     rememberProducts();
     const ci = cartInfo();

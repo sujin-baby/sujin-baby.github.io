@@ -1403,7 +1403,7 @@ function cp(id){var t=document.getElementById(id||'notice');t.select();
 function go(){
   var d={daily:document.getElementById('daily').value.trim(),title:document.getElementById('title').value.trim(),type:document.getElementById('type').value,
     takdae:document.getElementById('takdae').checked,realship:document.getElementById('realship').checked,
-    platform:document.getElementById('platform').value,desc:document.getElementById('desc').value,fname:window.__FNAME||'',k:window.__K||'',n:window.__N||'',opts:window.__OPTS||'',shop:window.__SHOP||'',slot:window.__SLOT||'',photo:window.__PHOTO||'',date:window.__DATE||'',plan:window.__PLAN||'',slot2:window.__SLOT2||'',day:window.__DAY||'',total:window.__TOTAL||'',room:window.__ROOM||'',croom:window.__CROOM||'',rv:window.__RV||'',cart:window.__CART||''};
+    platform:document.getElementById('platform').value,desc:document.getElementById('desc').value,fname:window.__FNAME||'',k:window.__K||'',n:window.__N||'',opts:window.__OPTS||'',shop:window.__SHOP||'',slot:window.__SLOT||'',photo:window.__PHOTO||'',date:window.__DATE||'',plan:window.__PLAN||'',slot2:window.__SLOT2||'',day:window.__DAY||'',total:window.__TOTAL||'',room:window.__ROOM||'',thumb:window.__THUMB||'',roomlink:window.__ROOMLINK||'',croom:window.__CROOM||'',rv:window.__RV||'',cart:window.__CART||''};
   if(!d.title){document.getElementById('msg').textContent='명단 제목을 넣어 주세요.';return;}
   document.getElementById('go').disabled=true;
   var t0=Date.now(),tick=function(){var s=Math.round((Date.now()-t0)/1000);document.getElementById('msg').textContent='만드는 중이에요… '+s+'초\\n(보통 30초~1분. 15분 자동 확인이 돌고 있으면 그게 멈출 때까지 1~2분 더 걸릴 수 있어요. 창을 닫지 마세요)';};
@@ -1640,6 +1640,7 @@ function doGet(e) {
   if (p.p === 'queue') return ContentService.createTextOutput(queueText_());
   // 읽기 전용 점검 (10/24): 진행목록·일정·보낼메시지·트리거·최근 확인 결과를 JSON으로. 아무것도 안 바꿈 (원격으로 버그 원인 찾기용)
   if (p.p === 'diag') return ContentService.createTextOutput(diagText_(p)).setMimeType(ContentService.MimeType.JSON);
+  if (p.p === 'roomlink') return ContentService.createTextOutput(JSON.stringify(saveRoomLink_(p.room, p.url))).setMimeType(ContentService.MimeType.JSON);
   if (p.p === 'sent') { markMsg_(p.id, p.st === 'fail' ? '대기' : '보냄'); return ContentService.createTextOutput('ok'); }
   if (p.p === 'rank') return rankPage_(p);
   if (p.p === 'review') return reviewPage_(p);
@@ -1649,7 +1650,7 @@ function doGet(e) {
   }
   if (p.p === 'outbox') {
     const items = JSON.stringify(outboxItems_()).replace(/</g, '\\u003c');
-    return HtmlService.createHtmlOutput(OUTBOX_HTML.replace('__ITEMS__', function () { return items; }).replace('__K__', JSON.stringify(CONFIG.KEY)))
+    return HtmlService.createHtmlOutput(OUTBOX_HTML.replace('__ITEMS__', function () { return items; }).replace('__K__', JSON.stringify(CONFIG.KEY)).replace('__EXEC__', function () { return JSON.stringify(CONFIG.WEBAPP_URL || ''); }))
       .setTitle('보낼 메시지함').addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
   if (p.d64) {
@@ -1662,7 +1663,7 @@ function doGet(e) {
     delete p.z64;
   }
   // 생성기 버튼으로 열면(auto=1) 값이 다 채워진 채로 바로 만들기 실행. 같은 요청ID는 한 번만 만들어짐
-  const pre = '<script>window.__CART=' + JSON.stringify(p.cart || '') + ';window.__N=' + JSON.stringify(p.n || '') + ';window.__ROOM=' + JSON.stringify(p.room || '') + ';window.__DATE=' + JSON.stringify(p.date || '') + ';window.__SHOP=' + JSON.stringify(p.shop || '') + ';window.__OPTS=' + JSON.stringify(p.opts || '') + ';window.__SLOT=' + JSON.stringify(p.slot || '') + ';window.__PHOTO=' + JSON.stringify(p.photo || '') + ';window.__PLAN=' + JSON.stringify(p.plan || '') + ';window.__SLOT2=' + JSON.stringify(p.slot2 || '') + ';window.__DAY=' + JSON.stringify(p.day || '') + ';window.__TOTAL=' + JSON.stringify(p.total || '') + ';window.__CROOM=' + JSON.stringify(p.croom || '') + ';window.__RV=' + JSON.stringify(p.rv || '') + ';window.__AUTO=' + (p.auto === '1' && p.title ? 'true' : 'false') + ';</' + 'script>';
+  const pre = '<script>window.__CART=' + JSON.stringify(p.cart || '') + ';window.__THUMB=' + JSON.stringify(p.thumb || '') + ';window.__ROOMLINK=' + JSON.stringify(p.roomlink || '') + ';window.__N=' + JSON.stringify(p.n || '') + ';window.__ROOM=' + JSON.stringify(p.room || '') + ';window.__DATE=' + JSON.stringify(p.date || '') + ';window.__SHOP=' + JSON.stringify(p.shop || '') + ';window.__OPTS=' + JSON.stringify(p.opts || '') + ';window.__SLOT=' + JSON.stringify(p.slot || '') + ';window.__PHOTO=' + JSON.stringify(p.photo || '') + ';window.__PLAN=' + JSON.stringify(p.plan || '') + ';window.__SLOT2=' + JSON.stringify(p.slot2 || '') + ';window.__DAY=' + JSON.stringify(p.day || '') + ';window.__TOTAL=' + JSON.stringify(p.total || '') + ';window.__CROOM=' + JSON.stringify(p.croom || '') + ';window.__RV=' + JSON.stringify(p.rv || '') + ';window.__AUTO=' + (p.auto === '1' && p.title ? 'true' : 'false') + ';</' + 'script>';
   const fill = pre + '<script>window.__K=' + JSON.stringify(CONFIG.KEY) + ';window.__FNAME=' + JSON.stringify(p.fname || '') + ';(function(){var p=' + JSON.stringify(p).replace(/</g, '\\u003c') + ';var $=function(i){return document.getElementById(i)};if(p.title)$("title").value=p.title;if(p.daily)$("daily").value=p.daily;if(p.desc)$("desc").value=p.desc;if(p.type)$("type").value=p.type;if(p.platform)$("platform").value=p.platform;$("takdae").checked=p.takdae==="1";$("realship").checked=p.realship==="1";autoGo();})();</' + 'script>';
   return HtmlService.createHtmlOutput(DIALOG_HTML + fill).setTitle('새 진행 만들기').addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
@@ -1671,6 +1672,7 @@ function doGet(e) {
 
 function createRun(d) {
   if (!d || d.k !== CONFIG.KEY) throw new Error('권한이 없어요. 생성기 버튼이나 시트 메뉴로 열어 주세요.');
+  if (d.act === 'roomlink') return saveRoomLink_(d.room, d.url);   // 보낼 메시지함 [방 링크 넣기] (로더에 있는 이름이라 붙여넣기 없이 됨)
   // 진행 도우미 페이지의 버튼도 이 이름으로 받음 (로더에 이미 있는 이름이라 붙여넣기 없이 됨)
   //  보기·공지 저장은 진행목록 줄을 안 바꿔서 15분 확인이 돌고 있어도 바로 (기다리면 버튼이 안 눌리는 것처럼 보임)
   // 예전에 열어 둔 진행 도우미 화면(동작이 다름)에서 누른 건 하지 않고 다시 열라고 알림
@@ -1856,6 +1858,9 @@ function createRunInner_(d) {
   if (d.urls) { try { PropertiesService.getScriptProperties().setProperty('PURL_' + ss.getId(), String(d.urls).slice(0, 2000)); } catch (e) {} }
   // 장바구니건 (10/28): 한 사람이 상품 N개를 한 번에. 진행목록 인원·총건수는 사람, 방 제목·명단 시트 이름·한눈에·월급시트 건수는 물건 수(사람 × N)
   if (Number(d.cart) > 1) { try { PropertiesService.getScriptProperties().setProperty('CART_' + ss.getId(), String(Number(d.cart))); } catch (e) {} }
+  // 썸네일 주소·카톡방 링크 (생성기가 넘기면): 보낼 메시지함 방 공지 옆 사진, [이 방 열기] (10/30)
+  if (/^https:\/\/\S+$/.test(String(d.thumb || ''))) { try { PropertiesService.getScriptProperties().setProperty('THUMB_' + ss.getId(), String(d.thumb).slice(0, 500)); } catch (e) {} }
+  if (d.roomlink) { try { saveRoomLink_(d.room || d.title, d.roomlink); } catch (e) {} }
   if (d.rv) { try { const pk = 'RV_' + ss.getId(), pr = PropertiesService.getScriptProperties(); if (!pr.getProperty(pk)) pr.setProperty(pk, String(d.rv).slice(0, 8000)); } catch (e) {} }
   return { notice: notice, formUrl: formUrl, sheetUrl: ss.getUrl(), folderUrl: folder.getUrl() };
 }
@@ -4085,11 +4090,45 @@ function queueMsgInner_(room, msg, kind) {
 
 function outboxItems_() {
   const sh = outboxSheet_();
+  let links = {}, rr = null;
+  try { links = roomLinksAll_(); } catch (e) {}
+  const runs = function () { if (!rr) rr = readRuns_(); return rr; };
   const last = sh.getLastRow();
   if (last < 2) return [];
   return sh.getRange(2, 1, last - 1, 6).getValues()
     .filter(function (r) { return r[5] === '대기' || r[5] === '방 못 찾음'; })
-    .map(function (r) { return { id: String(r[0]), kind: String(r[2]), room: String(r[3]), msg: String(r[4]), st: String(r[5]) }; });
+    .map(function (r) { return { id: String(r[0]), kind: String(r[2]), room: String(r[3]), msg: String(r[4]), st: String(r[5]) }; })
+    .map(function (x) { try { x.link = roomLinkOf_(x.room, links); if (x.kind === '방 공지') x.img = thumbOfRoom_(x.room, runs()); } catch (e) {} return x; });
+}
+// 카톡방 열기 (10/30): 오픈채팅 링크를 방 이름마다 한 번 넣어 두면 보낼 메시지함에 [이 방 열기]. 방제 숫자가 바뀌어도 같은 날짜·캠페인이면 같은 방으로 봄
+function roomKey_(room) { return bareTitle_(room).replace(/\s+/g, ' ').trim(); }
+function roomLinksAll_() {
+  const all = PropertiesService.getScriptProperties().getProperties(), out = {};
+  Object.keys(all).forEach(function (k) { if (k.indexOf('RL_') === 0) { try { out[k.slice(3)] = JSON.parse(all[k]).u; } catch (e) {} } });
+  return out;
+}
+function roomLinkOf_(room, map) {
+  const k = roomKey_(room);
+  if (!k) return '';
+  if (map[k]) return map[k];
+  const hit = Object.keys(map).filter(function (x) { return sameRunTitle_(x, k); })[0];
+  return hit ? map[hit] : '';
+}
+function saveRoomLink_(room, url) {
+  const k = roomKey_(room), m = String(url || '').match(/https:\/\/open\.kakao\.com\/o\/[A-Za-z0-9_-]+/);
+  if (!k) return { ok: false, msg: '방 이름이 없어요.' };
+  if (!m) return { ok: false, msg: '카톡 오픈채팅 링크(https://open.kakao.com/o/…)가 아니에요.\n카톡방 → 오른쪽 위 ≡ → 공유(링크 복사) 한 다음 붙여넣어 주세요.' };
+  const props = PropertiesService.getScriptProperties(), now = Date.now();
+  props.setProperty('RL_' + k, JSON.stringify({ u: m[0], t: now }));
+  // 45일 넘게 안 쓴 방 링크는 정리 (방이 날마다 새로 생겨서)
+  try { const all = props.getProperties(); Object.keys(all).forEach(function (x) { if (x.indexOf('RL_') !== 0) return; let t = 0; try { t = JSON.parse(all[x]).t; } catch (e) {} if (now - t > 45 * 86400000) props.deleteProperty(x); }); } catch (e) {}
+  return { ok: true, link: m[0], msg: '✔ ' + k + ' 방 링크 저장' };
+}
+// 방 공지 옆 썸네일: 그 방 진행의 명단 시트에 저장된 썸네일 주소 (생성기가 넘긴 것)
+function thumbOfRoom_(room, runs) {
+  const k = roomKey_(room), props = PropertiesService.getScriptProperties();
+  const r = runs.filter(function (x) { const rm = roomKey_(x['카톡방'] || x['명단 제목']); return x['시트ID'] && (rm === k || sameRunTitle_(rm, k)); })[0];
+  return r ? (props.getProperty('THUMB_' + r['시트ID']) || '') : '';
 }
 
 // PC 도우미용: 한 줄에 하나, ID 탭 방이름(base64) 탭 메시지(base64). 방 이름이 있는 대기 건만
@@ -5038,7 +5077,7 @@ const TOOLS_HTML = String.raw`
   <div id="stat"></div>
 </div>
 <script>
-var K = __K__, INIT = __INIT__, MODE = __MODE__, EXEC = __EXEC__, PV = __PV__, $ = function (i) { return document.getElementById(i); }, running = false, tick = null, NEXTMD = , JUST = false;
+var K = __K__, INIT = __INIT__, MODE = __MODE__, EXEC = __EXEC__, PV = __PV__, $ = function (i) { return document.getElementById(i); }, running = false, tick = null, NEXTMD = '', JUST = false;
 try { $('rvlink').href = EXEC + '?p=review&k=' + encodeURIComponent(K); if (MODE !== 'web') $('rvlink').target = '_blank'; } catch (e) {}
 function say(t) { $('msg').style.display = t ? 'block' : 'none'; $('msg').textContent = t || ''; if (t) $('msg').scrollIntoView({ block: 'nearest' }); }
 function busy(on, label) {
@@ -5078,6 +5117,23 @@ function go(d, label) {
     if (o && o.saved) go({ act: 'info', title: o.title }, (o.msg || '저장했어요.') + '\n\n중복·인원 불러오는 중…');
   }).withFailureHandler(function (e) { busy(false); say('오류: ' + e.message + '\n(한 번 더 눌러 보고, 또 나오면 이 글을 캡처해서 보내 주세요)'); }).createRun(d);
 }
+function roomBits(x, K, EXEC, c, before, linkEl) {
+  // 썸네일 (방 공지): 길게 눌러 저장 → 카톡에 사진으로
+  if (x.img) { var f = document.createElement('div'); f.style.cssText = 'margin:0 0 8px;font-size:12px;color:#676274'; var im = document.createElement('img'); im.src = x.img; im.style.cssText = 'display:block;max-width:140px;max-height:140px;border-radius:8px;border:1px solid #e1dee8;margin-bottom:2px'; f.appendChild(im); f.appendChild(document.createTextNode('사진 길게 눌러 저장 → 카톡에 첨부')); c.insertBefore(f, before); }
+  var setLink = function (u) { linkEl.href = u; linkEl.textContent = '이 방 열기'; linkEl.target = '_blank'; linkEl.rel = 'noopener'; };
+  if (x.link) setLink(x.link);
+  if (!x.room) return null;
+  var b = document.createElement('button'); b.type = 'button'; b.textContent = x.link ? '방 링크 바꾸기' : '🔗 방 링크 넣기';
+  b.style.cssText = 'margin-top:8px;width:100%;padding:8px;border-radius:8px;border:1px dashed #5b2a86;background:#fff;color:#5b2a86;font:inherit;font-size:13px';
+  b.onclick = function () {
+    var u = prompt('카톡방 링크를 붙여넣어 주세요 (한 번만)\n카톡방 → 오른쪽 위 ≡ → 공유 → 링크 복사', '');
+    if (!u) return;
+    var ok = function (o) { if (o && o.ok) { setLink(o.link); b.textContent = '✔ 저장됨 (방 링크 바꾸기)'; } else alert((o && o.msg) || '저장 못 했어요.'); };
+    var viaGet = function () { fetch(EXEC + '?p=roomlink&k=' + encodeURIComponent(K) + '&room=' + encodeURIComponent(x.room) + '&url=' + encodeURIComponent(u)).then(function (r) { return r.json(); }).then(ok, function () { alert('저장 못 했어요. 한 번 더 눌러 주세요.'); }); };
+    try { google.script.run.withSuccessHandler(ok).withFailureHandler(function () { if (EXEC) viaGet(); else alert('저장 못 했어요.'); }).createRun({ k: K, act: 'roomlink', room: x.room, url: u }); } catch (e) { if (EXEC) viaGet(); }
+  };
+  return b;
+}
 function outbox(list) {
   var box = $('ob'); box.innerHTML = '';
   if (!(list || []).length) { box.innerHTML = '<span class="ok">✔ 보낼 거 없어요</span>'; return; }
@@ -5085,6 +5141,7 @@ function outbox(list) {
     var c = document.createElement('div'); c.className = 'ob';
     c.innerHTML = '<span class="rm"></span><span class="kd"></span><pre></pre><div class="two"><button class="btn-mint">복사</button><a href="kakaotalk://">카톡 열기</a></div>';
     c.querySelector('.rm').textContent = x.room || '(방 이름 없음)'; c.querySelector('.kd').textContent = x.kind; c.querySelector('pre').textContent = x.msg;
+    var lb = roomBits(x, K, EXEC, c, c.querySelector('pre'), c.querySelector('.two a')); if (lb) c.appendChild(lb);
     var b = c.querySelector('button');
     b.onclick = function () {
       var done = function () {
@@ -5162,10 +5219,10 @@ $('b2').onclick = function () {
 $('b3').onclick = function () {
   var n = Number($('n').value);
   if (!n || n < 1) return say('추가할 인원수를 넣어 주세요.');
-  twice($('b3'), (NEXTMD || '다음 날') + '에 ' + n + '명 추가해요', function () { go({ act: 'addNext', n: n }, '추가 모집 만드는 중…'); });
+  twice($('b3'), (NEXTMD || '다음 날') + '에 ' + n + '명 추가해요', function () { go({ act: 'more', n: n }, '추가 모집 만드는 중…'); });
 };
-$('b4').onclick = function () { twice($('b4'), '이 진행 배정(카톡 공지)을 전부 비워요', function () { go({ act: 'clearAsg' }, '배정 비우는 중…'); }); };
-$('b5').onclick = function () { twice($('b5'), '이 진행을 아예 지워요 (응답 0명일 때만)', function () { go({ act: 'deleteRun' }, '진행 지우는 중…'); }); };
+$('b4').onclick = function () { twice($('b4'), '이 진행 배정(카톡 공지)을 전부 비워요', function () { go({ act: 'unassign' }, '배정 비우는 중…'); }); };
+$('b5').onclick = function () { twice($('b5'), '이 진행을 아예 지워요 (응답 0명일 때만)', function () { go({ act: 'remove' }, '진행 지우는 중…'); }); };
 show(INIT);
 </script>`;
 
@@ -5187,10 +5244,28 @@ const OUTBOX_HTML = `
   .warn{color:#a3271b;font-size:13px;margin-bottom:6px}
 </style>
 <h1>보낼 메시지함</h1>
-<p class="sub">복사 → 카톡 열기 → 해당 방에 붙여넣고 직접 보내기 → 보냄 표시</p>
+<p class="sub">복사 → 이 방 열기(링크 넣은 방) / 카톡 열기 → 붙여넣고 직접 보내기</p>
 <div id="list"></div>
 <script>
-var ITEMS = __ITEMS__, K = __K__;
+var ITEMS = __ITEMS__, K = __K__, EXEC = __EXEC__;
+function roomBits(x, K, EXEC, c, before, linkEl) {
+  // 썸네일 (방 공지): 길게 눌러 저장 → 카톡에 사진으로
+  if (x.img) { var f = document.createElement('div'); f.style.cssText = 'margin:0 0 8px;font-size:12px;color:#676274'; var im = document.createElement('img'); im.src = x.img; im.style.cssText = 'display:block;max-width:140px;max-height:140px;border-radius:8px;border:1px solid #e1dee8;margin-bottom:2px'; f.appendChild(im); f.appendChild(document.createTextNode('사진 길게 눌러 저장 → 카톡에 첨부')); c.insertBefore(f, before); }
+  var setLink = function (u) { linkEl.href = u; linkEl.textContent = '이 방 열기'; linkEl.target = '_blank'; linkEl.rel = 'noopener'; };
+  if (x.link) setLink(x.link);
+  if (!x.room) return null;
+  var b = document.createElement('button'); b.type = 'button'; b.textContent = x.link ? '방 링크 바꾸기' : '🔗 방 링크 넣기';
+  b.style.cssText = 'margin-top:8px;width:100%;padding:8px;border-radius:8px;border:1px dashed #5b2a86;background:#fff;color:#5b2a86;font:inherit;font-size:13px';
+  b.onclick = function () {
+    var u = prompt('카톡방 링크를 붙여넣어 주세요 (한 번만)\\n카톡방 → 오른쪽 위 ≡ → 공유 → 링크 복사', '');
+    if (!u) return;
+    var ok = function (o) { if (o && o.ok) { setLink(o.link); b.textContent = '✔ 저장됨 (방 링크 바꾸기)'; } else alert((o && o.msg) || '저장 못 했어요.'); };
+    var viaGet = function () { fetch(EXEC + '?p=roomlink&k=' + encodeURIComponent(K) + '&room=' + encodeURIComponent(x.room) + '&url=' + encodeURIComponent(u)).then(function (r) { return r.json(); }).then(ok, function () { alert('저장 못 했어요. 한 번 더 눌러 주세요.'); }); };
+    try { google.script.run.withSuccessHandler(ok).withFailureHandler(function () { if (EXEC) viaGet(); else alert('저장 못 했어요.'); }).createRun({ k: K, act: 'roomlink', room: x.room, url: u }); } catch (e) { if (EXEC) viaGet(); }
+  };
+  return b;
+}
+
 var box = document.getElementById('list');
 if (!ITEMS.length) box.textContent = '보낼 메시지가 없어요.';
 ITEMS.forEach(function (x) {
@@ -5214,6 +5289,7 @@ ITEMS.forEach(function (x) {
   var ok = document.createElement('button'); ok.className = 'b2'; ok.textContent = '보냄 표시';
   ok.onclick = function () { ok.disabled = true; google.script.run.withSuccessHandler(function () { c.remove(); }).withFailureHandler(function () { ok.disabled = false; }).markSentFromPage(K, x.id); };
   bs.appendChild(cp); bs.appendChild(op); bs.appendChild(ok); c.appendChild(bs);
+  var lb = roomBits(x, K, EXEC, c, pre, op); if (lb) c.appendChild(lb);
   box.appendChild(c);
 });
 </script>`;
