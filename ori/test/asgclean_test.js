@@ -11,8 +11,8 @@ env.__ss.sheets['진행목록'] = new H.Sheet('진행목록', [LH.slice(), mk({ 
 const asg = new H.Sheet('배정', [AH.slice(), [T(old, 'C'), 'a'], [T(old, 'C'), 'b'], [T(pw, 'B'), 'c'], [T(t0, 'A'), 'd'], ['#' + lab(old) + ' 없는진행 3', 'e'], [T(old, 'C'), 'f'], ['날짜없는 제목', 'g']]);
 asg.deleteRows = function (r, n) { this.rows.splice(r - 1, n); };
 env.__ss.sheets['배정'] = asg;
-const hr = Number(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: 'Asia/Seoul' }).format(new Date()));
-if (hr < 5) { console.log('(5시 전이라 건너뜀 — 정상)'); process.exit(0); }
+// 실행 시각과 상관없이 시험 (함수 안 '5시 넘어서만' 조건은 시계를 낮 12시로 보이게 해서 통과)
+G("(function(){ const f = Utilities.formatDate; Utilities.formatDate = function (d, tz, fmt) { return fmt === 'H' ? '12' : f(d, tz, fmt); }; })()");
 G('assignCleanDaily_()');
 const left = asg.rows.slice(1).map(r => r[1]).join('');
 const second = (G('assignCleanDaily_()'), asg.rows.length);
