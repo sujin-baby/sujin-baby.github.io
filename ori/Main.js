@@ -738,6 +738,10 @@ function syncList_(ss) {
   if (!props.getProperty('LISTV_' + id)) return 0;
   const tabs = ss.getSheets().filter(function (t) { return !!t.getFormUrl(); });
   if (!tabs.length) return 0;
+  // 응답 탭 줄·칸 수, 명단 탭 줄·칸 수, 넣은 응답 기록이 지난번과 같으면 새로 넣을 게 없음 → 안 읽음 (10/31: 바뀐 게 없어도 시트마다 4초). 하루 한 번은 다 봄
+  const sigK = 'LISTSIG_' + id, tabSig = tabs.map(function (t) { return t.getSheetId() + ':' + t.getLastRow() + ':' + t.getLastColumn(); }).join(',') + '|' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
+  const sigNow = function () { return tabSig + '|' + sh.getLastRow() + ':' + sh.getLastColumn() + '|' + String(props.getProperty('LISTK_' + id) || '').length; };
+  if (props.getProperty(sigK) === sigNow()) return 0;
   const heads = [], rows = [];
   tabs.forEach(function (t) {
     const lr = t.getLastRow(), h = rawHead_(t).map(hk_);
@@ -869,6 +873,7 @@ function syncList_(ss) {
   let save = done.join(',');
   while (save.length > 8500) { done.shift(); save = done.join(','); }
   props.setProperty('LISTK_' + id, save);
+  try { props.setProperty(sigK, sigNow()); } catch (e) {}
   return add.length;
 }
 

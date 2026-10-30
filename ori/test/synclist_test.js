@@ -1,0 +1,21 @@
+// 명단 탭 새 응답(syncList_): 새 응답은 넣고, 바뀐 게 없으면 응답 탭을 안 읽음, 응답이 더 오면 다시 넣음  node synclist_test.js <Main.js>
+const H = require('./harness'); const vm = require('vm');
+const env = H.makeEnv({ main: process.argv[2] }); const G = k => vm.runInContext(k, env);
+const ts = n => new Date(2026, 9, 30, 10, n);
+const resp = new H.Sheet('설문지 응답 시트1', [['타임스탬프', '이름', '전화번호'], [ts(1), '가', '01011112222'], [ts(2), '나', '01033334444']]);
+resp.getFormUrl = () => 'https://form'; resp.getSheetId = () => 11;
+let reads = 0; const gr = resp.getRange.bind(resp); resp.getRange = function () { reads++; return gr.apply(null, arguments); };
+const list = new H.Sheet('명단', [['요약'], ['타임스탬프', '이름', '전화번호']]);
+list.getFormUrl = () => null; list.getSheetId = () => 22;
+const lss = { getId: () => 'L1', getName: () => 'L1', getSheetByName: n => n === '명단' ? list : null, getSheets: () => [list, resp] };
+env.__lss = lss;
+G("PropertiesService.getScriptProperties().setProperty('LISTV_L1', '1'); PropertiesService.getScriptProperties().setProperty('RVCOL2_L1', '1'); PropertiesService.getScriptProperties().setProperty('LISTNONICK_L1', '1'); PropertiesService.getScriptProperties().setProperty('LISTFIX1_L1', '1'); PropertiesService.getScriptProperties().setProperty('LISTHIDE_L1', '1'); payCheck_ = function () {};");
+const a1 = G('syncList_(globalThis.__lss)'); const r1 = reads;
+const a2 = G('syncList_(globalThis.__lss)'); const r2 = reads - r1;
+resp.rows.push([ts(3), '다', '01055556666']);
+const a3 = G('syncList_(globalThis.__lss)');
+const names = list.rows.slice(2).map(r => r[1]).join(',');
+console.log('넣은 줄 ' + a1 + ' / 두 번째 ' + a2 + '(응답 탭 읽기 ' + r2 + '번) / 하나 더 ' + a3 + ' / 명단: ' + names);
+const ok = a1 === 2 && a2 === 0 && r2 === 0 && a3 === 1 && names === '가,나,다';
+console.log(ok ? '✓ 명단 새 응답 시험 통과' : 'XX 명단 새 응답 시험 실패');
+process.exit(ok ? 0 : 1);
