@@ -499,7 +499,11 @@ async function run(tab) {
   if (!pc.found && pc.log.length) notes.push({ t: "PC 확인한 것: " + pc.log.join(" / "), warn: true });
   if (!mo.found && mo.log.length) notes.push({ t: "모바일 확인한 것: " + mo.log.join(" / "), warn: true });
   [pc.found, mo.found].forEach((r, i) => { if (r && r.how === "상품명") notes.push({ t: (i ? "모바일" : "PC") + ": 상품명으로 찾았어요 (스토어 이름은 화면에 없었음)" }); });
-  notes.push(ctx.shot || await saveThumb(info));
+  if (info.img) {
+    const st = await saveThumb(info);
+    if (st) notes.push(st);
+  }
+  if (ctx.shot) notes.push(ctx.shot);
   const nv = await verP;
   if (nv) notes.push({ t: "새 버전(" + nv + ")이 있어요. 생성기에서 확장 프로그램을 다시 받아 바꿔 주세요.", warn: true });
   if (autoTab !== tid) { try { await chrome.windows.update(tab.windowId, { focused: true }); await chrome.tabs.update(tid, { active: true }); } catch (e) {} }
