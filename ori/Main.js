@@ -749,6 +749,8 @@ function syncList_(ss) {
   // 응답 탭 줄·칸 수, 명단 탭 줄·칸 수, 넣은 응답 기록이 지난번과 같으면 새로 넣을 게 없음 → 안 읽음 (10/31: 바뀐 게 없어도 시트마다 4초). 하루 한 번은 다 봄
   const sigK = 'LISTSIG_' + id, tabSig = tabs.map(function (t) { return t.getSheetId() + ':' + t.getLastRow() + ':' + t.getLastColumn(); }).join(',') + '|' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
   const sigNow = function () { return tabSig + '|' + sh.getLastRow() + ':' + sh.getLastColumn() + '|' + String(props.getProperty('LISTK_' + id) || '').length; };
+  // (한 번) 리뷰 확인 체크칸 폭 좁게 (사용자 요청 10/31)
+  if (!props.getProperty('RVW_' + id)) { props.setProperty('RVW_' + id, '1'); try { const c0 = rvCol_(sh, Math.max(sh.getLastColumn(), 1)); if (c0 > 0) sh.setColumnWidth(c0, 40); } catch (e) {} }
   if (props.getProperty(sigK) === sigNow()) return 0;
   const heads = [], rows = [];
   tabs.forEach(function (t) {
@@ -822,6 +824,7 @@ function syncList_(ss) {
       const c = lc + 1;   // 맨 오른쪽 바로 옆 칸 (사용자 요청 10/21: M칸)
       if (sh.getMaxColumns() < c) sh.insertColumnsAfter(sh.getMaxColumns(), c - sh.getMaxColumns());
       rvMark_(sh, c);
+      try { sh.setColumnWidth(c, 40); } catch (e) {}
       if (sh.getLastRow() >= 3) sh.getRange(3, c, sh.getLastRow() - 2, 1).insertCheckboxes().setHorizontalAlignment('center');
     }
     props.setProperty('RVCOL_' + id, '1');
@@ -1039,7 +1042,9 @@ function adoptOrphanForms_(runs) {
     return live;
   };
   const since = Date.now() - 10 * 86400000, me = Session.getEffectiveUser().getEmail();
-  const it = rootFolder_().getFolders();
+  const folders0 = campFolders_();
+  let fi0 = 0;
+  const it = { hasNext: function () { return fi0 < folders0.length; }, next: function () { return folders0[fi0++]; } };
   while (it.hasNext()) {
     const fo = it.next();
     if (subTime_('없는 폼: 폴더 보기', function () { return fo.getLastUpdated().getTime(); }) < since) continue;
@@ -1679,7 +1684,8 @@ function createRunInner_(d) {
   } else {
     // 이름 규칙: 방제에서 날짜 뺀 것. 오리컴퍼니 폴더 안에 의뢰마다 같은 이름의 하위 폴더
     const fname = sheetName_(d.fname || d.title);
-    folder = rootFolder_().createFolder(fname);
+    let mf; try { mf = monthFolder_(/^\d{4}-\d{2}-\d{2}$/.test(String(d.date || '')) ? new Date(d.date + 'T00:00:00') : dayFromTitle_(d.title)); } catch (e) { mf = rootFolder_(); }
+    folder = mf.createFolder(fname);
     const formFile = DriveApp.getFileById(CONFIG.TEMPLATE_FORM_ID).makeCopy(fname, folder);
     form = FormApp.openById(formFile.getId());
     form.setTitle(fname);
@@ -3103,6 +3109,7 @@ function checkFullInner_() {
   } catch (e) { note_('한눈에 오류 칸 확인 실패: ' + e); }
   // 리뷰 사진 AI 분류가 남은 의뢰가 있으면 이어서 (10/31)
   if (props.getProperty('RVAI_Q') && !late_(200)) { step_('리뷰 사진 AI'); rvAiQueue_(); }
+  if (geminiKey_()) { try { ensureInboxTrigger_(); } catch (e) {} }
   if (geminiKey_() && !late_(200)) { try { subTime_('리뷰 사진 받는 곳', function () { rvInboxSort_(null); }); } catch (e) { note_('리뷰 사진 받는 곳 실패: ' + e); } }
   // 사용법 탭 글이 바뀌었으면 바로 (정리는 30분마다라 새 칸이 늦게 생김. 같으면 속성 하나만 보고 끝)
   try { ensureUsageTab_(); } catch (e) {}
@@ -3166,6 +3173,8 @@ function slowTasks_(rr, listed) {
   try { subTime_('정리: 보낸 메시지', function () { pruneOutbox_(); }); } catch (e) { note_('보낸 메시지 정리 실패: ' + e); }
   try { subTime_('정리: 폼수정 탭', function () { ensureEditTab_(); }); } catch (e) { note_('폼수정 탭 만들기 실패: ' + e); }
   try { protectAutoCols_(); } catch (e) { note_('자동 칸 경고 걸기 실패: ' + e); }
+  try { moveCampFoldersOnce_(); } catch (e) { note_('월 폴더 정리 실패: ' + e); }
+  try { ensureInboxTrigger_(); } catch (e) { note_('받는 곳 5분 트리거 실패: ' + e); }
   PropertiesService.getScriptProperties().setProperty('SLOW_AT', String(Date.now()));
 }
 
@@ -3499,6 +3508,21 @@ function dupSummary_(sheetId) {
   } catch (e) { return '중복 확인 못 함: ' + e.message; }
 }
 
+function rvInboxTick_() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) return;   // 15분 확인이 도는 중이면 그쪽에서 함
+  try { globalThis.__ORI_T0 = Date.now(); rvInboxSort_(null); } catch (e) { try { note_('리뷰 사진 받는 곳(5분) 실패: ' + e); } catch (e2) {} }
+  finally { lock.releaseLock(); }
+}
+// 키가 있으면 5분마다 받는 곳 확인 트리거 (트리거는 계정당 20개 한도라 19개 넘으면 안 만듦 → 15분 확인에서만)
+function ensureInboxTrigger_() {
+  if (!geminiKey_()) return;
+  const ts = ScriptApp.getProjectTriggers();
+  if (ts.some(function (t) { return t.getHandlerFunction() === 'onAdminEdit' && t.getEventType() === ScriptApp.EventType.CLOCK; })) return;
+  if (ts.length >= 19) return;
+  ScriptApp.newTrigger('onAdminEdit').timeBased().everyMinutes(5).create();
+  note_('✓ 리뷰 사진 받는 곳 5분마다 확인 켬');
+}
 function ensureCheckTrigger_() {
   const has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'checkFull'; });
   if (!has) ScriptApp.newTrigger('checkFull').timeBased().everyMinutes(15).create();
@@ -3565,6 +3589,40 @@ function migrateList_(sh, have) {
   groupColumns_(sh, LIST_HIDDEN.map(lc_));
 }
 
+// 의뢰 폴더는 오리컴퍼니 안 '2026년 10월' 같은 월 폴더에 (진행 시작일 기준, 사용자 요청 10/31)
+const MONTH_DIR_RE = /^\d{4}년 \d{1,2}월$/;
+function monthFolder_(d) {
+  d = d instanceof Date && !isNaN(d) ? d : new Date();
+  const name = d.getFullYear() + '년 ' + (d.getMonth() + 1) + '월', root = rootFolder_(), it = root.getFoldersByName(name);
+  return it.hasNext() ? it.next() : root.createFolder(name);
+}
+// 의뢰 폴더 전부(월 폴더 안 + 아직 맨 위에 있는 것)
+function campFolders_() {
+  const out = [], it = rootFolder_().getFolders();
+  while (it.hasNext()) {
+    const f = it.next(), n = f.getName();
+    if (MONTH_DIR_RE.test(n)) { const s2 = f.getFolders(); while (s2.hasNext()) out.push(s2.next()); }
+    else if (n !== RV_INBOX) out.push(f);
+  }
+  return out;
+}
+// (한 번) 맨 위에 있는 의뢰 폴더를 진행목록의 가장 이른 진행일 월 폴더로 옮김. 진행목록에 없는 폴더는 그대로
+function moveCampFoldersOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('MONTHDIR_V1')) return;
+  const first = {};
+  readRuns_().concat(archivedRuns_()).forEach(function (r) {
+    const id = (String(r['폴더 링크'] || '').match(/[-\w]{25,}/) || [])[0];
+    if (id && r['진행일'] instanceof Date && (!first[id] || r['진행일'] < first[id])) first[id] = r['진행일'];
+  });
+  const it = rootFolder_().getFolders(), list = [];
+  while (it.hasNext()) { const f = it.next(); if (first[f.getId()]) list.push(f); }
+  let n = 0;
+  list.forEach(function (f) { if (late_(240)) return; try { f.moveTo(monthFolder_(first[f.getId()])); n++; } catch (e) { note_('월 폴더로 옮기기 실패 ' + f.getName() + ': ' + e.message); } });
+  if (!late_(240)) props.setProperty('MONTHDIR_V1', '1');
+  if (n) note_('✓ 의뢰 폴더 ' + n + '개를 월 폴더(진행 시작일 기준)로 옮김');
+}
+function archivedRuns_() { try { const a = adminSs_().getSheetByName('보관'); if (!a || a.getLastRow() < 2) return []; const h = a.getRange(1, 1, 1, a.getLastColumn()).getValues()[0].map(String), iL = h.indexOf('폴더 링크'), iD = h.indexOf('진행일'); if (iL < 0 || iD < 0) return []; return a.getRange(2, 1, a.getLastRow() - 1, a.getLastColumn()).getValues().map(function (v) { return { '폴더 링크': v[iL], '진행일': v[iD] }; }); } catch (e) { return []; } }
 function rootFolder_() {
   if (CONFIG.FOLDER_ID) return DriveApp.getFolderById(CONFIG.FOLDER_ID);
   const it = DriveApp.getRootFolder().getFoldersByName(CONFIG.ROOT_FOLDER_NAME);
@@ -5085,6 +5143,8 @@ function ensureEditTab_() {
 
 function onAdminEdit(e) {
   if (e && e.response) return onRunSubmit_(e);   // 폼 제출 트리거도 이 이름으로 받음 (로더에 이미 있는 이름이라)
+  // 5분 시계 트리거(로더에 있는 이름을 빌려 씀): 리뷰 사진 받는 곳만 빨리 나눔 (사용자 요청 10/31: 5분 안에)
+  if (e && !e.range && e.triggerUid) return rvInboxTick_();
   if (!e || !e.range) return;
   try { if (e.range.getSheet().getName() === OUTBOX_SHEET) obUserEdit_(e); } catch (err) {}
   try { if (e.range.getSheet().getName() === USAGE_TAB && e.range.getColumn() === 2 && e.range.getNumRows() === 1 && String(e.range.getSheet().getRange(e.range.getRow(), 1).getValue()) === GEMINI_CELL_LABEL) return geminiCellEdit_(e); } catch (err) {}
@@ -5651,21 +5711,13 @@ function rvExpect_(sid, mine) {
 }
 // 리뷰 캡처 올리기 할 일 (의뢰 리뷰가 다 끝났을 때 한 번, 사용자 요청 10/26: 날짜별 말고 의뢰가 다 끝나면 한 번에)
 function rvUploadMsg_(name, url, mine) {
-  // 방 체크리스트 (10/31): 이 의뢰 날짜별 방 + 저장해 둔 오픈채팅 링크. PC 카톡 검색창에 상품명을 치면 방이 한꺼번에 뜸
+  // 짧게 (10/31): 카톡 방 서랍에서 전체 저장만 하면 나머지(분류·압축·보고 글)는 자동. 빠뜨리지 않게 방 목록만
   const rooms = [];
   (mine || []).forEach(function (r) { if (!(Number(r['인원']) > 0)) return; const rm = String(r['카톡방'] || bareTitle_(r['명단 제목'])); if (rm && rooms.indexOf(rm) === -1) rooms.push(rm); });
   let links = {}; try { links = roomLinksAll_(); } catch (e) {}
-  const ai = !!geminiKey_();
-  const lines = ['📦 [' + rvBase_(name) + '] 의뢰 리뷰가 다 끝났어요 → 이 의뢰 리뷰 캡처를 전부 아래 폴더에 저장해 주세요' + (ai ? '' : ' (날짜·포토·텍스트·별점 안 나눠도 돼요)'), url];
-  if (rooms.length) {
-    lines.push('', '방 ' + rooms.length + '개 (빠뜨리지 않게 하나씩):');
-    rooms.forEach(function (rm) { const u = roomLinkOf_(rm, links); lines.push('☐ ' + rm + (u ? ' ' + u : '')); });
-  }
-  let inboxUrl = ''; if (ai) { try { inboxUrl = rvInbox_().getUrl(); } catch (e) {} }
-  if (inboxUrl) lines.push('', 'PC 카톡: 방 열기 → 서랍(사진·동영상) → 전체 선택 → 저장. 카톡 저장 폴더를 드라이브 \'' + RV_INBOX + '\'로 한 번 정해 두면 위 폴더에 안 넣어도 AI가 상품 이름으로 이 의뢰를 찾아 옮겨요', inboxUrl);
-  else lines.push('', 'PC 카톡: 방 열기 → 서랍(사진·동영상) → 사진 고르기 → 저장 위치 = 위 폴더 (PC 구글 드라이브 앱)');
-  if (ai) lines.push('구매 인증·공지 사진이 섞여도 돼요: AI가 리뷰만 골라 포토·텍스트·별점으로 나누고 나머지는 \'(압축 제외)\' 폴더로 옮겨요. 개수가 의뢰서·배정과 다르면 할 일에 알려요');
-  lines.push('올리고 10~40분 뒤 자동으로 압축돼요. 압축 파일 안에 포토·텍스트·별점 개수가 적히고, 보낼메시지 \'리뷰 보고\'(사장님)에 압축 파일 링크가 붙어요 → 받아서 보고 글과 같이 보내기');
+  const lines = ['📦 [' + rvBase_(name) + '] 리뷰 다 끝남 → 카톡 방마다 서랍 → 사진·동영상 → 전체 선택 → 저장 (분류·압축·보고 글은 자동)'];
+  rooms.forEach(function (rm) { const u = roomLinkOf_(rm, links); lines.push('☐ ' + rm + (u ? ' ' + u : '')); });
+  if (!geminiKey_()) lines.push('저장할 폴더: ' + url);
   return lines.join('\n');
 }
 // 캠페인명 (명단 시트 이름에서 '(응답)'과 끝 건수 뺌) = 압축 파일 이름
