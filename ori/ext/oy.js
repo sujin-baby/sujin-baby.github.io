@@ -44,16 +44,21 @@
     const isMod = t => /(는|한|된|용)$/.test(t) && t.length <= 4;
     const cand = toks.filter(t => !spec(t) && !STOP.test(t) && !isMod(t) && t.length >= 2);
     const mods = toks.filter(t => /용$/.test(t) && t.length <= 4);
+    const NOUN_SUFFIX = /(정|환|캡슐|스틱|분말|가루|원액|즙|차|오일|세럼|크림|로션|샴푸|패치|패드|거치대|매트|선풍기|텀블러|청소기|마사지기|워시|토너|앰플|마스크|비누|티슈|세제|치약|칫솔|홀더|걸이|선반|트레이|보틀|쿠션|방석|베개|슬리퍼|양말|장갑|모자|밴드)$/;
+    const nounMatch = cand.find(t => NOUN_SUFFIX.test(t));
     const tail = t => t.slice(-3);
     const rep = cand.filter(t => t.length >= 4 && cand.some(u => u !== t && u.length >= 4 && tail(u) === tail(t)));
     const cat = dash[1] ? dash[1].split(/[\/,]/)[0].trim() : "";
-    const main = rep[0] || (cat && cat.length >= 2 && !spec(cat) && !/일반|기타/.test(cat) ? cat : "") || cand.slice(0, 4).pop() || toks[0] || "";
+    const main = nounMatch || rep[0] || (cat && cat.length >= 2 && !spec(cat) && !/일반|기타/.test(cat) ? cat : "") || cand.slice(0, 4).pop() || toks[0] || "";
     const alts = rep.filter(t => t !== main), out = [main];
     const add = x => { x = x.trim(); if (x && out.indexOf(x) === -1) out.push(x); };
     alts.forEach(add);
     mods.forEach(m => { add(m + " " + main); alts.forEach(a => add(m + " " + a)); });
-    cand.filter(t => t !== main && alts.indexOf(t) === -1 && mods.indexOf(t) === -1).slice(0, 2).forEach(t => add(t + " " + main));
-    if (brand) add(brand + " " + main);
+    const rest = cand.filter(t => t !== main && alts.indexOf(t) === -1 && mods.indexOf(t) === -1);
+    if (rest[0]) add(rest[0] + " " + main);
+    if (brand && rest[0]) add(brand + " " + rest[0] + " " + main);
+    else if (brand) add(brand + " " + main);
+    rest.slice(1, 3).forEach(t => add(t + " " + main));
     return out.filter(Boolean).slice(0, 4);
   };
   /* 배송비: 상품명 뒤 글에서 '배송비 3,000원' / '무료배송' / '30,000원 이상 (구매 시) 무료'. 가격이 무료 조건에 맞으면 무료 (사용자 요청 10/20)
@@ -364,22 +369,14 @@
       kwIn = decodeURIComponent(ck);
       kwFrom = "생성기 주소 (클립보드)";
     } else if (cb && cb.length <= 30 && !/[\n\r]|http|[:：]/.test(cb)) {
-      kwIn = [cb].concat(sugKw(name).filter(x => x !== cb)).join("|");
+      kwIn = cb;
       kwFrom = "복사해 둔 의뢰서 키워드";
     }
   }
-  /* 키워드를 여전히 못 찾았으면, 상품명 자동 추천으로 바로 넘어가지 않고 prompt로 확인 (취소/엔터 시 자동 추천) */
+  // 사용자가 직접 입력하는 prompt는 제거: 없으면 알아서 상품명 자동 추천으로 탐색
   if (!kwIn) {
-    const sug = sugKw(name);
-    const defK = sug[0] || "";
-    const userKw = prompt("의뢰서 검색 키워드를 입력해 주세요:\n(취소 또는 엔터 시 상품명 자동 추천 키워드로 검색)", defK);
-    if (userKw && userKw.trim()) {
-      kwIn = userKw.trim();
-      kwFrom = "직접 입력 키워드";
-    } else {
-      kwIn = sug.join("|");
-      kwFrom = "상품명 자동 추천";
-    }
+    kwIn = sugKw(name).join("|");
+    kwFrom = "상품명 자동 추천";
   }
   const kws = kwIn.split("|").map(x => x.trim()).filter(Boolean);
   const kw = kws[0] || "";
