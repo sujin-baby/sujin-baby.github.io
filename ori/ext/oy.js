@@ -428,6 +428,10 @@
   }
   const pm = L.pathname.match(/\/v[pm]\/products\/(\d+)/);
   if (!pm) { alert("쿠팡 상품 상세 페이지(또는 검색 결과 화면)에서 눌러 주세요."); return; }
+  if (/사용권한이\s*없|접속이\s*제한|Access\s*Denied|요청하신\s*페이지/i.test((document.title || "") + " " + (document.body ? document.body.innerText.slice(0, 3000) : ""))) {
+    alert("쿠팡 접속 차단('사용권한이 없습니다') 화면이에요.\n공지에 차단 문구가 들어가지 않도록 중단합니다.\n사파리 주소창에서 직접 [붙여넣기 및 이동]해 정상 상품 페이지를 열어주세요.");
+    return;
+  }
   const pid = pm[1];
   const html = document.documentElement.innerHTML;
   const qs = new URLSearchParams(L.search);
@@ -437,9 +441,13 @@
   /* 상품명: 화면에 보이는 제목. og:title은 ' - 일반거치대' 같은 분류가 붙어서 마지막에 */
   const og = document.querySelector('meta[property="og:title"]');
   const jv = k => { const m = document.documentElement.innerHTML.match(new RegExp('"' + k + '"\\s*:\\s*"([^"]{2,120})"')); return m ? m[1] : ""; };
-  let name = [...document.querySelectorAll("h1, h2, h3")].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).find(t => t.length >= 6 && t.length <= 200 && !/쿠팡|coupang|장바구니|카테고리/i.test(t)) || "";
+  let name = [...document.querySelectorAll("h1, h2, h3")].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).find(t => t.length >= 6 && t.length <= 200 && !/쿠팡|coupang|장바구니|카테고리|사용권한|없습니다|Access\s*Denied|접속이\s*제한|요청하신\s*페이지/i.test(t)) || "";
   if (!name) name = jv("itemName") || jv("productName");
   if (!name) name = ((og && og.content) || document.title).replace(/\s*[-|]\s*쿠팡!?\s*$/, "").replace(/\s+-\s+[^-]{1,20}$/, "").trim();
+  if (/사용권한이\s*없|접속이\s*제한|Access\s*Denied|요청하신\s*페이지/i.test(name)) {
+    alert("쿠팡 접속 차단('사용권한이 없습니다') 화면이에요.\n공지에 차단 문구가 들어가지 않도록 중단합니다.");
+    return;
+  }
   const txt = document.body.innerText;
   let seller = "";
   const be = document.querySelector('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]');

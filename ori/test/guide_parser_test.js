@@ -411,7 +411,28 @@ const reqWithSeller = `판매처 : 아이누빅\n1. 검색 키워드 : 보냉백
 const headWithSeller = P.parseAll(reqWithSeller);
 if (headWithSeller.guides[0].seller !== '아이누빅') throw new Error('headWithSeller seller should be 아이누빅, got: ' + headWithSeller.guides[0].seller);
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (11개 샘플 전원 일치)');
+// ==========================================
+// Test 12: 쿠팡 403 차단 문구 공지 유입 방지 및 필터링 검증 (10/31 v135)
+// 1) isBlockedText: '요청하신 페이지의 사용권한이 없습니다', 'Access Denied', '접속이 제한' 감지
+// 2) parseCoupang: 차단 화면 글자가 상품명/판매처에 유입되지 않고 차단(r.blocked) 처리되는지
+// 3) baseName: 차단 문구 입력 시 빈 문자열 반환
+// 4) posText: 차단 문구 입력 시 안전한 기본값 1p 반환
+// ==========================================
+console.log('-- Test 12: 쿠팡 403 차단 문구 공지 유입 방지 및 필터링 검증');
+if (!P.isBlockedText('요청하신 페이지의 사용권한이 없습니다.')) throw new Error('isBlockedText should detect 사용권한 없음');
+if (!P.isBlockedText('Access Denied - You do not have permission')) throw new Error('isBlockedText should detect Access Denied');
+if (!P.isBlockedText('비정상적인 접근으로 접속이 제한되었습니다')) throw new Error('isBlockedText should detect 접속이 제한');
+
+const blockedParse = P.parseCoupang('상품명 : 요청하신 페이지의 사용권한이 없습니다.\n판매처 : 사용권한이 없습니다\n위치 : 요청하신 페이지의 사용권한이 없습니다');
+if (blockedParse.pname) throw new Error('parseCoupang should not set pname for blocked text, got: ' + blockedParse.pname);
+if (blockedParse.seller) throw new Error('parseCoupang should not set seller for blocked text, got: ' + blockedParse.seller);
+if (blockedParse.page !== '1p') throw new Error('parseCoupang should convert blocked page to 1p, got: ' + blockedParse.page);
+if (!blockedParse.blocked) throw new Error('parseCoupang should set blocked flag');
+
+if (P.baseName('요청하신 페이지의 사용권한이 없습니다.') !== '') throw new Error('baseName should return empty for blocked text');
+if (P.posText({ page: '요청하신 페이지의 사용권한이 없습니다' }) !== '1p') throw new Error('posText should return 1p for blocked text, got: ' + P.posText({ page: '요청하신 페이지의 사용권한이 없습니다' }));
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (12개 샘플 전원 일치)');
 process.exit(0);
 
 

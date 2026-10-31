@@ -77,7 +77,7 @@
   };
   /* 상품명: 화면에 보이는 제목(h1). og:title은 쿠팡이 ' - 일반거치대' 같은 분류를 붙여서 마지막에 */
   function visibleTitle() {
-    const h = [...document.querySelectorAll("h1, h2, h3")].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).find(t => t.length >= 6 && t.length <= 200 && !/쿠팡|coupang|네이버|장바구니|카테고리/i.test(t));
+    const h = [...document.querySelectorAll("h1, h2, h3")].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).find(t => t.length >= 6 && t.length <= 200 && !/쿠팡|coupang|네이버|장바구니|카테고리|사용권한|없습니다|Access\s*Denied|접속이\s*제한|요청하신\s*페이지/i.test(t));
     return h || "";
   }
 
@@ -118,8 +118,8 @@
     const num = s => Number(String(s || "").replace(/[^0-9]/g, "")) || 0;
     const firstPrices = (t, n) => (t.match(/\d{1,3}(?:,\d{3})+\s*원/g) || []).slice(0, n).map(num).filter(x => x >= 100);
     if (!isNaver) {
-      if (/사용권한이\s*없|접속이\s*제한|Access\s*Denied/i.test((document.title || "") + " " + (txt || "").slice(0, 1000))) {
-        return { site: "coupang", name: "", err: "쿠팡 사용권한 없음 화면이 떴어요. (새로고침 또는 수동 확인 필요)" };
+      if (/사용권한이\s*없|접속이\s*제한|Access\s*Denied|요청하신\s*페이지/i.test((document.title || "") + " " + (txt || "").slice(0, 3000))) {
+        return { site: "coupang", name: "", err: "쿠팡 사용권한 없음 화면이 떴어요. (차단 화면)" };
       }
       const pm = L.pathname.match(/\/v[pm]\/products\/(\d+)/);
       if (!pm) return { err: "쿠팡 상품 상세 페이지에서 눌러 주세요." };
@@ -129,8 +129,8 @@
       if (!item) { const m = html.match(/["']?itemId["']?\s*[:=]\s*["']?(\d{8,})/); if (m) item = m[1]; }
       let name = visibleTitle();
       if (!name) name = (og("title") || document.title).replace(/\s*[-|]\s*쿠팡!?\s*$/, "").replace(/\s+-\s+[^-]{1,20}$/, "").trim();
-      if (/사용권한이\s*없|접속이\s*제한|Access\s*Denied/i.test(name)) {
-        return { site: "coupang", name: "", err: "쿠팡 사용권한 없음 화면이 떴어요. (새로고침 또는 수동 확인 필요)" };
+      if (/사용권한이\s*없|접속이\s*제한|Access\s*Denied|요청하신\s*페이지/i.test(name)) {
+        return { site: "coupang", name: "", err: "쿠팡 사용권한 없음 화면이 떴어요. (차단 화면)" };
       }
       let seller = "";
       const be = document.querySelector('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]');

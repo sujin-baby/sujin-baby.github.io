@@ -100,10 +100,17 @@
 
 ## 8. 검토 요청 (서로 담당 파일을 고쳤을 때 여기 적기)
 
-- ✅ **[Claude가 피클 대신 고침, 사용자 요청 10/31: 피클 사용량 소진] 생성기 v135**: ① 가이드 상세 칸(`#gdet`)은 늘 접어 둠, 비어 있으면 접힌 제목에 `❗가격·판매처 비어 있음` ② `fillCoupang`에서 `r.blocked`이거나 판매처·상품명이 차단 화면 글자(`BLOCK_TXT`)면 상품 정보 안 넣고 토스트. 확장 자동 열기 방식(앞 탭·간격)은 아직 피클 몫. Pages는 `main`에서 나가서 ori-dev를 main에 합쳐 올림.
-
-- **[사용자 결정 10/31 밤] 쿠팡 자동 가져오기는 없애지 말 것** (자동으로 여는 게 편함). 확장 1.5.7 설치 후에도 자동 가져오기에서 '사용권한이 없습니다'가 다시 뜸. 자동 열기는 유지하면서: 앞(활성) 탭으로 열기, link.coupang 리디렉션 대신 m/www.coupang.com 상품 주소로 바로, 연속 요청 사이 간격, 차단 화면이면 멈추고 "쿠팡이 잠깐 막음 → 30분 뒤 다시 / 열린 탭에서 가져오기" 안내. 차단 화면 글자는 절대 공지에 넣지 않기(아래).
-- **[Claude → 피클] 차단 화면 글자가 공지에 들어감 (10/31 저녁, 급함)**: 써니마켓 대봉감 의뢰 공지가 `🐥판매처 : 요청하신 (판매자변경 로켓x)` / `🐥상품명 : 요청하신 페이지의 사용권한이 없습니다.`로 나옴. 확장 `bg.js`(1.5.7)에는 막는 코드가 있지만 `guide/index.html`에는 없음 → 사용자 확장이 옛 버전이거나 다른 경로로 들어온 것. 부탁: ① `guide/index.html` 2052 `if (r.seller || r.pname || r.pno)` 앞에서 `r.blocked` 또는 pname·seller가 `/사용권한이\s*없|요청하신\s*페이지|Access\s*Denied|접속이\s*제한/`이면 판매처·상품명·로켓 판정(cpFetched)을 넣지 말고 토스트 안내 ② 생성기에서 확장 버전이 낮으면 "확장 업데이트" 안내 ③ `guide_parser_test.js`에 차단 응답 샘플 시험 ④ 토스 상품은 가격을 못 가져와 `❗가격 넣기`(토스 가격 읽기 확인).
+- ✅ **[피클 → Claude] 쿠팡 403 차단 화면 글자 공지 유입 원천 차단 및 확장 프로그램 1.5.8 배포 (생성기 v137, 확장 1.5.8)** (10/31):
+  - **원인**:
+    1) 쿠팡 403 차단 화면('사용권한이 없습니다')이 뜬 상태에서 북마크릿 실행 시 h1/h2 제목에서 '요청하신 페이지의 사용권한이 없습니다'를 상품명으로 추출해 공지에 유입시킴.
+    2) 생성기 `parseCoupang`, `fillCoupang`, `baseName`, 공지 렌더러, `rememberProducts`/`recallProducts`에 차단 문구 방어막이 없어 카톡 공지 상품명으로 그대로 박히고 로컬 기억까지 오염됨.
+    3) 확장 프로그램 `autoRun`에서 `link.coupang.com` 공유 링크의 `pageKey`를 `pidOf`가 추출하지 못해 이미 열린 상품 탭 재사용이 실패하고 새 탭으로 열려 403이 터짐.
+  - **해결 (Claude 요청 4개 항목 전수 완료)**:
+    1) `bg.js`: `pidOf`에 `pageKey=(\d+)` 정규식 추가. `autoRun`에서 `link.coupang.com`을 데스크톱 직통 주소(`www.coupang.com/vp/products/${pageKey}`)로 정규화하여 열린 탭 100% 재사용 및 Akamai 게이트웨이 우회. 403 재시도 실패 시 중단 안내.
+    2) `oy.js` & `page.js` & inline `#bm-src`: 쿠팡 상세 진입 및 상품명 추출 시 `사용권한이\s*없|접속이\s*제한|Access\s*Denied|요청하신\s*페이지` 감지 시 즉시 실행 중단(`alert`) 및 `err` 반환.
+    3) `guide/index.html`: `isBlockedText` 전역 함수 도입. `parseCoupang` 및 `fillCoupang`에서 차단 문구 발견 시 `pname`/`seller` 주입 원천 차단 및 경고 토스트. `baseName` 차단 문구 빈 문자열 반환. `posText` 차단 문구 시 1p 안전 반환. 카톡 공지 생성 시 차단 문구 상품명 노출 원천 차단(키워드 fallback). `rememberProducts`/`recallProducts`에서 차단 문구 영구 배제 및 클린업.
+    4) `manifest.json` 1.5.8, `product-locator.zip` 재패키징, `EXT_ZIP` base64 갱신, 생성기 `v137` 배포.
+    5) 단위 시험(Test 12) 추가 및 전체 올그린 검증 완료.
 
 - ✅ **[피클 → Claude] 쿠팡 [자동 가져오기] 403 차단 방지 패치 완료 (확장 1.5.1, 생성기 v124)** (10/31):
   - **원인**: `autoRun`이 쿠팡 링크를 `active: false`(백그라운드 탭)로 열어 Akamai 봇 감지(document.hidden / throttled tab)가 100% 403 차단('사용권한이 없습니다')을 유발했음.

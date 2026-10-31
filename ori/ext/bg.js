@@ -39,7 +39,21 @@ function oyThumb(text) {
 async function autoRun(url, gt) {
   if (busy && Date.now() - busySince < 12 * 60000) { pushGen({ status: "이미 찾는 중이에요. 끝나고 다시 눌러 주세요." }); return; }
   await keepFn(fnOf(String(url).split("#")[1] || ""));   /* 단축 링크는 넘어가며 #을 버려서 미리 기억 */
-  const targetPid = pidOf(url);
+
+  // link.coupang.com 공유 링크일 경우 pageKey를 추출해 직접 PC 공식 웹 주소로 정규화 (Akamai 게이트웨이 403 차단 방지)
+  let normUrl = url;
+  const pk = (String(url).match(/[?&]pageKey=(\d+)/i) || [])[1];
+  if (pk && /link\.coupang\.com/i.test(url)) {
+    normUrl = "https://www.coupang.com/vp/products/" + pk;
+    const item = (String(url).match(/[?&]itemId=(\d+)/i) || [])[1];
+    const vendor = (String(url).match(/[?&]vendorItemId=(\d+)/i) || [])[1];
+    const q = [];
+    if (item) q.push("itemId=" + item);
+    if (vendor) q.push("vendorItemId=" + vendor);
+    if (q.length) normUrl += "?" + q.join("&");
+  }
+
+  const targetPid = pidOf(normUrl) || pidOf(url);
   let t = null, reused = false;
   /* 1. 이미 열려 있는 탭 중 해당 상품 탭이 있는지 확인 (있으면 탭 열기 없이 바로 읽음 → 403 차단 원천 방지) */
   if (targetPid && gt && gt.windowId) {
@@ -52,7 +66,7 @@ async function autoRun(url, gt) {
   /* 2. 열려 있는 탭이 없으면 새 탭 생성. 쿠팡 봇 탐지(Akamai) 차단을 막기 위해 활성 탭(active: true)으로 열기 */
   if (!t) {
     pushGen({ status: "상품 페이지 여는 중…" });
-    t = await chrome.tabs.create({ url: url, active: true, windowId: gt.windowId, index: gt.index + 1 });
+    t = await chrome.tabs.create({ url: normUrl, active: true, windowId: gt.windowId, index: gt.index + 1 });
   }
   autoTab = t.id;
   try {
@@ -70,14 +84,20 @@ async function autoRun(url, gt) {
     if (/oliveyoung\.co\.kr/.test(tab.url || "")) return await autoOy(tab);
     if (/toss\.(shopping|im)/.test(tab.url || "")) { await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["oy.js"] }); return; }   // 토스: 상품 정보만 (검색 순위는 토스 앱 안이라 못 찾음)
     if (!/\/products\/\d+/.test(tab.url || "")) { pushGen({ status: "상품 페이지가 안 열렸어요. 열린 탭을 확인해 주세요." }); await chrome.tabs.update(t.id, { active: true }); return; }
-    /* 일시적 403 차단 화면 감지 시 1회 새로고침 */
+    /* 403 차단 화면 감지 시 1회 새로고침 재시도 */
     let tInfo = null;
     try { tInfo = await call(t.id, "readProduct"); } catch (e) {}
-    if (tInfo && (tInfo.err || /사용권한이\s*없/i.test(tInfo.name || ""))) {
+    if (tInfo && (tInfo.err || /사용권한이\s*없|Access\s*Denied|요청하신\s*페이지/i.test(tInfo.name || ""))) {
       pushGen({ status: "쿠팡 일시 차단 감지 → 새로고침 재시도…" });
       await chrome.tabs.reload(t.id);
       await sleep(2500);
       tab = await chrome.tabs.get(t.id);
+      try { tInfo = await call(t.id, "readProduct"); } catch (e) {}
+      if (tInfo && (tInfo.err || /사용권한이\s*없|Access\s*Denied|요청하신\s*페이지/i.test(tInfo.name || ""))) {
+        pushGen({ status: "쿠팡 차단('사용권한이 없습니다'): 쿠팡 로그인 상태를 확인하시거나 상품 페이지에서 직접 확장 아이콘을 눌러주세요." });
+        await chrome.tabs.update(t.id, { active: true });
+        return;
+      }
     }
     const isNv = /naver\.com/.test(tab.url || "");
     const out = await start(tab);
@@ -112,7 +132,12 @@ chrome.runtime.onMessage.addListener((m, sender) => {
 /* 생성기 [상품 페이지 열기]로 연 탭: 주소 뒤 #kw=…&pr=… (의뢰서 키워드)를 탭마다 기억해 둠.
    쿠팡 단축 링크(link.coupang.com)가 상품 페이지로 넘어가면서 # 뒤를 버려서 (10/18 '런치버스 미니 텀블러' 대신 추천 키워드로 찾음) */
 const hashOf = u => { const h = String(u || "").split("#")[1] || ""; return /(?:^|&)kw=/.test(h) ? h : ""; };
-const pidOf = u => (String(u || "").match(/\/(?:vp|vm)\/products\/(\d+)|\/products\/(\d+)/) || []).slice(1).find(Boolean) || "";
+const pidOf = u => {
+  if (!u) return "";
+  const s = String(u);
+  const m = s.match(/\/(?:vp|vm)\/products\/(\d+)|\/products\/(\d+)|[?&]pageKey=(\d+)/i);
+  return (m || []).slice(1).find(Boolean) || "";
+};
 async function keepHash(id, u) {
   const k = "hash_" + id, h = hashOf(u);
   if (h) { await chrome.storage.session.set({ [k]: { h: h, pid: pidOf(u) } }); return; }
