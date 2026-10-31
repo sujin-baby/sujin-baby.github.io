@@ -197,7 +197,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v133 (모바일 403 유발 링크 버튼 및 새로고침 오안내 완전 제거)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v134 (공지 오류 피클·클로드 즉시 수정 요청 칸 탑재)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -366,6 +366,34 @@ details.help-box summary {
           </span>
         </div>
         <textarea id="o-notice" class="notice-ta" spellcheck="false" aria-label="방 공지" style="min-height: 240px; font-size: 13px; line-height: 1.5; padding: 12px;"></textarea>
+
+        <!-- 🚨 공지 오류 제보 / 피클·클로드 수정 요청 칸 -->
+        <div class="card-out" id="box-bug-report" style="margin: 14px 0; background: #fff5f7; border: 2px solid #e03131; border-radius: 12px; padding: 14px; box-shadow: 2px 2px 0 var(--ink, #3a2230);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:4px;">
+            <span style="font-weight: 900; font-size: 13.5px; color: #c92a2a;">🚨 공지 오류 제보 / 수정 요청 (피클·클로드 전달용)</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v134</span>
+          </div>
+          <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 8px;">
+            공지가 이상하게 나왔나요? 아래 태그를 누르거나 문제점을 적고 <b>[원터치 복사]</b>를 누르면, <b>의뢰서 원문 + 생성된 공지 + 문제점</b>이 한 번에 복사되어 피클 채팅창이나 클로드 코드에 바로 전달할 수 있어요.
+          </div>
+          <div id="bug-tags" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+            <button type="button" class="small ghost bug-tag" data-tag="판매처 오류" style="font-size:11.5px; padding:4px 8px; border-radius:6px; cursor:pointer;">🏷️ 판매처 오류</button>
+            <button type="button" class="small ghost bug-tag" data-tag="상품명 잘림/오류" style="font-size:11.5px; padding:4px 8px; border-radius:6px; cursor:pointer;">🏷️ 상품명 오류</button>
+            <button type="button" class="small ghost bug-tag" data-tag="옵션/가격 누락" style="font-size:11.5px; padding:4px 8px; border-radius:6px; cursor:pointer;">🏷️ 옵션/가격 누락</button>
+            <button type="button" class="small ghost bug-tag" data-tag="키워드/순위 1p 오류" style="font-size:11.5px; padding:4px 8px; border-radius:6px; cursor:pointer;">🏷️ 키워드/위치 오류</button>
+            <button type="button" class="small ghost bug-tag" data-tag="구매시간(자정건) 풀림" style="font-size:11.5px; padding:4px 8px; border-radius:6px; cursor:pointer;">🏷️ 구매시간 풀림</button>
+            <button type="button" class="small ghost bug-tag" data-tag="리뷰 가이드 서식 오류" style="font-size:11.5px; padding:4px 8px; border-radius:6px; cursor:pointer;">🏷️ 리뷰 서식 오류</button>
+            <button type="button" class="small ghost bug-tag" data-tag="방제/명단 제목 오류" style="font-size:11.5px; padding:4px 8px; border-radius:6px; cursor:pointer;">🏷️ 방제/인원 오류</button>
+          </div>
+          <div style="display:flex; gap:6px; margin-bottom:8px;">
+            <input type="text" id="bug-desc" placeholder="어떤 부분이 이상한지 메모 (예: 판매자가 바나바스토어인데 바나바로 나옴)" style="flex:1; box-sizing:border-box; padding:9px 12px; border:1.5px solid #e03131; border-radius:8px; font-size:12.5px; background:white;">
+            <button type="button" id="bug-clear-btn" class="small ghost" style="padding:0 10px; font-size:12px; border-color:#ced4da; cursor:pointer;">지우기</button>
+          </div>
+          <button type="button" id="copy-bug-report" class="btn primary" style="background:#e03131; border-color:var(--ink, #3a2230); color:white; font-size:14px; font-weight:800; padding:12px; margin-bottom:0; width:100%; border-radius:10px; box-shadow: 2px 2px 0 var(--ink, #3a2230); cursor:pointer;">
+            📋 피클·클로드 전달용 오류 제보 원터치 복사
+          </button>
+          <div id="bug-report-st" style="font-size:12px; color:#c92a2a; font-weight:bold; margin-top:8px; display:none; text-align:center; background:#ffe3e3; padding:8px; border-radius:6px;"></div>
+        </div>
 
         <div class="card-out" style="margin: 12px 0; background: #fff8fb; border: 2px solid var(--ink); border-radius: 12px; padding: 12px 14px;">
           <div style="font-weight: 900; font-size: 13px; color: var(--pink-deep); margin-bottom: 8px;">💡 살 사람 이름(배정) 입력 팁</div>
@@ -2877,6 +2905,76 @@ details.help-box summary {
   $("o-notice").addEventListener("input", () => { noticeEdited = true; fitNotice(); updateMakeRun(); });
   window.addEventListener("resize", fitNotice);
   $("notice-reset").addEventListener("click", () => { noticeEdited = false; render(); toast("자동 내용으로 되돌렸어요"); });
+
+  // 공지 오류 제보 / 피클·클로드 전달 복사 로직 (v134)
+  const bugDesc = $("bug-desc");
+  const bugSt = $("bug-report-st");
+  document.querySelectorAll(".bug-tag").forEach(b => {
+    b.addEventListener("click", () => {
+      const tag = b.getAttribute("data-tag");
+      if (!bugDesc) return;
+      if (bugDesc.value) {
+        if (!bugDesc.value.includes(tag)) bugDesc.value += ", " + tag;
+      } else {
+        bugDesc.value = tag;
+      }
+      b.style.background = "#ffc9c9";
+      b.style.borderColor = "#e03131";
+    });
+  });
+  if ($("bug-clear-btn")) {
+    $("bug-clear-btn").addEventListener("click", () => {
+      if (bugDesc) bugDesc.value = "";
+      document.querySelectorAll(".bug-tag").forEach(b => {
+        b.style.background = "";
+        b.style.borderColor = "";
+      });
+      if (bugSt) bugSt.style.display = "none";
+    });
+  }
+  if ($("copy-bug-report")) {
+    $("copy-bug-report").addEventListener("click", () => {
+      const desc = (bugDesc ? bugDesc.value : "").trim();
+      const rawReq = ($("req") ? $("req").value : "").trim();
+      const curNotice = ($("o-notice") ? $("o-notice").value : "").trim();
+      const curG = (typeof cur !== "undefined" ? (cur + 1) : 1);
+      const totalG = (typeof guides !== "undefined" && guides.length ? guides.length : 1);
+      const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
+
+      const lines = [
+        "🚨 [가이드 생성기 v134 공지 오류 제보]",
+        "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
+        "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
+        "",
+        "----------------------------------------",
+        "[1. 의뢰서 원문]",
+        "----------------------------------------",
+        rawReq || "(의뢰서 내용 없음)",
+        "",
+        "----------------------------------------",
+        "[2. 이상하게 나온 공지]",
+        "----------------------------------------",
+        curNotice || "(공지 생성 안 됨)",
+        "",
+        "----------------------------------------",
+        "[3. 필드 상태]",
+        "----------------------------------------",
+        "- 판매처: " + ($("seller") ? $("seller").value : "") + (g.sellerAuto ? " (자동채움)" : ""),
+        "- 상품명: " + ($("pname") ? $("pname").value : ""),
+        "- 키워드: " + ($("keyword") ? $("keyword").value : ""),
+        "- PC 위치: " + ($("page") ? $("page").value : "") + " / 모바일: " + ($("pageM") ? $("pageM").value : ""),
+        "- 구매시간(slot): " + ($("slot") ? $("slot").value : "기본"),
+        "- 포토제공: " + ($("photo") ? $("photo").value : "")
+      ];
+
+      const reportText = lines.join("\n");
+      copyText(reportText, "✓ 오류 제보 복사 완료! 피클이나 클로드에 붙여넣으세요.");
+      if (bugSt) {
+        bugSt.textContent = "✓ 클립보드에 복사 완료! 피클 채팅창이나 클로드 코드에 그대로 붙여넣기(Cmd+V / 붙여넣기) 하시면 즉시 수정에 들어갑니다.";
+        bugSt.style.display = "block";
+      }
+    });
+  }
 
   const parseBtnAction = () => {
     $("sample-tag").hidden = true;
