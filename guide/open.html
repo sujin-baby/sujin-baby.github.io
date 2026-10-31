@@ -69,6 +69,17 @@
 
     function toMobileCp(u) {
       if (!u) return u;
+      const pk = (u.match(/[?&]pageKey=(\d+)/) || [])[1];
+      if (pk) {
+        const item = (u.match(/[?&]itemId=(\d+)/) || [])[1];
+        const vendor = (u.match(/[?&]vendorItemId=(\d+)/) || [])[1];
+        let res = "https://m.coupang.com/vm/products/" + pk;
+        const q = [];
+        if (item) q.push("itemId=" + item);
+        if (vendor) q.push("vendorItemId=" + vendor);
+        if (q.length) res += "?" + q.join("&");
+        return res;
+      }
       return u.replace(/https?:\/\/(?:www\.)?coupang\.com\/vp\/products\/(\d+)/, "https://m.coupang.com/vm/products/$1");
     }
     function buildTargetUrl(base, k, p, f) {
