@@ -3,13 +3,30 @@
   const L = location;
   /* 고른 옵션: '색상 × 수량' 같은 이름표 바로 옆 값 (콜론은 화면 꾸밈이라 글에 없을 때가 있음). 없으면 단일옵션 */
   const readOpt = () => {
-    const OPT_LAB = /^(색상|옵션|사이즈|수량|구성|선택|용량|맛|종류|컬러|타입)(\s*[×x\/·,]\s*(색상|옵션|사이즈|수량|구성|선택|용량|맛|종류|컬러|타입))*\s*[:：]?$/;
+    // 1. 선택된 라디오/옵션 버튼(예: 10개) 먼저 확인 (모바일 쿠팡 수량 라디오 등, 10/31)
+    try {
+      const checked = document.querySelector('input[type="radio"]:checked, [class*="radio"][class*="checked"], [aria-checked="true"], .prod-option__item--selected');
+      if (checked) {
+        const p = checked.closest("label, li, div, tr") || checked.parentElement;
+        if (p) {
+          const pt = (p.innerText || "").split("\n").map(x => x.trim()).filter(Boolean);
+          const optCandidate = pt.find(x => !/\d{1,3}(?:,\d{3})+\s*원|로켓|배송|쿠폰|할인/.test(x) && x.length <= 30);
+          if (optCandidate) return optCandidate;
+        }
+      }
+    } catch (e) {}
+    // 2. 화면의 '색상: ...', '사이즈: ...' 라벨 값들 수집
+    const OPT_LAB = /^(개당\s*)?(색상|옵션|사이즈|수량|구성|선택|용량|맛|종류|컬러|타입)(\s*[×x\/·,]\s*(색상|옵션|사이즈|수량|구성|선택|용량|맛|종류|컬러|타입))*\s*[:：]?$/;
+    const vals = [];
     for (const lab of [...document.querySelectorAll("span,div,dt,th,td,strong,b,label,p,em")].filter(e => e.children.length <= 2 && OPT_LAB.test((e.innerText || "").trim()))) {
       let v = lab.nextElementSibling ? lab.nextElementSibling.innerText || "" : "";
       if (!v.trim() && lab.parentElement) v = (lab.parentElement.innerText || "").replace(lab.innerText, "");
       v = v.replace(/^\s*[:：]\s*/, "").replace(/\s+/g, " ").trim();
-      if (v && v.length <= 60 && !/선택하세요|선택해\s*주세요|^\d+$/.test(v)) return v;
+      if (v && v.length <= 60 && !/선택하세요|선택해\s*주세요|^\d+$/.test(v)) {
+        if (!vals.includes(v)) vals.push(v);
+      }
     }
+    if (vals.length > 0) return vals.join(" / ");
     return "";
   };
   /* 옵션마다 가격 (쿠팡 '수량' 목록: 2개 29,200원 / 3개 41,200원 …, 10/24 옥광밤·황금향). 이름표(수량) 줄 다음 옵션 이름 줄 → 가격 줄.
@@ -343,6 +360,9 @@
     const bg = name.split(/\s+/)[0];
     if (bg && /^[가-힣a-zA-Z0-9]{2,10}$/.test(bg) && !/^(로켓|쿠팡|무료|특가|할인|배송)/.test(bg)) seller = bg;
   }
+  if (seller) {
+    seller = seller.replace(/[>]/g, " ").replace(/\s*(?:브랜드\s*샵|브랜드샵|공식\s*몰|공식몰|공식\s*스토어|공식스토어|스토어|샵)\s*$/i, "").trim();
+  }
   const ogi = document.querySelector('meta[property="og:image"]');
   let img = ogi ? ogi.content : "";
   if (img.indexOf("//") === 0) img = "https:" + img;
@@ -432,7 +452,10 @@
       if (pg === -1) { blocked = true; if (!f) break; else continue; }
       if (pg > 0) { pageLine = pg + "페이지"; foundKw = k; if (f) filtLine = "가검" + (lo === hi ? lo : lo + "~" + hi); break; }
     }
-    if (!pageLine) pageLine = blocked ? "자동 조회 실패, 직접 검색 필요" : MAX + "페이지 안에 없음 (쿠팡 화면에서 다른 필터로 직접 찾아 주세요)";
+    const rk = (L.search.match(/[?&](?:searchRank|rank)=(\d+)/i) || [])[1] ? (L.search.match(/[?&](?:searchRank|rank)=(\d+)/i)[1] + "위") : "";
+    if (!pageLine) {
+      pageLine = rk ? rk : (blocked ? (mob ? "직접 검색 필요 (모바일 쿠팡)" : "자동 조회 실패, 직접 검색 필요") : MAX + "페이지 안에 없음 (쿠팡 화면에서 다른 필터로 직접 찾아 주세요)");
+    }
   }
   const out = [
     "상품명 : " + name,
@@ -493,7 +516,7 @@
     fetch(img).then(r => r.ok ? r.blob() : null).then(b => { blob = b; if (b && !phone) sv.onclick(); }).catch(() => { sv.textContent = "썸네일 새 탭에서 열기 (저장은 우클릭)"; });
   }
   /* PC에서 모바일 위치도: 모바일 쿠팡 상품 페이지를 열어 거기서 북마크를 한 번 더 */
-  if (!mob) {
+  if (!mob && !/iPhone|iPad|Android/i.test(navigator.userAgent)) {
     const ml = document.createElement("a");
     ml.href = "https://m.coupang.com/vm/products/" + pid + (item ? "?itemId=" + item : "") + "#kw=" + encodeURIComponent(kwIn) + (price ? "&pr=" + price : "");
     ml.target = "_blank"; ml.rel = "noopener"; ml.textContent = "모바일 위치도 찾기 (모바일 쿠팡 열기 → 거기서 북마크)";
