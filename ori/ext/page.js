@@ -9,14 +9,31 @@
   /* 고른 옵션: '색상 × 수량' 같은 이름표를 찾아 바로 옆 값 (콜론은 화면 꾸밈이라 글에 없을 때가 있음) */
   const OPT_LAB = /^(개당\s*)?(색상|옵션|사이즈|수량|구성|선택|용량|맛|종류|컬러|타입|중량|무게|개수)(\s*[×x\/·,]\s*(색상|옵션|사이즈|수량|구성|선택|용량|맛|종류|컬러|타입|중량|무게|개수))*\s*[:：]?$/;
   function readOption() {
+    // 1. 선택된 라디오/옵션 버튼(예: 10개) 먼저 확인 (10/31)
+    try {
+      const checked = document.querySelector('input[type="radio"]:checked, [class*="radio"][class*="checked"], [aria-checked="true"], .prod-option__item--selected');
+      if (checked) {
+        const p = checked.closest("label, li, div, tr") || checked.parentElement;
+        if (p) {
+          const pt = (p.innerText || "").split("\n").map(x => x.trim()).filter(Boolean);
+          const optCandidate = pt.find(x => !/\d{1,3}(?:,\d{3})+\s*원|로켓|배송|쿠폰|할인/.test(x) && x.length <= 30);
+          if (optCandidate) return optCandidate;
+        }
+      }
+    } catch (e) {}
+    // 2. 화면의 '색상: ...', '사이즈: ...' 라벨 값들 수집
     const labs = [...document.querySelectorAll("span,div,dt,th,td,strong,b,label,p,em")].filter(e => e.children.length <= 2 && OPT_LAB.test((e.innerText || "").trim()));
+    const vals = [];
     for (const lab of labs) {
       let v = "";
       if (lab.nextElementSibling) v = lab.nextElementSibling.innerText || "";
       if (!v.trim() && lab.parentElement) v = (lab.parentElement.innerText || "").replace(lab.innerText, "");
       v = v.replace(/^\s*[:：]\s*/, "").replace(/\s+/g, " ").trim();
-      if (v && v.length <= 60 && !/선택하세요|선택해\s*주세요|^\d+$/.test(v)) return v;
+      if (v && v.length <= 60 && !/선택하세요|선택해\s*주세요|^\d+$/.test(v)) {
+        if (!vals.includes(v)) vals.push(v);
+      }
     }
+    if (vals.length) return vals.join(" / ");
     const om = document.body.innerText.match(/(?:색상|옵션|구성|사이즈|수량|선택)[^\n]{0,12}[:：]\s*([^\n]{1,40})/);
     return om ? om[1].trim() : "";
   }
@@ -125,6 +142,9 @@
       { const vm = html.match(/"vendorName"\s*:\s*"([^"]{2,60})"/); if (vm && !seller) seller = vm[1]; }
       if (!seller || seller.length > 30 || /가입|보러가기|평가|정보|^특가|로켓|할인|쿠폰|무료|배송|와우/.test(seller)) { const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/); if (s2 && !seller) seller = s2[1].trim(); }
       if (!seller && name) { const bg = name.split(/\s+/)[0]; if (bg && /^[가-힣a-zA-Z0-9]{2,10}$/.test(bg) && !/^(로켓|쿠팡|무료|특가|할인|배송)/.test(bg)) seller = bg; }
+      if (seller) {
+        seller = seller.replace(/[>]/g, " ").replace(/\s*(?:브랜드\s*샵|브랜드샵|공식\s*몰|공식몰|공식\s*스토어|공식스토어|스토어|샵)\s*$/i, "").trim();
+      }
       let opt = readOption();
       if (!opt) { const oe = document.querySelector('.prod-option__selected .value, .prod-option__selected-container .value'); if (oe) opt = oe.textContent.replace(/\s+/g, " ").trim().slice(0, 60); }
       let price = 0;

@@ -288,5 +288,32 @@ if (!kwHierarchy.subs.some(s => s === '아텍스 산리오 밴드')) throw new E
 const daebongKwList = P.kwList({ keyword: '대봉감', pname: '홍시용 대봉감 로얄중대과 3kg', kwAuto: false });
 if (daebongKwList.length !== 1 || daebongKwList[0] !== '대봉감') throw new Error('kwList with explicit keyword should return only [대봉감], got: ' + JSON.stringify(daebongKwList));
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (7개 샘플 전원 일치)');
+// ==========================================
+// Test 8: 아텍스 밴드 의뢰서 파싱 및 판매처·공지 정밀 검증 (10/31)
+// 1) 판매처, 상품명, 위치 기본값 자동 채움
+// 2) 판매처 '아텍스브랜드샵' -> '아텍스' 정리
+// ==========================================
+console.log('-- Test 8: 아텍스 밴드 의뢰서 파싱 및 판매처·공지 정밀 검증');
+const reqAtexFull = `#입금대행 실배 11500
+
+1. 구매진행시 검색할 키워드 : 아텍스 산리오 캐릭터즈 우사하나 밴드 표준형
+2. 키워드 검색 시 현재 순위 :
+3. 총 구매 건수 : 20
+4. 일 진행 건수 : 10
+5. 상품주소(URL) : https://www.coupang.com/vp/products/9778569271?itemId=29274107751&vendorItemId=96191051552&q=%EC%9A%B0%EC%82%AC%ED%95%98%EB%82%98&searchId=5bdc4b2c1117990&sourceType=search&rank=2&itemsCount=36&searchRank=2&traceId=mvt9uym4
+
+6. 구매옵션 : 10개 11,500원
+7. 포토제공 유 무  : 유 10개, 무10개
+8. 리뷰내용 가이드 :  귀여운 우사하나 캐릭터, 소독제 함유, 붙음방지 쿠션패드
+9. 입금대행 Y/N : Y
+10.택배대행 Y/N: N`;
+
+const headFull = P.parseAll(reqAtexFull);
+const gFull = headFull.guides[0];
+if (gFull.seller !== '아텍스') throw new Error('gFull seller should default to 아텍스 from keyword, got: ' + gFull.seller);
+if (gFull.pname !== '아텍스 산리오 캐릭터즈 우사하나 밴드 표준형') throw new Error('gFull pname should default to keyword, got: ' + gFull.pname);
+if (gFull.page !== '2위') throw new Error('gFull page should default to 2위 from URL rank, got: ' + gFull.page);
+if (gFull.option !== '10개') throw new Error('gFull option should be 10개, got: ' + gFull.option);
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (8개 샘플 전원 일치)');
 process.exit(0);
