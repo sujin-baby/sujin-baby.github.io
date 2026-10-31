@@ -39,23 +39,11 @@ function oyThumb(text) {
 async function autoRun(url, gt) {
   if (busy && Date.now() - busySince < 12 * 60000) { pushGen({ status: "이미 찾는 중이에요. 끝나고 다시 눌러 주세요." }); return; }
   await keepFn(fnOf(String(url).split("#")[1] || ""));   /* 단축 링크는 넘어가며 #을 버려서 미리 기억 */
-
-  // link.coupang.com 공유 링크일 경우 pageKey를 추출해 직접 PC 공식 웹 주소로 정규화 (Akamai 게이트웨이 403 차단 방지)
-  let normUrl = url;
-  const pk = (String(url).match(/[?&]pageKey=(\d+)/i) || [])[1];
-  if (pk && /link\.coupang\.com/i.test(url)) {
-    normUrl = "https://www.coupang.com/vp/products/" + pk;
-    const item = (String(url).match(/[?&]itemId=(\d+)/i) || [])[1];
-    const vendor = (String(url).match(/[?&]vendorItemId=(\d+)/i) || [])[1];
-    const q = [];
-    if (item) q.push("itemId=" + item);
-    if (vendor) q.push("vendorItemId=" + vendor);
-    if (q.length) normUrl += "?" + q.join("&");
-  }
-
-  const targetPid = pidOf(normUrl) || pidOf(url);
+  /* 1.5.9 (10/31): 1.5.1~1.5.7에서 바꾼 '활성 탭으로 열기·link.coupang → www 직통 변환·차단 시 새로고침 재시도'를 되돌림.
+     차단 화면에서 새로고침을 반복하면 쿠팡(Akamai)이 프로필을 봇으로 찍어 확장을 꺼도 계속 막힘 (jinleeda1 프로필, 10/31).
+     유지: 이미 열린 같은 상품 탭 재사용(쿠팡에 새 요청 안 함), 차단 화면 감지(차단 글자를 상품 정보로 안 씀) → 바로 멈춤. */
+  const targetPid = pidOf(url);
   let t = null, reused = false;
-  /* 1. 이미 열려 있는 탭 중 해당 상품 탭이 있는지 확인 (있으면 탭 열기 없이 바로 읽음 → 403 차단 원천 방지) */
   if (targetPid && gt && gt.windowId) {
     try {
       const allTabs = await chrome.tabs.query({ windowId: gt.windowId });
@@ -63,50 +51,36 @@ async function autoRun(url, gt) {
       if (found) { t = found; reused = true; pushGen({ status: "열려 있는 상품 탭에서 읽는 중…" }); }
     } catch (e) {}
   }
-  /* 2. 열려 있는 탭이 없으면 새 탭 생성. 쿠팡 봇 탐지(Akamai) 차단을 막기 위해 활성 탭(active: true)으로 열기 */
   if (!t) {
     pushGen({ status: "상품 페이지 여는 중…" });
-    t = await chrome.tabs.create({ url: normUrl, active: true, windowId: gt.windowId, index: gt.index + 1 });
+    t = await chrome.tabs.create({ url: url, active: false, windowId: gt.windowId, index: gt.index + 1 });   /* 1.5.0처럼: 받은 주소 그대로, 뒤에서 */
   }
   autoTab = t.id;
   try {
     /* 단축 링크(link.coupang.com 등)가 상품 페이지로 넘어갈 때까지 (최대 40초) */
     let tab = t;
     if (!reused) {
-      for (let i = 0; i < 80; i++) {
-        await sleep(500);
-        tab = await chrome.tabs.get(t.id);
-        if (tab.status === "complete" && /\/products\/\d+|goodsNo=|toss\.shopping\/i\/|shopping-discovery/i.test(tab.url || "")) break;
-      }
+      for (let i = 0; i < 80; i++) { await sleep(500); tab = await chrome.tabs.get(t.id); if (tab.status === "complete" && /\/products\/\d+|goodsNo=|toss\.shopping\/i\/|shopping-discovery/i.test(tab.url || "")) break; }
       await sleep(1500);
       tab = await chrome.tabs.get(t.id);
     }
     if (/oliveyoung\.co\.kr/.test(tab.url || "")) return await autoOy(tab);
     if (/toss\.(shopping|im)/.test(tab.url || "")) { await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["oy.js"] }); return; }   // 토스: 상품 정보만 (검색 순위는 토스 앱 안이라 못 찾음)
     if (!/\/products\/\d+/.test(tab.url || "")) { pushGen({ status: "상품 페이지가 안 열렸어요. 열린 탭을 확인해 주세요." }); await chrome.tabs.update(t.id, { active: true }); return; }
-    /* 403 차단 화면 감지 시 1회 새로고침 재시도 */
+    /* 차단 화면이면 새로고침·재시도 없이 바로 멈춤 (재시도가 차단을 키움) */
     let tInfo = null;
     try { tInfo = await call(t.id, "readProduct"); } catch (e) {}
-    if (tInfo && (tInfo.err || /사용권한이\s*없|Access\s*Denied|요청하신\s*페이지/i.test(tInfo.name || ""))) {
-      pushGen({ status: "쿠팡 일시 차단 감지 → 새로고침 재시도…" });
-      await chrome.tabs.reload(t.id);
-      await sleep(2500);
-      tab = await chrome.tabs.get(t.id);
-      try { tInfo = await call(t.id, "readProduct"); } catch (e) {}
-      if (tInfo && (tInfo.err || /사용권한이\s*없|Access\s*Denied|요청하신\s*페이지/i.test(tInfo.name || ""))) {
-        pushGen({ status: "쿠팡 차단('사용권한이 없습니다'): 쿠팡 로그인 상태를 확인하시거나 상품 페이지에서 직접 확장 아이콘을 눌러주세요." });
-        await chrome.tabs.update(t.id, { active: true });
-        return;
-      }
+    if (tInfo && (tInfo.err && /차단|사용권한/.test(tInfo.err) || /사용권한이\s*없|Access\s*Denied|요청하신\s*페이지/i.test(tInfo.name || ""))) {
+      pushGen({ status: "쿠팡 차단 화면('사용권한이 없습니다')이 떠서 멈췄어요. 다시 누르지 말고, 크롬 설정에서 쿠팡 사이트 데이터를 지우고 크롬을 껐다 켠 뒤 해 주세요." });
+      await chrome.tabs.update(t.id, { active: true }).catch(() => {});
+      return;
     }
     const isNv = /naver\.com/.test(tab.url || "");
     const out = await start(tab);
-    /* 쿠팡: 끝나면 상품 탭 닫고 생성기 탭으로 복귀 (재사용한 탭은 닫지 않음). 네이버: 검색 탭이 따로 열려서 상품 탭만 닫음. 못 찾으면 상품 탭을 보여 줌 */
-    if ((out || isNv) && !reused) {
-      chrome.tabs.remove(t.id).catch(() => {});
-      if (gt && gt.id) chrome.tabs.update(gt.id, { active: true }).catch(() => {});
-    } else if (!reused) {
-      chrome.tabs.update(t.id, { active: true }).catch(() => {});
+    /* 쿠팡: 끝나면 상품 탭 닫음 (결과는 생성기에). 네이버: 검색 탭이 따로 열려서 상품 탭만 닫음. 못 찾으면 상품 탭을 보여 줌. 재사용한 탭은 그대로 둠 */
+    if (!reused) {
+      if (out || isNv) chrome.tabs.remove(t.id).catch(() => {});
+      else chrome.tabs.update(t.id, { active: true }).catch(() => {});
     }
   } finally { autoTab = 0; }
 }
