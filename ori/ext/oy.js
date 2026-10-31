@@ -73,9 +73,14 @@
       }
     } catch (e) {}
     const mods = toks.filter(t => /용$/.test(t) && t.length <= 4);
-    // 품목 명사 매칭: 여러 개 매칭 시 더 구체적이고 긴 명사(예: '나주배' > '햇배' > '배')를 최우선으로 선택 (11/01 v142)
+    // 품목 명사 매칭: 햇- 접두 수식 명사(햇배, 햇사과 등)보다 고유/지역 품종명(나주배, 옥광밤 등)을 우선, 그 외는 상품명 등장 순서 유지 (11/01 v142)
     const nounMatches = cand.filter(t => NOUN_SUFFIX.test(t));
-    nounMatches.sort((a, b) => b.length - a.length || toks.indexOf(a) - toks.indexOf(b));
+    nounMatches.sort((a, b) => {
+      const aHaet = /^햇/.test(a) ? 1 : 0;
+      const bHaet = /^햇/.test(b) ? 1 : 0;
+      if (aHaet !== bHaet) return aHaet - bHaet;
+      return toks.indexOf(a) - toks.indexOf(b);
+    });
     const nounMatch = nounMatches[0];
     const tail = t => t.slice(-3);
     const rep = cand.filter(t => t.length >= 3 && cand.some(u => u !== t && u.length >= 3 && tail(u) === tail(t)));
