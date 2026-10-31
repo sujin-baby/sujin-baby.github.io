@@ -1381,6 +1381,7 @@ function diagText_(p) {
 function diag_(p) {
   const tz = CONFIG.TIMEZONE, f = function (d, fmt) { return d instanceof Date ? Utilities.formatDate(d, tz, fmt || 'yyyy-MM-dd') : d; };
   const out = { now: f(new Date(), 'yyyy-MM-dd HH:mm:ss') };
+  try { out.runAs = Session.getEffectiveUser().getEmail(); } catch (e) {}
   const days = Number(p.days || 10), cut = today_().getTime() - days * 86400000;
   try {
     out.runs = readRuns_().filter(function (r) { return p.all || r['진행 상태'] !== '종료' || (r['진행일'] instanceof Date && r['진행일'].getTime() >= cut); })
@@ -5891,11 +5892,14 @@ function rvSubDir_(img, name) {
   while (it.hasNext()) { const f = it.next(), n = f.getName(); if (t ? rvTypeOf_(n) === t : n === name) return f; }
   return img.createFolder(t ? t + ' (0개)' : name);
 }
-// 종류 폴더 이름에 사진 수 (사용자 요청 10/31: '별점 (5개)'). 포토·텍스트·별점 세 폴더 다 (0개도)
+// 종류 폴더 이름에 사진 수 (사용자 요청 10/31: '별점 (5개)'). 0개인 종류는 폴더를 안 둠 (빈 폴더면 휴지통으로)
 function rvCountDirs_(img) {
-  RV_TYPES.forEach(function (t) {
-    const f = rvSubDir_(img, t), it = f.getFiles();
-    let n = 0; while (it.hasNext()) { if (/^image\//.test(it.next().getMimeType())) n++; }
+  const it0 = img.getFolders(), list = [];
+  while (it0.hasNext()) { const f = it0.next(); if (rvTypeOf_(f.getName())) list.push(f); }
+  list.forEach(function (f) {
+    const t = rvTypeOf_(f.getName()), it = f.getFiles();
+    let n = 0, any = false; while (it.hasNext()) { any = true; if (/^image\//.test(it.next().getMimeType())) n++; }
+    if (!n) { if (!any && !f.getFolders().hasNext()) { try { f.setTrashed(true); } catch (e) {} } return; }
     const want = t + ' (' + n + '개)';
     if (f.getName() !== want) f.setName(want);
   });
@@ -6011,7 +6015,7 @@ function rvInboxSort_(runs) {
   if (!files.length) return;
   const put = function (x, dest) {
     try { x.moveTo(dest); }
-    catch (e) { x.makeCopy(x.getName(), dest); doneIds.push(x.getId()); if (doneIds.length > 400) doneIds = doneIds.slice(-400); props.setProperty('RVINBOX_DONE', doneIds.join(',')); }
+    catch (e) { if (!globalThis.__MVERR) { globalThis.__MVERR = 1; note_('받는 곳 사진 옮기기 안 돼서 복사함 (' + Session.getEffectiveUser().getEmail() + ' 계정으로 도는 중): ' + (e && e.message || e)); } x.makeCopy(x.getName(), dest); doneIds.push(x.getId()); if (doneIds.length > 400) doneIds = doneIds.slice(-400); props.setProperty('RVINBOX_DONE', doneIds.join(',')); }
   };
   const camps = rvPendingCamps_(runs || readRuns_(), props), dirs = {};
   const sub = function (parent, name) { const k = parent.getId() + '|' + name; if (dirs[k]) return dirs[k]; const i2 = parent.getFoldersByName(name); return (dirs[k] = i2.hasNext() ? i2.next() : parent.createFolder(name)); };
