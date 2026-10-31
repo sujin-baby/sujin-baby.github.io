@@ -389,9 +389,9 @@ async function searchDev(ctx, dev, steps) {
   }
   return { log: log };
 }
-/* 위치는 'N페이지'만 (사용자 요청). 계속 내려가는 모바일 화면은 광고 뺀 순서로 페이지를 셈 (쿠팡 36개, 네이버 40개씩) */
+/* 위치는 '1p', '2p' 형식으로 (사용자 요청 10/31). 계속 내려가는 모바일 화면은 광고 뺀 순서로 페이지를 셈 (쿠팡 36개, 네이버 40개씩) */
 let PER = 36;
-const posText = r => !r ? "" : r.scroll ? Math.max(1, Math.ceil((r.org || r.pos) / PER)) + "페이지" : r.page + "페이지";
+const posText = r => !r ? "" : r.scroll ? Math.max(1, Math.ceil((r.org || r.pos) / PER)) + "p" : r.page + "p";
 /* 가격 필터는 '가검40000' (가검 = 가격검색) */
 const gageom = (lo, hi) => "가검" + (lo === hi ? lo : lo + "~" + hi);
 
