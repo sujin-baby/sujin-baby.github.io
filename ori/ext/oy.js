@@ -73,7 +73,6 @@
       }
     } catch (e) {}
     const mods = toks.filter(t => /용$/.test(t) && t.length <= 4);
-    const NOUN_SUFFIX = /(정|환|캡슐|스틱|분말|가루|원액|즙|차|오일|세럼|크림|로션|샴푸|패치|패드|거치대|매트|선풍기|텀블러|청소기|마사지기|워시|토너|앰플|마스크|비누|티슈|세제|치약|칫솔|홀더|걸이|선반|트레이|보틀|쿠션|방석|베개|슬리퍼|양말|장갑|모자|밴드|스토퍼|도어스토퍼|말굽|도어체크|도어락|고정기|가드|보냉백|보온백|런치백|도시락가방|가방|파우치|보냉가방|쿨러백|쇼퍼백|에코백|토트백|크로스백|백팩|손잡이백|보냉팩|보온팩)$/;
     const nounMatch = cand.find(t => NOUN_SUFFIX.test(t));
     const tail = t => t.slice(-3);
     const rep = cand.filter(t => t.length >= 3 && cand.some(u => u !== t && u.length >= 3 && tail(u) === tail(t)));
