@@ -522,8 +522,9 @@ async function run(tab) {
     info.rocket ? "배송 : 로켓배송" : "",
     F ? "찾은 키워드 : " + F.k : "",
     filt ? "필터 : " + filt : "",
-    "PC 위치 : " + (pc.found ? posText(pc.found) : "못 찾음"),
-    "모바일 위치 : " + (mo.found ? posText(mo.found) : "못 찾음"),
+    /* 못 찾은 게 쿠팡이 검색 화면을 막아서인지 같이 적음 (10/31: 같은 키워드로 PC 1p였다가 7분 뒤 '못 찾음' → 이유가 안 보였음) */
+    "PC 위치 : " + (pc.found ? posText(pc.found) : "못 찾음" + (pc.blocked ? " (쿠팡이 PC 검색 화면을 막음, 몇 분 뒤 다시)" : "")),
+    "모바일 위치 : " + (mo.found ? posText(mo.found) : "못 찾음" + (mo.blocked ? " (쿠팡이 모바일 검색 화면을 막음, 몇 분 뒤 다시)" : "")),
     info.img ? "썸네일 : " + info.img : ""
   ].filter(Boolean).join("\n");
   const notes = [];
@@ -541,6 +542,11 @@ async function run(tab) {
   const copied = await copyText(out, tid);
   const big = (F ? "키워드 : " + F.k + "\n" : "") + "PC " + (filt && pc.found ? filt + " " : "") + (pc.found ? posText(pc.found) : "못 찾음") + "\n모바일 " + (filt && mo.found ? filt + " " : "") + (mo.found ? posText(mo.found) : "못 찾음");
   await ui(tid, { title: copied ? "복사됐어요. 생성기 '상품 정보 붙여넣기' 칸에 Ctrl+V" : "복사를 눌러서 생성기 '상품 정보 붙여넣기' 칸에 붙여넣으세요", big: big, out: out, copied: copied, notes: notes, img: info.img });
+  /* 생성기 상태 줄에도 '확인한 것'과 판매처 못 읽은 이유를 띄움 (상품 탭은 닫혀서 거기 적힌 건 안 보였음) */
+  const why = [];
+  if (!info.seller) why.push("⚠ 판매처를 못 읽었어요" + (info.sellerHint ? " (화면: " + info.sellerHint + ")" : "") + " → 판매처 칸을 직접 채워 주세요");
+  notes.filter(x => x && x.warn && /확인한 것/.test(x.t)).forEach(x => why.push(x.t));
+  if (why.length) pushGen({ status: why.join(" / ") });
   return out;
 }
 

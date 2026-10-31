@@ -149,10 +149,10 @@
           if (okSeller(t)) { seller = t; break; }
         }
       }
+      /* 상품명 첫 단어로 채우지 않음: 판매자 이름은 쿠팡·토스·네이버 페이지에 꼭 있음. 못 읽으면 비워 두고 알림 (사용자 10/31) */
       /* '판매자 특가', '판매자로켓' 같은 배지 글자는 판매처가 아님 → 페이지 데이터의 판매자 이름 */
-      if (!seller) { const vn = (html.match(/"vendorName"\s*:\s*"([^"]{2,60})"/) || [])[1] || ""; if (okSeller(vn)) seller = vn; }
+      if (!seller) { const vn = (String(document.documentElement.innerHTML).match(/\\?"(?:vendorName|sellerName)\\?"\s*:\s*\\?"([^"\\]{2,60})/) || [])[1] || ""; if (okSeller(vn)) seller = vn; }
       if (!seller) { const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/); if (s2 && okSeller(s2[1].trim())) seller = s2[1].trim(); }
-      if (!seller && name) { const bg = name.split(/\s+/)[0]; if (bg && /^[가-힣a-zA-Z0-9]{2,10}$/.test(bg) && !/^(로켓|쿠팡|무료|특가|할인|배송)/.test(bg)) seller = bg; }
       if (seller) {
         seller = seller.replace(/[>]\s*(?:브랜드\s*샵|브랜드샵|공식\s*몰|공식몰|공식\s*스토어|공식스토어|스토어|샵).*$/i, "").replace(/\s*(?:브랜드\s*샵|브랜드샵|공식\s*몰|공식몰|공식\s*스토어|공식스토어)\s*$/i, "").replace(/\s+(?:스토어|샵)\s*$/i, "").trim();
       }
@@ -172,7 +172,9 @@
       const isRocket = !!document.querySelector('.prod-badge__rocket, [class*="badge-rocket"], [class*="rocket-badge"], img[alt*="로켓"], [class*="delivery-badge-rocket"]') ||
         /로켓\s*(배송|와우|그로스|직구|프레시)|판매자\s*로켓/i.test(rkTxt) ||
         /로켓\s*(배송|와우|그로스|직구|프레시)|판매자\s*로켓/i.test(html.slice(0, 20000));
-      return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, opt: opt || "단일옵션", price: price, optPrices: optPrices, ship: isRocket ? "무료 (로켓배송)" : shipOf(txt, name, price), rocket: isRocket, img: img };
+      /* 판매처를 못 읽었으면 왜 그런지 보려고 화면의 '판매자·상호' 줄을 같이 보냄 (생성기 상태 줄에 뜸) */
+      const sellerHint = seller ? "" : txt.split("\n").map(x => x.replace(/\s+/g, " ").trim()).filter(x => /판매자|판매처|상호|스토어/.test(x) && x.length <= 60).slice(0, 4).join(" | ") + (/vendorName|sellerName/.test(html) ? " [페이지 데이터에 판매자 칸 있음]" : "");
+      return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, sellerHint: sellerHint, opt: opt || "단일옵션", price: price, optPrices: optPrices, ship: isRocket ? "무료 (로켓배송)" : shipOf(txt, name, price), rocket: isRocket, img: img };
     }
     const pm = L.pathname.match(/products\/(\d+)/);
     if (!pm) return { err: "네이버는 스마트스토어(또는 브랜드스토어) 상품 페이지에서 눌러 주세요." };

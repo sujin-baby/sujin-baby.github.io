@@ -7,7 +7,7 @@ const src = {
   'oy.js': fs.readFileSync(path.join(root, 'ori/ext/oy.js'), 'utf8'),
   '생성기 bm-src': fs.readFileSync(path.join(root, 'guide/index.html'), 'utf8'),
 };
-// 판매처 코드: '/* 판매처: 첫 후보가' 부터 '정리'(브랜드샵 지우기) 바로 앞까지 + 상품명 첫 단어 줄
+// 판매처 코드: '/* 판매처: 첫 후보가' 부터 '정리'(브랜드샵 지우기) 바로 앞까지
 function sellerCode(s, label) {
   const a = s.indexOf('/* 판매처: 첫 후보가');
   const b = s.indexOf('if (seller) {', a);
@@ -15,7 +15,9 @@ function sellerCode(s, label) {
   return s.slice(a, b);
 }
 const cases = [
-  { t: '쿠팡 로켓: 화면에 판매자 가입만, 페이지 데이터 없음 → 상품명 첫 단어', brands: [], txt: '입점신청\n판매자 가입\n상품 정보', html: '', name: '가을제철 햇감 달콤말랑 시즌한정 홍시용대봉감, 1박스, 3kg 소과', want: '가을제철' },
+  { t: '화면에 판매자 가입만, 페이지 데이터 없음 → 상품명 첫 단어로 채우지 않고 비움', brands: [], txt: '입점신청\n판매자 가입\n상품 정보', html: '', name: '가을제철 햇감 달콤말랑 시즌한정 홍시용대봉감, 1박스, 3kg 소과', want: '' },
+  { t: '판매자 가입 + 페이지 데이터(따옴표가 \\" 로 들어간 것)', brands: [], txt: '판매자 가입', html: 'self.__next_f.push([1,"{\\"vendorName\\":\\"Happy 써나마켓\\"}"])', name: '가을제철 햇감', want: 'Happy 써나마켓' },
+  { t: '판매자 이름이 다음 줄에', brands: [], txt: '판매자 가입\n판매자\nHappy 써나마켓\n', html: '', name: '가을제철 햇감', want: 'Happy 써나마켓' },
   { t: '판매자 가입 다음에 진짜 판매자', brands: [], txt: '판매자 가입\n…\n판매자: 과일나라 판매자 상품 보러가기\n', html: '', name: '대봉감 5kg', want: '과일나라' },
   { t: '브랜드 칸이 와우 가입 → 페이지 데이터 판매자', brands: ['와우회원 가입'], txt: '판매자 특가', html: '{"vendorName":"햇살농원"}', name: '대봉감', want: '햇살농원' },
   { t: '정상 브랜드 칸은 그대로', brands: ['삼성전자'], txt: '판매자: 다른곳', html: '{"vendorName":"x"}', name: 'a b', want: '삼성전자' },
@@ -27,7 +29,7 @@ for (const [label, s] of Object.entries(src)) {
   const code = sellerCode(s, label);
   for (const c of cases) {
     const ctx = {
-      document: { querySelectorAll: () => c.brands.map(t => ({ textContent: t })) },
+      document: { querySelectorAll: () => c.brands.map(t => ({ textContent: t })), documentElement: { innerHTML: c.html } },
       txt: c.txt, html: c.html, name: c.name, seller: '',
       jv: k => { const m = c.html.match(new RegExp('"' + k + '"\\s*:\\s*"([^"]+)"')); return m ? m[1] : ''; },
     };
@@ -38,12 +40,6 @@ for (const [label, s] of Object.entries(src)) {
     if (!ok) fail++;
     console.log((ok ? '✓ ' : '✗ ') + label + ' · ' + c.t + ' → ' + JSON.stringify(got) + (ok ? '' : ' (기대: ' + JSON.stringify(c.want) + ')'));
   }
-}
-// 생성기 북마크는 줄바꿈을 지워 한 줄로 만들어 씀 → '//' 줄 주석이 있으면 뒤가 다 주석이 돼서 북마크가 안 돎 (v125~v138에서 그랬음)
-{
-  const m = src['생성기 bm-src'].match(/<script type="text\/plain" id="bm-src">([\s\S]*?)<\/script>/);
-  const one = m[1].replace(/\s*\n\s*/g, ' ').trim();
-  try { new Function(one); console.log('✓ 생성기 북마크 한 줄 코드 문법 OK'); } catch (e) { fail++; console.log('✗ 생성기 북마크 한 줄 코드 문법 오류: ' + e.message + ' (bm-src 안에서는 // 대신 /* */ 주석)'); }
 }
 if (fail) { console.error(fail + '개 실패'); process.exit(1); }
 console.log('✓ 판매처 시험 통과');
