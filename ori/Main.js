@@ -3193,6 +3193,8 @@ function listMsgText_(r) {
     if (total && sib.length && sib[sib.length - 1].row === me.row && got >= total) {
       const md = function (x) { return (x['진행일'].getMonth() + 1) + '.' + String(x['진행일'].getDate()).padStart(2, '0'); };
       tail = sib.length === 1 ? '마지막' : md(sib[0]) + '~ ' + md(me) + '  ' + (isExpect_(me) ? EXP_LINKS.length * 15 + '건 작성완료' : total + '건 구매완료');
+      let pc = []; try { pc = priceChangeLines_(me, sib, runs); } catch (e) {}
+      if (pc.length) tail += '\n' + (sib.length === 1 ? '\n' : '') + pc.join('\n');
     }
   } catch (e) {}
   // 앞 진행일보다 공지 가격이 바뀌었으면 '가격변동 9100 > 9200' (사용자 요청 10/28 마켓담온 귤). 그날 방 공지(없으면 폼 설명)의 🐥가격
@@ -3209,6 +3211,61 @@ function listMsgText_(r) {
   try { sk = PropertiesService.getScriptProperties().getProperty(listShortKey_(r)) || ''; } catch (e) {}
   if (cartN_(r) > 1) tail = (tail ? tail + '\n' : '') + '장바구니건';   // 사용자 요청 10/28
   return r['시트 링크'] + '\n\n' + t + (tail ? '\n' + tail : '') + (sk ? '\n\n' + sk : '');
+}
+// 가격변동 줄 (사용자 요청 10/31): 의뢰 마지막 명단 전달 글 맨 밑에. 실제 결제금액(응답)으로 셈
+//  여러 날 의뢰: 날마다 옵션별로 가장 많이 낸 금액이 앞 날과 달라지면 '*10.28 가격변동 9100 > 9200' (마켓담온 귤)
+//  첫날부터 공지(옵션 가격)와 다르면: '*쿠팡 가격변동 9800원' / '*토스 가격변동 소과 9800원, 로얄중대과 11800원' (써니마켓 대봉감)
+//  한 사람만 다른 건(쿠폰 등) 안 셈: 그날 그 옵션 2명 이상이 같은 금액이고 절반 넘을 때만. 장바구니건·기대평은 안 함
+const PLATFORM_RE = /쿠팡|토스|네이버|올리브영|11번가|지마켓|G마켓|옥션|카카오|무신사|오늘의집|에이블리|지그재그/;
+function priceChangeLines_(me, sib, runs) {
+  if (isExpect_(me) || cartN_(me) > 1 || !me['시트ID']) return [];
+  const num = function (x) { return Number(String(x == null ? '' : x).replace(/[^0-9]/g, '')) || 0; };
+  const md = function (d) { return (d.getMonth() + 1) + '.' + String(d.getDate()).padStart(2, '0'); };
+  const rows = [];
+  const ss = SpreadsheetApp.openById(String(me['시트ID']));
+  ss.getSheets().filter(function (t) { return !!t.getFormUrl(); }).forEach(function (t) {
+    const lr = t.getLastRow(), h = rawHead_(t).map(hk_);
+    if (lr < 2 || !h.length) return;
+    const co = h.findIndex(function (x) { return MATCH.opt.test(x) && !MATCH.nick.test(x); }), cp = h.findIndex(function (x) { return /결제\s*금액|결제\s*가격|구매\s*금액|결제한\s*금액/.test(x); });
+    if (cp < 0) return;
+    t.getRange(2, 1, lr - 1, h.length).getValues().forEach(function (v) { if (v[0] instanceof Date && num(v[cp])) rows.push({ t: v[0].getTime(), opt: co >= 0 ? String(v[co]).trim() : '', paid: num(v[cp]) }); });
+  });
+  if (!rows.length) return [];
+  const pm = optPriceMap_(sib.map(function (x) { return String(x['명단 제목']); }), String(me['시트ID']));
+  const one = (function () { const ps = runPrices_(me['가격']); return ps.length && ps.every(function (p) { return p === ps[0]; }) ? ps[0] : 0; })();
+  const expOf = function (opt) { const m = opt.match(/\(\s*([\d,]+)\s*원\s*\)/); return (m ? num(m[1]) : 0) || pm[opt] || one; };
+  const unit = function (paid, exp) { if (exp) for (let k = 2; k <= 5; k++) if (paid === exp * k) return exp; return paid; };
+  const major = function (list) {
+    const c = {}; list.forEach(function (p) { c[p] = (c[p] || 0) + 1; });
+    const top = Object.keys(c).sort(function (a, b) { return c[b] - c[a]; })[0];
+    return top && c[top] >= 2 && c[top] * 2 > list.length ? Number(top) : 0;
+  };
+  const days = sib.map(function (x) { const w = windowOf_(runs, x); return { d: x['진행일'], from: w.from, to: w.to }; });
+  const opts = []; rows.forEach(function (x) { if (opts.indexOf(x.opt) < 0) opts.push(x.opt); });
+  const label = function (opt) {
+    const pf = (opt.match(PLATFORM_RE) || [])[0] || String(me['플랫폼'] || '').match(PLATFORM_RE) && String(me['플랫폼']).match(PLATFORM_RE)[0] || '';
+    const name = opt.replace(/\(\s*[\d,]+\s*원\s*\)/, '').replace(PLATFORM_RE, '').replace(/^[\s\-:]+|[\s\-:]+$/g, '').trim();
+    return { pf: pf, name: name };
+  };
+  const dayLines = [], first = {};
+  opts.forEach(function (opt) {
+    const exp = expOf(opt);
+    let prev = 0;
+    days.forEach(function (dd, i) {
+      const m = major(rows.filter(function (x) { return x.opt === opt && x.t >= dd.from && x.t < dd.to; }).map(function (x) { return unit(x.paid, exp); }));
+      if (!m) return;
+      if (!prev) { prev = m; if (exp && m !== exp) first[opt] = m; return; }
+      if (m !== prev) { const lb = label(opt); dayLines.push('*' + md(dd.d) + (opts.length > 1 && lb.name ? ' ' + lb.name : '') + ' 가격변동 ' + prev + ' > ' + m); prev = m; }
+    });
+  });
+  // 첫날부터 다른 것: 플랫폼별로 묶음
+  const byPf = {}, order = [];
+  Object.keys(first).forEach(function (opt) { const lb = label(opt); if (!byPf[lb.pf]) { byPf[lb.pf] = []; order.push(lb.pf); } byPf[lb.pf].push({ name: lb.name, p: first[opt] }); });
+  const firstLines = order.map(function (pf) {
+    const xs = byPf[pf], one1 = xs.length === 1;
+    return '*' + (pf ? pf + ' ' : '') + '가격변동 ' + xs.map(function (x) { return (one1 ? '' : x.name + ' ') + x.p + '원'; }).join(', ');
+  });
+  return firstLines.concat(dayLines);
 }
 // 이 진행의 명단 전달이 아직 안 보내고 대기 중이면 새로 넣지 않고 그 글을 지금 내용으로 고침 (인원을 늘려 다시 마감될 때 두 줄 생기지 않게, 10/26)
 function pendingListMsg_(r) {
