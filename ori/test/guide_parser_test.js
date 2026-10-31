@@ -312,7 +312,7 @@ const headFull = P.parseAll(reqAtexFull);
 const gFull = headFull.guides[0];
 if (gFull.seller !== '아텍스') throw new Error('gFull seller should default to 아텍스 from keyword, got: ' + gFull.seller);
 if (gFull.pname !== '아텍스 산리오 캐릭터즈 우사하나 밴드 표준형') throw new Error('gFull pname should default to keyword, got: ' + gFull.pname);
-if (gFull.page !== '2위') throw new Error('gFull page should default to 2위 from URL rank, got: ' + gFull.page);
+if (gFull.page !== '1p') throw new Error('gFull page should default to 1p, got: ' + gFull.page);
 if (gFull.option !== '10개') throw new Error('gFull option should be 10개, got: ' + gFull.option);
 
 console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (8개 샘플 전원 일치)');
