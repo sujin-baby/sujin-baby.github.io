@@ -5772,6 +5772,8 @@ function rvZip_(f, name, props, sid, mine) {
   // 예전에 리뷰이미지 안에 만든 '(압축 제외)' 폴더는 의뢰 폴더로 꺼냄 (사장님이 보는 링크에서 빼기)
   try { const xi = f.img.getFolders(); while (xi.hasNext()) { const xf = xi.next(); if (RV_SKIP_RE.test(xf.getName()) && f.parent && f.parent.getId && f.parent.getId() !== f.img.getId()) xf.moveTo(f.parent); } } catch (e) {}
   const aiLeft = (mine && mine[0] && mine[0]['업체 전송']) ? 0 : rvAiSort_(f, sid, props);
+  // 사장님께 리뷰이미지 폴더 링크로 보냄 (사용자 허락 10/31: 링크 있으면 보기). 그 의뢰 리뷰이미지 폴더만 열림 (다른 업체 폴더는 안 보임)
+  try { f.img.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
   if (aiLeft > 0) return;
   const byType = { 포토: [], 텍스트: [], 별점: [] }, loose = [], seen = {}, skipped = {};
   const walk = function (fo, depth, type) {
