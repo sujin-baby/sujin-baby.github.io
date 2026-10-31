@@ -261,5 +261,32 @@ if (headDaebong.guides[2].total !== '2') throw new Error('Daebong guide 2 total 
 if (headDaebong.guides[2].pno !== '2704063801') throw new Error('Daebong guide 2 pno should be 2704063801, got: ' + headDaebong.guides[2].pno);
 if (headDaebong.guides[2].page !== '1p') throw new Error('Daebong guide 2 page should default to 1p, got: ' + headDaebong.guides[2].page);
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (6개 샘플 전원 일치)');
+console.log('-- Test 7: 10/31 피드백 검증 (유/무 분할 리뷰, 계층 키워드, 토스 상품명 보존, kwList 단일 키워드)');
+// 1) 포토 유 10개, 무 10개 분할 테스트
+const atexMix = P.reviewMix({ photo: '유 10개, 무10개' });
+if (atexMix.length !== 2) throw new Error('atexMix should have 2 elements, got: ' + atexMix.length);
+if (atexMix[0].label !== '포토리뷰' || atexMix[0].n !== 10) throw new Error('atexMix[0] should be 포토리뷰 10, got: ' + JSON.stringify(atexMix[0]));
+if (atexMix[1].label !== '텍스트리뷰' || atexMix[1].n !== 10) throw new Error('atexMix[1] should be 텍스트리뷰 10, got: ' + JSON.stringify(atexMix[1]));
+
+// 2) 토스 상품명 쉼표/규격 보존 테스트
+const tossPname = '홍시용 대봉감, 소과, 3kg, 1박스';
+const tossClean = P.baseName(tossPname, null, { platform: '토스' });
+if (tossClean !== tossPname) throw new Error('Toss pname should be preserved exactly, got: ' + tossClean);
+
+// 쿠팡 상품명은 옵션 규격 정리 유지
+const coupangPname = '홍시용 대봉감, 소과, 3kg, 1박스';
+const cpClean = P.baseName(coupangPname, null, { platform: '쿠팡' });
+if (cpClean === tossPname) throw new Error('Coupang pname should strip trailing box/kg');
+
+// 3) 계층 키워드 추천 테스트: 밴드 -> 산리오 밴드 -> 아텍스 산리오 밴드
+const kwHierarchy = P.suggestKeywords('아텍스 산리오 캐릭터즈 우사하나 밴드 표준형');
+if (kwHierarchy.main !== '밴드') throw new Error('Main keyword should be 밴드, got: ' + kwHierarchy.main);
+if (!kwHierarchy.subs.some(s => s === '산리오 밴드')) throw new Error('Subs should include 산리오 밴드, got: ' + JSON.stringify(kwHierarchy.subs));
+if (!kwHierarchy.subs.some(s => s === '아텍스 산리오 밴드')) throw new Error('Subs should include 아텍스 산리오 밴드, got: ' + JSON.stringify(kwHierarchy.subs));
+
+// 4) kwList: 의뢰서 키워드가 명시되어 있을 때 옵션명이 섞이지 않고 단일 키워드만 반환하는지
+const daebongKwList = P.kwList({ keyword: '대봉감', pname: '홍시용 대봉감 로얄중대과 3kg', kwAuto: false });
+if (daebongKwList.length !== 1 || daebongKwList[0] !== '대봉감') throw new Error('kwList with explicit keyword should return only [대봉감], got: ' + JSON.stringify(daebongKwList));
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (7개 샘플 전원 일치)');
 process.exit(0);

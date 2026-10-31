@@ -51,15 +51,18 @@
   <script>
     const qs = new URLSearchParams(location.search);
     let target = qs.get("url") || "";
-    let kw = (qs.get("kw") || (target.match(/[#&]kw=([^&]+)/) || [])[1] || "").trim();
+    let rawKw = (qs.get("kw") || (target.match(/[#&]kw=([^&]+)/) || [])[1] || "").trim();
+    let kw = rawKw;
     if (kw) {
       try { kw = decodeURIComponent(kw); } catch (e) {}
     }
+    // 옵션명이나 복수 키워드가 넘어오더라도 대표 키워드만 단일 추출
+    const k0 = kw.split("|")[0].trim();
     const pr = qs.get("pr") || (target.match(/[#&]pr=([^&]+)/) || [])[1] || "";
     const fn = qs.get("fn") || (target.match(/[#&]fn=([^&]+)/) || [])[1] || "";
 
     const cleanTarget = target.replace(/#(kw|pr|fn)=.*$/, "");
-    const fullTarget = cleanTarget + (kw ? "#kw=" + encodeURIComponent(kw) : "") + (pr ? "&pr=" + pr : "") + (fn ? "&fn=" + encodeURIComponent(fn) : "");
+    const fullTarget = cleanTarget + (k0 ? "#kw=" + encodeURIComponent(k0) : "") + (pr ? "&pr=" + pr : "") + (fn ? "&fn=" + encodeURIComponent(fn) : "");
 
     const kwCard = document.getElementById("kw-card");
     const kwVal = document.getElementById("kw-val");
@@ -68,11 +71,11 @@
     const go = document.getElementById("go");
     const copySafariBtn = document.getElementById("copy-safari-btn");
 
-    if (kw) {
+    if (k0) {
       kwCard.style.display = "block";
-      kwVal.textContent = kw;
+      kwVal.textContent = k0;
       copyKwBtn.style.display = "block";
-      copyKwBtn.textContent = '🔑 키워드만 복사 ("' + kw.split("|")[0] + '")';
+      copyKwBtn.textContent = '🔑 키워드만 복사 ("' + k0 + '")';
     }
 
     if (cleanTarget) {

@@ -196,7 +196,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v122 (아이폰 사파리 키워드 보존·북마크릿 키워드 자동 인식 및 원터치 붙여넣기 탑재) · 확장 1.5.0</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v123 (키워드 단일 추출·실배송 리뷰배정대기·토스상품명 보존·구매시간 필수화·가이드별 열기 단축) · 확장 1.5.0</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -277,6 +277,7 @@ details.help-box summary {
 
       <h2>진행 정보</h2>
       <div class="gtabs" id="gtabs" role="tablist" aria-label="가이드"></div>
+      <div id="tab-open-box" style="margin:8px 0 12px;"></div>
       <div class="checks">
         <label><input type="radio" name="type" id="t-ip" value="입대" checked> 입금대행 (#)</label>
         <label><input type="radio" name="type" id="t-up" value="업체입금"> 업체입금 (업)</label>
@@ -446,16 +447,21 @@ details.help-box summary {
     const isMod = t => /(는|한|된|용)$/.test(t) && t.length <= 4;
     const cand = toks.filter(t => !spec(t) && !STOP.test(t) && !isMod(t) && t.length >= 2);
     const mods = toks.filter(t => /용$/.test(t) && t.length <= 4);
+    const NOUN_SUFFIX = /(정|환|캡슐|스틱|분말|가루|원액|즙|차|오일|세럼|크림|로션|샴푸|패치|패드|거치대|매트|선풍기|텀블러|청소기|마사지기|워시|토너|앰플|마스크|비누|티슈|세제|치약|칫솔|홀더|걸이|선반|트레이|보틀|쿠션|방석|베개|슬리퍼|양말|장갑|모자|밴드)$/;
+    const nounMatch = cand.find(t => NOUN_SUFFIX.test(t));
     const tail = t => t.slice(-3);
     const rep = cand.filter(t => t.length >= 4 && cand.some(u => u !== t && u.length >= 4 && tail(u) === tail(t)));
     const cat = dash[1] ? dash[1].split(/[\/,]/)[0].trim() : "";
-    const main = rep[0] || (cat && cat.length >= 2 && !spec(cat) && !/일반|기타/.test(cat) ? cat : "") || cand.slice(0, 4).pop() || toks[0] || "";
+    const main = nounMatch || rep[0] || (cat && cat.length >= 2 && !spec(cat) && !/일반|기타/.test(cat) ? cat : "") || cand.slice(0, 4).pop() || toks[0] || "";
     const alts = rep.filter(t => t !== main), out = [main];
     const add = x => { x = x.trim(); if (x && out.indexOf(x) === -1) out.push(x); };
     alts.forEach(add);
     mods.forEach(m => { add(m + " " + main); alts.forEach(a => add(m + " " + a)); });
-    cand.filter(t => t !== main && alts.indexOf(t) === -1 && mods.indexOf(t) === -1).slice(0, 2).forEach(t => add(t + " " + main));
-    if (brand) add(brand + " " + main);
+    const rest = cand.filter(t => t !== main && alts.indexOf(t) === -1 && mods.indexOf(t) === -1);
+    if (rest[0]) add(rest[0] + " " + main);
+    if (brand && rest[0]) add(brand + " " + rest[0] + " " + main);
+    else if (brand) add(brand + " " + main);
+    rest.slice(1, 3).forEach(t => add(t + " " + main));
     return out.filter(Boolean).slice(0, 4);
   };
   /* 배송비: 상품명 뒤 글에서 '배송비 3,000원' / '무료배송' / '30,000원 이상 (구매 시) 무료'. 가격이 무료 조건에 맞으면 무료 (사용자 요청 10/20)
@@ -759,22 +765,14 @@ details.help-box summary {
       kwIn = decodeURIComponent(ck);
       kwFrom = "생성기 주소 (클립보드)";
     } else if (cb && cb.length <= 30 && !/[\n\r]|http|[:：]/.test(cb)) {
-      kwIn = [cb].concat(sugKw(name).filter(x => x !== cb)).join("|");
+      kwIn = cb;
       kwFrom = "복사해 둔 의뢰서 키워드";
     }
   }
-  /* 키워드를 여전히 못 찾았으면, 상품명 자동 추천으로 바로 넘어가지 않고 prompt로 확인 (취소/엔터 시 자동 추천) */
+  // 사용자가 직접 입력하는 prompt는 제거: 없으면 알아서 상품명 자동 추천으로 탐색
   if (!kwIn) {
-    const sug = sugKw(name);
-    const defK = sug[0] || "";
-    const userKw = prompt("의뢰서 검색 키워드를 입력해 주세요:\n(취소 또는 엔터 시 상품명 자동 추천 키워드로 검색)", defK);
-    if (userKw && userKw.trim()) {
-      kwIn = userKw.trim();
-      kwFrom = "직접 입력 키워드";
-    } else {
-      kwIn = sug.join("|");
-      kwFrom = "상품명 자동 추천";
-    }
+    kwIn = sugKw(name).join("|");
+    kwFrom = "상품명 자동 추천";
   }
   const kws = kwIn.split("|").map(x => x.trim()).filter(Boolean);
   const kw = kws[0] || "";
@@ -1389,14 +1387,18 @@ details.help-box summary {
 
   // ---------------- 리뷰 종류 나누기 ----------------
   // 의뢰서의 리뷰 종류와 개수: '포토리뷰 5개 (1줄리뷰) / 별점만 30개', '텍스트리뷰, 별점리뷰 각 10개씩', '별점2개,글씨리뷰3개'
+  // 유 10개, 무 10개 / 포토 10 / 텍스트 10 지원 (10/31 사용자 요청)
   function reviewMix(g) {
     const t = [g.review, g.photo].filter(Boolean).join(" / ");
-    const re = /(포토\s*대기|포토\s*리뷰|텍스트\s*리뷰|글씨\s*리뷰|별점\s*리뷰|별점\s*만|별점|한\s*줄\s*리뷰|1줄\s*리뷰)\s*(\d+)?\s*(?:개|건|명)?\s*(\([^)]*\))?|리뷰\s*(\d+)\s*(?:개|건|명)|각\s*(\d+)\s*(?:개|건|명)/g;
+    const re = /(포토\s*대기|포토\s*리뷰|텍스트\s*리뷰|글씨\s*리뷰|별점\s*리뷰|별점\s*만|별점|한\s*줄\s*리뷰|1줄\s*리뷰|포토|텍스트|글씨|별점|유|무)\s*(\d+)?\s*(?:개|건|명)?\s*(\([^)]*\))?|리뷰\s*(\d+)\s*(?:개|건|명)|각\s*(\d+)\s*(?:개|건|명)/g;
     const out = []; let pend = [], m;
     while ((m = re.exec(t))) {
       if (m[5]) { pend.forEach(o => { o.n = Number(m[5]); }); pend = []; continue; }
       if (m[4]) { out.push({ label: "텍스트리뷰", n: Number(m[4]) }); continue; }   /* 그냥 '리뷰 9건' = 글 쓰는 리뷰 */
-      let lab = m[1].replace(/\s+/g, "").replace("글씨리뷰", "텍스트리뷰");
+      let rawLab = m[1].replace(/\s+/g, "");
+      let lab = rawLab === "유" ? "포토리뷰" : rawLab === "무" ? "텍스트리뷰" : rawLab.replace("글씨리뷰", "텍스트리뷰");
+      if (lab === "포토") lab = "포토리뷰";
+      if (lab === "텍스트" || lab === "글씨") lab = "텍스트리뷰";
       if (m[3]) lab += m[3].replace(/\s+/g, "");
       const o = { label: lab, n: m[2] ? Number(m[2]) : 0 };
       if (!m[2]) pend.push(o);
@@ -1504,8 +1506,12 @@ details.help-box summary {
     const OFF = /^(식탁|책상|침대|소파|의자|천장|천정|벽|바닥|베란다|현관|창문|화장대|선반|테이블)$/;
     const rest = cand.filter(t => t !== main && mainAlts.indexOf(t) === -1 && mods.indexOf(t) === -1 && !OFF.test(t));
     rest.filter(t => TYPE.test(t)).forEach(t => add(main + " " + t));
-    rest.filter(t => !TYPE.test(t)).slice(0, 4).forEach(t => add(t + " " + main));
-    if (brand) add(brand + " " + main);
+    // 서브키워드 1 (예: 산리오 밴드)
+    if (rest[0]) add(rest[0] + " " + main);
+    // 업체명 + 서브키워드 1 (예: 아텍스 산리오 밴드)
+    if (brand && rest[0]) add(brand + " " + rest[0] + " " + main);
+    else if (brand) add(brand + " " + main);
+    rest.slice(1, 4).forEach(t => add(t + " " + main));
     (given || []).forEach(add);
     return { main: main, alts: mainAlts, subs: subs };
   }
@@ -1777,6 +1783,9 @@ details.help-box summary {
   // 쿠팡 상품명 끝의 고른 옵션(', 1kg, 2개' / ', 1개, 1kg(5~8개)')은 뺌: 공지에 '1kg, 2개'가 보이면 1kg×1 사는 사람이 헷갈림 (사용자 요청 10/24)
   function baseName(nm, r, g) {
     let s = String(nm || "").trim();
+    // 쿠팡 외 타 플랫폼(토스, 네이버 등)은 상품명 끝 옵션/규격을 임의로 자르지 않고 등록명 그대로 유지 (사용자 요청 10/31)
+    const plat = (g && g.platform) || v("platform") || "쿠팡";
+    if (plat !== "쿠팡") return s;
     const SEG = /^(\d+(\.\d+)?\s*(kg|g|mg|ml|l|리터|개입|개|팩|봉|입|매|박스|box|세트|set|병|캔|포|구|과|수|통|롤|ea|p|pcs)(\s*[×xX*]\s*\d+\s*(개|팩|봉|박스|세트|병|통)?)?(\s*\([^)]*\))?|[×xX*]\s*\d+\s*개?)$/i;
     const nz = x => String(x || "").replace(/\s+/g, "");
     const ro = nz(r && r.option !== "단일옵션" ? r.option : "");
@@ -1864,34 +1873,31 @@ details.help-box summary {
   // 가이드의 상품 주소마다 '열기' 버튼 (1kg, 2kg처럼 상품번호가 다르면 버튼이 여러 개)
   function updateProductLink() {
     const box = $("open-products");
+    const tabBox = $("tab-open-box");
     // 상품 주소 칸이 비었으면(의뢰서 링크 하나를 여러 가이드가 같이 쓸 때) 같은 단축 링크인 다른 가이드 주소 → 그래도 없으면 단축 링크 (10/22 가이드3)
-    //  → 되돌림: 다른 가이드(양모볼) 주소를 열어서 가이드3에 양모볼이 들어감. 이제는 가이드 자기 주소만 (https 없는 주소는 의뢰서 읽을 때 붙임)
     const urls = lines(v("url")).map(l => { const m = l.match(/^(.*?)\s*(https?:\/\/\S+)/); return m ? { label: m[1].trim(), url: m[2] } : null; }).filter(Boolean);
-    // 내용이 같으면 다시 안 만듦 (다른 칸에서 단추로 바로 누를 때 단추가 바뀌면서 클릭이 사라지는 것 막음)
-    // 썸네일·캡처 파일 이름 = 폼 제목 (방제에서 날짜·끝 숫자 뺀 것: '# 실링팬', '#택 과일쏙 대봉감', 사용자 요청 10/24)
     const ft0 = String(roomTpl || $("o-room").textContent || "").replace(/^([#업택\s]*?)\s*\d{1,2}\.\d{1,2}\s*/, "$1 ").replace(/\s*\d+\s*$/, "").replace(/\s+/g, " ").trim();
     const ft = ft0 && guides.length > 1 ? ft0 + " " + (cur + 1) : ft0;   // 상품이 여럿이면 가이드 번호 (같은 이름으로 덮어쓰지 않게)
-    // 가격 힌트(&pr=)는 그 상품 가격일 때만 (상품이 여럿인데 첫 상품 가격을 넘기면 확장 프로그램이 2kg 가격을 1kg 가격으로 적음, 10/24)
     const prOf = i => { const g = guides[cur] || {}, need = priceNeed(g), P = priceAt(g); const p = need.n <= 1 ? P[0] : urls.length > 1 && need.n === urls.length ? P[i] : ""; return Number(String(p || "").replace(/[^0-9]/g, "")) || 0; };
-    { const g = guides[cur] || {}, sig = JSON.stringify([urls, kwList(g), urls.map((u, i) => prOf(i)), ft]); if (box.dataset.sig === sig) return; box.dataset.sig = sig; }
+    const sig = JSON.stringify([cur, guides.length, urls, kwList(guides[cur] || {}), urls.map((u, i) => prOf(i)), ft]);
+    if (box.dataset.sig === sig) return;
+    box.dataset.sig = sig;
     box.innerHTML = "";
+    if (tabBox) tabBox.innerHTML = "";
     const noUrl = !urls.length;
     if (noUrl) urls.push({ label: "", url: "https://www.coupang.com" });
     urls.forEach((u, i) => {
       const a = document.createElement("a");
-      // 키워드를 주소 뒤(#kw=)에 붙여서 북마크 및 PC 확장 프로그램이 바로 쓰게 하고, 클릭하면 클립보드에도 복사
       const g = guides[cur] || {}, kw = kwList(g).join("|"), pr = prOf(i);
       const k0 = kw.split("|")[0];
-      const fullUrl = u.url + (kw && u.url.indexOf("#") === -1 ? "#kw=" + encodeURIComponent(kw) + (pr ? "&pr=" + pr : "") + (ft ? "&fn=" + encodeURIComponent(ft) : "") : "");
+      const fullUrl = u.url + (k0 && u.url.indexOf("#") === -1 ? "#kw=" + encodeURIComponent(k0) + (pr ? "&pr=" + pr : "") + (ft ? "&fn=" + encodeURIComponent(ft) : "") : "");
       a.className = "btn ghost"; a.target = "_blank"; a.rel = "noopener";
       a.href = fullUrl;
-      // 아이폰은 그냥 누르면 쿠팡 앱이 열려서 북마크를 못 씀 → 누르면 키워드 포함 주소 복사 + open.html 열기
       a.addEventListener("click", ev => {
-        // 아이폰: 앱 튕김 방지 우회 페이지(open.html)로 새 탭 열기 + 전체 주소(키워드 포함) 자동 복사
         if (isIOS()) {
           ev.preventDefault();
           copyText(fullUrl, "상품 주소(키워드 포함) 복사 완료 (" + (k0 || "키워드 포함") + ")");
-          const openUrl = "open.html?url=" + encodeURIComponent(u.url) + (kw ? "&kw=" + encodeURIComponent(kw) : "") + (pr ? "&pr=" + pr : "") + (ft ? "&fn=" + encodeURIComponent(ft) : "");
+          const openUrl = "open.html?url=" + encodeURIComponent(u.url) + (k0 ? "&kw=" + encodeURIComponent(k0) : "") + (pr ? "&pr=" + pr : "") + (ft ? "&fn=" + encodeURIComponent(ft) : "");
           window.open(openUrl, "_blank");
           return;
         }
@@ -1899,13 +1905,53 @@ details.help-box summary {
       });
       a.textContent = (u.label || (urls.length > 1 ? "상품 " + (i + 1) : "상품")) + " 페이지 열기";
       box.appendChild(a);
-      // PC 확장 프로그램(1.2.0부터)이 있으면 [자동 가져오기]: 확장 프로그램이 상품 페이지를 열어 읽고 결과를 아래 칸에 바로 넣음 (사용자 요청 10/20)
+
+      // 가이드 탭 바로 아래(tabBox)에도 원터치 바로가기 버튼 배치
+      if (tabBox) {
+        const ta = document.createElement("a");
+        ta.className = "btn primary small"; ta.target = "_blank"; ta.rel = "noopener";
+        ta.style.cssText = "display:inline-block; margin-right:6px; margin-bottom:6px; font-size:13px; font-weight:700;";
+        ta.href = fullUrl;
+        ta.addEventListener("click", ev => {
+          if (isIOS()) {
+            ev.preventDefault();
+            copyText(fullUrl, "상품 주소(키워드 포함) 복사 완료 (" + (k0 || "키워드 포함") + ")");
+            const openUrl = "open.html?url=" + encodeURIComponent(u.url) + (k0 ? "&kw=" + encodeURIComponent(k0) : "") + (pr ? "&pr=" + pr : "") + (ft ? "&fn=" + encodeURIComponent(ft) : "");
+            window.open(openUrl, "_blank");
+            return;
+          }
+          if (k0) copyText(k0, "검색 키워드를 복사했어요: " + k0);
+        });
+        const pfx = g.platform ? g.platform + " " : "";
+        ta.textContent = "👉 가이드 " + (cur + 1) + " (" + pfx + (u.label || "상품") + ") 페이지 열기";
+        tabBox.appendChild(ta);
+      }
+
+      // PC 확장 프로그램(1.2.0부터)이 있으면 [자동 가져오기]
       if (noUrl) return;
       const ab = document.createElement("button"); ab.type = "button"; ab.className = "pl-auto"; ab.hidden = !document.documentElement.hasAttribute("data-pl-ext");
       ab.textContent = urls.length > 1 ? (u.label || "상품 " + (i + 1)) + " 자동 가져오기" : "자동 가져오기";
       ab.addEventListener("click", () => { autoIdx = { g: cur, i: i, at: Date.now() }; $("auto-st").textContent = "확장 프로그램에 보냈어요…"; document.dispatchEvent(new CustomEvent("pl-auto", { detail: JSON.stringify({ url: a.href }) })); });
       box.appendChild(ab);
     });
+
+    // 가이드가 여러 개일 때 상단 box에도 다른 가이드 빠른 이동 버튼 추가 (10/31 사용자 요청)
+    if (guides.length > 1) {
+      const otherSpan = document.createElement("span");
+      otherSpan.style.cssText = "display:inline-flex; gap:4px; margin-left:8px; align-items:center;";
+      guides.forEach((og, oi) => {
+        if (oi === cur) return;
+        const ob = document.createElement("button");
+        ob.type = "button"; ob.className = "small ghost";
+        ob.textContent = "가이드 " + (oi + 1) + (og.platform ? " (" + og.platform + ")" : "") + "로 이동";
+        ob.addEventListener("click", () => {
+          saveCur(); loadGuide(oi); renderTabs(); render();
+        });
+        otherSpan.appendChild(ob);
+      });
+      box.appendChild(otherSpan);
+    }
+
     if (isIOS()) { const n = document.createElement("div"); n.className = "note"; n.textContent = "아이폰: [상품 페이지 열기]를 누르면 키워드가 포함된 주소가 열리고 자동 복사돼요."; box.appendChild(n); }
   }
   function isIOS() { return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); }
@@ -2053,6 +2099,9 @@ details.help-box summary {
 
   // 키워드 찾기: 대표 키워드 → (안 나오면) 가격 필터 → (그래도 안 나오면) 서브 키워드. 모바일, PC 따로 확인
   function kwList(g) {
+    if (g.keyword && !g.kwAuto) {
+      return [String(g.keyword).trim()];
+    }
     const s = g.kwSug || suggestKeywords(g.pname || "", g.kwAlts, g.kwAuto ? "" : g.keyword);
     const main = String(g.keyword || "").trim() || s.main;
     const subs = [].concat(g.kwAuto ? s.alts : [], s.subs, g.kwAlts || []).filter((x, i, a) => x && x !== main && a.indexOf(x) === i);
@@ -2266,8 +2315,11 @@ details.help-box summary {
       const mixLine = dm && dm.length ? mixText(dm) : mixText(mix);
       const isReal = (rocketRun || $("realship").checked);
       const isPhotoYes = /^\s*(유|y(es)?\b|있)/i.test(g.photo || "");
+      const hasPhotoAndText = (mix.length >= 2 && mix.some(x => /포토/.test(x.label)) && mix.some(x => /텍스트|별점/.test(x.label))) || /유\s*\d+.*무\s*\d+|무\s*\d+.*유\s*\d+/i.test(g.photo || "");
       const photo = photoWait(g) || (!isReal && isPhotoYes)
         ? "🐥리뷰 : ★★★포토대기★★★"
+        : isReal && hasPhotoAndText
+        ? "🐥리뷰 : ★★★리뷰배정대기★★★"
         : mix.length
         ? "🐥리뷰 : " + mixLine
         : isReal && isPhotoYes
@@ -2278,7 +2330,7 @@ details.help-box summary {
         confirmRun ? (i + 1) + "." : guides.length > 1 ? (cartInfo() ? (i + 1) + ")" : (i + 1) + ") " + pfx + (g.daily ? g.daily + "명" : "") + " : ") : null,
         g.short ? "링크타고 검색▼( 상번이 네이버일때 무시)" : null,
         g.short || null,
-        "🐥판매처 : " + (g.seller || "") + (g.cpFetched && !g.cpRocket && (g.seller || "").trim() ? " (판매자변경 로켓xxxxxx)" : ""),
+        "🐥판매처 : " + (g.seller || "") + ((g.platform === "쿠팡" || !g.platform) && g.cpFetched && !g.cpRocket && (g.seller || "").trim() ? " (판매자변경 로켓xxxxxx)" : ""),
         "🐥상품명 : " + baseName(g.pname || "", null, g),
         "🐥상품번호 : " + lines(g.pno).join("\n"),
         "🐥★키워드 : " + (g.keyword || ""),
@@ -2647,9 +2699,10 @@ details.help-box summary {
     }
     batchSay("확인 중…");
     if (!v("slot")) {
-      $("slot").value = "midnight";
-      $("slot").dispatchEvent(new Event("change"));
-      toast("구매 시간을 '자정건'으로 자동 선택했어요");
+      alert("⚠️ 구매 시간(자정건 / 긴급건 / 시간지정)을 먼저 선택해 주세요!\n구매 시간을 선택하지 않으면 공지가 잘못 나갈 수 있어 실행되지 않습니다.");
+      $("slot-btns").scrollIntoView({ block: "center", behavior: "smooth" });
+      batchSay("⚠️ 구매 시간(자정건 / 긴급건 / 시간지정)을 먼저 선택해 주세요.", true);
+      return;
     }
     if (!document.documentElement.hasAttribute("data-pl-ext")) {
       batchSay("📱 의뢰서 분석 및 상품 정보 적용 중…");
@@ -2773,7 +2826,7 @@ details.help-box summary {
 
   if (typeof globalThis !== "undefined") {
     globalThis.__PARSER__ = {
-      parseAll, parseHead, fieldsOf, parseOptions, parse, parseCoupang, optionText, baseName, makeRoom, shortName
+      parseAll, parseHead, fieldsOf, parseOptions, parse, parseCoupang, optionText, baseName, makeRoom, shortName, suggestKeywords, kwList, reviewMix
     };
   }
 })();
