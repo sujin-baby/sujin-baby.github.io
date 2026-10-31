@@ -5969,8 +5969,14 @@ function rvInboxSort_(runs) {
   if (!geminiKey_() || Number(props.getProperty('GEMINI_WAIT') || 0) > Date.now()) return;
   let inbox; try { inbox = rvInbox_(); } catch (e) { return; }
   const files = [], it = inbox.getFiles();
-  while (it.hasNext()) { const x = it.next(); if (/^image\//.test(x.getMimeType())) files.push(x); }
+  // 다른 계정(PC 드라이브 앱 로그인 계정)이 올린 사진은 옮기기가 안 될 수 있어 복사 → 복사한 건 기억해서 다시 안 봄 (10/31)
+  let doneIds = String(props.getProperty('RVINBOX_DONE') || '').split(',').filter(Boolean);
+  while (it.hasNext()) { const x = it.next(); if (/^image\//.test(x.getMimeType()) && doneIds.indexOf(x.getId()) < 0) files.push(x); }
   if (!files.length) return;
+  const put = function (x, dest) {
+    try { x.moveTo(dest); }
+    catch (e) { x.makeCopy(x.getName(), dest); doneIds.push(x.getId()); if (doneIds.length > 400) doneIds = doneIds.slice(-400); props.setProperty('RVINBOX_DONE', doneIds.join(',')); }
+  };
   const camps = rvPendingCamps_(runs || readRuns_(), props), dirs = {};
   const sub = function (parent, name) { const k = parent.getId() + '|' + name; if (dirs[k]) return dirs[k]; const i2 = parent.getFoldersByName(name); return (dirs[k] = i2.hasNext() ? i2.next() : parent.createFolder(name)); };
   const t0 = Date.now(), got = {};
@@ -5988,10 +5994,10 @@ function rvInboxSort_(runs) {
     }
     try { x.setDescription('AI ' + JSON.stringify(o)); } catch (e) {}
     const c = o.kind === 'other' && !o.product ? (camps.length === 1 ? camps[0] : null) : rvMatchCamp_(o.product, camps);
-    if (!c) { x.moveTo(sub(inbox, RV_INBOX_UNKNOWN)); unknown++; }
+    if (!c) { put(x, sub(inbox, RV_INBOX_UNKNOWN)); unknown++; }
     else {
       const img = c.img = c.img || DriveApp.getFolderById(c.imgId);
-      x.moveTo(sub(img, rvAiDir_(o)));
+      put(x, sub(img, rvAiDir_(o)));
       got[c.name] = (got[c.name] || 0) + 1;
     }
     if (i < files.length - 1) Utilities.sleep(2000);
