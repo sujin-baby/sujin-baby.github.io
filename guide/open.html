@@ -37,21 +37,14 @@
     <button type="button" class="btn sub" id="copy-kw-btn" style="display:none;">🔑 키워드만 복사하기</button>
 
     <div class="guide-box">
-      <b>💡 아이폰 사파리에서 위치 찾는 3단계:</b>
-      <div style="font-size:12px; color:#666; margin:4px 0 8px;">쿠팡 앱 설치 시 링크를 누르면 무조건 앱으로 튕기므로, 사파리 웹에서 북마크를 쓰시려면 아래처럼 해 주세요:</div>
+      <b>💡 아이폰 사파리에서 위치 찾는 방법:</b>
+      <div style="font-size:12px; color:#666; margin:4px 0 8px;">쿠팡 보안 정책(외부 링크 403 차단) 때문에 링크를 직접 누르면 열리지 않습니다. 아래 순서대로 해 주세요:</div>
       <ol class="guide-steps">
-        <li>위 <b>[📋 사파리 주소 복사하기]</b> 탭</li>
+        <li>위 <b>[📋 사파리 주소 복사하기]</b> 탭 (페이지 열릴 때 이미 복사됨)</li>
         <li>사파리 <b>주소창 탭 → [붙여넣기 및 이동]</b></li>
         <li>상품 화면이 열리면 <b>[북마크 상품위치 찾기]</b> 탭!</li>
       </ol>
       <div style="font-size:11.5px; color:#d63384; margin-top:8px;">👉 복사된 주소에 의뢰서 키워드가 포함되어 있어 북마크가 정확한 키워드로 위치를 100% 찾아줍니다.</div>
-    </div>
-
-    <a id="go" class="btn" href="#" target="_blank" rel="noreferrer noopener" style="background:#0071e3; color:white; margin-top:8px;">👉 상품 페이지 바로 열기</a>
-    <div style="font-size:12px; color:#b02a37; background:#fff5f5; border:1.5px solid #f8d7da; border-radius:10px; padding:10px; margin-top:12px; text-align:left; line-height:1.5;">
-      <b>💡 쿠팡 접속 시 '사용권한이 없습니다'가 뜨나요?</b><br>
-      쿠팡 보안 정책 때문입니다. 사파리 화면을 <b>아래로 당겨 새로고침(🔄)</b>을 1회 하시면 정상 페이지로 바로 열립니다! (주소창에 키워드가 보존되어 북마크가 정상 작동합니다)<br>
-      👉 <b>가장 안전한 방법:</b> 위 <b>[📋 사파리 주소 복사하기]</b> 후 사파리 주소창에 <b>붙여넣기 및 이동</b>하시면 403 오류 없이 100% 한 번에 열립니다.
     </div>
   </div>
   <script>
@@ -103,7 +96,6 @@
     const kwVal = document.getElementById("kw-val");
     const copyKwBtn = document.getElementById("copy-kw-btn");
     const cpSt = document.getElementById("cp-st");
-    const go = document.getElementById("go");
     const copySafariBtn = document.getElementById("copy-safari-btn");
 
     if (k0) {
@@ -111,18 +103,6 @@
       kwVal.textContent = k0;
       copyKwBtn.style.display = "block";
       copyKwBtn.textContent = '🔑 키워드만 복사 ("' + k0 + '")';
-    }
-
-    if (fullTarget || cleanTarget) {
-      const destUrl = fullTarget || cleanTarget;
-      go.href = destUrl;
-      go.setAttribute("rel", "noreferrer noopener");
-      go.addEventListener("click", ev => {
-        // 클립보드에 키워드 포함 주소 최신 복사
-        if (destUrl && navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(destUrl).catch(() => {});
-        }
-      });
     }
 
     // 진입 시 자동으로 키워드가 포함된 주소를 클립보드에 복사해 둠
