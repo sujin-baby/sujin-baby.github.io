@@ -1510,7 +1510,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -5797,18 +5797,18 @@ const GEMINI_CELL_LABEL = '🔑 리뷰 사진 AI 키';
 function geminiCellText_() {
   const k = geminiKey_();
   return k ? '✓ 키 넣음 (…' + k.slice(-4) + ') — 리뷰이미지 폴더 사진을 AI가 나눠요. 바꾸려면 새 키를 이 칸에 붙여넣기, 끄려면 "지움"'
-    : '여기에 Gemini 키(AIza로 시작)를 붙여넣기 → 키 만들기: 컴퓨터에서 aistudio.google.com → Get API key → Create API key (무료)';
+    : '여기에 Gemini 키(AIza… 또는 AQ.…로 시작)를 붙여넣기 → 키 만들기: 컴퓨터에서 aistudio.google.com → Get API key → Create API key (무료)';
 }
 // 사용법 탭 5행 B칸에 붙여넣은 키 → 저장하고 바로 시험. 칸에는 키 대신 결과만 남김
 function geminiCellEdit_(e) {
   const props = PropertiesService.getScriptProperties(), v = String(e.value === undefined ? e.range.getValue() : e.value || '').trim();
   let msg;
   if (v === '지움') { props.deleteProperty('GEMINI_KEY'); msg = '키를 지웠어요. 리뷰 사진은 예전처럼 안 나누고 압축해요.'; }
-  else if (/^[\w-]{30,}$/.test(v)) {
-    props.setProperty('GEMINI_KEY', v); props.deleteProperty('GEMINI_MODEL'); props.deleteProperty('GEMINI_WAIT');
+  else if (/^[\w.\-]{30,}$/.test(v)) {   // AIza… 또는 새 형식 AQ.… (10/31)
+    props.setProperty('GEMINI_KEY', v); props.deleteProperty('GEMINI_MODEL'); props.deleteProperty('GEMINI_WAIT'); props.deleteProperty('GEMINI_AUTH');
     try { geminiAsk_([{ text: '"ok"라고만 답하세요' }], false); msg = '✓ 키가 잘 돼요. 이제 리뷰이미지 폴더에 저장한 사진을 AI가 나눠요.'; }
     catch (err) { msg = '⚠ 키는 넣었는데 시험이 안 됐어요: ' + (err && err.message || err) + ' → 키를 다시 확인해서 붙여넣기'; }
-  } else msg = '⚠ 키 모양이 아니에요 (AIza로 시작하는 긴 글자). 다시 붙여넣어 주세요.';
+  } else msg = '⚠ 키 모양이 아니에요 (AIza… 또는 AQ.…로 시작하는 긴 글자). 다시 붙여넣어 주세요.';
   e.range.setValue(geminiCellText_());
   try { e.source.toast(msg, '리뷰 사진 AI 키', 15); } catch (err) {}
   note_('리뷰 사진 AI 키: ' + msg);
@@ -5821,10 +5821,16 @@ function geminiAsk_(parts, json) {
   const props = PropertiesService.getScriptProperties(), okM = props.getProperty('GEMINI_MODEL');
   const models = (okM ? [okM] : []).concat(GEMINI_MODELS.filter(function (m) { return m !== okM; }));
   const body = { contents: [{ parts: parts }], generationConfig: json ? { responseMimeType: 'application/json', temperature: 0 } : { temperature: 0 } };
-  let last = '';
+  let last = '', bearer = props.getProperty('GEMINI_AUTH') === 'bearer';
   for (let i = 0; i < models.length; i++) {
-    const res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + models[i] + ':generateContent', {
-      method: 'post', contentType: 'application/json', headers: { 'x-goog-api-key': key }, payload: JSON.stringify(body), muteHttpExceptions: true });
+    const ask = function () { return UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + models[i] + ':generateContent', {
+      method: 'post', contentType: 'application/json', headers: bearer ? { Authorization: 'Bearer ' + key } : { 'x-goog-api-key': key }, payload: JSON.stringify(body), muteHttpExceptions: true }); };
+    let res = ask();
+    // 새 형식 키(AQ.…)가 키 머리글로 안 되면 Bearer로 한 번 더 (되는 방식 기억)
+    if ((res.getResponseCode() === 401 || res.getResponseCode() === 403) && !/^AIza/.test(key)) {
+      bearer = !bearer; const r2 = ask();
+      if (r2.getResponseCode() !== 401 && r2.getResponseCode() !== 403) { res = r2; props.setProperty('GEMINI_AUTH', bearer ? 'bearer' : 'key'); } else bearer = !bearer;
+    }
     const code = res.getResponseCode(), txt = res.getContentText();
     if (code === 200) {
       if (okM !== models[i]) props.setProperty('GEMINI_MODEL', models[i]);
@@ -5935,8 +5941,8 @@ function setGeminiKey() {
   if (r.getSelectedButton() !== ui.Button.OK) return;
   const v = String(r.getResponseText() || '').trim(), props = PropertiesService.getScriptProperties();
   if (v === '지움') { props.deleteProperty('GEMINI_KEY'); ui.alert('키를 지웠어요. 리뷰 사진은 예전처럼 안 나누고 압축해요.'); return; }
-  if (!/^[\w-]{20,}$/.test(v)) { ui.alert('키 모양이 아니에요 (AIza로 시작하는 긴 글자). 다시 해 주세요.'); return; }
-  props.setProperty('GEMINI_KEY', v); props.deleteProperty('GEMINI_MODEL'); props.deleteProperty('GEMINI_WAIT');
+  if (!/^[\w.\-]{20,}$/.test(v)) { ui.alert('키 모양이 아니에요 (AIza… 또는 AQ.…로 시작하는 긴 글자). 다시 해 주세요.'); return; }
+  props.setProperty('GEMINI_KEY', v); props.deleteProperty('GEMINI_MODEL'); props.deleteProperty('GEMINI_WAIT'); props.deleteProperty('GEMINI_AUTH');
   try { const t = geminiAsk_([{ text: '"ok"라고만 답하세요' }], false); ui.alert('✓ 키가 잘 돼요 (' + (props.getProperty('GEMINI_MODEL') || '') + '). 이제 리뷰이미지 폴더에 올린 사진을 AI가 나눠요.\n답: ' + String(t).slice(0, 20)); }
   catch (e) { ui.alert('키는 넣었는데 시험이 안 됐어요: ' + (e && e.message || e) + '\n키를 다시 확인하거나 잠시 뒤 다시 해 주세요.'); }
 }
@@ -7612,7 +7618,7 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '27';
+const DASH_VER = '28';
 // 한눈에 '리뷰 취합할 것' 칸에 보일 것: 의뢰 전체 리뷰가 끝난(RVRPT_) 의뢰 중 업체 전송 체크 안 했거나 체크한 지 3일 안 된 것. 최근 40일 진행만, 기대평 빼고
 //  날마다 취합하던 줄은 없앰 (사용자 요청 10/26: 날짜별로 말고 한 캠페인이 다 끝나면 그때 한 번에)
 function rvItems_(allRuns, props) {
@@ -7821,6 +7827,8 @@ function buildDashboard_(force) {
     x.item = x.item.replace(/실(배송)?$/, '').replace(/외$/, '');
     row += x.n + 4;
   });
+  // 끝의 빈 줄은 지워 두니(아래) 이번에 쓸 만큼 줄이 모자라면 먼저 늘림 (10/31)
+  try { const need = row + 40; if (sh.getMaxRows() < need) sh.insertRowsAfter(sh.getMaxRows(), need - sh.getMaxRows()); } catch (e) {}
   const fmt = function (t) { return 'DATE(' + Utilities.formatDate(new Date(t), CONFIG.TIMEZONE, 'yyyy,M,d') + ')'; };
   runs.forEach(function (r, i) {
     const rr = i + 2, x = sheets['b' + i];
@@ -8012,6 +8020,8 @@ function buildDashboard_(force) {
   if (prevLastRow > maxUsedRow) {
     try { sh.getRange(maxUsedRow + 1, 1, prevLastRow - maxUsedRow, sh.getMaxColumns()).clear().clearDataValidations().clearNote(); } catch (e) {}
   }
+  // 쓴 곳 아래 빈 줄은 지움 (사용자 요청 10/31: 스크롤이 끝없이 내려가서). 마지막 명단 덩어리에 응답이 더 들어올 자리로 30줄은 남김
+  try { const keepTo = maxUsedRow + 30, mx = sh.getMaxRows(); if (mx > keepTo) sh.deleteRows(keepTo + 1, mx - keepTo); } catch (e) {}
   const block0Top = show.length ? sheets[show[0]].top : (bar + 3);
   const gapStart = rvItems.length ? (bar + 2 + rvItems.length + 1) : (bar + 1);
   if (block0Top > gapStart) {

@@ -79,10 +79,10 @@ const ok2 = left === 0 && models.length === n0;
 // 사용법 탭 키 칸에 붙여넣기 → 저장 + 시험, 칸에는 키 대신 결과
 let cell = '', toast = '';
 const usage = { getName: () => '사용법', getRange: (r, c) => ({ getValue: () => c === 1 ? G('GEMINI_CELL_LABEL') : cell }) };
-env.__ev = { value: 'AIzaNEWKEY_yyyyyyyyyyyyyyyyyyyyyyyy', range: { getSheet: () => usage, getColumn: () => 2, getRow: () => 5, getNumRows: () => 1, setValue: v => { cell = v; }, getValue: () => cell }, source: { toast: m => { toast = m; } } };
+env.__ev = { value: 'AQ.Ab8RN_NEWKEY-yyyyyyyyyyyyyyyyyyyy', range: { getSheet: () => usage, getColumn: () => 2, getRow: () => 5, getNumRows: () => 1, setValue: v => { cell = v; }, getValue: () => cell }, source: { toast: m => { toast = m; } } };
 env.UrlFetchApp = { fetch: () => ({ getResponseCode: () => 200, getContentText: () => JSON.stringify({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }) }) };
 G('onAdminEdit(__ev)');
-const ok3 = env.__props.get('GEMINI_KEY') === 'AIzaNEWKEY_yyyyyyyyyyyyyyyyyyyyyyyy' && /✓ 키 넣음 \(…yyyy\)/.test(cell) && cell.indexOf('AIzaNEWKEY') < 0 && /잘 돼요/.test(toast);
+const ok3 = env.__props.get('GEMINI_KEY') === 'AQ.Ab8RN_NEWKEY-yyyyyyyyyyyyyyyyyyyy' && /✓ 키 넣음 \(…yyyy\)/.test(cell) && cell.indexOf('AQ.Ab8RN') < 0 && /잘 돼요/.test(toast);
 console.log('키 칸:', cell, '/', toast);
 const okAll = ok && ok2 && ok3;
 console.log(okAll ? '✓ 리뷰 사진 AI 분류 시험 통과' : 'XX 리뷰 사진 AI 분류 시험 실패');
