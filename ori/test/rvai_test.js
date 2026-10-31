@@ -5,7 +5,7 @@ const env = makeEnv({ main: process.argv[2] }); const G = k => vm.runInContext(k
 const it = a => { let i = 0; const c = a.slice(); return { hasNext: () => i < c.length, next: () => c[i++] }; };
 const old = new Date(Date.now() - 3600e3);
 function Folder(name) { this.name = name; this.files = []; this.subs = []; }
-Folder.prototype = { getName() { return this.name; }, getUrl() { return 'https://drive/' + this.name; }, getId() { return 'D_' + this.name; },
+Folder.prototype = { getName() { return this.name; }, setName(n) { this.name = n; }, getUrl() { return 'https://drive/' + this.name; }, getId() { return 'D_' + this.name; },
   getFiles() { return it(this.files); }, getFolders() { return it(this.subs); },
   getFoldersByName(n) { return it(this.subs.filter(s => s.name === n)); }, createFolder(n) { const f = new Folder(n); this.subs.push(f); return f; },
   getFilesByName() { return it([]); }, createFile() { return { getUrl: () => 'https://zip' }; } };
@@ -61,14 +61,15 @@ run();
 const q1 = env.__props.get('RVAI_Q'), wait1 = !!env.__props.get('GEMINI_WAIT');
 env.__props.delete('GEMINI_WAIT');
 run();   // 나머지 분류 → 다 나눴으면 같은 실행에서 압축
-const count = n => { const f = img.subs.find(s => s.name === n); return f ? f.files.length : 0; };
+const count = n => { const f = img.subs.find(s => s.name === n || s.name.indexOf(n + ' (') === 0); return f ? f.files.length : 0; };
+const names = img.subs.map(s => s.name).join(',');
 const dirs = {}; (zipped ? zipped.blobs : []).forEach(b => { const d = String(b).split('/')[0]; dirs[d] = (dirs[d] || 0) + 1; });
 console.log('1차 후 대기열:', q1, '/ 한도 초과 기다림:', wait1, '/ 모델 기억:', env.__props.get('GEMINI_MODEL'));
 console.log('폴더:', ['포토', '텍스트', '별점', '구매인증 (압축 제외)', '기타 (압축 제외)', '같은 사진 (압축 제외)'].map(n => n + ' ' + count(n)).join(', '), '/ 맨 위 남은 것', img.files.length);
 console.log('압축:', zipped && zipped.name, JSON.stringify(dirs));
 console.log(msgs.join('\n'));
 const todo = msgs.find(m => /리뷰 압축 확인/.test(m)) || '';
-const ok = q1 === 'SID' && wait1 && env.__props.get('GEMINI_MODEL') === 'gemini-2.5-flash-lite' &&
+const ok = /포토 \(2개\)/.test(names) && /텍스트 \(3개\)/.test(names) && /별점 \(5개\)/.test(names) && q1 === 'SID' && wait1 && env.__props.get('GEMINI_MODEL') === 'gemini-2.5-flash-lite' &&
   count('포토') === 2 && count('텍스트') === 3 && count('별점') === 5 && count('구매인증 (압축 제외)') === 3 && count('기타 (압축 제외)') === 1 && count('같은 사진 (압축 제외)') === 1 && img.files.length === 0 &&
   zipped && dirs['포토 2'] === 2 && dirs['텍스트 3'] === 3 && dirs['별점 5'] === 5 && Object.keys(dirs).length === 3 &&
   /별점이 5개가 아닌 리뷰 1장: text0\.jpg\(별 4\)/.test(todo) && /압축에서 뺀 사진: .*구매인증 3장/.test(todo) && !/실제 배정/.test(todo) && (env.__props.get('RVAI_Q') || '') === '';

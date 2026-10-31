@@ -5716,7 +5716,7 @@ function rvCntText_(c) { return RV_TYPES.filter(function (t) { return c[t] > 0; 
 //  다 올릴 때까지 기다림: 마지막 사진을 올리고 10분 동안 새 사진이 없을 때 만듦. 사진을 더 올리면 다시 만듦. 사진 내용은 안 봄
 function rvZip_(f, name, props, sid, mine) {
   // 안 나눈 사진은 AI(Gemini)로 먼저 나눔 (키가 있을 때만). 남았으면 다 나눈 뒤에 압축 (15분 확인에서 이어서)
-  const aiLeft = rvAiSort_(f, sid, props);
+  const aiLeft = (mine && mine[0] && mine[0]['업체 전송']) ? 0 : rvAiSort_(f, sid, props);
   if (aiLeft > 0) return;
   const byType = { 포토: [], 텍스트: [], 별점: [] }, loose = [], seen = {}, skipped = {};
   const walk = function (fo, depth, type) {
@@ -5885,6 +5885,21 @@ function rvAiDir_(o) {
   if (o.kind === 'review') return o.photo ? '포토' : o.text ? '텍스트' : '별점';
   return o.kind === 'purchase' ? RV_AI_DIR.purchase : RV_AI_DIR.other;
 }
+// 리뷰이미지 안 종류 폴더 찾기/만들기 ('포토 (3개)'처럼 이름에 개수가 붙어도 같은 폴더)
+function rvSubDir_(img, name) {
+  const t = rvTypeOf_(name), it = img.getFolders();
+  while (it.hasNext()) { const f = it.next(), n = f.getName(); if (t ? rvTypeOf_(n) === t : n === name) return f; }
+  return img.createFolder(t ? t + ' (0개)' : name);
+}
+// 종류 폴더 이름에 사진 수 (사용자 요청 10/31: '별점 (5개)'). 포토·텍스트·별점 세 폴더 다 (0개도)
+function rvCountDirs_(img) {
+  RV_TYPES.forEach(function (t) {
+    const f = rvSubDir_(img, t), it = f.getFiles();
+    let n = 0; while (it.hasNext()) { if (/^image\//.test(it.next().getMimeType())) n++; }
+    const want = t + ' (' + n + '개)';
+    if (f.getName() !== want) f.setName(want);
+  });
+}
 // 리뷰이미지(+직접 만든 '리뷰캡처' 폴더)에서 아직 안 나눈 사진을 나눔. 한 번에 60초까지(무료 한도: 분당 몇 장) → 남은 장수 (0 = 다 나눔 또는 키 없음)
 function rvAiSort_(f, sid, props) {
   if (!geminiKey_() || !f || !f.img) return 0;
@@ -5901,11 +5916,7 @@ function rvAiSort_(f, sid, props) {
   const setQ = function (on) { const i = q.indexOf(sid); if (on && i < 0) q.push(sid); if (!on && i >= 0) q.splice(i, 1); props.setProperty('RVAI_Q', q.join(',')); };
   if (!loose.length) { setQ(false); return 0; }
   const dirs = {};
-  const dirOf = function (name) {
-    if (dirs[name]) return dirs[name];
-    const it = f.img.getFoldersByName(name);
-    return (dirs[name] = it.hasNext() ? it.next() : f.img.createFolder(name));
-  };
+  const dirOf = function (name) { return dirs[name] || (dirs[name] = rvSubDir_(f.img, name)); };
   // 같은 사진(같은 방에서 두 번 저장 등): 크기가 같은 것만 내용 비교
   const bySize = {};
   typed.concat(loose).forEach(function (x) { const k = String(x.getSize()); (bySize[k] = bySize[k] || []).push(x); });
@@ -5947,6 +5958,7 @@ function rvAiSort_(f, sid, props) {
   }
   if (done) note_('✓ 리뷰 사진 AI 분류 ' + done + '장: ' + Object.keys(moved).map(function (k) { return k.replace(/\s*\(압축 제외\)/, '') + ' ' + moved[k]; }).join(', ') + (left.length - done > 0 ? ' (남은 ' + (left.length - done) + '장은 다음 확인에서)' : ''));
   setQ(left.length - done > 0);
+  if (done) { try { rvCountDirs_(f.img); } catch (e) {} }
   return left.length - done;
 }
 // 리뷰 사진 받는 곳 (10/31: PC 카톡은 저장 위치를 매번 못 고르고 다운로드 폴더에 바로 저장됨)
@@ -5969,8 +5981,8 @@ function rvPendingCamps_(runs, props) {
   runs.forEach(function (r) { if (r['시트ID'] && !isExpect_(r) && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut) (by[r['시트ID']] = by[r['시트ID']] || []).push(r); });
   const out = [];
   Object.keys(by).forEach(function (sid) {
-    if (!all['RVRPT_' + sid] || all['RVZIPURL_' + sid] || !all['RVIMG_' + sid]) return;
     const mine = by[sid], words = {};
+    if (!all['RVRPT_' + sid] || !all['RVIMG_' + sid] || mine[0]['업체 전송']) return;
     mine.forEach(function (r) {
       rvWords_(campOf_(r['명단 제목'])).forEach(function (w) { words[w] = 1; });
       String(formDescRead_(r['폼ID'], descAge_(r))).split('\n').forEach(function (l) { if (/상품명|키워드|판매처/.test(l)) rvWords_(l.replace(/^.*?[:：]/, '')).forEach(function (w) { words[w] = 1; }); });
@@ -6021,11 +6033,12 @@ function rvInboxSort_(runs) {
     if (!c) { put(x, sub(inbox, RV_INBOX_UNKNOWN)); unknown++; }
     else {
       const img = c.img = c.img || DriveApp.getFolderById(c.imgId);
-      put(x, sub(img, rvAiDir_(o)));
-      got[c.name] = (got[c.name] || 0) + 1;
+      put(x, rvSubDir_(img, rvAiDir_(o)));
+      got[c.name] = (got[c.name] || 0) + 1; c.moved = 1;
     }
     if (i < files.length - 1) Utilities.sleep(2000);
   }
+  camps.forEach(function (c) { if (c.moved) { try { rvCountDirs_(c.img); } catch (e) {} } });
   const done = Object.keys(got);
   if (done.length) note_('✓ 리뷰 사진 받는 곳 → ' + done.map(function (k) { return k + ' ' + got[k] + '장'; }).join(', '));
   if (unknown) {

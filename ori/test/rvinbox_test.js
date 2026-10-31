@@ -3,7 +3,7 @@ const { makeEnv, Sheet } = require('./harness'); const vm = require('vm');
 const env = makeEnv({ main: process.argv[2] }); const G = k => vm.runInContext(k, env);
 const it = a => { let i = 0; const c = a.slice(); return { hasNext: () => i < c.length, next: () => c[i++] }; };
 function Folder(name) { this.name = name; this.files = []; this.subs = []; this.id = 'D_' + name; }
-Folder.prototype = { getName() { return this.name; }, getUrl() { return 'https://drive/' + this.name; }, getId() { return this.id; }, isTrashed() { return false; },
+Folder.prototype = { getName() { return this.name; }, setName(n) { this.name = n; }, getUrl() { return 'https://drive/' + this.name; }, getId() { return this.id; }, isTrashed() { return false; },
   getFiles() { return it(this.files); }, getFolders() { return it(this.subs); },
   getFoldersByName(n) { return it(this.subs.filter(s => s.name === n)); }, createFolder(n) { const f = new Folder(n); this.subs.push(f); return f; } };
 let fid = 0;
@@ -35,7 +35,7 @@ env.__ss.sheets['진행목록'] = new Sheet('진행목록', [LH.slice(),
   mk({ '진행일': new Date(d0 - 5 * 864e5), '명단 제목': '#10.26 텀블러 2 (뽀짝오리)', '시트ID': 'SC', '폼ID': 'FC', '진행 상태': '진행중' })]);
 [['GEMINI_KEY', 'AQ.testkey_zzzzzzzzzzzzzzzzzzzzzzzzzz'], ['RVRPT_SA', '1'], ['RVIMG_SA', 'D_리뷰이미지A'], ['RVRPT_SB', '1'], ['RVIMG_SB', 'D_리뷰이미지B'], ['RVINBOX_ID', 'D_리뷰 사진 받는 곳']].forEach(([k, v]) => env.__props.set(k, v));
 G('rvInboxSort_(null)');
-const cnt = (f, n) => { const s = f.subs.find(x => x.name === n); return s ? s.files.length : 0; };
+const cnt = (f, n) => { const s = f.subs.find(x => x.name === n || x.name.indexOf(n + ' (') === 0); return s ? s.files.length : 0; };
 const res = 'A 포토 ' + cnt(imgA, '포토') + ', A 구매인증 ' + cnt(imgA, '구매인증 (압축 제외)') + ', B 텍스트 ' + cnt(imgB, '텍스트') + ', 모름 ' + cnt(inbox, '어느 의뢰인지 모름') + ', 남음 ' + inbox.files.length;
 console.log(res); console.log(msgs.join('\n'));
 const ok = res === 'A 포토 1, A 구매인증 1, B 텍스트 1, 모름 1, 남음 0' && msgs.length === 1 && /모르는 사진이 있어요 \(1장\)/.test(msgs[0]) && /모두의농수산감홍사과, 실링팬/.test(msgs[0]);
