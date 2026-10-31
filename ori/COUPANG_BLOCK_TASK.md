@@ -23,7 +23,9 @@
 - → 인터넷·코드 문제 아님. **jinleeda1 프로필 자체**(그 프로필에만 깔린 확장, 설정, 실험 기능, 자동화 흔적 등)가 원인.
 - **디버깅은 꼭 jinleeda1 프로필에서** (sujinlee9704는 정상이라 비교 대상일 뿐). 볼 것: 두 프로필 `chrome://extensions` 비교(특히 debugger·tabs·모든 사이트 권한 확장, 자동화 확장), `chrome://settings/privacy`(쿠키·추적 방지·보안 수준), `chrome://flags` 바뀐 것, `chrome://version` 명령줄. 못 찾으면 jinleeda1로 **새 크롬 프로필**을 만들어 확장만 깔고 쿠팡 열어 보기.
 
-## 🔎 10/31 20:30 Claude 디버깅 (jinleeda1 프로필, Claude in Chrome)
+## ❌ (정정) 10/31 20:30 Claude 디버깅 — 실제로는 sujinlee9704 프로필이었음
+- **정정(사용자 확인)**: 아이템스카우트는 sujinlee9704에만 있음 → Claude in Chrome이 연결된 크롬은 jinleeda1이 아니라 sujinlee9704. 아래 "아이템스카우트가 원인" 결론은 **틀림**. jinleeda1 조사는 아직 안 됨.
+- 참고: sujinlee9704에서도 Claude in Chrome(자동 조작)으로 연 쿠팡 탭은 막힘 → 자동화 도구로 쿠팡을 여는 시험은 결과를 믿을 수 없음.
 - Claude in Chrome은 chrome:// 페이지(extensions·flags·settings·version)에 접근 불가 → 일반 페이지에서 브라우저 상태를 읽어 비교.
 - 정상: navigator.webdriver=false, UA Chrome 156 macOS, 자동화 흔적(cdc_/selenium/puppeteer) 없음, 언어 ko-KR, 시간대 Asia/Seoul.
 - **발견: 모든 사이트에 다른 확장이 content script를 넣고 있음** — ID `ecmeogcbcoalojmkfkmancobmiahaigg`, `content_script/content_script.js`, 코드 안에 `itemscoutWebExtension`, `CRAWLING_PAGE_TIMES:5`, `COUPANG`, `MONTHLY_USAGE_LIMIT` → **아이템스카우트(키워드 분석) 확장 v5.4.6**. 쿠팡 검색 결과를 크롤링하는 확장이라 Akamai가 이 프로필을 봇으로 찍은 1순위 원인으로 봄.
