@@ -432,7 +432,21 @@ if (!blockedParse.blocked) throw new Error('parseCoupang should set blocked flag
 if (P.baseName('요청하신 페이지의 사용권한이 없습니다.') !== '') throw new Error('baseName should return empty for blocked text');
 if (P.posText({ page: '요청하신 페이지의 사용권한이 없습니다' }) !== '1p') throw new Error('posText should return 1p for blocked text, got: ' + P.posText({ page: '요청하신 페이지의 사용권한이 없습니다' }));
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (12개 샘플 전원 일치)');
+// ==========================================
+// Test 13: 텀블러 등 품목 명사 추천 보존 및 prompt 제거 검증 (11/01 v141)
+// 1) suggestKeywords: '텀블러 500ml 보온보냉'처럼 첫 단어가 품목 명사일 때 브랜드로 잘라내지 않고 '텀블러' 추천
+// 2) index.html / oy.js 코드에 '의뢰서 검색 키워드를 입력해 주세요' prompt가 없는지 정적 검증
+// ==========================================
+console.log('-- Test 13: 텀블러 등 품목 명사 추천 보존 및 prompt 제거 검증');
+const sugTumbler = P.suggestKeywords('텀블러 500ml 보온보냉 빨대 물병');
+if (sugTumbler.main !== '텀블러') throw new Error('suggestKeywords main should be 텀블러, got: ' + sugTumbler.main);
+
+const oyCode = fs.readFileSync(path.join(__dirname, '../ext/oy.js'), 'utf8');
+const indexCode = fs.readFileSync(path.join(__dirname, '../../guide/index.html'), 'utf8');
+if (oyCode.includes('의뢰서 검색 키워드를 입력해 주세요')) throw new Error('oy.js should not contain keyword prompt');
+if (indexCode.includes('의뢰서 검색 키워드를 입력해 주세요')) throw new Error('guide/index.html should not contain keyword prompt');
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (13개 샘플 전원 일치)');
 process.exit(0);
 
 
