@@ -3102,6 +3102,8 @@ function checkFullInner_() {
   } catch (e) { note_('한눈에 오류 칸 확인 실패: ' + e); }
   // 리뷰 사진 AI 분류가 남은 의뢰가 있으면 이어서 (10/31)
   if (props.getProperty('RVAI_Q') && !late_(200)) { step_('리뷰 사진 AI'); rvAiQueue_(); }
+  // 사용법 탭 글이 바뀌었으면 바로 (정리는 30분마다라 새 칸이 늦게 생김. 같으면 속성 하나만 보고 끝)
+  try { ensureUsageTab_(); } catch (e) {}
   // 월급시트·배정 수식은 진행이 바뀌었을 때(인원·방제·날짜·상태) 또는 30분마다만 (10/23 정리: 매번 하면 확인이 5분 넘게 걸려 명단이 늦게 뜸)
   const rr = readRuns_(), sigOf = function (o) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(o), Utilities.Charset.UTF_8)); };
   const live = rr.filter(function (r) { return r['진행 상태'] !== '종료'; });
@@ -5059,6 +5061,7 @@ function onAdminEdit(e) {
   if (e && e.response) return onRunSubmit_(e);   // 폼 제출 트리거도 이 이름으로 받음 (로더에 이미 있는 이름이라)
   if (!e || !e.range) return;
   try { if (e.range.getSheet().getName() === OUTBOX_SHEET) obUserEdit_(e); } catch (err) {}
+  try { if (e.range.getSheet().getName() === USAGE_TAB && e.range.getColumn() === 2 && e.range.getNumRows() === 1 && String(e.range.getSheet().getRange(e.range.getRow(), 1).getValue()) === GEMINI_CELL_LABEL) return geminiCellEdit_(e); } catch (err) {}
   // 한눈에 탭 '진행 도우미' 체크 → 시트 오른쪽에 진행 도우미 (새 탭 없이)
   if (e.range.getSheet().getName() === DASH_TAB && e.range.getColumn() === 1 && String(e.range.getRow()) === PropertiesService.getScriptProperties().getProperty('DASH_BAR_ROW')) {
     if (String(e.value).toUpperCase() !== 'TRUE') return;
@@ -5790,6 +5793,26 @@ const GEMINI_PROMPT = [
   '- text: 참여자가 직접 쓴 리뷰 본문 글이 있으면 true. "소음 작아요" 같은 선택형 문구만 있으면 false',
   '- photo: 참여자가 리뷰에 직접 붙인 사진·동영상이 있으면 true. 화면 맨 위 작은 상품 썸네일은 사진이 아님'
 ].join('\n');
+const GEMINI_CELL_LABEL = '🔑 리뷰 사진 AI 키';
+function geminiCellText_() {
+  const k = geminiKey_();
+  return k ? '✓ 키 넣음 (…' + k.slice(-4) + ') — 리뷰이미지 폴더 사진을 AI가 나눠요. 바꾸려면 새 키를 이 칸에 붙여넣기, 끄려면 "지움"'
+    : '여기에 Gemini 키(AIza로 시작)를 붙여넣기 → 키 만들기: 컴퓨터에서 aistudio.google.com → Get API key → Create API key (무료)';
+}
+// 사용법 탭 5행 B칸에 붙여넣은 키 → 저장하고 바로 시험. 칸에는 키 대신 결과만 남김
+function geminiCellEdit_(e) {
+  const props = PropertiesService.getScriptProperties(), v = String(e.value === undefined ? e.range.getValue() : e.value || '').trim();
+  let msg;
+  if (v === '지움') { props.deleteProperty('GEMINI_KEY'); msg = '키를 지웠어요. 리뷰 사진은 예전처럼 안 나누고 압축해요.'; }
+  else if (/^[\w-]{30,}$/.test(v)) {
+    props.setProperty('GEMINI_KEY', v); props.deleteProperty('GEMINI_MODEL'); props.deleteProperty('GEMINI_WAIT');
+    try { geminiAsk_([{ text: '"ok"라고만 답하세요' }], false); msg = '✓ 키가 잘 돼요. 이제 리뷰이미지 폴더에 저장한 사진을 AI가 나눠요.'; }
+    catch (err) { msg = '⚠ 키는 넣었는데 시험이 안 됐어요: ' + (err && err.message || err) + ' → 키를 다시 확인해서 붙여넣기'; }
+  } else msg = '⚠ 키 모양이 아니에요 (AIza로 시작하는 긴 글자). 다시 붙여넣어 주세요.';
+  e.range.setValue(geminiCellText_());
+  try { e.source.toast(msg, '리뷰 사진 AI 키', 15); } catch (err) {}
+  note_('리뷰 사진 AI 키: ' + msg);
+}
 function geminiKey_() { try { return PropertiesService.getScriptProperties().getProperty('GEMINI_KEY') || ''; } catch (e) { return ''; } }
 // Gemini에 묻기: parts = [{text}, {inline_data}] → 답 글. 모델 이름이 바뀌어도 되게 차례로 시도(되는 모델 기억). 한도 초과 = { quota: 1 }
 function geminiAsk_(parts, json) {
@@ -5949,7 +5972,7 @@ const USAGE_ROWS = [
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
   ['리뷰 완료 (취완)', '명단 시트 "명단" 탭 맨 오른쪽 "리뷰 확인" 체크칸에 체크 → 그 방 사람 전부 체크되면 보낼메시지에 그 방 "취완". 의뢰 전체가 끝나고 전부 체크되면 보낼메시지 "할 일"에 리뷰 캡처 올릴 폴더 링크'],
   ['리뷰 사진 압축', '날마다 말고 의뢰가 다 끝난 뒤 한 번에: 그 의뢰 리뷰 캡처를 전부 의뢰 폴더 안 "리뷰이미지"(할 일·한눈에 "리뷰 취합할 것" 줄의 링크)에 올리기. 날짜·포토·텍스트·별점으로 안 나눠도 됨 → 10~40분 뒤 캠페인명.zip이 생기고(안에 "포토 N, 텍스트 N, 별점 N" 메모 파일, 개수는 방마다 보낸 리뷰 가이드대로 자동) 보낼메시지 "리뷰 보고"(사장님)에 압축 파일 링크 → 받아서 보고 글과 같이 업체에 보내고, 한눈에 그 줄 체크. 사진이 리뷰 건수보다 적거나 개수가 의뢰서와 다르면 할 일에 ⚠'],
-  ['리뷰 사진 AI 분류', '메뉴 "리뷰 사진 AI 키 넣기"에 Gemini 무료 키(aistudio.google.com → Get API key)를 한 번 넣으면: PC 카톡 서랍에서 방 사진을 통째로 리뷰이미지 폴더에 저장해도 AI가 리뷰만 골라 포토·텍스트·별점 폴더로 나누고, 구매 인증·다른 사진·같은 사진은 "(압축 제외)" 폴더로 옮김(안 지움). AI가 틀렸으면 파일을 맞는 폴더로 옮기면 다시 압축. 개수가 의뢰서·배정과 다르거나 별점이 5개가 아니면 할 일에 알림'],
+  ['리뷰 사진 AI 분류', '사용법 탭 맨 위 "🔑 리뷰 사진 AI 키" 칸에 Gemini 무료 키(aistudio.google.com → Get API key)를 한 번 붙여넣으면: PC 카톡 서랍에서 방 사진을 통째로 리뷰이미지 폴더에 저장해도 AI가 리뷰만 골라 포토·텍스트·별점 폴더로 나누고, 구매 인증·다른 사진·같은 사진은 "(압축 제외)" 폴더로 옮김(안 지움). AI가 틀렸으면 파일을 맞는 폴더로 옮기면 다시 압축. 개수가 의뢰서·배정과 다르거나 별점이 5개가 아니면 할 일에 알림'],
   ['블랙리스트 사람이 폼을 냄', '한눈에 "확인 필요" 칸에 ⛔ + 메일 → 폼수정 탭에서 그 응답 지우기'],
   ['명단이 안 보임', '메뉴 체험단 도구 → 지금 명단 마감 확인 (명단 탭만 바로 새로고침, 나머지는 1분 뒤 자동)'],
   ['화면이 이상함', '메뉴 → 지금 최신 버전으로 업데이트 → 한눈에 탭 새로 만들기'],
@@ -5963,7 +5986,7 @@ const USAGE_ROWS = [
 function ensureUsageTab_() {
   const props = PropertiesService.getScriptProperties(), ss = adminSs_();
   let sh = ss.getSheetByName(USAGE_TAB);
-  const ver = USAGE_VER + '|' + String(CONFIG.KEY).slice(-4) + String(globalThis.__DIAGKEY || '').slice(-4);   // 열쇠가 바뀌면 링크도 다시
+  const ver = USAGE_VER + '|' + String(CONFIG.KEY).slice(-4) + String(globalThis.__DIAGKEY || '').slice(-4) + '|' + String(geminiKey_()).slice(-4);   // 열쇠가 바뀌면 링크도 다시
   if (sh && props.getProperty('USAGE_VER') === ver) return;
   if (!sh) { sh = ss.insertSheet(USAGE_TAB, 0); sh.setTabColor('#5b2a86'); }
   sh.clear();
@@ -5985,6 +6008,9 @@ function ensureUsageTab_() {
     if (i < 2) sh.getRange(2 + i, 2).setFormula('=HYPERLINK(' + JSON.stringify(x[1]) + ',' + JSON.stringify(x[2]) + ')').setBackground('#fff2cc');
     else sh.getRange(2 + i, 2).setValue(x[1] + '\n(' + x[2] + ')').setBackground('#fff2cc');
   });
+  // 5행: 리뷰 사진 AI 키 넣는 칸 (메뉴는 로더가 만들어서 새 메뉴를 못 넣음 → 이 칸에 붙여넣으면 onAdminEdit가 받아서 저장, 10/31)
+  sh.getRange(5, 1).setValue(GEMINI_CELL_LABEL).setFontWeight('bold').setBackground('#e2f0d9');
+  sh.getRange(5, 2).setValue(geminiCellText_()).setBackground('#e2f0d9').setFontColor(null);
   props.setProperty('USAGE_VER', ver);
 }
 
