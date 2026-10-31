@@ -23,6 +23,13 @@
 - → 인터넷·코드 문제 아님. **jinleeda1 프로필 자체**(그 프로필에만 깔린 확장, 설정, 실험 기능, 자동화 흔적 등)가 원인.
 - **디버깅은 꼭 jinleeda1 프로필에서** (sujinlee9704는 정상이라 비교 대상일 뿐). 볼 것: 두 프로필 `chrome://extensions` 비교(특히 debugger·tabs·모든 사이트 권한 확장, 자동화 확장), `chrome://settings/privacy`(쿠키·추적 방지·보안 수준), `chrome://flags` 바뀐 것, `chrome://version` 명령줄. 못 찾으면 jinleeda1로 **새 크롬 프로필**을 만들어 확장만 깔고 쿠팡 열어 보기.
 
+## 🔎 10/31 20:30 Claude 디버깅 (jinleeda1 프로필, Claude in Chrome)
+- Claude in Chrome은 chrome:// 페이지(extensions·flags·settings·version)에 접근 불가 → 일반 페이지에서 브라우저 상태를 읽어 비교.
+- 정상: navigator.webdriver=false, UA Chrome 156 macOS, 자동화 흔적(cdc_/selenium/puppeteer) 없음, 언어 ko-KR, 시간대 Asia/Seoul.
+- **발견: 모든 사이트에 다른 확장이 content script를 넣고 있음** — ID `ecmeogcbcoalojmkfkmancobmiahaigg`, `content_script/content_script.js`, 코드 안에 `itemscoutWebExtension`, `CRAWLING_PAGE_TIMES:5`, `COUPANG`, `MONTHLY_USAGE_LIMIT` → **아이템스카우트(키워드 분석) 확장 v5.4.6**. 쿠팡 검색 결과를 크롤링하는 확장이라 Akamai가 이 프로필을 봇으로 찍은 1순위 원인으로 봄.
+- 할 일(사용자): jinleeda1에서 이 확장 **삭제**(끄기만 하면 다시 켜질 수 있음) → 쿠팡 사이트 데이터 삭제 → 크롬 재시작 → 몇 시간 뒤 확인. sujinlee9704에 같은 확장이 없는지도 확인.
+- 체험단 확장(ori/ext) 코드는 원인 아님 → 수정 안 함, 자동 가져오기 유지.
+
 ## 확인 순서 (사용자 크롬에서)
 1. **확장 끄고** 크롬 새 탭 주소창에 `https://www.coupang.com/vp/products/9796919905` 직접 입력 → 열리나?
    - 막히면: 코드 문제 아님. 이 IP/브라우저가 쿠팡에 찍힘 → 시크릿 창, 휴대폰 핫스팟으로 다시. 쿠팡 쿠키 삭제(설정 → 개인정보 → 쿠키 → coupang.com).
