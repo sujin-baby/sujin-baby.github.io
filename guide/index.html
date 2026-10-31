@@ -197,7 +197,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v134 (공지 오류 피클·클로드 즉시 수정 요청 칸 탑재)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v135 (상세 칸 접기, 쿠팡 차단 화면 글자 안 넣음)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -297,7 +297,7 @@ details.help-box summary {
       <div class="bm" id="optbox" hidden></div>
       <div class="bm" id="pricebox" hidden></div>
       <details class="gd" id="gdet">
-        <summary><span id="gsum"></span><span class="note">고칠 때만 눌러서 열기</span></summary>
+        <summary><span id="gsum"></span><span class="note">상세 (고칠 때만 열기)</span></summary>
       <div class="fields">
         <label>검색 키워드<input id="keyword"></label>
         <label>짧은 상품명 (방제, 시트, 명단 이름용. 예: 옥광밤)<input id="guide"></label>
@@ -371,7 +371,7 @@ details.help-box summary {
         <div class="card-out" id="box-bug-report" style="margin: 14px 0; background: #fff5f7; border: 2px solid #e03131; border-radius: 12px; padding: 14px; box-shadow: 2px 2px 0 var(--ink, #3a2230);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:4px;">
             <span style="font-weight: 900; font-size: 13.5px; color: #c92a2a;">🚨 공지 오류 제보 / 수정 요청 (피클·클로드 전달용)</span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v134</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v135</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 8px;">
             공지가 이상하게 나왔나요? 아래 태그를 누르거나 문제점을 적고 <b>[원터치 복사]</b>를 누르면, <b>의뢰서 원문 + 생성된 공지 + 문제점</b>이 한 번에 복사되어 피클 채팅창이나 클로드 코드에 바로 전달할 수 있어요.
@@ -1948,8 +1948,8 @@ details.help-box summary {
     loadGuide(0);
     renderTabs();
     render();
-    // 가격, 상품번호처럼 직접 채울 게 남아 있으면 칸을 펼쳐 둠
-    $("gdet").open = guides.some(g => priceMissing(g).length || !g.seller);
+    // 상세 칸은 늘 접어 둠 (사용자 요청 10/31: 길고 복잡해 보임). 비어 있는 게 있으면 접힌 제목에 ❗로 알려 줌
+    $("gdet").open = false;
   }
   // 가져온 가격을 맞는 자리에 (10/24): 상품이 여럿이면 그 상품 자리, 옵션마다 가격이 다르면 상품 페이지에서 고른 옵션 자리.
   //  어느 옵션 가격인지 모르면 안 넣고 알려 줌 (가격 하나를 모든 옵션 가격처럼 쓰지 않게). 이미 있는 가격(의뢰서·직접 넣은 것)은 안 바꿈
@@ -2053,7 +2053,14 @@ details.help-box summary {
     }
     return s;
   }
+  // 쇼핑몰 차단 화면 글자 (10/31: '요청하신 페이지의 사용권한이 없습니다'가 판매처·상품명에 들어감)
+  const BLOCK_TXT = /사용권한이\s*없|요청하신\s*페이지|Access\s*Denied|접속이\s*(제한|불가)|일시적으로\s*제한/i;
   function fillCoupang(r) {
+    // 차단 화면을 읽었으면 상품 정보로 안 씀 (위치·키워드 같은 다른 건 그대로)
+    if (r && (r.blocked || BLOCK_TXT.test(String(r.pname || "")) || BLOCK_TXT.test(String(r.seller || "")))) {
+      r = Object.assign({}, r, { pname: "", seller: "", pno: "", price: "", prices: null, rocket: false, thumb: "" });
+      toast("쿠팡이 잠깐 막았어요. 판매처·상품명은 안 넣었어요 → 30분 뒤 다시 가져오기, 또는 쿠팡 상품 페이지를 직접 열어 둔 채 가져오기");
+    }
     // [자동 가져오기]로 누른 상품 자리 (상품이 여럿이면 누른 상품 줄에), 아니면 빈 줄부터
     const ai = autoIdx && autoIdx.g === cur && Date.now() - autoIdx.at < 600000 ? autoIdx.i : -1;
     r.slot = ai;
@@ -2538,7 +2545,8 @@ details.help-box summary {
     try { updateProductLink(); } catch (e) {}   // 썸네일 파일 이름(폼 제목)이 방제를 따라가게
 
     const g0 = guides[cur] || {};
-    $("gsum").textContent = "가이드 " + (cur + 1) + ": " + [g0.keyword || "(키워드)", (g0.daily || "?") + "건", lines(g0.option).join(", "), g0.seller || ""].filter(Boolean).join(" / ");
+    const miss0 = [priceMissing(g0).length ? "가격" : "", !g0.seller ? "판매처" : ""].filter(Boolean);
+    $("gsum").textContent = "가이드 " + (cur + 1) + ": " + [g0.keyword || "(키워드)", (g0.daily || "?") + "건", lines(g0.option).join(", "), g0.seller || ""].filter(Boolean).join(" / ") + (miss0.length ? "  ❗" + miss0.join("·") + " 비어 있음 (눌러서 채우기)" : "");
     const warns = [];
     if (reqNote) warns.push(reqNote);
     document.querySelectorAll("#slot-btns button").forEach(b => { b.className = b.dataset.slot === v("slot") ? "" : "ghost"; });
@@ -2942,7 +2950,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v134 공지 오류 제보]",
+        "🚨 [가이드 생성기 v135 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",
