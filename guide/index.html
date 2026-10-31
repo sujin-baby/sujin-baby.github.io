@@ -197,7 +197,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v131 (link.coupang 직통 모바일 변환·보냉백 명사 추천·추천상품 옵션 혼입 차단)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v132 (상품페이지 실제 판매처 전용 연동·입금자명 유추 원천 배제)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -1328,6 +1328,7 @@ details.help-box summary {
 
   // 라벨 → 칸. 번호(1. 2. 10.)가 엉망이어도 라벨 글자로 찾고, 다음 라벨 전까지 여러 줄을 한 칸으로 읽음
   const LABELS = [
+    ["seller", /판매처|판매자|스토어|브랜드/],
     ["keyword", /검색\s*키워드|검색할\s*키워드/], ["rank", /순위/], ["total", /총\s*구매\s*건수|총\s*건수|총\s*결제\S*\s*건수/], ["daily", /일\s*진행\s*건수|일\s*건수|하루\s*진행\s*건수|하루\s*\S*\s*건수/],
     ["url", /상품\s*주소|URL|상품\s*링크/i], ["option", /옵션/], ["photo", /포토/], ["review", /리뷰\s*내용|리뷰\s*가이드|^\s*리뷰\s*(종류|방식)?\s*$/],
     ["payer", /입금자|입금하실/], ["takdaeYN", /택배\s*대행/], ["depositYN", /입금\s*대행/]
@@ -1518,22 +1519,11 @@ details.help-box summary {
     // 상품번호: 상품이 여럿이면 옵션(없으면 주소 라벨) 이름을 앞에 붙임
     const names = urls.length > 1 ? (r.optBase.length === urls.length ? r.optBase.map(o => o.label) : urls.map((u, i) => u.label || ("상품" + (i + 1)))) : [];
     r.pno = urls.map((u, i) => (names[i] ? names[i] + " : " : "") + urlInfo(u.url)).join("\n");
-    // 판매처: 1) 괄호 상호 2) 회사/스토어 키워드 3) 2-3글자 한글 인명이 아닌 입금자명 (예: 아이누빅, 로이시, ABC)
-    const isPerson = /^[가-힣]{2,3}$/.test((f.payer || "").trim());
-    r.seller = pick(f.payer || "", /\(([^)]+)\)/) || 
-               (/(주식회사|\(주\)|㈜|컴퍼니|상사|스토어)/.test(f.payer || "") ? (f.payer || "").replace(/주식회사|\(주\)|㈜/g, "").trim() : "") ||
-               (!isPerson && f.payer ? f.payer.trim() : "");
-    // 판매처가 아직 없으면 검색 키워드의 첫 단어(브랜드, 예: 아텍스)를 판매처 기본값으로 추출 (10/31)
-    if (!r.seller && r.keyword) {
-      const bCand = r.keyword.trim().split(/\s+/)[0];
-      const isGenericNoun = /(스토퍼|도어스토퍼|말굽|도어체크|도어락|고정기|가드|보냉백|보온백|런치백|도시락가방|가방|파우치|보냉가방|쿨러백|쇼퍼백|에코백|토트백|크로스백|백팩|손잡이백|보냉팩|보온팩|텀블러|밴드|샐러드|거치대|패치|패드|매트)$/.test(bCand);
-      if (bCand && /^[가-힣a-zA-Z0-9]{2,10}$/.test(bCand) && !isGenericNoun && !/^(로켓|쿠팡|무료|특가|할인|배송|입금대행|업체입금)/.test(bCand)) {
-        r.seller = bCand;
-        r.sellerAuto = true;
-      }
-    }
+    // 판매처: 의뢰서에 명시된 '판매처/판매자/스토어/브랜드' 라벨만 읽고, 입금자명이나 키워드로 절대 유추하지 않음
+    // (10/31 수진 님 지시: 입금자명과 판매처는 다른 경우가 많으니 입금자명으로 가져오지 말고, 무조건 상품한번에가져오기나 상품페이지열기로 가져온 상품페이지 판매처로만 사용)
+    r.seller = (f.seller || "").trim();
     if (r.seller) {
-      r.seller = r.seller.replace(/[>]\s*(?:브랜드\s*샵|브랜드샵|공식\s*몰|공식몰|공식\s*스토어|공식스토어|스토어|샵).*$/i, "").replace(/\s*(?:브랜드\s*샵|브랜드샵|공식\s*몰|공식몰|공식\s*스토어|공식스토어)\s*$/i, "").replace(/\s+(?:스토어|샵)\s*$/i, "").trim();
+      r.seller = r.seller.replace(/[>]\s*(?:브랜드\s*샵|브랜드샵|공식\s*몰|공식몰|공식\s*스토어|공식스토어|스토어|샵).*$/i, "").replace(/\s*(?:스토어|샵)\s*$/i, "").trim();
     }
     // 상품명이 의뢰서에 따로 없으면 검색 키워드를 상품명 기본값으로 채움 (공지 비어있음 방지, 10/31)
     if (!r.pname && r.keyword) {
