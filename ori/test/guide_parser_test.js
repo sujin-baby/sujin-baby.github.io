@@ -373,6 +373,39 @@ const gDoor = headDoor.guides[0];
 if (gDoor.keyword !== '도어스토퍼') throw new Error('gDoor keyword should be 도어스토퍼, got: ' + gDoor.keyword);
 if (gDoor.option !== '다크블랙') throw new Error('gDoor option should be 다크블랙, got: ' + gDoor.option);
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (10개 샘플 전원 일치)');
+// ==========================================
+// Test 11: 보냉백 의뢰서 파싱 및 suggestKeywords 보냉백 명사 추출 검증 (10/31 v131)
+// 1) '루오넬 온담 데일리 보온 보냉백 이유식 도시락가방 런치백' -> 대표 키워드 '보냉백'
+// 2) link.coupang.com 공유 링크 및 구매옵션 '블랙 그레이 네이비' 정상 파싱
+// ==========================================
+console.log('-- Test 11: 보냉백 의뢰서 파싱 및 suggestKeywords 명사 추출 검증');
+const bagKw = P.suggestKeywords('루오넬 온담 데일리 보온 보냉백 이유식 도시락가방 런치백');
+if (bagKw.main !== '보냉백') throw new Error('Main keyword should be 보냉백, got: ' + bagKw.main);
+
+const reqBag = `#입금대행 실배 17000
+3명 상품받고 포토리뷰 
+2명 원고제공 사진제공
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 보냉백
+2. 키워드 검색 시 현재 순위 :모르시면 비워두세요
+3. 총 결제하신 건수 : 5건
+4. 하루 진행 건수 : 2+3
+5. 상품주소(URL) : https://link.coupang.com/re/SHARESDPNUL?pageKey=9790575144&itemId=29312667128&vendorItemId=96227887527
+6. 구매옵션 : 블랙 그레이 네이비 
+7. 포토제공 (몇명)  /포토없음  선택:
+실배송건 3개(블랙,그레이,네이비) 
+전부 사진 10장
+사진제공 2개
+8. 리뷰 가이드 : 원고제공 
+9. 입금하실 입금자명 : 아이누빅
+10.택배대행 Y/N: N`;
+
+const headBag = P.parseAll(reqBag);
+const gBag = headBag.guides[0];
+if (gBag.keyword !== '보냉백') throw new Error('gBag keyword should be 보냉백, got: ' + gBag.keyword);
+if (gBag.seller !== '아이누빅') throw new Error('gBag seller should be 아이누빅, got: ' + gBag.seller);
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (11개 샘플 전원 일치)');
 process.exit(0);
+
 
