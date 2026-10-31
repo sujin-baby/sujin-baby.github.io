@@ -197,7 +197,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v135 (상세 칸 접기, 쿠팡 차단 화면 글자 안 넣음)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v136 (PC 쿠팡 주소에 ?kw= 안 붙임: 차단 원인)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -371,7 +371,7 @@ details.help-box summary {
         <div class="card-out" id="box-bug-report" style="margin: 14px 0; background: #fff5f7; border: 2px solid #e03131; border-radius: 12px; padding: 14px; box-shadow: 2px 2px 0 var(--ink, #3a2230);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:4px;">
             <span style="font-weight: 900; font-size: 13.5px; color: #c92a2a;">🚨 공지 오류 제보 / 수정 요청 (피클·클로드 전달용)</span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v135</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v136</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 8px;">
             공지가 이상하게 나왔나요? 아래 태그를 누르거나 문제점을 적고 <b>[원터치 복사]</b>를 누르면, <b>의뢰서 원문 + 생성된 공지 + 문제점</b>이 한 번에 복사되어 피클 채팅창이나 클로드 코드에 바로 전달할 수 있어요.
@@ -2193,11 +2193,13 @@ details.help-box summary {
       function buildFullUrl(targetUrl, k0, pr, ft) {
         if (!targetUrl) return targetUrl;
         let u = targetUrl;
-        if (k0 && !/[?&]kw=/.test(u)) {
-          u += (u.indexOf("?") === -1 ? "?" : "&") + "kw=" + encodeURIComponent(k0);
+        // 쿠팡 주소 자체(?kw=&pr=&fn=)에 붙이면 PC에서 '사용권한이 없습니다' 차단이 남 (10/31 v130부터. 그전 #kw=만 쓸 때는 잘 됨)
+        //  → PC는 예전처럼 # 뒤에만. 아이폰(사파리가 #을 버림)만 주소에 붙임
+        if (isIOS()) {
+          if (k0 && !/[?&]kw=/.test(u)) u += (u.indexOf("?") === -1 ? "?" : "&") + "kw=" + encodeURIComponent(k0);
+          if (pr && !/[?&]pr=/.test(u)) u += "&pr=" + pr;
+          if (ft && !/[?&]fn=/.test(u)) u += "&fn=" + encodeURIComponent(ft);
         }
-        if (pr && !/[?&]pr=/.test(u)) u += "&pr=" + pr;
-        if (ft && !/[?&]fn=/.test(u)) u += "&fn=" + encodeURIComponent(ft);
         const h = [];
         if (k0) h.push("kw=" + encodeURIComponent(k0));
         if (pr) h.push("pr=" + pr);
@@ -2207,7 +2209,7 @@ details.help-box summary {
       }
       const targetUrl = isIOS() ? toMobileCoupang(u.url) : u.url;
       const fullUrl = buildFullUrl(targetUrl, k0, pr, ft);
-      a.className = "btn ghost"; a.target = "_blank"; a.rel = "noreferrer noopener";
+      a.className = "btn ghost"; a.target = "_blank"; a.rel = isIOS() ? "noreferrer noopener" : "noopener";
       a.href = fullUrl;
       a.addEventListener("click", ev => {
         if (isIOS()) {
@@ -2225,7 +2227,7 @@ details.help-box summary {
       // 가이드 탭 바로 아래(tabBox)에도 원터치 바로가기 버튼 배치
       if (tabBox) {
         const ta = document.createElement("a");
-        ta.className = "btn primary small"; ta.target = "_blank"; ta.rel = "noreferrer noopener";
+        ta.className = "btn primary small"; ta.target = "_blank"; ta.rel = isIOS() ? "noreferrer noopener" : "noopener";
         ta.style.cssText = "display:inline-block; margin-right:6px; margin-bottom:6px; font-size:13px; font-weight:700;";
         ta.href = fullUrl;
         ta.addEventListener("click", ev => {
@@ -2950,7 +2952,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v135 공지 오류 제보]",
+        "🚨 [가이드 생성기 v136 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",
