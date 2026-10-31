@@ -352,19 +352,35 @@
   let fnIn = "";
   try { fnIn = decodeURIComponent((L.hash.match(/fn=([^&]+)/) || [])[1] || ""); } catch (e) {}
   if (!fnIn) { try { const cb0 = ((await navigator.clipboard.readText()) || ""); fnIn = decodeURIComponent((cb0.match(/[#&]fn=([^&\s]+)/) || [])[1] || ""); } catch (e) {} }
-  /* 키워드: 생성기 [상품 페이지 열기]가 주소 뒤(#kw=)에 붙여 줌. 쿠팡 단축 링크가 넘어가면서 #을 버리면, 그 버튼이 복사해 둔 의뢰서 키워드(클립보드)를 씀. 상품명에 들어 있는 낱말이 있을 때만 */
-  let kwIn = hk ? decodeURIComponent(hk) : "", kwFrom = hk ? "생성기" : "";
+  /* 키워드: 생성기 [상품 페이지 열기]가 주소 뒤(#kw=)에 붙여 줌. 쿠팡 단축 링크가 넘어가면서 #을 버리면, 그 버튼이 복사해 둔 의뢰서 키워드(클립보드)를 씀. */
+  let kwIn = hk ? decodeURIComponent(hk) : "", kwFrom = hk ? "생성기 주소" : "";
   if (!kwIn) {
     let cb = "";
     try { cb = ((await navigator.clipboard.readText()) || "").trim(); } catch (e) {}
     const nmN = name.replace(/\s+/g, "");
     /* 생성기 [상품 페이지 열기]가 복사한 상품 주소(#kw=…)에서 키워드 (아이폰: 쿠팡이 모바일 주소로 넘어가며 #을 버림) */
     const ck = (cb.match(/[#&]kw=([^&\s]+)/) || [])[1];
-    if (ck) { kwIn = decodeURIComponent(ck); kwFrom = "생성기"; }
-    else if (cb && cb.length <= 30 && !/[\n\r]|http|[:：]/.test(cb) && cb.split(/\s+/).some(w => w.length >= 2 && nmN.indexOf(w) !== -1)) { kwIn = [cb].concat(sugKw(name).filter(x => x !== cb)).join("|"); kwFrom = "복사해 둔 의뢰서 키워드"; }
+    if (ck) {
+      kwIn = decodeURIComponent(ck);
+      kwFrom = "생성기 주소 (클립보드)";
+    } else if (cb && cb.length <= 30 && !/[\n\r]|http|[:：]/.test(cb)) {
+      kwIn = [cb].concat(sugKw(name).filter(x => x !== cb)).join("|");
+      kwFrom = "복사해 둔 의뢰서 키워드";
+    }
   }
-  if (!kwIn) { kwIn = sugKw(name).join("|"); kwFrom = "상품명으로 추천 (의뢰서 키워드로 찾으려면 생성기 [상품 페이지 열기]로 열어 주세요)"; }
-  if (!kwIn) kwIn = (prompt("검색 키워드 (대표 | 서브1 | 서브2 …)", qs.get("q") || "") || "").trim();
+  /* 키워드를 여전히 못 찾았으면, 상품명 자동 추천으로 바로 넘어가지 않고 prompt로 확인 (취소/엔터 시 자동 추천) */
+  if (!kwIn) {
+    const sug = sugKw(name);
+    const defK = sug[0] || "";
+    const userKw = prompt("의뢰서 검색 키워드를 입력해 주세요:\n(취소 또는 엔터 시 상품명 자동 추천 키워드로 검색)", defK);
+    if (userKw && userKw.trim()) {
+      kwIn = userKw.trim();
+      kwFrom = "직접 입력 키워드";
+    } else {
+      kwIn = sug.join("|");
+      kwFrom = "상품명 자동 추천";
+    }
+  }
   const kws = kwIn.split("|").map(x => x.trim()).filter(Boolean);
   const kw = kws[0] || "";
   let price = hp;

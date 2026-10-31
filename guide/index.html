@@ -196,7 +196,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v121 (대봉감 다중 플랫폼 자동 분할·토스 상품번호/1p 인식·포토대기/공지머리글 정밀 서식) · 확장 1.5.0</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v122 (아이폰 사파리 키워드 보존·북마크릿 키워드 자동 인식 및 원터치 붙여넣기 탑재) · 확장 1.5.0</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -269,7 +269,11 @@ details.help-box summary {
           </div>
         </details>
       </div>
-      <label>상품 정보 붙여넣기 (확장 프로그램·북마크 결과)<textarea id="cp" class="short-ta" spellcheck="false" placeholder="상품명 : ...&#10;판매처 : ...&#10;상품번호 : 9765953762 - 292294***86&#10;PC 위치 : 1페이지&#10;모바일 위치 : 위에서 7번째&#10;썸네일 : https://..."></textarea></label>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <label for="cp" style="margin:0; font-weight:bold;">상품 정보 붙여넣기 (확장 프로그램·북마크 결과)</label>
+        <button type="button" class="small ghost" id="paste-cp-btn" style="padding:3px 8px; font-size:12px;">📋 클립보드 붙여넣기</button>
+      </div>
+      <textarea id="cp" class="short-ta" spellcheck="false" placeholder="상품명 : ...&#10;판매처 : ...&#10;상품번호 : 9765953762 - 292294***86&#10;PC 위치 : 1페이지&#10;모바일 위치 : 위에서 7번째&#10;썸네일 : https://..."></textarea>
 
       <h2>진행 정보</h2>
       <div class="gtabs" id="gtabs" role="tablist" aria-label="가이드"></div>
@@ -743,25 +747,33 @@ details.help-box summary {
   let fnIn = "";
   try { fnIn = decodeURIComponent((L.hash.match(/fn=([^&]+)/) || [])[1] || ""); } catch (e) {}
   if (!fnIn) { try { const cb0 = ((await navigator.clipboard.readText()) || ""); fnIn = decodeURIComponent((cb0.match(/[#&]fn=([^&\s]+)/) || [])[1] || ""); } catch (e) {} }
-  /* 키워드: 생성기 [상품 페이지 열기]가 주소 뒤(#kw=)에 붙여 줌. 쿠팡 단축 링크가 넘어가면서 #을 버리면, 그 버튼이 복사해 둔 의뢰서 키워드(클립보드)를 씀. 상품명에 들어 있는 낱말이 있을 때만 */
-  let kwIn = hk ? decodeURIComponent(hk) : "", kwFrom = hk ? "생성기" : "";
+  /* 키워드: 생성기 [상품 페이지 열기]가 주소 뒤(#kw=)에 붙여 줌. 쿠팡 단축 링크가 넘어가면서 #을 버리면, 그 버튼이 복사해 둔 의뢰서 키워드(클립보드)를 씀. */
+  let kwIn = hk ? decodeURIComponent(hk) : "", kwFrom = hk ? "생성기 주소" : "";
   if (!kwIn) {
     let cb = "";
     try { cb = ((await navigator.clipboard.readText()) || "").trim(); } catch (e) {}
     const nmN = name.replace(/\s+/g, "");
     /* 생성기 [상품 페이지 열기]가 복사한 상품 주소(#kw=…)에서 키워드 (아이폰: 쿠팡이 모바일 주소로 넘어가며 #을 버림) */
     const ck = (cb.match(/[#&]kw=([^&\s]+)/) || [])[1];
-    if (ck) { kwIn = decodeURIComponent(ck); kwFrom = "생성기"; }
-    else if (cb && cb.length <= 30 && !/[\n\r]|http|[:：]/.test(cb) && cb.split(/\s+/).some(w => w.length >= 2 && nmN.indexOf(w) !== -1)) { kwIn = [cb].concat(sugKw(name).filter(x => x !== cb)).join("|"); kwFrom = "복사해 둔 의뢰서 키워드"; }
+    if (ck) {
+      kwIn = decodeURIComponent(ck);
+      kwFrom = "생성기 주소 (클립보드)";
+    } else if (cb && cb.length <= 30 && !/[\n\r]|http|[:：]/.test(cb)) {
+      kwIn = [cb].concat(sugKw(name).filter(x => x !== cb)).join("|");
+      kwFrom = "복사해 둔 의뢰서 키워드";
+    }
   }
-  if (!kwIn || kwFrom.indexOf("추천") !== -1 || mob) {
-    var defK = (kwIn && kwFrom.indexOf("추천") === -1) ? kwIn : (sugKw(name)[0] || "");
-    if (mob) {
-      var pK = prompt("의뢰서 검색 키워드를 확인해 주세요:", defK);
-      if (pK && pK.trim()) { kwIn = pK.trim(); kwFrom = "모바일 입력"; }
-      else if (!kwIn) { kwIn = defK; }
-    } else if (!kwIn) {
-      kwIn = (prompt("검색 키워드 (대표 | 서브1 | 서브2 …)", qs.get("q") || defK) || "").trim();
+  /* 키워드를 여전히 못 찾았으면, 상품명 자동 추천으로 바로 넘어가지 않고 prompt로 확인 (취소/엔터 시 자동 추천) */
+  if (!kwIn) {
+    const sug = sugKw(name);
+    const defK = sug[0] || "";
+    const userKw = prompt("의뢰서 검색 키워드를 입력해 주세요:\n(취소 또는 엔터 시 상품명 자동 추천 키워드로 검색)", defK);
+    if (userKw && userKw.trim()) {
+      kwIn = userKw.trim();
+      kwFrom = "직접 입력 키워드";
+    } else {
+      kwIn = sug.join("|");
+      kwFrom = "상품명 자동 추천";
     }
   }
   const kws = kwIn.split("|").map(x => x.trim()).filter(Boolean);
@@ -1869,16 +1881,18 @@ details.help-box summary {
       const a = document.createElement("a");
       // 키워드를 주소 뒤(#kw=)에 붙여서 북마크 및 PC 확장 프로그램이 바로 쓰게 하고, 클릭하면 클립보드에도 복사
       const g = guides[cur] || {}, kw = kwList(g).join("|"), pr = prOf(i);
+      const k0 = kw.split("|")[0];
+      const fullUrl = u.url + (kw && u.url.indexOf("#") === -1 ? "#kw=" + encodeURIComponent(kw) + (pr ? "&pr=" + pr : "") + (ft ? "&fn=" + encodeURIComponent(ft) : "") : "");
       a.className = "btn ghost"; a.target = "_blank"; a.rel = "noopener";
-      a.href = u.url + (kw && u.url.indexOf("#") === -1 ? "#kw=" + encodeURIComponent(kw) + (pr ? "&pr=" + pr : "") + (ft ? "&fn=" + encodeURIComponent(ft) : "") : "");
-      // 아이폰은 그냥 누르면 쿠팡 앱이 열려서 북마크를 못 씀 → 누르면 키워드만 복사하고, 열기는 길게 눌러 '새 탭에서 열기' (사파리에서 열림)
+      a.href = fullUrl;
+      // 아이폰은 그냥 누르면 쿠팡 앱이 열려서 북마크를 못 씀 → 누르면 키워드 포함 주소 복사 + open.html 열기
       a.addEventListener("click", ev => {
-        const k0 = kw.split("|")[0];
-        // 아이폰: 앱 튕김 방지 우회 페이지(open.html)로 새 탭 열기 + 키워드 자동 복사
+        // 아이폰: 앱 튕김 방지 우회 페이지(open.html)로 새 탭 열기 + 전체 주소(키워드 포함) 자동 복사
         if (isIOS()) {
           ev.preventDefault();
-          if (k0) copyText(k0, "키워드 복사 완료 (" + k0 + ")");
-          window.open("open.html?url=" + encodeURIComponent(a.href), "_blank");
+          copyText(fullUrl, "상품 주소(키워드 포함) 복사 완료 (" + (k0 || "키워드 포함") + ")");
+          const openUrl = "open.html?url=" + encodeURIComponent(u.url) + (kw ? "&kw=" + encodeURIComponent(kw) : "") + (pr ? "&pr=" + pr : "") + (ft ? "&fn=" + encodeURIComponent(ft) : "");
+          window.open(openUrl, "_blank");
           return;
         }
         if (k0) copyText(k0, "검색 키워드를 복사했어요: " + k0);
@@ -1892,7 +1906,7 @@ details.help-box summary {
       ab.addEventListener("click", () => { autoIdx = { g: cur, i: i, at: Date.now() }; $("auto-st").textContent = "확장 프로그램에 보냈어요…"; document.dispatchEvent(new CustomEvent("pl-auto", { detail: JSON.stringify({ url: a.href }) })); });
       box.appendChild(ab);
     });
-    if (isIOS()) { const n = document.createElement("div"); n.className = "note"; n.textContent = "아이폰: [상품 페이지 열기] → 버튼을 길게 꾹 눌러 [새 탭에서 열기]를 누르면 앱 튕김 없이 사파리에서 열려요."; box.appendChild(n); }
+    if (isIOS()) { const n = document.createElement("div"); n.className = "note"; n.textContent = "아이폰: [상품 페이지 열기]를 누르면 키워드가 포함된 주소가 열리고 자동 복사돼요."; box.appendChild(n); }
   }
   function isIOS() { return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); }
 
@@ -2581,6 +2595,26 @@ details.help-box summary {
     if (m.text) { $("cp").value = m.text; $("cp").dispatchEvent(new Event("input")); $("auto-st").textContent = "확장 프로그램 결과를 넣었어요 ✓"; }
   });
   pasteReplace("cp", () => { cpRead(); toast("상품 정보를 넣었어요"); });
+  const pasteCpBtn = $("paste-cp-btn");
+  if (pasteCpBtn) {
+    pasteCpBtn.addEventListener("click", () => {
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        navigator.clipboard.readText().then(t => {
+          if (t && t.trim()) {
+            $("cp").value = t.trim();
+            cpRead();
+            toast("클립보드 상품 정보를 넣었어요 ✓");
+          } else {
+            toast("클립보드가 비어 있어요");
+          }
+        }).catch(() => {
+          toast("클립보드 권한을 허용해 주세요");
+        });
+      } else {
+        toast("이 브라우저에서는 직접 붙여넣기를 해 주세요");
+      }
+    });
+  }
 
   // 한 번에 가져오기 (사용자 요청 10/24): 구매 시간만 고르면 가이드마다 확장 프로그램으로 차례로 가져옴. 새 진행 만들기는 사장님이 직접
   //  10/26 '버튼이 안 눌러져': 가져오는 동안 버튼이 말없이 잠겨 있었고, 확장 프로그램이 대답을 안 하면 상품마다 4분씩 잠김

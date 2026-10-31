@@ -36,5 +36,11 @@ jobs:
             echo "::error::실서비스 브랜치에 ori-dev에 없는 커밋이 있어요. ori-dev에서 git pull origin $LIVE 로 합친 뒤 다시 올려 주세요."
             exit 1
           fi
-          git push origin "HEAD:refs/heads/$LIVE"
+          # GitHub 쪽 일시 오류(fatal error in commit_refs 등)면 몇 번 다시 (10/30)
+          for i in 1 2 3 4; do
+            if git push origin "HEAD:refs/heads/$LIVE"; then break; fi
+            if [ "$i" = 4 ]; then echo "::error::실서비스 브랜치로 넘기기 실패 (4번 시도)"; exit 1; fi
+            sleep $((i * 10)); git fetch origin "$LIVE"
+            if ! git merge-base --is-ancestor "origin/$LIVE" HEAD; then echo "::error::그새 실서비스 브랜치가 바뀜"; exit 1; fi
+          done
           echo "✓ 실서비스 반영: $(git rev-parse --short HEAD) (Apps Script는 10~20분 안에 새 코드 사용)"

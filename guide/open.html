@@ -6,52 +6,111 @@
   <title>사파리에서 상품 열기</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #fff5f8; color: #3a2230; text-align: center; padding: 20px; box-sizing: border-box; }
-    .card { background: white; padding: 24px 20px; border-radius: 20px; box-shadow: 0 6px 20px rgba(255,95,168,0.15); max-width: 360px; width: 100%; border: 2.5px solid #3a2230; }
+    .card { background: white; padding: 24px 20px; border-radius: 20px; box-shadow: 0 6px 20px rgba(255,95,168,0.15); max-width: 360px; width: 100%; border: 2.5px solid #3a2230; box-sizing: border-box; }
     h2 { font-size: 19px; margin: 0 0 12px; color: #ff5fa8; }
-    .status { background: #e8f9f0; color: #0b7a42; border: 1.5px solid #0b7a42; border-radius: 10px; padding: 10px; font-weight: bold; font-size: 14px; margin-bottom: 16px; }
+    .status { background: #e8f9f0; color: #0b7a42; border: 1.5px solid #0b7a42; border-radius: 10px; padding: 10px; font-weight: bold; font-size: 13.5px; margin-bottom: 14px; word-break: keep-all; }
+    .kw-card { background: #f0f7ff; border: 1.5px solid #3182f6; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; text-align: left; }
+    .kw-badge { font-size: 11px; font-weight: bold; color: #1971c2; text-transform: uppercase; margin-bottom: 2px; }
+    .kw-val { font-size: 16px; font-weight: 800; color: #0c4a6e; word-break: break-all; }
     .guide-box { background: #fdf2f6; border: 1.5px solid #3a2230; border-radius: 12px; padding: 14px; text-align: left; font-size: 13px; line-height: 1.6; color: #3a2230; margin-bottom: 16px; }
     .guide-box b { color: #d63384; }
-    .btn { display: block; background: #ff5fa8; color: white; padding: 13px; border-radius: 12px; text-decoration: none; font-weight: 900; font-size: 15px; border: 2px solid #3a2230; box-shadow: 2px 2px 0 #3a2230; cursor: pointer; margin-bottom: 10px; }
+    .guide-steps { margin: 8px 0 0; padding-left: 18px; }
+    .guide-steps li { margin-bottom: 6px; }
+    .btn { display: block; width: 100%; box-sizing: border-box; background: #ff5fa8; color: white; padding: 13px; border-radius: 12px; text-decoration: none; font-weight: 900; font-size: 15px; border: 2px solid #3a2230; box-shadow: 2px 2px 0 #3a2230; cursor: pointer; margin-bottom: 10px; text-align: center; }
     .btn.sub { background: #fff; color: #3a2230; font-size: 13px; padding: 10px; }
+    .btn.ghost { background: #f8f9fa; color: #6c757d; font-size: 12px; padding: 8px; border-color: #adb5bd; box-shadow: none; }
     .btn:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 #3a2230; }
-    .tip { font-size: 11.5px; color: #8c7280; margin-top: 10px; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h2>📱 쿠팡 상품 페이지 열기</h2>
+    <h2>📱 쿠팡 상품 위치 찾기</h2>
     <div class="status" id="cp-st">✓ 상품 주소 준비 완료</div>
-    
-    <a id="go" class="btn" href="#" target="_blank" rel="noopener">👉 상품 페이지 바로 열기</a>
-    
-    <div class="guide-box" style="margin-top:16px;">
-      <b>⚠️ 주소창 [붙여넣기 및 이동] 금지</b><br>
-      사파리 주소창에 단축링크를 직접 붙여넣으면 쿠팡 보안 방화벽이 차단하여 <b>'사용권한이 없습니다'</b> 오류가 뜹니다.<br><br>
-      <b>💡 사파리 웹에서 바로 여는 법:</b><br>
-      위 <b>[👉 상품 페이지 바로 열기]</b> 버튼을 <b>손가락으로 꾹 길게 눌러</b> 나오는 메뉴에서 <b>[새 탭에서 열기]</b>를 누르시면 앱으로 튕기지 않고 사파리에서 바로 열립니다!
+
+    <div class="kw-card" id="kw-card" style="display:none;">
+      <div class="kw-badge">🔑 의뢰서 검색 키워드</div>
+      <div class="kw-val" id="kw-val"></div>
     </div>
-    
-    <button type="button" class="btn sub" id="copy-btn">📋 원본 주소 복사하기</button>
+
+    <button type="button" class="btn" id="copy-safari-btn">📋 사파리 주소 복사하기 (키워드 포함)</button>
+    <button type="button" class="btn sub" id="copy-kw-btn" style="display:none;">🔑 키워드만 복사하기</button>
+
+    <div class="guide-box">
+      <b>💡 아이폰 사파리에서 위치 찾는 3단계:</b>
+      <div style="font-size:12px; color:#666; margin:4px 0 8px;">쿠팡 앱 설치 시 링크를 누르면 무조건 앱으로 튕기므로, 사파리 웹에서 북마크를 쓰시려면 아래처럼 해 주세요:</div>
+      <ol class="guide-steps">
+        <li>위 <b>[📋 사파리 주소 복사하기]</b> 탭</li>
+        <li>사파리 <b>주소창 탭 → [붙여넣기 및 이동]</b></li>
+        <li>상품 화면이 열리면 <b>[북마크 상품위치 찾기]</b> 탭!</li>
+      </ol>
+      <div style="font-size:11.5px; color:#d63384; margin-top:8px;">👉 복사된 주소에 의뢰서 키워드가 포함되어 있어 북마크가 정확한 키워드로 위치를 100% 찾아줍니다.</div>
+    </div>
+
+    <a id="go" class="btn ghost" href="#" target="_blank" rel="noopener">👉 상품 페이지 바로 열기 (앱 설치 시 앱으로 이동)</a>
   </div>
   <script>
     const qs = new URLSearchParams(location.search);
     let target = qs.get("url") || "";
-    if (/link\.coupang\.com|coupa\.ng/.test(target)) {
-      target = target.replace(/#(kw|pr|fn)=.*$/, "");
+    let kw = (qs.get("kw") || (target.match(/[#&]kw=([^&]+)/) || [])[1] || "").trim();
+    if (kw) {
+      try { kw = decodeURIComponent(kw); } catch (e) {}
     }
-    if (target) {
-      document.getElementById("go").href = target;
+    const pr = qs.get("pr") || (target.match(/[#&]pr=([^&]+)/) || [])[1] || "";
+    const fn = qs.get("fn") || (target.match(/[#&]fn=([^&]+)/) || [])[1] || "";
+
+    const cleanTarget = target.replace(/#(kw|pr|fn)=.*$/, "");
+    const fullTarget = cleanTarget + (kw ? "#kw=" + encodeURIComponent(kw) : "") + (pr ? "&pr=" + pr : "") + (fn ? "&fn=" + encodeURIComponent(fn) : "");
+
+    const kwCard = document.getElementById("kw-card");
+    const kwVal = document.getElementById("kw-val");
+    const copyKwBtn = document.getElementById("copy-kw-btn");
+    const cpSt = document.getElementById("cp-st");
+    const go = document.getElementById("go");
+    const copySafariBtn = document.getElementById("copy-safari-btn");
+
+    if (kw) {
+      kwCard.style.display = "block";
+      kwVal.textContent = kw;
+      copyKwBtn.style.display = "block";
+      copyKwBtn.textContent = '🔑 키워드만 복사 ("' + kw.split("|")[0] + '")';
+    }
+
+    if (cleanTarget) {
+      go.href = cleanTarget;
+    }
+
+    // 진입 시 자동으로 키워드가 포함된 주소를 클립보드에 복사해 둠
+    if (fullTarget && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(fullTarget).then(() => {
+        cpSt.textContent = "✓ 주소(키워드 포함) 자동 복사 완료";
+      }).catch(() => {});
+    }
+
+    copySafariBtn.addEventListener("click", () => {
+      const toCopy = fullTarget || cleanTarget;
+      if (!toCopy) return;
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(target).catch(() => {});
-      }
-    }
-    document.getElementById("copy-btn").addEventListener("click", () => {
-      if (target) {
-        navigator.clipboard.writeText(target).then(() => {
-          document.getElementById("cp-st").textContent = "✓ 주소를 다시 복사했어요!";
+        navigator.clipboard.writeText(toCopy).then(() => {
+          cpSt.textContent = "✓ 주소를 복사했어요! 사파리 주소창에 붙여넣기 하세요";
         }).catch(() => {
-          prompt("아래 주소를 복사해 주세요:", target);
+          prompt("아래 주소를 복사해 주세요:", toCopy);
         });
+      } else {
+        prompt("아래 주소를 복사해 주세요:", toCopy);
+      }
+    });
+
+    copyKwBtn.addEventListener("click", () => {
+      const k0 = kw.split("|")[0];
+      if (!k0) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(k0).then(() => {
+          cpSt.textContent = '✓ 키워드 "' + k0 + '" 복사 완료';
+        }).catch(() => {
+          prompt("키워드를 복사해 주세요:", k0);
+        });
+      } else {
+        prompt("키워드를 복사해 주세요:", k0);
       }
     });
   </script>
