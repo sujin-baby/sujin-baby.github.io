@@ -1377,8 +1377,8 @@ details.help-box summary {
     }
     // 상품명이 의뢰서에 따로 없으면 검색 키워드를 상품명 기본값으로 채움 (공지 비어있음 방지, 10/31)
     if (!r.pname && r.keyword) r.pname = r.keyword;
-    // 위치가 비어있고 순위(rank)가 있으면 위치 기본값으로 채움 (10/31)
-    if (!r.page && r.rank) r.page = r.rank;
+    // 위치가 비어있고 순위(rank)가 실제 숫자 순위(예: 2위, 1페이지)이면 위치 기본값으로 채움 (10/31)
+    if (!r.page && r.rank && /\d+\s*(?:위|p|페이지)/i.test(r.rank) && !/미노출|모르|비워/.test(r.rank)) r.page = r.rank;
     r.platform = platformOf(urls.length ? urls[0].url : "");
     r.short = LINKS[r.platform] || "";
     r.price = "";
