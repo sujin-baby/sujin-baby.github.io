@@ -1518,12 +1518,16 @@ details.help-box summary {
     // 상품번호: 상품이 여럿이면 옵션(없으면 주소 라벨) 이름을 앞에 붙임
     const names = urls.length > 1 ? (r.optBase.length === urls.length ? r.optBase.map(o => o.label) : urls.map((u, i) => u.label || ("상품" + (i + 1)))) : [];
     r.pno = urls.map((u, i) => (names[i] ? names[i] + " : " : "") + urlInfo(u.url)).join("\n");
-    // 판매처는 의뢰서에 없음 (입금자명은 사람 이름). 괄호에 상호가 있을 때만, 또는 입금자명이 회사 이름이면
-    r.seller = pick(f.payer || "", /\(([^)]+)\)/) || (/(주식회사|\(주\)|㈜|컴퍼니|상사|스토어)/.test(f.payer || "") ? (f.payer || "").replace(/주식회사|\(주\)|㈜/g, "").trim() : "");
+    // 판매처: 1) 괄호 상호 2) 회사/스토어 키워드 3) 2-3글자 한글 인명이 아닌 입금자명 (예: 아이누빅, 로이시, ABC)
+    const isPerson = /^[가-힣]{2,3}$/.test((f.payer || "").trim());
+    r.seller = pick(f.payer || "", /\(([^)]+)\)/) || 
+               (/(주식회사|\(주\)|㈜|컴퍼니|상사|스토어)/.test(f.payer || "") ? (f.payer || "").replace(/주식회사|\(주\)|㈜/g, "").trim() : "") ||
+               (!isPerson && f.payer ? f.payer.trim() : "");
     // 판매처가 아직 없으면 검색 키워드의 첫 단어(브랜드, 예: 아텍스)를 판매처 기본값으로 추출 (10/31)
     if (!r.seller && r.keyword) {
       const bCand = r.keyword.trim().split(/\s+/)[0];
-      if (bCand && /^[가-힣a-zA-Z0-9]{2,10}$/.test(bCand) && !/^(로켓|쿠팡|무료|특가|할인|배송|입금대행|업체입금)/.test(bCand)) {
+      const isGenericNoun = /(스토퍼|도어스토퍼|말굽|도어체크|도어락|고정기|가드|보냉백|보온백|런치백|도시락가방|가방|파우치|보냉가방|쿨러백|쇼퍼백|에코백|토트백|크로스백|백팩|손잡이백|보냉팩|보온팩|텀블러|밴드|샐러드|거치대|패치|패드|매트)$/.test(bCand);
+      if (bCand && /^[가-힣a-zA-Z0-9]{2,10}$/.test(bCand) && !isGenericNoun && !/^(로켓|쿠팡|무료|특가|할인|배송|입금대행|업체입금)/.test(bCand)) {
         r.seller = bCand;
         r.sellerAuto = true;
       }
