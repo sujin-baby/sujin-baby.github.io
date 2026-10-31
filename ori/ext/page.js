@@ -133,14 +133,25 @@
         return { site: "coupang", name: "", err: "쿠팡 사용권한 없음 화면이 떴어요. (차단 화면)" };
       }
       let seller = "";
-      const be = document.querySelector('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]');
-      if (be) seller = be.textContent.trim();
-      if (!seller) {
-        const sm = txt.match(/판매자\s*[:：]?\s*([^\n]{1,60})/);
-        if (sm) seller = sm[1].replace(/\s*(판매자\s*)?(상품\s*)?보러\s*가기.*$/, "").replace(/\s*판매자\s*평가.*$/, "").trim();
+      /* 판매처: 첫 후보가 '가입'(쿠팡 위·아래 '판매자 가입' 글자) 같은 엉터리면 버리고 다음 후보로 (10/31 대봉감 '판매처 : 가입').
+         예전엔 엉터리를 알아보고도 지우지 않아서 그대로 남았음 */
+      const BAD_SELLER = /가입|보러가기|평가|정보|^특가|로켓|할인|쿠폰|무료|배송|와우|입점/;
+      const okSeller = s => !!s && s.length <= 30 && !BAD_SELLER.test(s);
+      for (const e of document.querySelectorAll('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]')) {
+        const t = (e.textContent || "").replace(/\s+/g, " ").trim();
+        if (okSeller(t)) { seller = t; break; }
       }
-      { const vm = html.match(/"vendorName"\s*:\s*"([^"]{2,60})"/); if (vm && !seller) seller = vm[1]; }
-      if (!seller || seller.length > 30 || /가입|보러가기|평가|정보|^특가|로켓|할인|쿠폰|무료|배송|와우/.test(seller)) { const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/); if (s2 && !seller) seller = s2[1].trim(); }
+      if (!seller) {
+        const re = /판매자\s*[:：]?\s*([^\n]{1,60})/g;
+        let sm;
+        while ((sm = re.exec(txt))) {
+          const t = sm[1].replace(/\s*(판매자\s*)?(상품\s*)?보러\s*가기.*$/, "").replace(/\s*판매자\s*평가.*$/, "").trim();
+          if (okSeller(t)) { seller = t; break; }
+        }
+      }
+      /* '판매자 특가', '판매자로켓' 같은 배지 글자는 판매처가 아님 → 페이지 데이터의 판매자 이름 */
+      if (!seller) { const vn = (html.match(/"vendorName"\s*:\s*"([^"]{2,60})"/) || [])[1] || ""; if (okSeller(vn)) seller = vn; }
+      if (!seller) { const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/); if (s2 && okSeller(s2[1].trim())) seller = s2[1].trim(); }
       if (!seller && name) { const bg = name.split(/\s+/)[0]; if (bg && /^[가-힣a-zA-Z0-9]{2,10}$/.test(bg) && !/^(로켓|쿠팡|무료|특가|할인|배송)/.test(bg)) seller = bg; }
       if (seller) {
         seller = seller.replace(/[>]\s*(?:브랜드\s*샵|브랜드샵|공식\s*몰|공식몰|공식\s*스토어|공식스토어|스토어|샵).*$/i, "").replace(/\s*(?:브랜드\s*샵|브랜드샵|공식\s*몰|공식몰|공식\s*스토어|공식스토어)\s*$/i, "").replace(/\s+(?:스토어|샵)\s*$/i, "").trim();
