@@ -12,6 +12,11 @@
 2. 생성기 v129~v131: `rel="noreferrer"`, link.coupang → m.coupang 직통 변환(아이폰만), v130 `?kw=&pr=&fn=` 주소 붙이기 → v136에서 PC는 되돌림(#kw=만).
 3. 확장 `page.js`/`oy.js` 읽기 코드 변경.
 
+## ✅ 10/31 밤 확인 결과 (사용자)
+- **확장 끄고 주소 직접 입력해도 막힘** → 코드 문제 아님.
+- **jinleeda1 크롬 프로필에서만 막히고, sujinlee9704 프로필에서는 열림** → jinleeda1 프로필의 쿠팡 쿠키·사이트 데이터(Akamai가 찍어 둔 값)나 그 프로필의 다른 확장이 원인.
+- 조치: jinleeda1 프로필에서 `chrome://settings/content/all` → coupang 검색 → 데이터 전부 삭제, 그 프로필의 다른 확장 끄고 다시.
+
 ## 확인 순서 (사용자 크롬에서)
 1. **확장 끄고** 크롬 새 탭 주소창에 `https://www.coupang.com/vp/products/9796919905` 직접 입력 → 열리나?
    - 막히면: 코드 문제 아님. 이 IP/브라우저가 쿠팡에 찍힘 → 시크릿 창, 휴대폰 핫스팟으로 다시. 쿠팡 쿠키 삭제(설정 → 개인정보 → 쿠키 → coupang.com).
