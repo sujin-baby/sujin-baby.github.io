@@ -446,7 +446,27 @@ const indexCode = fs.readFileSync(path.join(__dirname, '../../guide/index.html')
 if (oyCode.includes('의뢰서 검색 키워드를 입력해 주세요')) throw new Error('oy.js should not contain keyword prompt');
 if (indexCode.includes('의뢰서 검색 키워드를 입력해 주세요')) throw new Error('guide/index.html should not contain keyword prompt');
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (13개 샘플 전원 일치)');
+// ==========================================
+// Test 14: 과일·농산물·식품 품목 명사 보강 및 꿀brix 등 당도/유통 수식어 키워드 추출 차단 검증 (11/01 v142)
+// 1) suggestKeywords: '50박스한정 꿀brix 산지직송 햇배 나주배' -> '나주배' (꿀brix 오추출 완전 차단)
+// 2) '써니마켓 대봉감 12' -> '대봉감'
+// 3) '마켓담온 귤 8' -> '귤' (1글자 과일 명사 인식)
+// 4) '모두의농수산 옥광밤 5' -> '옥광밤'
+// ==========================================
+console.log('-- Test 14: 과일·농산물·식품 품목 명사 보강 및 꿀brix 등 당도/유통 수식어 키워드 추출 차단 검증');
+const sugNaju = P.suggestKeywords('50박스한정 꿀brix 산지직송 햇배 나주배');
+if (sugNaju.main !== '나주배') throw new Error('suggestKeywords main should be 나주배, got: ' + sugNaju.main);
+
+const sugGam = P.suggestKeywords('써니마켓 대봉감 12');
+if (sugGam.main !== '대봉감') throw new Error('suggestKeywords main should be 대봉감, got: ' + sugGam.main);
+
+const sugGyul = P.suggestKeywords('마켓담온 귤 8');
+if (sugGyul.main !== '귤') throw new Error('suggestKeywords main should be 귤, got: ' + sugGyul.main);
+
+const sugBam = P.suggestKeywords('모두의농수산 옥광밤 5');
+if (sugBam.main !== '옥광밤') throw new Error('suggestKeywords main should be 옥광밤, got: ' + sugBam.main);
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (14개 샘플 전원 일치)');
 process.exit(0);
 
 

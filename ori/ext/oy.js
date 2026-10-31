@@ -55,13 +55,13 @@
   const sugKw = nm => {
     const raw = String(nm || "").replace(/\(.*$/, "").replace(/\[[^\]]*\]/g, " "), dash = raw.split(/\s+-\s+/);
     let toks = dash[0].split(/[\s,]+/).filter(Boolean);
-    const NOUN_SUFFIX = /(정|환|캡슐|스틱|분말|가루|원액|즙|차|오일|세럼|크림|로션|샴푸|패치|패드|거치대|매트|선풍기|텀블러|청소기|마사지기|워시|토너|앰플|마스크|비누|티슈|세제|치약|칫솔|홀더|걸이|선반|트레이|보틀|쿠션|방석|베개|슬리퍼|양말|장갑|모자|밴드|스토퍼|도어스토퍼|말굽|도어체크|도어락|고정기|가드|보냉백|보온백|런치백|도시락가방|가방|파우치|보냉가방|쿨러백|쇼퍼백|에코백|토트백|크로스백|백팩|손잡이백|보냉팩|보온팩)$/;
-    // 첫 단어가 이미 대표 품목 명사(텀블러, 밴드, 보냉백 등)이면 브랜드로 잘라내지 않음 (11/01)
+    const NOUN_SUFFIX = /(정|환|캡슐|스틱|분말|가루|원액|즙|차|오일|세럼|크림|로션|샴푸|패치|패드|거치대|매트|선풍기|텀블러|청소기|마사지기|워시|토너|앰플|마스크|비누|티슈|세제|치약|칫솔|홀더|걸이|선반|트레이|보틀|쿠션|방석|베개|슬리퍼|양말|장갑|모자|밴드|스토퍼|도어스토퍼|말굽|도어체크|도어락|고정기|가드|보냉백|보온백|런치백|도시락가방|가방|파우치|보냉가방|쿨러백|쇼퍼백|에코백|토트백|크로스백|백팩|손잡이백|보냉팩|보온팩|나주배|햇배|배|사과|부유단감|단감|대봉감|감|귤|감귤|황금향|레드향|한라봉|천혜향|샤인머스캣|포도|머루포도|거봉|복숭아|자두|살구|딸기|참외|수박|멜론|메론|토마토|방울토마토|키위|참다래|무화과|감홍사과|부사|아오리|홍옥|사과대추|대추|밤|옥광밤|군밤|호두|잣|땅콩|과일|고구마|호박고구마|꿀고구마|감자|수미감자|옥수수|초당옥수수|양파|자색양파|마늘|의성마늘|생강|고추|청양고추|당근|무|배추|절임배추|김치|갓김치|파김치|열무김치|쌀|백미|현미|잡곡|찹쌀|보리|귀리|콩|서리태|팥|견과|말랭이|고구마말랭이|곶감|반건시|건나물|나물|시금치|상추|깻잎|버섯|표고버섯|송이버섯|느타리버섯|팽이버섯|새송이버섯)$/;
+    // 첫 단어가 이미 대표 품목 명사(텀블러, 밴드, 보냉백, 나주배 등)이면 브랜드로 잘라내지 않음 (11/01)
     const brand = toks.length >= 3 && !NOUN_SUFFIX.test(toks[0]) ? toks[0] : ""; if (brand) toks = toks.slice(1);
-    const STOP = /^(탈부착식|탈부착|착붙는|무타공|세라믹|코팅|프리미엄|고급|대용량|소용량|회전|포함|정품|국내산|수입산|신상|신상품|인기|추천|최신|업그레이드|스마트|터치|겨울|여름|봄|가을|방한|보온보냉|보온|보냉|세척솔|대시보드|특가|증정|무료배송|1\+1|세트|단품|미니|슬림|휴대용|접이식)$/;
-    const spec = t => /^\d|\d+(mg|g|kg|ml|l|개|캡슐|정|매|p|도|cm|mm|인치|w)\b|x\d/i.test(t) && !/^[가-힣a-z]+\d+$/i.test(t);
+    const STOP = /^(탈부착식|탈부착|착붙는|무타공|세라믹|코팅|프리미엄|고급|대용량|소용량|회전|포함|정품|국내산|수입산|신상|신상품|인기|추천|최신|업그레이드|스마트|터치|겨울|여름|봄|가을|방한|보온보냉|보온|보냉|세척솔|대시보드|특가|증정|무료배송|1\+1|세트|단품|미니|슬림|휴대용|접이식|산지직송|직송|농장직송|당일수확|당일발송|새벽배송|고당도|꿀당도|당도선별|당도보장|brix|브릭스|꿀brix|명품|특품|가정용|선물용|제수용|파격특가|초특가|한정특가|선착순|마감임박|한정)$/i;
+    const spec = t => /^\d|\d+(mg|g|kg|ml|l|개|박스|과|입|수|캡슐|정|매|p|도|cm|mm|인치|w)\b|x\d|한정/i.test(t) && !/^[가-힣a-z]+\d+$/i.test(t);
     const isMod = t => /(는|한|된|용|방지|차단|전용|호환|타입|형)$/.test(t) && t.length <= 6;
-    let cand = toks.filter(t => !spec(t) && !STOP.test(t) && !isMod(t) && t.length >= 2);
+    let cand = toks.filter(t => !spec(t) && !STOP.test(t) && !isMod(t) && (t.length >= 2 || NOUN_SUFFIX.test(t)));
     // 화면 카테고리(빵가루/카테고리 바)에서 카테고리 명사 보강 (예: 물병/물통/텀블러)
     try {
       const breadcrumb = document.querySelector('[class*="breadcrumb"], [class*="category"], .prod-buy-header__breadcrumb');
@@ -73,11 +73,14 @@
       }
     } catch (e) {}
     const mods = toks.filter(t => /용$/.test(t) && t.length <= 4);
-    const nounMatch = cand.find(t => NOUN_SUFFIX.test(t));
+    // 품목 명사 매칭: 여러 개 매칭 시 더 구체적이고 긴 명사(예: '나주배' > '햇배' > '배')를 최우선으로 선택 (11/01 v142)
+    const nounMatches = cand.filter(t => NOUN_SUFFIX.test(t));
+    nounMatches.sort((a, b) => b.length - a.length || toks.indexOf(a) - toks.indexOf(b));
+    const nounMatch = nounMatches[0];
     const tail = t => t.slice(-3);
     const rep = cand.filter(t => t.length >= 3 && cand.some(u => u !== t && u.length >= 3 && tail(u) === tail(t)));
     const cat = dash[1] ? dash[1].split(/[\/,]/)[0].trim() : "";
-    const main = nounMatch || rep[0] || (cat && cat.length >= 2 && !spec(cat) && !/일반|기타/.test(cat) ? cat : "") || cand[0] || toks[0] || "";
+    const main = nounMatch || rep[0] || (cat && cat.length >= 2 && !spec(cat) && !/일반|기타/.test(cat) ? cat : "") || cand[cand.length - 1] || cand[0] || toks[toks.length - 1] || toks[0] || "";
     const alts = rep.filter(t => t !== main), out = [main];
     const add = x => { x = x.trim(); if (x && out.indexOf(x) === -1) out.push(x); };
     alts.forEach(add);
