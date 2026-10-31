@@ -2090,7 +2090,6 @@ details.help-box summary {
       r.blocked = true;
       toast("⚠️ 쿠팡 차단 화면('사용권한이 없습니다') 감지: 판매처·상품명 유입을 차단했습니다. (30분 뒤 다시 가져오기 또는 상품 페이지를 직접 열어 둔 채 가져오기)");
     }
-    }
     // [자동 가져오기]로 누른 상품 자리 (상품이 여럿이면 누른 상품 줄에), 아니면 빈 줄부터
     const ai = autoIdx && autoIdx.g === cur && Date.now() - autoIdx.at < 600000 ? autoIdx.i : -1;
     r.slot = ai;
