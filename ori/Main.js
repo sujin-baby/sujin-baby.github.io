@@ -1237,6 +1237,7 @@ function onOpen() {
     .addItem('폼수정 탭 만들기 (응답 삭제)', 'setupEditTab')
     .addItem('월급시트 칩 오류 보기', 'showChipError')
     .addItem('한눈에 탭 새로 만들기', 'rebuildDashboard')
+    .addItem('리뷰 사진 AI 키 넣기', 'setGeminiKey')
     .addSeparator()
     .addItem('지금 최신 버전으로 업데이트', 'updateNow')
     .addSeparator()
@@ -1374,7 +1375,7 @@ function rvExplain_() {
 // 점검 결과 글: 보낼메시지 안 링크 등에 든 열쇠는 *** 로 가림
 function diagText_(p) {
   let t = JSON.stringify(diag_(p), null, 1);
-  [CONFIG.KEY, globalThis.__DIAGKEY].forEach(function (k) { if (k && String(k).length >= 8) t = t.split(String(k)).join('***'); });
+  [CONFIG.KEY, globalThis.__DIAGKEY, geminiKey_()].forEach(function (k) { if (k && String(k).length >= 8) t = t.split(String(k)).join('***'); });
   return t;
 }
 function diag_(p) {
@@ -3099,6 +3100,8 @@ function checkFullInner_() {
       note_(left.length ? '⚠ 한눈에 오류 칸(' + bad.slice(0, 3).join(', ') + ')을 다시 그렸는데 ' + left.length + '개 남음: ' + left.slice(0, 3).join(', ') : '✓ 한눈에 오류 칸 ' + bad.length + '개(' + bad.slice(0, 3).join(', ') + ') → 다시 그려서 고침');
     }
   } catch (e) { note_('한눈에 오류 칸 확인 실패: ' + e); }
+  // 리뷰 사진 AI 분류가 남은 의뢰가 있으면 이어서 (10/31)
+  if (props.getProperty('RVAI_Q') && !late_(200)) { step_('리뷰 사진 AI'); rvAiQueue_(); }
   // 월급시트·배정 수식은 진행이 바뀌었을 때(인원·방제·날짜·상태) 또는 30분마다만 (10/23 정리: 매번 하면 확인이 5분 넘게 걸려 명단이 늦게 뜸)
   const rr = readRuns_(), sigOf = function (o) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(o), Utilities.Charset.UTF_8)); };
   const live = rr.filter(function (r) { return r['진행 상태'] !== '종료'; });
@@ -5550,7 +5553,7 @@ function reviewDone_(runs) {
       // 의뢰 리뷰가 다 끝나면 한 번: 리뷰 캡처를 의뢰 폴더 '리뷰이미지'에 전부 올리라는 할 일 (폴더 링크, 사용자 요청 10/26 '한 캠페인이 모두 완료되면 그때 취합')
       if (capF && props.getProperty(rk) && !props.getProperty('RVUP_' + sid)) {
         props.setProperty('RVUP_' + sid, '1');
-        if (!init) queueMsg_('내 할 일', rvUploadMsg_(name, capF.img.getUrl()), '할 일');
+        if (!init) queueMsg_('내 할 일', rvUploadMsg_(name, capF.img.getUrl(), mine), '할 일');
       }
       // B1. 리뷰이미지 폴더 사진 → 압축 (다 끝난 뒤에 한 번에 업체로)
       if (capF && props.getProperty(rk)) subTime_('정리: 리뷰 압축', function () { rvZip_(capF, name, props, sid, mine); });
@@ -5618,9 +5621,21 @@ function rvExpect_(sid, mine) {
   return out;
 }
 // 리뷰 캡처 올리기 할 일 (의뢰 리뷰가 다 끝났을 때 한 번, 사용자 요청 10/26: 날짜별 말고 의뢰가 다 끝나면 한 번에)
-function rvUploadMsg_(name, url) {
-  return '📦 [' + rvBase_(name) + '] 의뢰 리뷰가 다 끝났어요 → 이 의뢰 리뷰 캡처를 전부 아래 폴더에 올려 주세요 (날짜·포토·텍스트·별점 안 나눠도 돼요)\n' + url +
-    '\n올리고 10~40분 뒤 자동으로 압축돼요. 압축 파일 안에 포토·텍스트·별점 개수가 적히고, 보낼메시지 \'리뷰 보고\'(사장님)에 압축 파일 링크가 붙어요 → 받아서 보고 글과 같이 보내기';
+function rvUploadMsg_(name, url, mine) {
+  // 방 체크리스트 (10/31): 이 의뢰 날짜별 방 + 저장해 둔 오픈채팅 링크. PC 카톡 검색창에 상품명을 치면 방이 한꺼번에 뜸
+  const rooms = [];
+  (mine || []).forEach(function (r) { if (!(Number(r['인원']) > 0)) return; const rm = String(r['카톡방'] || bareTitle_(r['명단 제목'])); if (rm && rooms.indexOf(rm) === -1) rooms.push(rm); });
+  let links = {}; try { links = roomLinksAll_(); } catch (e) {}
+  const ai = !!geminiKey_();
+  const lines = ['📦 [' + rvBase_(name) + '] 의뢰 리뷰가 다 끝났어요 → 이 의뢰 리뷰 캡처를 전부 아래 폴더에 저장해 주세요' + (ai ? '' : ' (날짜·포토·텍스트·별점 안 나눠도 돼요)'), url];
+  if (rooms.length) {
+    lines.push('', '방 ' + rooms.length + '개 (빠뜨리지 않게 하나씩):');
+    rooms.forEach(function (rm) { const u = roomLinkOf_(rm, links); lines.push('☐ ' + rm + (u ? ' ' + u : '')); });
+  }
+  lines.push('', 'PC 카톡: 방 열기 → 서랍(사진·동영상) → 사진 고르기 → 저장 위치 = 위 폴더 (PC 구글 드라이브 앱)');
+  if (ai) lines.push('구매 인증·공지 사진이 섞여도 돼요: AI가 리뷰만 골라 포토·텍스트·별점으로 나누고 나머지는 \'(압축 제외)\' 폴더로 옮겨요. 개수가 의뢰서·배정과 다르면 할 일에 알려요');
+  lines.push('올리고 10~40분 뒤 자동으로 압축돼요. 압축 파일 안에 포토·텍스트·별점 개수가 적히고, 보낼메시지 \'리뷰 보고\'(사장님)에 압축 파일 링크가 붙어요 → 받아서 보고 글과 같이 보내기');
+  return lines.join('\n');
 }
 // 캠페인명 (명단 시트 이름에서 '(응답)'과 끝 건수 뺌) = 압축 파일 이름
 function rvBase_(name) { return String(name).replace(/\s*\(응답\)\s*$/, '').replace(/\s*\d+\s*$/, '').trim(); }
@@ -5670,8 +5685,12 @@ function rvCntText_(c) { return RV_TYPES.filter(function (t) { return c[t] > 0; 
 //  포토·텍스트·별점으로 시작하는 폴더에 나눠 올린 사진은 압축 안에서도 '포토 N/' 폴더로 (전부 나눴으면 폴더 이름이 개수라 메모 파일 없음)
 //  다 올릴 때까지 기다림: 마지막 사진을 올리고 10분 동안 새 사진이 없을 때 만듦. 사진을 더 올리면 다시 만듦. 사진 내용은 안 봄
 function rvZip_(f, name, props, sid, mine) {
-  const byType = { 포토: [], 텍스트: [], 별점: [] }, loose = [], seen = {};
+  // 안 나눈 사진은 AI(Gemini)로 먼저 나눔 (키가 있을 때만). 남았으면 다 나눈 뒤에 압축 (15분 확인에서 이어서)
+  const aiLeft = rvAiSort_(f, sid, props);
+  if (aiLeft > 0) return;
+  const byType = { 포토: [], 텍스트: [], 별점: [] }, loose = [], seen = {}, skipped = {};
   const walk = function (fo, depth, type) {
+    if (depth > 0 && RV_SKIP_RE.test(fo.getName())) { const sk = fo.getFiles(); let n = 0; while (sk.hasNext()) { if (/^image\//.test(sk.next().getMimeType())) n++; } if (n) skipped[fo.getName()] = (skipped[fo.getName()] || 0) + n; return; }
     const t = rvTypeOf_(fo.getName()) || type, it = fo.getFiles();
     while (it.hasNext()) { const x = it.next(); if (!/^image\//.test(x.getMimeType()) || seen[x.getId()]) continue; seen[x.getId()] = 1; if (t) byType[t].push(x); else loose.push(x); }
     if (depth < 4) { const fi = fo.getFolders(); while (fi.hasNext()) walk(fi.next(), depth + 1, t); }
@@ -5694,6 +5713,17 @@ function rvZip_(f, name, props, sid, mine) {
     cnt = { 포토: byType['포토'].length, 텍스트: byType['텍스트'].length, 별점: byType['별점'].length }; from = '폴더';
     const ex = rvExpect_(sid, mine);
     if (ex && RV_TYPES.some(function (t) { return ex[t] !== cnt[t]; })) warn.push('⚠ 의뢰서(' + rvCntText_(ex) + ')와 폴더 사진 수(' + rvCntText_(cnt) + ')가 달라요');
+    // 실제 배정(방마다 보낸 리뷰 가이드)과도 비교 (10/31 AI 분류: 종류를 바꾼 사람·빠진 캡처 찾기)
+    let obRows0 = [];
+    try { const ob0 = outboxSheet_(), ol0 = ob0.getLastRow(); if (ol0 >= 2) obRows0 = ob0.getRange(2, 1, ol0 - 1, 6).getValues(); } catch (e) {}
+    const g0 = rvGuideCounts_(mine, obRows0);
+    if (!g0.miss && !g0.odd && RV_TYPES.some(function (t) { return g0[t] !== cnt[t]; }) && (!ex || RV_TYPES.some(function (t) { return g0[t] !== ex[t]; }))) warn.push('⚠ 실제 배정(리뷰 가이드: ' + rvCntText_(g0) + ')과 폴더 사진 수(' + rvCntText_(cnt) + ')가 달라요');
+    // AI가 읽은 별점이 5개가 아닌 리뷰
+    if (geminiKey_()) {
+      const low = [];
+      RV_TYPES.forEach(function (t) { byType[t].forEach(function (x) { try { const m = String(x.getDescription() || '').match(/"stars":\s*(\d)/); if (m && Number(m[1]) > 0 && Number(m[1]) < 5) low.push(x.getName() + '(별 ' + m[1] + ')'); } catch (e) {} }); });
+      if (low.length) warn.push('⚠ 별점이 5개가 아닌 리뷰 ' + low.length + '장: ' + low.slice(0, 8).join(', ') + (low.length > 8 ? ' …' : ''));
+    }
   }
   else {
     let obRows = [];
@@ -5736,12 +5766,160 @@ function rvZip_(f, name, props, sid, mine) {
     }
   });
   if (!done) queueMsg_('사장님', msg, '리뷰 보고');
+  const skTxt = Object.keys(skipped).map(function (k) { return k.replace(/\s*\(?압축\s*제외\)?\s*/, '') + ' ' + skipped[k] + '장'; }).join(', ');
+  if (skTxt) warn.push('ℹ 압축에서 뺀 사진: ' + skTxt + ' (리뷰이미지 폴더 안 \'(압축 제외)\' 폴더. 리뷰인데 빠졌으면 포토·텍스트·별점 폴더로 옮기면 다시 압축돼요)');
   if (warn.length) queueMsg_('내 할 일', '[' + base + '] 리뷰 압축 확인 (사진 ' + files.length + '장 · ' + cntTxt + ')\n' + warn.join('\n'), '할 일');
   note_('✓ 리뷰 압축: ' + zipName + ' (사진 ' + files.length + '장 · ' + cntTxt + (from ? ', ' + from + ' 기준' : '') + ')' + (warn.length ? ' ' + warn.join(' ') : ''));
 }
 
+/* ---------------- 리뷰 캡처 AI 분류 (10/31 사용자 요청: 카톡 방마다 사진 골라 저장하는 시간 줄이기) ---------------- */
+//  PC 카톡 서랍에서 전체 저장한 사진(구매 인증·공지 사진이 섞여도 됨)을 Gemini(무료)로 한 장씩 읽어서
+//  리뷰 → 리뷰이미지 안 '포토'/'텍스트'/'별점' 폴더, 구매 인증·그 밖·같은 사진 → '(압축 제외)' 폴더로 옮김. 지우지 않음
+//  → 압축(rvZip_)은 폴더 사진 수로 세고 의뢰서·리뷰 가이드 배정과 비교. 사람이 폴더를 옮겨 고치면 그대로 따름
+//  키: 메뉴 '리뷰 사진 AI 키 넣기' → 스크립트 속성 GEMINI_KEY (저장소·점검 링크에 안 나옴). 키가 없으면 예전처럼 안 나누고 압축
+const RV_SKIP_RE = /압축\s*제외/;
+const RV_AI_DIR = { purchase: '구매인증 (압축 제외)', other: '기타 (압축 제외)', dup: '같은 사진 (압축 제외)', fail: 'AI가 못 읽음 (압축 제외)' };
+const GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash'];
+const GEMINI_PROMPT = [
+  '이 이미지는 한국 쇼핑몰(쿠팡·네이버·올리브영 등) 체험단 참여자가 카카오톡 방에 올린 휴대폰 캡처예요.',
+  'JSON 하나로만 답하세요: {"kind": "review" | "purchase" | "other", "stars": 0~5 정수, "text": true/false, "photo": true/false}',
+  '- review: 상품 리뷰를 쓰는 화면이나 다 쓴 리뷰 화면 (별점·리뷰 글이 보임)',
+  '- purchase: 주문·결제 완료·주문 상세·배송 조회 화면 (구매 인증)',
+  '- other: 그 밖 (상품 사진만, 공지, 대화 캡처 등)',
+  '- stars: 리뷰에 매긴 별점 개수 (리뷰가 아니거나 안 보이면 0)',
+  '- text: 참여자가 직접 쓴 리뷰 본문 글이 있으면 true. "소음 작아요" 같은 선택형 문구만 있으면 false',
+  '- photo: 참여자가 리뷰에 직접 붙인 사진·동영상이 있으면 true. 화면 맨 위 작은 상품 썸네일은 사진이 아님'
+].join('\n');
+function geminiKey_() { try { return PropertiesService.getScriptProperties().getProperty('GEMINI_KEY') || ''; } catch (e) { return ''; } }
+// Gemini에 묻기: parts = [{text}, {inline_data}] → 답 글. 모델 이름이 바뀌어도 되게 차례로 시도(되는 모델 기억). 한도 초과 = { quota: 1 }
+function geminiAsk_(parts, json) {
+  const key = geminiKey_();
+  if (!key) throw new Error('Gemini 키 없음');
+  const props = PropertiesService.getScriptProperties(), okM = props.getProperty('GEMINI_MODEL');
+  const models = (okM ? [okM] : []).concat(GEMINI_MODELS.filter(function (m) { return m !== okM; }));
+  const body = { contents: [{ parts: parts }], generationConfig: json ? { responseMimeType: 'application/json', temperature: 0 } : { temperature: 0 } };
+  let last = '';
+  for (let i = 0; i < models.length; i++) {
+    const res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + models[i] + ':generateContent', {
+      method: 'post', contentType: 'application/json', headers: { 'x-goog-api-key': key }, payload: JSON.stringify(body), muteHttpExceptions: true });
+    const code = res.getResponseCode(), txt = res.getContentText();
+    if (code === 200) {
+      if (okM !== models[i]) props.setProperty('GEMINI_MODEL', models[i]);
+      let o = {}; try { o = JSON.parse(txt); } catch (e) {}
+      return (((o.candidates || [])[0] || {}).content || { parts: [] }).parts.map(function (p) { return p.text || ''; }).join('');
+    }
+    if (code === 429) throw { quota: 1, message: 'Gemini 무료 한도 초과 (잠시 뒤 이어서)' };
+    if (code === 400 && /API key|API_KEY/i.test(txt) || code === 401 || code === 403) throw new Error('Gemini 키가 안 맞아요 (' + code + ')');
+    last = code + ' ' + txt.slice(0, 120);   // 404 = 모델 이름 없음 → 다음 모델
+  }
+  throw new Error('Gemini 답 없음: ' + last);
+}
+// 캡처 한 장 → { kind, stars, text, photo }
+function geminiReadCapture_(blob) {
+  const mime = String(blob.getContentType() || 'image/jpeg');
+  const t = geminiAsk_([{ text: GEMINI_PROMPT }, { inline_data: { mime_type: mime, data: Utilities.base64Encode(blob.getBytes()) } }], true);
+  const m = String(t).replace(/```(json)?/g, '').match(/\{[\s\S]*\}/);
+  if (!m) throw new Error('Gemini 답을 못 읽음: ' + String(t).slice(0, 80));
+  const o = JSON.parse(m[0]);
+  return { kind: /review|purchase|other/.test(o.kind) ? o.kind : 'other', stars: Math.max(0, Math.min(5, Number(o.stars) || 0)), text: o.text === true, photo: o.photo === true };
+}
+// 읽은 결과 → 옮길 폴더 이름
+function rvAiDir_(o) {
+  if (o.kind === 'review') return o.photo ? '포토' : o.text ? '텍스트' : '별점';
+  return o.kind === 'purchase' ? RV_AI_DIR.purchase : RV_AI_DIR.other;
+}
+// 리뷰이미지(+직접 만든 '리뷰캡처' 폴더)에서 아직 안 나눈 사진을 나눔. 한 번에 60초까지(무료 한도: 분당 몇 장) → 남은 장수 (0 = 다 나눔 또는 키 없음)
+function rvAiSort_(f, sid, props) {
+  if (!geminiKey_() || !f || !f.img) return 0;
+  const loose = [], typed = [], seen = {};
+  const walk = function (fo, depth) {
+    if (depth > 0 && (RV_SKIP_RE.test(fo.getName()) || rvTypeOf_(fo.getName()))) { if (!RV_SKIP_RE.test(fo.getName())) { const ti = fo.getFiles(); while (ti.hasNext()) typed.push(ti.next()); } return; }
+    const it = fo.getFiles();
+    while (it.hasNext()) { const x = it.next(); if (/^image\//.test(x.getMimeType()) && !seen[x.getId()]) { seen[x.getId()] = 1; loose.push(x); } }
+    if (depth < 4) { const fi = fo.getFolders(); while (fi.hasNext()) walk(fi.next(), depth + 1); }
+  };
+  walk(f.img, 0);
+  try { const ci = f.parent.getFolders(); while (ci.hasNext()) { const x = ci.next(); if (RV_CAP_RE.test(String(x.getName()).trim())) walk(x, 0); } } catch (e) {}
+  const q = String(props.getProperty('RVAI_Q') || '').split(',').filter(Boolean);
+  const setQ = function (on) { const i = q.indexOf(sid); if (on && i < 0) q.push(sid); if (!on && i >= 0) q.splice(i, 1); props.setProperty('RVAI_Q', q.join(',')); };
+  if (!loose.length) { setQ(false); return 0; }
+  const dirs = {};
+  const dirOf = function (name) {
+    if (dirs[name]) return dirs[name];
+    const it = f.img.getFoldersByName(name);
+    return (dirs[name] = it.hasNext() ? it.next() : f.img.createFolder(name));
+  };
+  // 같은 사진(같은 방에서 두 번 저장 등): 크기가 같은 것만 내용 비교
+  const bySize = {};
+  typed.concat(loose).forEach(function (x) { const k = String(x.getSize()); (bySize[k] = bySize[k] || []).push(x); });
+  const digest = function (x) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, x.getBlob().getBytes())); };
+  const left = [], seenDg = {};
+  const collide = function (x) { return bySize[String(x.getSize())].length > 1; };
+  typed.forEach(function (x) { if (collide(x)) { try { seenDg[digest(x)] = 1; } catch (e) {} } });
+  loose.forEach(function (x) {
+    if (collide(x)) {
+      let d = ''; try { d = digest(x); } catch (e) {}
+      if (d && seenDg[d]) { try { x.moveTo(dirOf(RV_AI_DIR.dup)); } catch (e) { note_('같은 사진 옮기기 실패: ' + e); } return; }
+      if (d) seenDg[d] = 1;
+    }
+    left.push(x);
+  });
+  if (Number(props.getProperty('GEMINI_WAIT') || 0) > Date.now()) { setQ(left.length > 0); return left.length; }
+  const t0 = Date.now();
+  let done = 0, moved = {};
+  for (let i = 0; i < left.length; i++) {
+    if (Date.now() - t0 > 60000 || late_(230)) break;
+    const x = left[i];
+    let o;
+    try { o = subTime_('리뷰 사진 AI', function () { return geminiReadCapture_(x.getBlob()); }); }
+    catch (e) {
+      if (e && e.quota) { props.setProperty('GEMINI_WAIT', String(Date.now() + 90000)); break; }
+      // 같은 사진이 세 번 실패하면 '못 읽음' 폴더로 (압축 확인 할 일에 장수가 나옴 → 직접 옮기기)
+      const fk = 'RVAIERR_' + x.getId(), n = Number(props.getProperty(fk) || 0) + 1;
+      if (n >= 3) { props.deleteProperty(fk); try { x.moveTo(dirOf(RV_AI_DIR.fail)); done++; } catch (e2) {} }
+      else props.setProperty(fk, String(n));
+      note_('리뷰 사진 AI 읽기 실패 (' + x.getName() + '): ' + (e && e.message || e));
+      if (/키가 안 맞아요|키 없음/.test(String(e && e.message))) break;
+      continue;
+    }
+    const d = rvAiDir_(o);
+    try { x.setDescription('AI ' + JSON.stringify(o)); } catch (e) {}
+    x.moveTo(dirOf(d));
+    moved[d] = (moved[d] || 0) + 1; done++;
+    if (i < left.length - 1) Utilities.sleep(2000);   // 무료 한도(분당 요청 수)
+  }
+  if (done) note_('✓ 리뷰 사진 AI 분류 ' + done + '장: ' + Object.keys(moved).map(function (k) { return k.replace(/\s*\(압축 제외\)/, '') + ' ' + moved[k]; }).join(', ') + (left.length - done > 0 ? ' (남은 ' + (left.length - done) + '장은 다음 확인에서)' : ''));
+  setQ(left.length - done > 0);
+  return left.length - done;
+}
+// 15분 확인에서 AI 분류 이어 하기 (정리는 30분마다라 한 의뢰 사진 30장이 1시간 넘게 걸려서). 다 나누면 다음 정리에서 압축
+function rvAiQueue_() {
+  const props = PropertiesService.getScriptProperties(), q = String(props.getProperty('RVAI_Q') || '').split(',').filter(Boolean);
+  q.forEach(function (sid) {
+    if (late_(200)) return;
+    try {
+      const imgId = props.getProperty('RVIMG_' + sid);
+      if (!imgId) return;
+      const img = DriveApp.getFolderById(imgId), pa = img.getParents();
+      rvAiSort_({ img: img, parent: pa.hasNext() ? pa.next() : img }, sid, props);
+    } catch (e) { note_('리뷰 사진 AI 분류 실패: ' + e); }
+  });
+}
+// 메뉴: 키 넣기 (aistudio.google.com에서 무료로 만든 키). 넣고 바로 한 번 시험
+function setGeminiKey() {
+  const ui = SpreadsheetApp.getUi();
+  const r = ui.prompt('리뷰 사진 AI 키 넣기', 'aistudio.google.com → Get API key → Create API key 로 만든 키(AIza…)를 붙여넣으세요.\n지우려면 "지움"이라고 쓰세요.', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  const v = String(r.getResponseText() || '').trim(), props = PropertiesService.getScriptProperties();
+  if (v === '지움') { props.deleteProperty('GEMINI_KEY'); ui.alert('키를 지웠어요. 리뷰 사진은 예전처럼 안 나누고 압축해요.'); return; }
+  if (!/^[\w-]{20,}$/.test(v)) { ui.alert('키 모양이 아니에요 (AIza로 시작하는 긴 글자). 다시 해 주세요.'); return; }
+  props.setProperty('GEMINI_KEY', v); props.deleteProperty('GEMINI_MODEL'); props.deleteProperty('GEMINI_WAIT');
+  try { const t = geminiAsk_([{ text: '"ok"라고만 답하세요' }], false); ui.alert('✓ 키가 잘 돼요 (' + (props.getProperty('GEMINI_MODEL') || '') + '). 이제 리뷰이미지 폴더에 올린 사진을 AI가 나눠요.\n답: ' + String(t).slice(0, 20)); }
+  catch (e) { ui.alert('키는 넣었는데 시험이 안 됐어요: ' + (e && e.message || e) + '\n키를 다시 확인하거나 잠시 뒤 다시 해 주세요.'); }
+}
+
 /* ---------------- 사용법 탭 (맨 앞, 사용자 요청 10/20). 글을 바꾸면 USAGE_VER를 올림 → 다시 씀 ---------------- */
-const USAGE_TAB = '사용법', USAGE_VER = '15';
+const USAGE_TAB = '사용법', USAGE_VER = '16';
 const USAGE_ROWS = [
   ['체험단 관리 시트 사용법', '(스크립트가 쓰는 탭이라 여기 고친 글은 다음 업데이트 때 다시 써져요)'],
   ['', ''],
@@ -5771,6 +5949,7 @@ const USAGE_ROWS = [
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
   ['리뷰 완료 (취완)', '명단 시트 "명단" 탭 맨 오른쪽 "리뷰 확인" 체크칸에 체크 → 그 방 사람 전부 체크되면 보낼메시지에 그 방 "취완". 의뢰 전체가 끝나고 전부 체크되면 보낼메시지 "할 일"에 리뷰 캡처 올릴 폴더 링크'],
   ['리뷰 사진 압축', '날마다 말고 의뢰가 다 끝난 뒤 한 번에: 그 의뢰 리뷰 캡처를 전부 의뢰 폴더 안 "리뷰이미지"(할 일·한눈에 "리뷰 취합할 것" 줄의 링크)에 올리기. 날짜·포토·텍스트·별점으로 안 나눠도 됨 → 10~40분 뒤 캠페인명.zip이 생기고(안에 "포토 N, 텍스트 N, 별점 N" 메모 파일, 개수는 방마다 보낸 리뷰 가이드대로 자동) 보낼메시지 "리뷰 보고"(사장님)에 압축 파일 링크 → 받아서 보고 글과 같이 업체에 보내고, 한눈에 그 줄 체크. 사진이 리뷰 건수보다 적거나 개수가 의뢰서와 다르면 할 일에 ⚠'],
+  ['리뷰 사진 AI 분류', '메뉴 "리뷰 사진 AI 키 넣기"에 Gemini 무료 키(aistudio.google.com → Get API key)를 한 번 넣으면: PC 카톡 서랍에서 방 사진을 통째로 리뷰이미지 폴더에 저장해도 AI가 리뷰만 골라 포토·텍스트·별점 폴더로 나누고, 구매 인증·다른 사진·같은 사진은 "(압축 제외)" 폴더로 옮김(안 지움). AI가 틀렸으면 파일을 맞는 폴더로 옮기면 다시 압축. 개수가 의뢰서·배정과 다르거나 별점이 5개가 아니면 할 일에 알림'],
   ['블랙리스트 사람이 폼을 냄', '한눈에 "확인 필요" 칸에 ⛔ + 메일 → 폼수정 탭에서 그 응답 지우기'],
   ['명단이 안 보임', '메뉴 체험단 도구 → 지금 명단 마감 확인 (명단 탭만 바로 새로고침, 나머지는 1분 뒤 자동)'],
   ['화면이 이상함', '메뉴 → 지금 최신 버전으로 업데이트 → 한눈에 탭 새로 만들기'],
@@ -7423,7 +7602,8 @@ function rvItems_(allRuns, props) {
     if (!all['RVRPT_' + sid] || !keep(mine[0]['업체 전송'])) return;
     const f = function (r) { return (r['진행일'].getMonth() + 1) + '.' + r['진행일'].getDate(); };
     const span = f(mine[0]) === f(mine[mine.length - 1]) ? f(mine[0]) : f(mine[0]) + '~' + f(mine[mine.length - 1]);
-    const todo = all['RVZIPURL_' + sid] ? '압축 완료 → 보낼메시지 \'리뷰 보고\' 압축 파일 받아서 업체에 보내고 체크' : '리뷰 캡처 전부 올리기(오른쪽 리뷰이미지) → 압축되면 업체에 보내고 체크';
+    const aiQ = String(all['RVAI_Q'] || '').split(',').indexOf(sid) >= 0;
+    const todo = all['RVZIPURL_' + sid] ? '압축 완료 → 보낼메시지 \'리뷰 보고\' 압축 파일 받아서 업체에 보내고 체크' : aiQ ? '사진 AI 분류 중 (15분마다 이어서) → 끝나면 압축' : '리뷰 캡처 전부 올리기(오른쪽 리뷰이미지) → 압축되면 업체에 보내고 체크';
     const img = all['RVIMG_' + sid] ? 'https://drive.google.com/drive/folders/' + all['RVIMG_' + sid] : String(mine[0]['폴더 링크'] || '');
     items.push({ type: 'req', sid: sid, label: '📦 의뢰 끝: ' + campOf_(mine[0]['명단 제목']) + ' (' + span + ') ' + todo, at: md(mine[0]['업체 전송']), sheet: String(mine[0]['시트 링크'] || ''), folder: img });
   });
