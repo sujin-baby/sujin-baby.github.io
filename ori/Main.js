@@ -3209,7 +3209,7 @@ function listMsgText_(r) {
   // 그날 모자라서 다음 날로 넘긴 건수 (shrinkToGot_이 저장, 10/27 사용자 캡처 모양)
   let sk = '';
   try { sk = PropertiesService.getScriptProperties().getProperty(listShortKey_(r)) || ''; } catch (e) {}
-  if (cartN_(r) > 1) tail = (tail ? tail + '\n' : '') + '장바구니건';   // 사용자 요청 10/28
+  if (cartN_(r) > 1) tail = (tail ? tail + '\n' : '') + '*' + cartN_(r) + '개 장바구니건';   // 사용자 요청 10/28, 10/31 '*3개 장바구니건'
   return r['시트 링크'] + '\n\n' + t + (tail ? '\n' + tail : '') + (sk ? '\n\n' + sk : '');
 }
 // 가격변동 줄 (사용자 요청 10/31): 의뢰 마지막 명단 전달 글 맨 밑에. 실제 결제금액(응답)으로 셈

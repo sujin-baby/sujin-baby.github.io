@@ -1,8 +1,8 @@
 // 명단 전달 마지막 글 가격변동 줄(priceChangeLines_): 여러 날 귤(10.28부터 9200) / 하루 대봉감(쿠팡·토스 옵션별 공지와 다른 금액)  node pricechange_test.js <Main.js>
 const { makeEnv, Sheet } = require('./harness'); const vm = require('vm');
 const LH0 = null;
-function run(runsDef, resp) {
-  const env = makeEnv({ main: process.argv[2] }); const G = k => vm.runInContext(k, env); const LH = G('LIST_HEADER');
+function run(runsDef, resp, props) {
+  const env = makeEnv({ main: process.argv[2], props: props || {} }); const G = k => vm.runInContext(k, env); const LH = G('LIST_HEADER');
   const mk = o => LH.map(h => o[h] !== undefined ? o[h] : '');
   env.__ss.sheets['진행목록'] = new Sheet('진행목록', [LH.slice()].concat(runsDef.map(mk)));
   const rs = new Sheet('설문지 응답 시트1', [['타임스탬프', '계정명(수령인)', '옵션', '결제금액']].concat(resp));
@@ -27,8 +27,11 @@ for (let k = 0; k < 5; k++) br.push([D(10, 30, 1), 'c' + k, '쿠팡 대봉감 (9
 for (let k = 0; k < 5; k++) br.push([D(10, 30, 2), 's' + k, '토스 소과 (9,500원)', 9800]);
 for (let k = 0; k < 2; k++) br.push([D(10, 30, 3), 'r' + k, '토스 로얄중대과 (11,500원)', 11800]);
 const t2 = run(b, br);
-console.log(t1 + '\n---\n' + t2);
+// 장바구니 3개 (유러피안샐러드외): '마지막' 밑에 '*3개 장바구니건'
+const c = [{ '진행일': new Date(2026, 9, 28), '명단 제목': '#10.28 유러피안샐러드외 60 (뽀짝오리)', '시트ID': 'S1', '시트 링크': 'https://sheet/S1', '진행 상태': '진행중', '인원': 60, '목표인원': 60, '총건수': 60, '일차': 1, '요청ID': 'RQ' }];
+const t3 = run(c, [], { CART_S1: '3' });
+console.log(t1 + '\n---\n' + t2 + '\n---\n' + t3);
 const ok = /10\.27~ 10\.29  22건 구매완료\n\*10\.28 가격변동 9100 > 9200$/.test(t1) &&
-  /마지막\n\n\*쿠팡 가격변동 9800원\n\*토스 가격변동 소과 9800원, 로얄중대과 11800원$/.test(t2);
+  /마지막\n\n\*쿠팡 가격변동 9800원\n\*토스 가격변동 소과 9800원, 로얄중대과 11800원$/.test(t2) && /유러피안샐러드외 60 \(뽀짝오리\)\n마지막\n\*3개 장바구니건$/.test(t3);
 console.log(ok ? '✓ 가격변동 줄 시험 통과' : 'XX 가격변동 줄 시험 실패');
 process.exit(ok ? 0 : 1);
