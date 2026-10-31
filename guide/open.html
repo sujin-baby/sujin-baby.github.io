@@ -77,19 +77,17 @@
     }
     function buildTargetUrl(base, k, p, f) {
       if (!base) return base;
-      let res = toMobileCp(base.replace(/#(kw|pr|fn)=.*$/, ""));
-      const sep = res.indexOf("?") === -1 ? "?" : "&";
-      if (k && !/[?&]kw=/.test(res)) res += sep + "kw=" + encodeURIComponent(k);
-      if (p && !/[?&]pr=/.test(res)) res += "&pr=" + p;
-      if (f && !/[?&]fn=/.test(res)) res += "&fn=" + encodeURIComponent(f);
+      // 쿠팡 403 차단 원천 해결: 쿠팡 URL 쿼리스트링(?kw=, &kw=)에 kw/pr/fn이 들어가면 아카마이 방화벽이 100% 차단함
+      // 따라서 쿼리스트링에서는 kw/pr/fn을 완전히 제거하고 오직 해시(#kw=)로만 키워드를 전달해야 안전함 (11/01 v143)
+      let res = toMobileCp(base.replace(/#(kw|pr|fn)=.*$/, "").replace(/[?&](kw|pr|fn)=[^&#]*/g, "").replace(/\?&/, "?").replace(/[?&]$/, ""));
       const h = [];
       if (k) h.push("kw=" + encodeURIComponent(k));
       if (p) h.push("pr=" + p);
       if (f) h.push("fn=" + encodeURIComponent(f));
-      if (h.length && res.indexOf("#") === -1) res += "#" + h.join("&");
+      if (h.length) res += "#" + h.join("&");
       return res;
     }
-    const cleanTarget = toMobileCp(target.replace(/#(kw|pr|fn)=.*$/, ""));
+    const cleanTarget = toMobileCp(target.replace(/#(kw|pr|fn)=.*$/, "").replace(/[?&](kw|pr|fn)=[^&#]*/g, "").replace(/\?&/, "?").replace(/[?&]$/, ""));
     const fullTarget = buildTargetUrl(cleanTarget, k0, pr, fn);
 
     const kwCard = document.getElementById("kw-card");

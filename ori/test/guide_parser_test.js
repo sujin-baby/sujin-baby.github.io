@@ -466,7 +466,19 @@ if (sugGyul.main !== '귤') throw new Error('suggestKeywords main should be 귤,
 const sugBam = P.suggestKeywords('모두의농수산 옥광밤 5');
 if (sugBam.main !== '옥광밤') throw new Error('suggestKeywords main should be 옥광밤, got: ' + sugBam.main);
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (14개 샘플 전원 일치)');
+
+// ==========================================
+// Test 15: 쿠팡 URL 쿼리스트링(?kw=, &kw=) 차단 및 해시(#kw=) 단일 전달 검증 (11/01 v143)
+// 1) open.html buildTargetUrl: 쿼리스트링에 kw, pr, fn이 절대 들어가지 않고 해시(#kw=)로만 전달되는지 검증
+// 2) index.html buildFullUrl: 쿼리스트링에 kw, pr, fn이 절대 들어가지 않고 해시(#kw=)로만 전달되는지 검증
+// ==========================================
+console.log('-- Test 15: 쿠팡 URL 쿼리스트링(?kw=, &kw=) 차단 및 해시(#kw=) 단일 전달 검증');
+const openCode = fs.readFileSync(path.join(__dirname, '../../guide/open.html'), 'utf8');
+if (/res\s*\+=\s*sep\s*\+\s*["']kw=["']/.test(openCode)) throw new Error('open.html should not append kw to query string');
+if (/u\s*\+=\s*\(.*\?.*\)\s*\+\s*["']kw=["']/.test(indexCode)) throw new Error('index.html should not append kw to query string');
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (15개 샘플 전원 일치)');
 process.exit(0);
+
 
 
