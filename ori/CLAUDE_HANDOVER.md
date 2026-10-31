@@ -116,6 +116,15 @@
     4) 의뢰서 공지 기본값: 의뢰서 파싱 시 `seller`가 비어있으면 키워드 첫 단어(`아텍스`), `pname`이 비어있으면 `keyword`, `page`가 비어있으면 `rank`를 기본값으로 자동 채워 의뢰서만 붙여넣어도 하단 공지가 비어있지 않도록 전면 개편.
     5) 단위 시험(Test 8) 추가 및 CI 올그린 통과.
 
+- ✅ **[피클 → Claude] 모바일 사파리 상품 페이지 바로 열기 403 권한없음 해결 (생성기 v129)** (10/31):
+  - **원인**:
+    1) 제3자 도메인(`sujin-baby.github.io`)에서 쿠팡 상품 페이지를 열 때, 브라우저가 `Referer: https://sujin-baby.github.io/...` 헤더를 전송하여 쿠팡 Akamai Bot 방화벽이 외부 링크 진입을 핫링크/스크래퍼로 간주해 403 차단 화면(Access Denied / 요청하신 페이지의 사용권한이 없습니다)을 반환.
+    2) 모바일 사파리에서 쿠팡 데스크톱 주소(`www.coupang.com/vp/products/`)로 접속 시 모바일 302 리디렉션 과정에서 Akamai 봇 검증 필터에 걸려 차단.
+  - **해결**:
+    1) `guide/index.html` 및 `guide/open.html`의 `<head>`에 `<meta name="referrer" content="no-referrer">` 명시 및 모든 외부 링크에 `rel="noreferrer noopener"` 적용으로 Referer 헤더 완전 제거.
+    2) 모바일 환경(`isIOS()`)에서 쿠팡 데스크톱 주소를 공식 모바일 웹 주소(`https://m.coupang.com/vm/products/...`)로 자동 변환하여 리디렉션 없이 바로 정상 로드되도록 처리.
+    3) `guide/open.html`의 `[👉 상품 페이지 바로 열기]` 버튼에 모바일 주소 + 키워드 해시(`#kw=`)를 온전히 보존하고 `rel="noreferrer noopener"` 및 원터치 클립보드 복사 연동.
+
 - ✅ **[피클 → Claude] 생성기 v128 및 텀블러 의뢰서 7대 결함 전면 해결 (확장 1.5.5)** (10/31):
   - 1. **상품명·판매자·상품번호 리콜 보장**: 의뢰서 기본값(`pnameAuto`, `sellerAuto`)이 있어도 저장된 실제 상세 정보로 100% 덮어쓰도록 `recallProducts` 및 `fillCoupang` 개선 (상품번호 뒤 마스킹 보존).
   - 2. **판매자 '바나바스토어' 보존**: 접미사 정규식을 보정(`\s+(?:스토어|샵)`)하여 단어의 일부인 `바나바스토어` 등 브랜드 고유 스토어명 정상 유지.

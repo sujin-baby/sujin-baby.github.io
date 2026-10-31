@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
   <title>체험단 가이드 생성기</title>
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
@@ -196,7 +197,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v128 (상단 및 중간 광고(AD) 전수 감지·제외 및 쿠팡 검색화면 북마크 지원) · 확장 1.5.5</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v129 (상단 및 중간 광고(AD) 전수 감지·제외 및 쿠팡 검색화면 북마크 지원) · 확장 1.5.5</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -2121,19 +2122,24 @@ details.help-box summary {
     if (tabBox) tabBox.innerHTML = "";
     const noUrl = !urls.length;
     if (noUrl) urls.push({ label: "", url: "https://www.coupang.com" });
+    function toMobileCoupang(rawUrl) {
+      if (!rawUrl) return rawUrl;
+      return rawUrl.replace(/https?:\/\/(?:www\.)?coupang\.com\/vp\/products\/(\d+)/, "https://m.coupang.com/vm/products/$1");
+    }
     urls.forEach((u, i) => {
       const a = document.createElement("a");
       const g = guides[cur] || {}, kw = kwList(g).join("|"), pr = prOf(i);
       const k0 = kw.split("|")[0];
-      const fullUrl = u.url + (k0 && u.url.indexOf("#") === -1 ? "#kw=" + encodeURIComponent(k0) + (pr ? "&pr=" + pr : "") + (ft ? "&fn=" + encodeURIComponent(ft) : "") : "");
-      a.className = "btn ghost"; a.target = "_blank"; a.rel = "noopener";
+      const targetUrl = isIOS() ? toMobileCoupang(u.url) : u.url;
+      const fullUrl = targetUrl + (k0 && targetUrl.indexOf("#") === -1 ? "#kw=" + encodeURIComponent(k0) + (pr ? "&pr=" + pr : "") + (ft ? "&fn=" + encodeURIComponent(ft) : "") : "");
+      a.className = "btn ghost"; a.target = "_blank"; a.rel = "noreferrer noopener";
       a.href = fullUrl;
       a.addEventListener("click", ev => {
         if (isIOS()) {
           ev.preventDefault();
           copyText(fullUrl, "상품 주소(키워드 포함) 복사 완료 (" + (k0 || "키워드 포함") + ")");
-          const openUrl = "open.html?url=" + encodeURIComponent(u.url) + (k0 ? "&kw=" + encodeURIComponent(k0) : "") + (pr ? "&pr=" + pr : "") + (ft ? "&fn=" + encodeURIComponent(ft) : "");
-          window.open(openUrl, "_blank");
+          const openUrl = "open.html?url=" + encodeURIComponent(targetUrl) + (k0 ? "&kw=" + encodeURIComponent(k0) : "") + (pr ? "&pr=" + pr : "") + (ft ? "&fn=" + encodeURIComponent(ft) : "");
+          window.open(openUrl, "_blank", "noreferrer,noopener");
           return;
         }
         if (k0) copyText(k0, "검색 키워드를 복사했어요: " + k0);
@@ -2144,15 +2150,15 @@ details.help-box summary {
       // 가이드 탭 바로 아래(tabBox)에도 원터치 바로가기 버튼 배치
       if (tabBox) {
         const ta = document.createElement("a");
-        ta.className = "btn primary small"; ta.target = "_blank"; ta.rel = "noopener";
+        ta.className = "btn primary small"; ta.target = "_blank"; ta.rel = "noreferrer noopener";
         ta.style.cssText = "display:inline-block; margin-right:6px; margin-bottom:6px; font-size:13px; font-weight:700;";
         ta.href = fullUrl;
         ta.addEventListener("click", ev => {
           if (isIOS()) {
             ev.preventDefault();
             copyText(fullUrl, "상품 주소(키워드 포함) 복사 완료 (" + (k0 || "키워드 포함") + ")");
-            const openUrl = "open.html?url=" + encodeURIComponent(u.url) + (k0 ? "&kw=" + encodeURIComponent(k0) : "") + (pr ? "&pr=" + pr : "") + (ft ? "&fn=" + encodeURIComponent(ft) : "");
-            window.open(openUrl, "_blank");
+            const openUrl = "open.html?url=" + encodeURIComponent(targetUrl) + (k0 ? "&kw=" + encodeURIComponent(k0) : "") + (pr ? "&pr=" + pr : "") + (ft ? "&fn=" + encodeURIComponent(ft) : "");
+            window.open(openUrl, "_blank", "noreferrer,noopener");
             return;
           }
           if (k0) copyText(k0, "검색 키워드를 복사했어요: " + k0);
