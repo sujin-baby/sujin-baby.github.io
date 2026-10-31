@@ -55,13 +55,24 @@
   const sugKw = nm => {
     const raw = String(nm || "").replace(/\(.*$/, "").replace(/\[[^\]]*\]/g, " "), dash = raw.split(/\s+-\s+/);
     let toks = dash[0].split(/[\s,]+/).filter(Boolean);
-    const brand = toks.length >= 3 ? toks[0] : ""; if (brand) toks = toks.slice(1);
+    const NOUN_SUFFIX = /(정|환|캡슐|스틱|분말|가루|원액|즙|차|오일|세럼|크림|로션|샴푸|패치|패드|거치대|매트|선풍기|텀블러|청소기|마사지기|워시|토너|앰플|마스크|비누|티슈|세제|치약|칫솔|홀더|걸이|선반|트레이|보틀|쿠션|방석|베개|슬리퍼|양말|장갑|모자|밴드|스토퍼|도어스토퍼|말굽|도어체크|도어락|고정기|가드|보냉백|보온백|런치백|도시락가방|가방|파우치|보냉가방|쿨러백|쇼퍼백|에코백|토트백|크로스백|백팩|손잡이백|보냉팩|보온팩)$/;
+    // 첫 단어가 이미 대표 품목 명사(텀블러, 밴드, 보냉백 등)이면 브랜드로 잘라내지 않음 (11/01)
+    const brand = toks.length >= 3 && !NOUN_SUFFIX.test(toks[0]) ? toks[0] : ""; if (brand) toks = toks.slice(1);
     const STOP = /^(탈부착식|탈부착|착붙는|무타공|세라믹|코팅|프리미엄|고급|대용량|소용량|회전|포함|정품|국내산|수입산|신상|신상품|인기|추천|최신|업그레이드|스마트|터치|겨울|여름|봄|가을|방한|보온보냉|보온|보냉|세척솔|대시보드|특가|증정|무료배송|1\+1|세트|단품|미니|슬림|휴대용|접이식)$/;
     const spec = t => /^\d|\d+(mg|g|kg|ml|l|개|캡슐|정|매|p|도|cm|mm|인치|w)\b|x\d/i.test(t) && !/^[가-힣a-z]+\d+$/i.test(t);
     const isMod = t => /(는|한|된|용|방지|차단|전용|호환|타입|형)$/.test(t) && t.length <= 6;
-    const cand = toks.filter(t => !spec(t) && !STOP.test(t) && !isMod(t) && t.length >= 2);
+    let cand = toks.filter(t => !spec(t) && !STOP.test(t) && !isMod(t) && t.length >= 2);
+    // 화면 카테고리(빵가루/카테고리 바)에서 카테고리 명사 보강 (예: 물병/물통/텀블러)
+    try {
+      const breadcrumb = document.querySelector('[class*="breadcrumb"], [class*="category"], .prod-buy-header__breadcrumb');
+      if (breadcrumb) {
+        const bTxt = breadcrumb.innerText || breadcrumb.textContent || "";
+        const bToks = bTxt.split(/[\s>/,]+/).filter(Boolean);
+        const bNoun = bToks.reverse().find(t => NOUN_SUFFIX.test(t));
+        if (bNoun && !cand.includes(bNoun)) cand.push(bNoun);
+      }
+    } catch (e) {}
     const mods = toks.filter(t => /용$/.test(t) && t.length <= 4);
-    const NOUN_SUFFIX = /(정|환|캡슐|스틱|분말|가루|원액|즙|차|오일|세럼|크림|로션|샴푸|패치|패드|거치대|매트|선풍기|텀블러|청소기|마사지기|워시|토너|앰플|마스크|비누|티슈|세제|치약|칫솔|홀더|걸이|선반|트레이|보틀|쿠션|방석|베개|슬리퍼|양말|장갑|모자|밴드|스토퍼|도어스토퍼|말굽|도어체크|도어락|고정기|가드|보냉백|보온백|런치백|도시락가방|가방|파우치|보냉가방|쿨러백|쇼퍼백|에코백|토트백|크로스백|백팩|손잡이백|보냉팩|보온팩)$/;
     const nounMatch = cand.find(t => NOUN_SUFFIX.test(t));
     const tail = t => t.slice(-3);
     const rep = cand.filter(t => t.length >= 3 && cand.some(u => u !== t && u.length >= 3 && tail(u) === tail(t)));
@@ -441,7 +452,7 @@
   /* 상품명: 화면에 보이는 제목. og:title은 ' - 일반거치대' 같은 분류가 붙어서 마지막에 */
   const og = document.querySelector('meta[property="og:title"]');
   const jv = k => { const m = document.documentElement.innerHTML.match(new RegExp('"' + k + '"\\s*:\\s*"([^"]{2,120})"')); return m ? m[1] : ""; };
-  let name = [...document.querySelectorAll("h1, h2, h3")].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).find(t => t.length >= 6 && t.length <= 200 && !/쿠팡|coupang|장바구니|카테고리|사용권한|없습니다|Access\s*Denied|접속이\s*제한|요청하신\s*페이지/i.test(t)) || "";
+  let name = [...document.querySelectorAll("h1, h2, h3, .prod-buy-header__title, [class*='prod-buy-header__title'], [class*='product-title']")].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).find(t => t.length >= 2 && t.length <= 200 && !/쿠팡|coupang|장바구니|카테고리|사용권한|없습니다|Access\s*Denied|접속이\s*제한|요청하신\s*페이지/i.test(t)) || "";
   if (!name) name = jv("itemName") || jv("productName");
   if (!name) name = ((og && og.content) || document.title).replace(/\s*[-|]\s*쿠팡!?\s*$/, "").replace(/\s+-\s+[^-]{1,20}$/, "").trim();
   if (/사용권한이\s*없|접속이\s*제한|Access\s*Denied|요청하신\s*페이지/i.test(name)) {
@@ -450,23 +461,26 @@
   }
   const txt = document.body.innerText;
   let seller = "";
-  const be = document.querySelector('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]');
-  if (be) seller = be.textContent.trim();
+  /* 판매처: 첫 후보가 '가입'(쿠팡 위·아래 '판매자 가입' 글자) 같은 엉터리면 버리고 다음 후보로 (10/31 대봉감 '판매처 : 가입').
+     예전엔 엉터리를 알아보고도 지우지 않아서 그대로 남았음 */
+  const BAD_SELLER = /가입|보러가기|평가|정보|^특가|로켓|할인|쿠폰|무료|배송|와우|입점/;
+  const okSeller = s => !!s && s.length <= 30 && !BAD_SELLER.test(s);
+  for (const e of document.querySelectorAll('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]')) {
+    const t = (e.textContent || "").replace(/\s+/g, " ").trim();
+    if (okSeller(t)) { seller = t; break; }
+  }
   if (!seller) {
-    const sm = txt.match(/판매자\s*[:：]?\s*([^\n]{1,60})/);
-    if (sm) seller = sm[1].replace(/\s*(판매자\s*)?(상품\s*)?보러\s*가기.*$/, "").replace(/\s*판매자\s*평가.*$/, "").trim();
+    const re = /판매자\s*[:：]?\s*([^\n]{1,60})/g;
+    let sm;
+    while ((sm = re.exec(txt))) {
+      const t = sm[1].replace(/\s*(판매자\s*)?(상품\s*)?보러\s*가기.*$/, "").replace(/\s*판매자\s*평가.*$/, "").trim();
+      if (okSeller(t)) { seller = t; break; }
+    }
   }
-  /* '판매자 특가', '판매자로켓' 같은 배지 글자는 판매처가 아님 → 페이지 데이터의 판매자 이름 먼저 (10/21 아이폰 '특가') */
-  const vn = jv("vendorName");
-  if (vn && !seller) seller = vn;
-  if (!seller || seller.length > 30 || /가입|보러가기|평가|정보|^특가|로켓|할인|쿠폰|무료|배송|와우/.test(seller)) {
-    const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/);
-    if (s2 && !seller) seller = s2[1].trim();
-  }
-  if (!seller && name) {
-    const bg = name.split(/\s+/)[0];
-    if (bg && /^[가-힣a-zA-Z0-9]{2,10}$/.test(bg) && !/^(로켓|쿠팡|무료|특가|할인|배송)/.test(bg)) seller = bg;
-  }
+  /* 상품명 첫 단어로 채우지 않음: 판매자 이름은 쿠팡·토스·네이버 페이지에 꼭 있음. 못 읽으면 비워 두고 알림 (사용자 10/31) */
+  /* '판매자 특가', '판매자로켓' 같은 배지 글자는 판매처가 아님 → 페이지 데이터의 판매자 이름 */
+  if (!seller) { const vn = (String(document.documentElement.innerHTML).match(/\\?"(?:vendorName|sellerName)\\?"\s*:\s*\\?"([^"\\]{2,60})/) || [])[1] || ""; if (okSeller(vn)) seller = vn; }
+  if (!seller) { const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/); if (s2 && okSeller(s2[1].trim())) seller = s2[1].trim(); }
   if (seller) {
     seller = seller.replace(/[>]\s*(?:브랜드\s*샵|브랜드샵|공식\s*몰|공식몰|공식\s*스토어|공식스토어|스토어|샵).*$/i, "").replace(/\s*(?:브랜드\s*샵|브랜드샵|공식\s*몰|공식몰|공식\s*스토어|공식스토어)\s*$/i, "").replace(/\s+(?:스토어|샵)\s*$/i, "").trim();
   }
@@ -500,21 +514,11 @@
       kwFrom = "복사해 둔 의뢰서 키워드";
     }
   }
-  // URL이나 클립보드에 키워드가 없으면, 추천 키워드를 기본값으로 프롬프트 확인 (오추출 방지)
+  // URL이나 클립보드에 키워드가 없으면, 사용자에게 묻지 않고(prompt 제거) 상품명 자동 추천으로 탐색 (11/01 사용자 요청)
   if (!kwIn) {
     const sug = sugKw(name);
-    const guessed = sug[0] || "";
-    let u = "";
-    try {
-      u = prompt("의뢰서 검색 키워드를 입력해 주세요 (추천 키워드):", guessed);
-    } catch (e) {}
-    if (u && u.trim()) {
-      kwIn = u.trim();
-      kwFrom = "사용자 직접 입력";
-    } else if (guessed) {
-      kwIn = guessed;
-      kwFrom = "상품명 자동 추천";
-    }
+    kwIn = sug.join("|");
+    kwFrom = "상품명 자동 추천";
   }
   const kws = kwIn.split("|").map(x => x.trim()).filter(Boolean);
   const kw = kws[0] || "";
