@@ -157,7 +157,24 @@
         const cp = new Map(); out.forEach(el => cp.set(el.parentElement, (cp.get(el.parentElement) || 0) + 1));
         return out.filter(el => cp.get(el.parentElement) >= 3);
       };
-      const isAd = el => /(^|[\s·|])(광고|AD)([\s·|]|$)/.test(el.innerText || "");
+      const AD_SEL_N = '[class*="ad-badge"], [class*="adBadge"], [class*="ad_label"], [class*="AdMark"], [data-is-ad="true"], [data-ad="true"], [data-ad-id], img[alt*="광고"], img[alt*="AD"]';
+      const isAd = el => {
+        if (!el) return false;
+        try {
+          if (el.matches && el.matches(AD_SEL_N)) return true;
+          if (el.querySelector(AD_SEL_N)) return true;
+        } catch(e) {}
+        const badges = el.querySelectorAll('span, em, strong, b, div, p, i');
+        for (let i = 0; i < badges.length; i++) {
+          const t = (badges[i].textContent || "").trim().replace(/[ⓘi\s]/g, "");
+          if (t === "광고" || t === "AD" || t === "ad" || t === "Ad") return true;
+        }
+        const txt = (el.innerText || el.textContent || "").trim();
+        if (/(?:^|[\s·|\[\(<>\/.,\-_])(?:광고|AD|Ad)(?:$|[\s·|ⓘi\]\)>,\/.\-_])/.test(txt)) {
+          if (!/(?:광고용|광고판|광고지|광고대|adidas|adapt)/i.test(txt)) return true;
+        }
+        return false;
+      };
       const pidRe = T.pid && T.pid.length >= 8 ? new RegExp("(^|\\D)" + T.pid + "(?!\\d)") : null;
       /* 상품명 낱말 대부분 + 스토어 이름이 같아도 같은 상품 (앞부분이 조금 달라도) */
       const nToks = String(T.nm || "").split(/[\s\/,·|]+/).map(norm).filter(x => x.length >= 2);
@@ -279,7 +296,24 @@
       ks.forEach(x => { let el = x.e; while (el.parentElement && el.parentElement !== document.body && n(el.parentElement) <= 1) el = el.parentElement; if (!seen.has(el)) { seen.add(el); out.push({ el: el, g: x.g }); } });
       return out;
     };
-    const isAd = el => /(^|[\s·|])(광고|AD|Ad)([\s·|]|$)/.test(el.innerText || "") || !!el.querySelector('img[alt="AD"],img[alt="광고"]');
+    const AD_SEL_OY = '[class*="ad-badge"], [class*="adBadge"], [class*="ad_label"], [class*="AdMark"], img[alt*="AD"], img[alt*="광고"]';
+    const isAd = el => {
+      if (!el) return false;
+      try {
+        if (el.matches && el.matches(AD_SEL_OY)) return true;
+        if (el.querySelector(AD_SEL_OY)) return true;
+      } catch(e) {}
+      const badges = el.querySelectorAll('span, em, strong, b, div, p, i');
+      for (let i = 0; i < badges.length; i++) {
+        const t = (badges[i].textContent || "").trim().replace(/[ⓘi\s]/g, "");
+        if (t === "광고" || t === "AD" || t === "ad" || t === "Ad") return true;
+      }
+      const txt = (el.innerText || el.textContent || "").trim();
+      if (/(?:^|[\s·|\[\(<>\/.,\-_])(?:광고|AD|Ad)(?:$|[\s·|ⓘi\]\)>,\/.\-_])/.test(txt)) {
+        if (!/(?:광고용|광고판|광고지|광고대|adidas|adapt)/i.test(txt)) return true;
+      }
+      return false;
+    };
     const find = () => {
       /* 같은 상품이 '최근 본 상품' 같은 작은 묶음에도 있으면, 상품이 가장 많이 모인 줄에 있는 것 */
       const cs = cards().filter(c => c.el.getClientRects().length), sib = c => cs.filter(d => d.el.parentElement === c.el.parentElement).length;
@@ -326,9 +360,74 @@
     return;
   }
   if (!/coupang\.com$/.test(L.hostname)) { alert("쿠팡 상품 페이지(또는 네이버 상품 페이지·네이버 쇼핑 검색 화면·올리브영 상품 페이지)에서 눌러 주세요."); return; }
+  const mob = /^m\./.test(L.hostname) || /iPhone|iPad|Android/i.test(navigator.userAgent);
+  const AD_SEL_CP = '[class*="ad-badge"], [class*="adBadge"], [class*="ad-mark"], [class*="ad_mark"], [class*="AdMark"], ' +
+    '[class*="search-product__ad"], [class*="search-product-ad"], [class*="product-ad"], ' +
+    '[class*="badge-ad"], [class*="badge_ad"], [class*="ad_label"], [class*="adLabel"], ' +
+    '[data-is-ad="true"], [data-ad="true"], [data-ad-id], [data-s-ad], ' +
+    'img[alt*="광고"], img[alt*="AD"], img[src*="ad_badge"], img[src*="ad-badge"], ' +
+    'a[href*="isSearchAd=true"], a[href*="click.coupang.com"]';
+  const isAdCp = el => {
+    if (!el) return false;
+    try {
+      if (el.matches && el.matches(AD_SEL_CP)) return true;
+      if (el.querySelector(AD_SEL_CP)) return true;
+    } catch(e) {}
+    const badges = el.querySelectorAll('span, em, strong, b, div, p, i');
+    for (let i = 0; i < badges.length; i++) {
+      const t = (badges[i].textContent || "").trim().replace(/[ⓘi\s]/g, "");
+      if (t === "광고" || t === "AD" || t === "ad" || t === "Ad") return true;
+    }
+    const txt = (el.innerText || el.textContent || "").trim();
+    if (/(?:^|[\s·|\[\(<>\/.,\-_])(?:광고|AD|Ad)(?:$|[\s·|ⓘi\]\)>,\/.\-_])/.test(txt)) {
+      if (!/(?:광고용|광고판|광고지|광고대|adidas|adapt)/i.test(txt)) return true;
+    }
+    return false;
+  };
+  if (/\/n[pm]\/search/.test(L.pathname)) {
+    /* 쿠팡 검색 화면: 상단 및 중간중간 섞여 있는 광고(AD) 전수 식별 및 제외하여 순위 탐색 */
+    let T = null;
+    try { T = JSON.parse(localStorage.getItem("__pl_cp") || "null"); } catch (e) {}
+    if (!T || !T.pid) {
+      let cb = ""; try { cb = (await navigator.clipboard.readText()) || ""; } catch (e) {}
+      const m = cb.match(/상품번호\s*[:：]\s*(\d{8,})/);
+      if (m) T = { pid: m[1], nm: "", kw: "" };
+    }
+    if (!T || !T.pid) {
+      const a = (prompt("찾을 쿠팡 상품번호(상품 상세 주소의 products/ 뒤 숫자)", "") || "").match(/\d{8,}/);
+      if (!a) return;
+      T = { pid: a[0], nm: "", kw: "" };
+    }
+    const qp = new URLSearchParams(L.search);
+    const q = qp.get("q") || "";
+    const pg = Number(qp.get("page") || 1);
+    const as = [...document.querySelectorAll('a[href*="/products/"]')].map(a => ({ a: a, k: ((a.getAttribute("href") || "").match(/\/v[pm]\/products\/(\d+)/) || [])[1] })).filter(x => x.k);
+    const nIn = el => { const st = new Set(); as.forEach(x => { if (el.contains(x.a)) st.add(x.k); }); return st.size; };
+    const seenEl = new Set(), cs = [];
+    as.forEach(x => { let el = x.a; while (el.parentElement && el.parentElement !== document.body && nIn(el.parentElement) <= 1) el = el.parentElement; if (!seenEl.has(el)) { seenEl.add(el); cs.push({ el: el, k: x.k }); } });
+    const cp = new Map(); cs.forEach(c => cp.set(c.el.parentElement, (cp.get(c.el.parentElement) || 0) + 1));
+    const list = cs.filter(c => cp.get(c.el.parentElement) >= 3);
+    let hit = -1, adHit = -1;
+    list.forEach((c, i) => {
+      if (c.k !== T.pid) return;
+      if (isAdCp(c.el)) { if (adHit < 0) adHit = i; return; }
+      if (hit < 0) hit = i;
+    });
+    const bx = show("", "쿠팡 검색 결과에서 찾는 중…");
+    bx.id = "__pl_bm";
+    if (hit >= 0) {
+      const el = list[hit].el;
+      el.style.outline = "4px solid #e5397a"; el.style.outlineOffset = "2px"; el.scrollIntoView({ block: "center" });
+      const org = list.slice(0, hit).filter(c => !isAdCp(c.el)).length + 1;
+      const pos = pg + "p";
+      show([q ? "찾은 키워드 : " + q.trim() : "", (mob ? "모바일 위치 : " : "PC 위치 : ") + pos].filter(Boolean).join("\n"), "찾았어요 (분홍 테두리, 광고 빼고 " + org + "번째). 복사해서 생성기 '상품 정보 붙여넣기' 칸에.");
+    } else {
+      show("이 화면에는 없어요", "검색어 '" + q + "', " + pg + "페이지, 상품 " + list.length + "개 확인" + (adHit >= 0 ? " (광고 자리에만 있어요)" : "") + ".\n다음 페이지로 이동 후 북마크를 다시 눌러 주세요.");
+    }
+    return;
+  }
   const pm = L.pathname.match(/\/v[pm]\/products\/(\d+)/);
-  if (!pm) { alert("쿠팡 상품 상세 페이지에서 눌러 주세요."); return; }
-  const mob = /^m\./.test(L.hostname);
+  if (!pm) { alert("쿠팡 상품 상세 페이지(또는 검색 결과 화면)에서 눌러 주세요."); return; }
   const pid = pm[1];
   const html = document.documentElement.innerHTML;
   const qs = new URLSearchParams(L.search);
@@ -409,6 +508,7 @@
   }
   const optPrices = readOptPrices(txt, name, price);
   if (optPrices.length && !optPrices.some(x => x.o === opt)) { const hit = optPrices.filter(x => x.p === price); if (hit.length === 1) opt = hit[0].o; }
+  try { localStorage.setItem("__pl_cp", JSON.stringify({ pid: pid, item: item, nm: name, st: seller, opt: opt, pr: price, kw: kws.join("|") })); } catch (e) {}
   const lo = price ? Math.floor(price * 0.9 / 100) * 100 : 0, hi = price ? Math.ceil(price * 1.1 / 100) * 100 : 0;
   const box = document.createElement("div");
   box.style.cssText = "position:fixed;right:8px;bottom:8px;z-index:2147483647;width:340px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;box-sizing:border-box;background:#fff;color:#1d1a24;border:2px solid #5b2a86;border-radius:10px;padding:14px;font:13px/1.5 sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.2)";
@@ -432,8 +532,10 @@
         const seenEl = new Set(), cs = [];
         as.forEach(x => { let el = x.a; while (el.parentElement && el.parentElement !== doc.body && nIn(el.parentElement) <= 1) el = el.parentElement; if (!seenEl.has(el)) { seenEl.add(el); cs.push({ el: el, k: x.k }); } });
         const cp = new Map(); cs.forEach(c => cp.set(c.el.parentElement, (cp.get(c.el.parentElement) || 0) + 1));
-        const isAdC = el => /(^|\s)(AD|광고)(\s|$)/.test(el.textContent || "") || !!el.querySelector('[class*="ad-badge"], [class*="adBadge"], [class*="AdMark"], img[alt="AD"], img[alt="광고"]');
-        const ids = cs.filter(c => cp.get(c.el.parentElement) >= 3 && !isAdC(c.el)).map(c => c.k);
+        const isAdC = el => isAdCp(el);
+        // 중간중간 섞여 있는 광고 상품을 전수 식별하여 순위 및 목록에서 완전히 제외
+        const organicCards = cs.filter(c => cp.get(c.el.parentElement) >= 3 && !isAdC(c.el));
+        const ids = organicCards.map(c => c.k);
         if (!r.ok || (p === 1 && ids.length === 0)) return filt ? 0 : -1;
         if (ids.indexOf(pid) !== -1) return p;
       } catch (e) { return -1; }

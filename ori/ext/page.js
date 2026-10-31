@@ -210,10 +210,33 @@
     list.sort((a, b) => a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
     return list;
   }
-  /* 광고 표시: '광고', '광고ⓘ', 'AD' (상품명 속 '광고용' 같은 건 아님) */
-  const AD_TXT = /(^|[\s·|])(광고|AD)(?![가-힣A-Za-z])/;
-  /* 네이버는 광고 아닌 상품 링크도 클릭 기록용 adcr 주소를 써서, 네이버에서는 링크 주소로 광고를 판단하지 않음 */
-  const isAd = el => AD_TXT.test(el.innerText || "") || !!el.querySelector((isNaver ? "" : 'a[href*="adcr"], ') + '[class*="ad-badge"], [class*="adBadge"], [class*="ad_label"], [class*="AdMark"], img[alt="광고"], img[alt="AD"]');
+  /* 광고 표시: '광고', '광고ⓘ', 'AD', 배지 클래스, 광고 속성 (상단 및 중간중간 섞여 있는 광고 전수 감지) */
+  const AD_SEL = (isNaver ? "" : 'a[href*="adcr"], a[href*="isSearchAd=true"], a[href*="click.coupang.com"], a[href*="searchAd="], ') +
+    '[class*="ad-badge"], [class*="adBadge"], [class*="ad-mark"], [class*="ad_mark"], [class*="AdMark"], ' +
+    '[class*="search-product__ad"], [class*="search-product-ad"], [class*="product-ad"], ' +
+    '[class*="badge-ad"], [class*="badge_ad"], [class*="ad_label"], [class*="adLabel"], ' +
+    '[data-is-ad="true"], [data-ad="true"], [data-ad-id], [data-s-ad], ' +
+    'img[alt*="광고"], img[alt*="AD"], img[src*="ad_badge"], img[src*="ad-badge"]';
+
+  const isAd = el => {
+    if (!el) return false;
+    try {
+      if (el.matches && el.matches(AD_SEL)) return true;
+      if (el.querySelector(AD_SEL)) return true;
+    } catch (e) {}
+    // 개별 배지 태그의 텍스트가 순수 '광고' 또는 'AD'인지 검사 (중간중간 섞여있는 광고 배지 포함)
+    const nodes = el.querySelectorAll('span, em, strong, b, div, p, i');
+    for (let i = 0; i < nodes.length; i++) {
+      const t = (nodes[i].textContent || "").trim().replace(/[ⓘi\s]/g, "");
+      if (t === "광고" || t === "AD" || t === "ad" || t === "Ad") return true;
+    }
+    // 본문 텍스트 내 광고/AD 기호 경계 검사 (상품명 속 '광고용', '아디다스' 등은 제외)
+    const txt = (el.innerText || el.textContent || "").trim();
+    if (/(?:^|[\s·|\[\(<>\/.,\-_])(?:광고|AD|Ad)(?:$|[\s·|ⓘi\]\)>,\/.\-_])/.test(txt)) {
+      if (!/(?:광고용|광고판|광고지|광고대|adidas|adapt)/i.test(txt)) return true;
+    }
+    return false;
+  };
   function matchOf(el, o) {
     const pidRe = new RegExp((isNaver ? "(^|\\D)" : "products/") + o.pid + "(?!\\d)");
     if (!isNaver) return pidRe.test(el.innerHTML) ? "상품번호" : "";
