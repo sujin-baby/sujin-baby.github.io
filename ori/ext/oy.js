@@ -450,9 +450,9 @@
     for (const [k, f, lab] of steps) {
       const pg = await look(k, f, lab);
       if (pg === -1) { blocked = true; if (!f) break; else continue; }
-      if (pg > 0) { pageLine = pg + "페이지"; foundKw = k; if (f) filtLine = "가검" + (lo === hi ? lo : lo + "~" + hi); break; }
+      if (pg > 0) { pageLine = pg + "p"; foundKw = k; if (f) filtLine = "가검" + (lo === hi ? lo : lo + "~" + hi); break; }
     }
-    const rk = (L.search.match(/[?&](?:searchRank|rank)=(\d+)/i) || [])[1] ? (L.search.match(/[?&](?:searchRank|rank)=(\d+)/i)[1] + "위") : "";
+    const rk = (L.search.match(/[?&](?:searchRank|rank)=(\d+)/i) || [])[1] ? (Math.max(1, Math.ceil(Number(L.search.match(/[?&](?:searchRank|rank)=(\d+)/i)[1]) / 36)) + "p") : "";
     if (!pageLine) {
       pageLine = rk ? rk : (blocked ? (mob ? "직접 검색 필요 (모바일 쿠팡)" : "자동 조회 실패, 직접 검색 필요") : MAX + "페이지 안에 없음 (쿠팡 화면에서 다른 필터로 직접 찾아 주세요)");
     }
