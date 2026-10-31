@@ -68,11 +68,11 @@ console.log('1차 후 대기열:', q1, '/ 한도 초과 기다림:', wait1, '/ �
 console.log('폴더:', ['포토', '텍스트', '별점', '구매인증 (압축 제외)', '기타 (압축 제외)', '같은 사진 (압축 제외)'].map(n => n + ' ' + count(n)).join(', '), '/ 맨 위 남은 것', img.files.length);
 console.log('압축:', zipped && zipped.name, JSON.stringify(dirs));
 console.log(msgs.join('\n'));
-const todo = msgs.find(m => /리뷰 압축 확인/.test(m)) || '';
+const todo = msgs.find(m => /리뷰 사진 확인/.test(m)) || '';
 const ok = /포토 \(2개\)/.test(names) && /텍스트 \(3개\)/.test(names) && /별점 \(5개\)/.test(names) && q1 === 'SID' && wait1 && env.__props.get('GEMINI_MODEL') === 'gemini-2.5-flash-lite' &&
   count('포토') === 2 && !/\(0개\)/.test(names) && count('텍스트') === 3 && count('별점') === 5 && count('구매인증 (압축 제외)') === 3 && count('기타 (압축 제외)') === 1 && count('같은 사진 (압축 제외)') === 1 && img.files.length === 0 && !img.subs.some(s => /압축 제외/.test(s.name)) &&
-  zipped && dirs['포토 2'] === 2 && dirs['텍스트 3'] === 3 && dirs['별점 5'] === 5 && Object.keys(dirs).length === 3 &&
-  /별점이 5개가 아닌 리뷰 1장: text0\.jpg\(별 4\)/.test(todo) && /압축에서 뺀 사진: .*구매인증 3장/.test(todo) && !/실제 배정/.test(todo) && (env.__props.get('RVAI_Q') || '') === '';
+  !zipped && env.__props.get('RVZIPURL_SID') === 'https://drive/리뷰이미지' && msgs.some(m => /리뷰 보고 \| https:\/\/drive\/리뷰이미지/.test(m)) &&
+  /별점이 5개가 아닌 리뷰 1장: text0\.jpg\(별 4\)/.test(todo) && /리뷰가 아니라고 뺀 사진: .*구매인증 3장/.test(todo) && !/실제 배정/.test(todo) && (env.__props.get('RVAI_Q') || '') === '';
 // 키 없으면 아무것도 안 함 (예전처럼)
 env.__props.delete('GEMINI_KEY'); const n0 = models.length;
 const left = G("rvAiSort_(__f, 'SID', PropertiesService.getScriptProperties())");
