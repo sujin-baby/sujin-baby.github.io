@@ -5768,6 +5768,7 @@ function rvCntText_(c) { return RV_TYPES.filter(function (t) { return c[t] > 0; 
 //  포토·텍스트·별점으로 시작하는 폴더에 나눠 올린 사진은 압축 안에서도 '포토 N/' 폴더로 (전부 나눴으면 폴더 이름이 개수라 메모 파일 없음)
 //  다 올릴 때까지 기다림: 마지막 사진을 올리고 10분 동안 새 사진이 없을 때 만듦. 사진을 더 올리면 다시 만듦. 사진 내용은 안 봄
 function rvZip_(f, name, props, sid, mine) {
+  if (!props.getProperty('RVRPTFIX_' + sid) && !(mine && mine[0] && mine[0]['업체 전송'])) { props.setProperty('RVRPTFIX_' + sid, '1'); props.deleteProperty('RVZIP_' + sid); }   // (10/31 한 번) 덮어써서 사라진 보고 글 다시
   // 안 나눈 사진은 AI(Gemini)로 먼저 나눔 (키가 있을 때만). 남았으면 다 나눈 뒤에 압축 (15분 확인에서 이어서)
   // 예전에 리뷰이미지 안에 만든 '(압축 제외)' 폴더는 의뢰 폴더로 꺼냄 (사장님이 보는 링크에서 빼기)
   try { const xi = f.img.getFolders(); while (xi.hasNext()) { const xf = xi.next(); if (RV_SKIP_RE.test(xf.getName()) && f.parent && f.parent.getId && f.parent.getId() !== f.img.getId()) xf.moveTo(f.parent); } } catch (e) {}
@@ -5792,8 +5793,6 @@ function rvZip_(f, name, props, sid, mine) {
   if (props.getProperty('RVZIP_' + sid) === sig) return;
   if (Date.now() - newest < 10 * 60000) return;   // 아직 올리는 중일 수 있음 → 다음 확인에서
   const base = rvBase_(name), zipName = base.replace(/\//g, '／').replace(/[\\:*?"<>|]/g, '') + '.zip', warn = [];   // 파일 이름에 못 쓰는 글자 (# 실/빈 → 실／빈)
-  const size = files.reduce(function (a, x) { return a + x.getSize(); }, 0);
-  if (size > 45 * 1024 * 1024) { props.setProperty('RVZIP_' + sid, sig); queueMsg_('내 할 일', '[' + base + '] 리뷰 사진이 너무 커서(' + Math.round(size / 1048576) + 'MB) 압축 못 했어요 → 사진을 줄이거나 나눠서 보내기', '할 일'); return; }
   // 개수: 전부 종류 폴더에 나눴으면 폴더 사진 수, 아니면 리뷰 가이드 배정(못 찾으면 의뢰서)
   let cnt = null, from = '';
   if (!loose.length) {
@@ -5826,37 +5825,27 @@ function rvZip_(f, name, props, sid, mine) {
   }
   const total = cnt ? cnt['포토'] + cnt['텍스트'] + cnt['별점'] : 0;
   if (from !== '폴더' && total && files.length < total) warn.push('⚠ 리뷰 ' + total + '건인데 사진이 ' + files.length + '장이에요 → 빠진 캡처가 없는지 확인 (더 올리면 다시 압축돼요)');
-  const used = {}, blobs = [];
-  const add = function (n, x) { while (used[n]) n = n.replace(/([^/]*)$/, '_$1'); used[n] = 1; blobs.push(x.getBlob().setName(n)); };
-  RV_TYPES.forEach(function (t) { byType[t].forEach(function (x) { add(t + ' ' + byType[t].length + '/' + x.getName(), x); }); });
-  loose.forEach(function (x) { add(x.getName(), x); });
-  if (from !== '폴더' && total) {
-    const txt = rvCntText_(cnt);
-    used[txt + '.txt'] = 1;
-    blobs.push(Utilities.newBlob('\uFEFF' + base + ' 리뷰\r\n' + RV_TYPES.filter(function (t) { return cnt[t] > 0; }).map(function (t) { return t + ' ' + cnt[t]; }).join('\r\n') + '\r\n총 ' + total + '건\r\n', 'text/plain', txt + '.txt'));
-  }
-  const old = f.parent.getFilesByName(zipName);
-  while (old.hasNext()) old.next().setTrashed(true);
-  const zip = f.parent.createFile(Utilities.zip(blobs, zipName));
-  props.setProperty('RVZIP_' + sid, sig);   // 압축을 다 만든 뒤에 기억 (중간에 끊기면 다음 확인에서 다시)
-  props.setProperty('RVZIPURL_' + sid, zip.getUrl());
+  // 압축 파일은 안 만듦 (10/31: 사장님께 리뷰이미지 폴더 링크로 보내서 압축은 안 씀). 개수 확인·보고 글만
+  props.setProperty('RVZIP_' + sid, sig);
+  props.setProperty('RVZIPURL_' + sid, f.img.getUrl());
   const cntTxt = cnt ? rvCntText_(cnt) : '개수 모름';
   // 사장님께 보낼 글 하나: 리뷰 완료 보고 + 폴더/압축 파일 링크 (사용자 요청: 폴더 링크 + 날짜 캠페인명 + 총 N건 리뷰 취합본 전달드립니다!)
-  const link = (f && f.img) ? f.img.getUrl() : zip.getUrl();
+  const link = f.img.getUrl();
   const msg = rvReportMsg_(link, mine, name);
+  // 같은 의뢰 보고 글만 고침 (10/31 버그: 다른 의뢰 보고 글을 덮어써서 오즈네즈 보고가 사라졌음). 이미 보냈으면 새로 안 넣음
+  const tl = msg.split('\n').filter(function (l) { return l && !/^https?:/.test(l) && !/전달드립니다/.test(l); })[0] || '';
   const ob = outboxSheet_(), ol = ob.getLastRow();
   let done = false;
   if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
-    if (!done && v[2] === '리뷰 보고' && v[5] !== '보냄' && (/리뷰\s*취합본\s*전달드립니다/.test(String(v[4])) || /리뷰완료되어 보고드립니다/.test(String(v[4])))) {
-      obSet_(ob, v[0], 5, msg);
-      done = true;
-    }
+    if (done || v[2] !== '리뷰 보고' || !tl || String(v[4]).indexOf(tl) < 0) return;
+    if (v[5] !== '보냄' && String(v[4]) !== msg) obSet_(ob, v[0], 5, msg);
+    done = true;
   });
   if (!done) queueMsg_('사장님', msg, '리뷰 보고');
   const skTxt = Object.keys(skipped).map(function (k) { return k.replace(/\s*\(?압축\s*제외\)?\s*/, '') + ' ' + skipped[k] + '장'; }).join(', ');
-  if (skTxt) warn.push('ℹ 압축에서 뺀 사진: ' + skTxt + ' (리뷰이미지 폴더 안 \'(압축 제외)\' 폴더. 리뷰인데 빠졌으면 포토·텍스트·별점 폴더로 옮기면 다시 압축돼요)');
-  if (warn.length) queueMsg_('내 할 일', '[' + base + '] 리뷰 압축 확인 (사진 ' + files.length + '장 · ' + cntTxt + ')\n' + warn.join('\n'), '할 일');
-  note_('✓ 리뷰 압축: ' + zipName + ' (사진 ' + files.length + '장 · ' + cntTxt + (from ? ', ' + from + ' 기준' : '') + ')' + (warn.length ? ' ' + warn.join(' ') : ''));
+  if (skTxt) warn.push('ℹ 리뷰가 아니라고 뺀 사진: ' + skTxt + ' (의뢰 폴더 안 \'(압축 제외)\' 폴더. 리뷰인데 빠졌으면 리뷰이미지 안 포토·텍스트·별점 폴더로 옮기면 다시 세요)');
+  if (warn.length) queueMsg_('내 할 일', '[' + base + '] 리뷰 사진 확인 (사진 ' + files.length + '장 · ' + cntTxt + ')\n' + warn.join('\n'), '할 일');
+  note_('✓ 리뷰 보고: ' + base + ' (사진 ' + files.length + '장 · ' + cntTxt + (from ? ', ' + from + ' 기준' : '') + ')' + (warn.length ? ' ' + warn.join(' ') : ''));
 }
 
 /* ---------------- 리뷰 캡처 AI 분류 (10/31 사용자 요청: 카톡 방마다 사진 골라 저장하는 시간 줄이기) ---------------- */
@@ -6140,7 +6129,7 @@ function setGeminiKey() {
 }
 
 /* ---------------- 사용법 탭 (맨 앞, 사용자 요청 10/20). 글을 바꾸면 USAGE_VER를 올림 → 다시 씀 ---------------- */
-const USAGE_TAB = '사용법', USAGE_VER = '17';
+const USAGE_TAB = '사용법', USAGE_VER = '18';
 const USAGE_ROWS = [
   ['체험단 관리 시트 사용법', '(스크립트가 쓰는 탭이라 여기 고친 글은 다음 업데이트 때 다시 써져요)'],
   ['', ''],
@@ -6169,7 +6158,7 @@ const USAGE_ROWS = [
   ['잘못 산 사람·방 나간 사람', '폼수정 탭 B1에서 진행 고르기 → 그 응답 체크 → 삭제 실행. 그날 안이면 폼이 다시 열려 다른 사람을 받음'],
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
   ['리뷰 완료 (취완)', '명단 시트 "명단" 탭 맨 오른쪽 "리뷰 확인" 체크칸에 체크 → 그 방 사람 전부 체크되면 보낼메시지에 그 방 "취완". 의뢰 전체가 끝나고 전부 체크되면 보낼메시지 "할 일"에 리뷰 캡처 올릴 폴더 링크'],
-  ['리뷰 사진 압축', '날마다 말고 의뢰가 다 끝난 뒤 한 번에: 그 의뢰 리뷰 캡처를 전부 의뢰 폴더 안 "리뷰이미지"(할 일·한눈에 "리뷰 취합할 것" 줄의 링크)에 올리기. 날짜·포토·텍스트·별점으로 안 나눠도 됨 → 10~40분 뒤 캠페인명.zip이 생기고(안에 "포토 N, 텍스트 N, 별점 N" 메모 파일, 개수는 방마다 보낸 리뷰 가이드대로 자동) 보낼메시지 "리뷰 보고"(사장님)에 압축 파일 링크 → 받아서 보고 글과 같이 업체에 보내고, 한눈에 그 줄 체크. 사진이 리뷰 건수보다 적거나 개수가 의뢰서와 다르면 할 일에 ⚠'],
+  ['리뷰 보고', '의뢰 리뷰가 다 끝나면 카톡 방마다 서랍 → 사진·동영상 → 전체 선택 → 저장만. AI가 나눈 뒤 보낼메시지 "리뷰 보고"(사장님)에 그 의뢰 리뷰이미지 폴더 링크 + 날짜 캠페인명 + 총 N건 글이 생김 → 보내고 한눈에 "리뷰 취합할 것" 체크. 압축 파일은 안 만듦']
   ['리뷰 사진 받는 곳', 'PC 카톡 저장 폴더를 구글 드라이브 데스크톱의 "리뷰 사진 받는 곳"(맨 위 🔑 줄에 링크)으로 한 번만 바꿔 두면: 방마다 서랍 → 전체 선택 → 저장만 하면 됨. AI가 캡처 속 상품 이름으로 리뷰 체크가 끝난 의뢰를 찾아 그 의뢰 리뷰이미지 폴더(포토·텍스트·별점)로 옮김. 못 찾은 사진은 "어느 의뢰인지 모름" 폴더 + 할 일'],
   ['리뷰 사진 AI 분류', '사용법 탭 맨 위 "🔑 리뷰 사진 AI 키" 칸에 Gemini 무료 키(aistudio.google.com → Get API key)를 한 번 붙여넣으면: PC 카톡 서랍에서 방 사진을 통째로 리뷰이미지 폴더에 저장해도 AI가 리뷰만 골라 포토·텍스트·별점 폴더로 나누고, 구매 인증·다른 사진·같은 사진은 "(압축 제외)" 폴더로 옮김(안 지움). AI가 틀렸으면 파일을 맞는 폴더로 옮기면 다시 압축. 개수가 의뢰서·배정과 다르거나 별점이 5개가 아니면 할 일에 알림'],
   ['블랙리스트 사람이 폼을 냄', '한눈에 "확인 필요" 칸에 ⛔ + 메일 → 폼수정 탭에서 그 응답 지우기'],
@@ -7828,7 +7817,7 @@ function rvItems_(allRuns, props) {
     const f = function (r) { return (r['진행일'].getMonth() + 1) + '.' + r['진행일'].getDate(); };
     const span = f(mine[0]) === f(mine[mine.length - 1]) ? f(mine[0]) : f(mine[0]) + '~' + f(mine[mine.length - 1]);
     const aiQ = String(all['RVAI_Q'] || '').split(',').indexOf(sid) >= 0;
-    const todo = all['RVZIPURL_' + sid] ? '압축 완료 → 보낼메시지 \'리뷰 보고\' 압축 파일 받아서 업체에 보내고 체크' : aiQ ? '사진 AI 분류 중 (15분마다 이어서) → 끝나면 압축' : '리뷰 캡처 전부 올리기(오른쪽 리뷰이미지) → 압축되면 업체에 보내고 체크';
+    const todo = all['RVZIPURL_' + sid] ? '보고 글 보내고 체크' : aiQ ? '사진 분류 중' : '카톡 사진 저장';
     const img = all['RVIMG_' + sid] ? 'https://drive.google.com/drive/folders/' + all['RVIMG_' + sid] : String(mine[0]['폴더 링크'] || '');
     items.push({ type: 'req', sid: sid, label: '📦 의뢰 끝: ' + campOf_(mine[0]['명단 제목']) + ' (' + span + ') ' + todo, at: md(mine[0]['업체 전송']), sheet: String(mine[0]['시트 링크'] || ''), folder: img });
   });
