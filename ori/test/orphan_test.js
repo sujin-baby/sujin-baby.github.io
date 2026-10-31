@@ -19,7 +19,7 @@ function run(orphanResp) {
     MailApp.sendEmail = function () { globalThis.__log.mail++; };
     const file = function (id) { return { getId: function () { return id; }, isTrashed: function () { return false; }, getDateCreated: function () { return new Date(); }, getUrl: function () { return 'u'; } }; };
     const iter = function (a) { let i = 0; return { hasNext: function () { return i < a.length; }, next: function () { return a[i++]; } }; };
-    rootFolder_ = function () { return { getFolders: function () { return iter([{ getLastUpdated: function () { return new Date(); }, getFilesByType: function () { return iter([file('F1'), file('OLD')]); } }]); } }; };
+    rootFolder_ = function () { return { getFolders: function () { return iter([{ getName: function () { return '#밴드'; }, getLastUpdated: function () { return new Date(); }, getFilesByType: function () { return iter([file('F1'), file('OLD')]); } }]); } }; };
     MimeType = { GOOGLE_FORMS: 'f' };
   `);
   G(env, 'adoptOrphanForms_(readRuns_())');
