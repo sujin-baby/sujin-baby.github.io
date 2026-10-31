@@ -101,6 +101,9 @@
     const num = s => Number(String(s || "").replace(/[^0-9]/g, "")) || 0;
     const firstPrices = (t, n) => (t.match(/\d{1,3}(?:,\d{3})+\s*원/g) || []).slice(0, n).map(num).filter(x => x >= 100);
     if (!isNaver) {
+      if (/사용권한이\s*없|접속이\s*제한|Access\s*Denied/i.test((document.title || "") + " " + (txt || "").slice(0, 1000))) {
+        return { site: "coupang", name: "", err: "쿠팡 사용권한 없음 화면이 떴어요. (새로고침 또는 수동 확인 필요)" };
+      }
       const pm = L.pathname.match(/\/v[pm]\/products\/(\d+)/);
       if (!pm) return { err: "쿠팡 상품 상세 페이지에서 눌러 주세요." };
       const qs = new URLSearchParams(L.search);
@@ -109,6 +112,9 @@
       if (!item) { const m = html.match(/["']?itemId["']?\s*[:=]\s*["']?(\d{8,})/); if (m) item = m[1]; }
       let name = visibleTitle();
       if (!name) name = (og("title") || document.title).replace(/\s*[-|]\s*쿠팡!?\s*$/, "").replace(/\s+-\s+[^-]{1,20}$/, "").trim();
+      if (/사용권한이\s*없|접속이\s*제한|Access\s*Denied/i.test(name)) {
+        return { site: "coupang", name: "", err: "쿠팡 사용권한 없음 화면이 떴어요. (새로고침 또는 수동 확인 필요)" };
+      }
       let seller = "";
       const be = document.querySelector('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]');
       if (be) seller = be.textContent.trim();
@@ -239,7 +245,7 @@
     return toks.filter(x => t.indexOf(x) !== -1).length / toks.length;
   }
   /* 쇼핑몰이 띄운 보안 확인(캡차) 화면인지: 상품 칸이 하나도 없고 보안 확인 문구가 있을 때만 */
-  const BLOCK_RE = /자동\s*입력\s*방지|보안\s*확인|영수증|비정상적인|일시적으로\s*제한|접속이\s*(제한|불가)|로봇이\s*아닙|Access Denied|captcha|unusual traffic/i;
+  const BLOCK_RE = /자동\s*입력\s*방지|보안\s*확인|영수증|비정상적인|일시적으로\s*제한|접속이\s*(제한|불가)|로봇이\s*아닙|Access Denied|captcha|unusual traffic|사용권한이\s*없/i;
   const blockedText = () => !!document.body && BLOCK_RE.test(document.body.innerText.slice(0, 4000)) && cardList().length === 0;
   const snippet = () => ((document.title || "") + " | " + (document.body ? document.body.innerText : "")).replace(/\s+/g, " ").trim().slice(0, 90);
   async function waitReady() {

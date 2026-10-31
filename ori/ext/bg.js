@@ -38,24 +38,56 @@ function oyThumb(text) {
 }
 async function autoRun(url, gt) {
   if (busy && Date.now() - busySince < 12 * 60000) { pushGen({ status: "이미 찾는 중이에요. 끝나고 다시 눌러 주세요." }); return; }
-  pushGen({ status: "상품 페이지 여는 중…" });
   await keepFn(fnOf(String(url).split("#")[1] || ""));   /* 단축 링크는 넘어가며 #을 버려서 미리 기억 */
-  const t = await chrome.tabs.create({ url: url, active: false, windowId: gt.windowId, index: gt.index + 1 });
+  const targetPid = pidOf(url);
+  let t = null, reused = false;
+  /* 1. 이미 열려 있는 탭 중 해당 상품 탭이 있는지 확인 (있으면 탭 열기 없이 바로 읽음 → 403 차단 원천 방지) */
+  if (targetPid && gt && gt.windowId) {
+    try {
+      const allTabs = await chrome.tabs.query({ windowId: gt.windowId });
+      const found = allTabs.find(tab => pidOf(tab.url) === targetPid && !/coupang\.com\/(np\/search|error)/.test(tab.url || ""));
+      if (found) { t = found; reused = true; pushGen({ status: "열려 있는 상품 탭에서 읽는 중…" }); }
+    } catch (e) {}
+  }
+  /* 2. 열려 있는 탭이 없으면 새 탭 생성. 쿠팡 봇 탐지(Akamai) 차단을 막기 위해 활성 탭(active: true)으로 열기 */
+  if (!t) {
+    pushGen({ status: "상품 페이지 여는 중…" });
+    t = await chrome.tabs.create({ url: url, active: true, windowId: gt.windowId, index: gt.index + 1 });
+  }
   autoTab = t.id;
   try {
     /* 단축 링크(link.coupang.com 등)가 상품 페이지로 넘어갈 때까지 (최대 40초) */
     let tab = t;
-    for (let i = 0; i < 80; i++) { await sleep(500); tab = await chrome.tabs.get(t.id); if (tab.status === "complete" && /\/products\/\d+|goodsNo=|toss\.shopping\/i\/|shopping-discovery/i.test(tab.url || "")) break; }
-    await sleep(1500);
-    tab = await chrome.tabs.get(t.id);
+    if (!reused) {
+      for (let i = 0; i < 80; i++) {
+        await sleep(500);
+        tab = await chrome.tabs.get(t.id);
+        if (tab.status === "complete" && /\/products\/\d+|goodsNo=|toss\.shopping\/i\/|shopping-discovery/i.test(tab.url || "")) break;
+      }
+      await sleep(1500);
+      tab = await chrome.tabs.get(t.id);
+    }
     if (/oliveyoung\.co\.kr/.test(tab.url || "")) return await autoOy(tab);
     if (/toss\.(shopping|im)/.test(tab.url || "")) { await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["oy.js"] }); return; }   // 토스: 상품 정보만 (검색 순위는 토스 앱 안이라 못 찾음)
     if (!/\/products\/\d+/.test(tab.url || "")) { pushGen({ status: "상품 페이지가 안 열렸어요. 열린 탭을 확인해 주세요." }); await chrome.tabs.update(t.id, { active: true }); return; }
+    /* 일시적 403 차단 화면 감지 시 1회 새로고침 */
+    let tInfo = null;
+    try { tInfo = await call(t.id, "readProduct"); } catch (e) {}
+    if (tInfo && (tInfo.err || /사용권한이\s*없/i.test(tInfo.name || ""))) {
+      pushGen({ status: "쿠팡 일시 차단 감지 → 새로고침 재시도…" });
+      await chrome.tabs.reload(t.id);
+      await sleep(2500);
+      tab = await chrome.tabs.get(t.id);
+    }
     const isNv = /naver\.com/.test(tab.url || "");
     const out = await start(tab);
-    /* 쿠팡: 끝나면 상품 탭 닫음 (결과는 생성기에). 네이버: 검색 탭이 따로 열려서 상품 탭만 닫음. 못 찾으면 상품 탭을 보여 줌 */
-    if (out || isNv) chrome.tabs.remove(t.id).catch(() => {});
-    else chrome.tabs.update(t.id, { active: true }).catch(() => {});
+    /* 쿠팡: 끝나면 상품 탭 닫고 생성기 탭으로 복귀 (재사용한 탭은 닫지 않음). 네이버: 검색 탭이 따로 열려서 상품 탭만 닫음. 못 찾으면 상품 탭을 보여 줌 */
+    if ((out || isNv) && !reused) {
+      chrome.tabs.remove(t.id).catch(() => {});
+      if (gt && gt.id) chrome.tabs.update(gt.id, { active: true }).catch(() => {});
+    } else if (!reused) {
+      chrome.tabs.update(t.id, { active: true }).catch(() => {});
+    }
   } finally { autoTab = 0; }
 }
 /* 올리브영: 상품 페이지에서 oy.js(상품 정보) → 같은 탭을 검색 화면으로 → oy.js(몇 번째). 결과는 oy.js가 생성기로 보냄. 탭은 분홍 테두리 확인용으로 둠 */
@@ -247,7 +279,7 @@ async function scanW(o) {
   }
   return s;
 }
-const HARD_BLOCK = /일시적으로\s*제한|접속이\s*(제한|불가)|Access Denied/i;
+const HARD_BLOCK = /일시적으로\s*제한|접속이\s*(제한|불가)|Access Denied|사용권한이\s*없/i;
 async function waitHuman() {
   if (HARD_BLOCK.test(work.blockSnip || "")) return false;   /* 접속 제한은 풀 수 있는 확인 화면이 아님 → 바로 멈춤 */
   try { await chrome.windows.update(work.winId, { focused: true, state: "normal" }); } catch (e) {}
