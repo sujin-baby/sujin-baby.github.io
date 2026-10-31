@@ -5769,6 +5769,8 @@ function rvCntText_(c) { return RV_TYPES.filter(function (t) { return c[t] > 0; 
 //  다 올릴 때까지 기다림: 마지막 사진을 올리고 10분 동안 새 사진이 없을 때 만듦. 사진을 더 올리면 다시 만듦. 사진 내용은 안 봄
 function rvZip_(f, name, props, sid, mine) {
   // 안 나눈 사진은 AI(Gemini)로 먼저 나눔 (키가 있을 때만). 남았으면 다 나눈 뒤에 압축 (15분 확인에서 이어서)
+  // 예전에 리뷰이미지 안에 만든 '(압축 제외)' 폴더는 의뢰 폴더로 꺼냄 (사장님이 보는 링크에서 빼기)
+  try { const xi = f.img.getFolders(); while (xi.hasNext()) { const xf = xi.next(); if (RV_SKIP_RE.test(xf.getName()) && f.parent && f.parent.getId && f.parent.getId() !== f.img.getId()) xf.moveTo(f.parent); } } catch (e) {}
   const aiLeft = (mine && mine[0] && mine[0]['업체 전송']) ? 0 : rvAiSort_(f, sid, props);
   if (aiLeft > 0) return;
   const byType = { 포토: [], 텍스트: [], 별점: [] }, loose = [], seen = {}, skipped = {};
@@ -5780,7 +5782,7 @@ function rvZip_(f, name, props, sid, mine) {
   };
   walk(f.img, 0, '');
   const ci = f.parent.getFolders();
-  while (ci.hasNext()) { const x = ci.next(); if (RV_CAP_RE.test(String(x.getName()).trim())) walk(x, 0, ''); }
+  while (ci.hasNext()) { const x = ci.next(); if (RV_CAP_RE.test(String(x.getName()).trim())) walk(x, 0, ''); else if (RV_SKIP_RE.test(x.getName())) walk(x, 1, ''); }
   const typed = byType['포토'].concat(byType['텍스트'], byType['별점']), files = typed.concat(loose);
   if (!files.length) return;
   const newest = files.reduce(function (m, x) { return Math.max(m, x.getLastUpdated().getTime(), x.getDateCreated().getTime()); }, 0);
@@ -5972,7 +5974,8 @@ function rvAiSort_(f, sid, props) {
   const setQ = function (on) { const i = q.indexOf(sid); if (on && i < 0) q.push(sid); if (!on && i >= 0) q.splice(i, 1); props.setProperty('RVAI_Q', q.join(',')); };
   if (!loose.length) { setQ(false); return 0; }
   const dirs = {};
-  const dirOf = function (name) { return dirs[name] || (dirs[name] = rvSubDir_(f.img, name)); };
+  // 압축 제외(구매 인증 등)는 리뷰이미지 밖(의뢰 폴더)에 둠: 사장님께 리뷰이미지 폴더 링크를 보내서 구매 인증(이름·주소)이 보이면 안 됨 (10/31)
+  const dirOf = function (name) { return dirs[name] || (dirs[name] = rvSubDir_(RV_SKIP_RE.test(name) ? (f.parent || f.img) : f.img, name)); };
   // 같은 사진(같은 방에서 두 번 저장 등): 크기가 같은 것만 내용 비교
   const bySize = {};
   typed.concat(loose).forEach(function (x) { const k = String(x.getSize()); (bySize[k] = bySize[k] || []).push(x); });
@@ -6089,7 +6092,9 @@ function rvInboxSort_(runs) {
     if (!c) { put(x, sub(inbox, RV_INBOX_UNKNOWN)); unknown++; }
     else {
       const img = c.img = c.img || DriveApp.getFolderById(c.imgId);
-      put(x, rvSubDir_(img, rvAiDir_(o)));
+      const dn = rvAiDir_(o);
+      let home = img; if (RV_SKIP_RE.test(dn)) { try { const pp = img.getParents(); if (pp.hasNext()) home = pp.next(); } catch (e) {} }
+      put(x, rvSubDir_(home, dn));
       got[c.name] = (got[c.name] || 0) + 1; c.moved = 1;
     }
     if (i < files.length - 1) Utilities.sleep(2000);
