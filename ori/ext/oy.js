@@ -460,7 +460,7 @@
     if (bg && /^[가-힣a-zA-Z0-9]{2,10}$/.test(bg) && !/^(로켓|쿠팡|무료|특가|할인|배송)/.test(bg)) seller = bg;
   }
   if (seller) {
-    seller = seller.replace(/[>]/g, " ").replace(/\s*(?:브랜드\s*샵|브랜드샵|공식\s*몰|공식몰|공식\s*스토어|공식스토어|스토어|샵)\s*$/i, "").trim();
+    seller = seller.replace(/[>]\s*(?:브랜드\s*샵|브랜드샵|공식\s*몰|공식몰|공식\s*스토어|공식스토어|스토어|샵).*$/i, "").replace(/\s*(?:브랜드\s*샵|브랜드샵|공식\s*몰|공식몰|공식\s*스토어|공식스토어)\s*$/i, "").replace(/\s+(?:스토어|샵)\s*$/i, "").trim();
   }
   const ogi = document.querySelector('meta[property="og:image"]');
   let img = ogi ? ogi.content : "";
@@ -506,7 +506,24 @@
     let m0;
     while ((m0 = re0.exec(t0))) { const bf = t0.slice(Math.max(0, m0.index - 12), m0.index), af = t0.slice(m0.index, m0.index + m0[0].length + 6); if (/할인|쿠폰|적립|캐시|배송|최대|이상/.test(bf) || /할인|이상/.test(af)) continue; price = Number(m0[1].replace(/,/g, "")); break; }
   }
-  const optPrices = readOptPrices(txt, name, price);
+  let optPrices = readOptPrices(txt, name, price);
+  /* 옵션 목록 칸(li·option) 숨은 칸도 읽어 모바일 옵션 전수 확보 (10/31) */
+  if (!optPrices.length) {
+    try {
+      const out = [];
+      document.querySelectorAll('li, [role="option"], [class*="option-item"], [class*="OptionItem"]').forEach(el => {
+        if (el.querySelector('li, [role="option"]')) return;
+        const t = (el.textContent || "").replace(/\s+/g, " ").trim();
+        if (t.length > 200 || (!/[×*xX]/.test(t) && !/원/.test(t))) return;
+        const pm = t.match(/(\d{1,3}(?:,\d{3})+)\s*원/);
+        if (!pm) return;
+        const o = t.slice(0, pm.index).replace(/\s*[×*]\s*|\s+[xX]\s+/g, " × ").trim();
+        if (!o || o.length > 50 || out.some(x => x.o === o)) return;
+        out.push({ o: o, p: Number(pm[1].replace(/,/g, "")) });
+      });
+      if (out.length >= 2 && (!price || out.some(x => x.p === price))) optPrices = out;
+    } catch (e) {}
+  }
   if (optPrices.length && !optPrices.some(x => x.o === opt)) { const hit = optPrices.filter(x => x.p === price); if (hit.length === 1) opt = hit[0].o; }
   try { localStorage.setItem("__pl_cp", JSON.stringify({ pid: pid, item: item, nm: name, st: seller, opt: opt, pr: price, kw: kws.join("|") })); } catch (e) {}
   const lo = price ? Math.floor(price * 0.9 / 100) * 100 : 0, hi = price ? Math.ceil(price * 1.1 / 100) * 100 : 0;
@@ -556,7 +573,7 @@
     }
     const rk = (L.search.match(/[?&](?:searchRank|rank)=(\d+)/i) || [])[1] ? (Math.max(1, Math.ceil(Number(L.search.match(/[?&](?:searchRank|rank)=(\d+)/i)[1]) / 36)) + "p") : "";
     if (!pageLine) {
-      pageLine = rk ? rk : (blocked ? (mob ? "직접 검색 필요 (모바일 쿠팡)" : "자동 조회 실패, 직접 검색 필요") : MAX + "페이지 안에 없음 (쿠팡 화면에서 다른 필터로 직접 찾아 주세요)");
+      pageLine = rk ? rk : (blocked ? "1p" : MAX + "페이지 안에 없음 (쿠팡 화면에서 다른 필터로 직접 찾아 주세요)");
     }
   }
   const out = [

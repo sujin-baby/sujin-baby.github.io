@@ -315,5 +315,37 @@ if (gFull.pname !== '아텍스 산리오 캐릭터즈 우사하나 밴드 표준
 if (gFull.page !== '1p') throw new Error('gFull page should default to 1p, got: ' + gFull.page);
 if (gFull.option !== '10개') throw new Error('gFull option should be 10개, got: ' + gFull.option);
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (8개 샘플 전원 일치)');
+// ==========================================
+// Test 9: 텀블러 의뢰서 파싱 및 4색상·리뷰·신상품 검증 (10/31)
+// 1) 4색상 5개씩 -> 검정·아이보리·연그린·하늘색 자동 분할
+// 2) 2개 정도만 사진 나머지는 별점만 -> 포토리뷰 2개 / 텍스트리뷰 3개
+// 3) 신상품 순위 -> 1p
+// 4) 판매처 바나바스토어 보존
+// ==========================================
+console.log('-- Test 9: 텀블러 의뢰서 파싱 (4색상 분할, 구어체 리뷰, 신상품 1p, 바나바스토어 보존)');
+const reqTumblerFull = `#입금대행 실배 교차불가9500
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 런치버스 미니 보온보냉 텀블러
+2. 키워드 검색 시 현재 순위 : 신상품
+3. 총 구매 건수 : 20개
+4. 일 진행 건수 : 5개
+5. 상품주소(URL) :
+https://www.coupang.com/vp/products/9775450298?vendorItemId=96180413598
+6. 구매옵션 : 4가지
+4색상 5개씩
+7. 포토제공 유 무  : 유
+8. 리뷰내용 가이드 : 2개 정도만 사진을 넣어 주시고 나머지는 별점만 부탁드립니다
+9. 입금하실 입금자명 :신훈
+10.택배대행 Y/N:Y`;
+
+const headTumblerFull = P.parseAll(reqTumblerFull);
+const gTumblerFull = headTumblerFull.guides[0];
+if (gTumblerFull.page !== '1p') throw new Error('gTumblerFull page should be 1p, got: ' + gTumblerFull.page);
+if (!/포토리뷰 2개 \/ 텍스트리뷰 3개/.test(gTumblerFull.review)) throw new Error('gTumblerFull review should split 2 photo / 3 text, got: ' + gTumblerFull.review);
+if (gTumblerFull.optBase.length !== 4) throw new Error('gTumblerFull optBase should have 4 colors, got: ' + gTumblerFull.optBase.length);
+if (!gTumblerFull.optBase.some(o => o.label === '아이보리') || !gTumblerFull.optBase.some(o => o.label === '검정')) {
+  throw new Error('gTumblerFull optBase should contain 검정, 아이보리, 연그린, 하늘색');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (9개 샘플 전원 일치)');
 process.exit(0);
