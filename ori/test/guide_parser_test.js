@@ -310,7 +310,7 @@ const reqAtexFull = `#입금대행 실배 11500
 
 const headFull = P.parseAll(reqAtexFull);
 const gFull = headFull.guides[0];
-if (gFull.seller !== '아텍스') throw new Error('gFull seller should default to 아텍스 from keyword, got: ' + gFull.seller);
+if (gFull.seller !== '') throw new Error('gFull seller should be empty before product page fetch, got: ' + gFull.seller);
 if (gFull.pname !== '아텍스 산리오 캐릭터즈 우사하나 밴드 표준형') throw new Error('gFull pname should default to keyword, got: ' + gFull.pname);
 if (gFull.page !== '1p') throw new Error('gFull page should default to 1p, got: ' + gFull.page);
 if (gFull.option !== '10개') throw new Error('gFull option should be 10개, got: ' + gFull.option);
@@ -403,7 +403,13 @@ const reqBag = `#입금대행 실배 17000
 const headBag = P.parseAll(reqBag);
 const gBag = headBag.guides[0];
 if (gBag.keyword !== '보냉백') throw new Error('gBag keyword should be 보냉백, got: ' + gBag.keyword);
-if (gBag.seller !== '아이누빅') throw new Error('gBag seller should be 아이누빅, got: ' + gBag.seller);
+// 의뢰서에 판매처 라벨이 없을 때는 입금자명(아이누빅)으로 유추하지 않고 빈칸(상품페이지 가져오기로 채움)
+if (gBag.seller !== '') throw new Error('gBag seller should be empty before product page fetch, got: ' + gBag.seller);
+
+// 의뢰서에 명시적인 판매처 라벨이 있을 때는 정상 파싱
+const reqWithSeller = `판매처 : 아이누빅\n1. 검색 키워드 : 보냉백`;
+const headWithSeller = P.parseAll(reqWithSeller);
+if (headWithSeller.guides[0].seller !== '아이누빅') throw new Error('headWithSeller seller should be 아이누빅, got: ' + headWithSeller.guides[0].seller);
 
 console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (11개 샘플 전원 일치)');
 process.exit(0);
