@@ -7800,11 +7800,11 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '28';
+const DASH_VER = '29';
 // 한눈에 '리뷰 취합할 것' 칸에 보일 것: 의뢰 전체 리뷰가 끝난(RVRPT_) 의뢰 중 업체 전송 체크 안 했거나 체크한 지 3일 안 된 것. 최근 40일 진행만, 기대평 빼고
 //  날마다 취합하던 줄은 없앰 (사용자 요청 10/26: 날짜별로 말고 한 캠페인이 다 끝나면 그때 한 번에)
 function rvItems_(allRuns, props) {
-  const all = props.getProperties(), t0 = today_().getTime(), cut = t0 - 40 * 86400000, keep = function (d) { return !(d instanceof Date) || dayStart_(d) >= t0 - 3 * 86400000; };
+  const all = props.getProperties(), t0 = today_().getTime(), cut = t0 - 40 * 86400000, keep = function (d) { return !(d instanceof Date) || dayStart_(d) >= t0; };   // 체크한 날만 보이고 다음 날 사라짐 (10/31: 3일은 길어서 또 생긴 것처럼 보임)
   const md = function (d) { return d instanceof Date ? Utilities.formatDate(d, CONFIG.TIMEZONE, 'yyyy-MM-dd') : ''; };
   const runs = allRuns.filter(function (r) { return r['시트ID'] && !isExpect_(r) && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut; })
     .sort(function (a, b) { return a['진행일'] - b['진행일']; });
@@ -8032,7 +8032,9 @@ function buildDashboard_(force) {
       if (pu) sh.getRange(rr, 11).setFormula('=HYPERLINK(' + q(pu) + ',' + q(pl || '상품') + ')'); else if (pl) sh.getRange(rr, 11).setValue(pl); }
     // 택대면 '택배 옮김' 체크 (명단을 택배시트에 옮겨 적었으면 체크, 2시 전까지). 체크하면 진행목록에도 저장
     if (r['택대'] === 'Y') sh.getRange(rr, 13).insertCheckboxes().setValue(r['택배 옮김'] === true);
+    // 오류가 없어지면 칸도 비움 (10/31: 다시 그릴 때 시트를 통째로 안 지워서 옛 오류가 몇 시간 남아 있었음)
     if (errs[r['명단 제목']]) sh.getRange(rr, 14).setValue('⚠ ' + errs[r['명단 제목']]).setFontColor('#b91c1c');
+    else sh.getRange(rr, 14).clearContent();
     if (x.chk) {
       const c = colLetter_(x.chk), rg = c + (x.top + 2) + ':' + c + (x.top + 1 + x.n);
       sh.getRange(rr, 12).setFormula('=COUNTIF(' + rg + ',"옵션 틀림")+COUNTIF(' + rg + ',"초과 구매")');
@@ -8055,7 +8057,7 @@ function buildDashboard_(force) {
   const rvMap = {};
   if (rvItems.length) {
     const rt = bar + 2;
-    sh.getRange(rt, 1, 1, 5).setValues([['보냄', '리뷰 취합할 것 (의뢰 리뷰가 다 끝난 것 · 업체에 보내면 체크 → 3일 뒤 사라짐)', '체크한 날', '명단', '사진 올릴 곳']]).setFontWeight('bold').setBackground('#e6f4ea');
+    sh.getRange(rt, 1, 1, 5).setValues([['보냄', '리뷰 취합할 것 (의뢰 리뷰가 다 끝난 것 · 업체에 보내면 체크 → 다음 날 사라짐)', '체크한 날', '명단', '사진 올릴 곳']]).setFontWeight('bold').setBackground('#e6f4ea');
     rvItems.forEach(function (it, i) {
       const rr = rt + 1 + i;
       rvMap[rr] = it.type === 'req' ? { type: 'req', sid: it.sid } : { type: 'day', title: it.title };
