@@ -347,5 +347,32 @@ if (!gTumblerFull.optBase.some(o => o.label === '아이보리') || !gTumblerFull
   throw new Error('gTumblerFull optBase should contain 검정, 아이보리, 연그린, 하늘색');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (9개 샘플 전원 일치)');
+// ==========================================
+// Test 10: 도어스토퍼 의뢰서 파싱 및 suggestKeywords 명사 추출 검증 (10/31 v130)
+// 1) '로이시 원스텝 도어스토퍼 현관문 닫힘방지 무타공 자석 스토퍼' -> 대표 키워드 '도어스토퍼' (닫힘방지 오인식 방지)
+// 2) 의뢰서 키워드 '도어스토퍼' 정상 파싱
+// ==========================================
+console.log('-- Test 10: 도어스토퍼 의뢰서 파싱 및 suggestKeywords 명사 추출 검증');
+const doorKw = P.suggestKeywords('로이시 원스텝 도어스토퍼 현관문 닫힘방지 무타공 자석 스토퍼');
+if (doorKw.main !== '도어스토퍼') throw new Error('Main keyword should be 도어스토퍼, got: ' + doorKw.main);
+if (doorKw.subs.some(s => s.indexOf('닫힘방지') !== -1)) throw new Error('Subs should not include 닫힘방지, got: ' + JSON.stringify(doorKw.subs));
+
+const reqDoor = `#입금대행 실배 17800
+
+1. 구매진행시 검색할 키워드 : 도어스토퍼
+2. 키워드 검색 시 현재 순위 :
+3. 총 구매 건수 : 20
+4. 일 진행 건수 : 10
+5. 상품주소(URL) : https://www.coupang.com/vp/products/9790583445?vendorItemId=96227821123
+6. 구매옵션 : 다크블랙
+7. 포토제공 유 무 : 유
+8. 리뷰내용 가이드 : 원스텝 방식, 자석 고정력 좋음`;
+
+const headDoor = P.parseAll(reqDoor);
+const gDoor = headDoor.guides[0];
+if (gDoor.keyword !== '도어스토퍼') throw new Error('gDoor keyword should be 도어스토퍼, got: ' + gDoor.keyword);
+if (gDoor.option !== '다크블랙') throw new Error('gDoor option should be 다크블랙, got: ' + gDoor.option);
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (10개 샘플 전원 일치)');
 process.exit(0);
+

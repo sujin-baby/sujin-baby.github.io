@@ -58,15 +58,15 @@
     const brand = toks.length >= 3 ? toks[0] : ""; if (brand) toks = toks.slice(1);
     const STOP = /^(탈부착식|탈부착|착붙는|무타공|세라믹|코팅|프리미엄|고급|대용량|소용량|회전|포함|정품|국내산|수입산|신상|신상품|인기|추천|최신|업그레이드|스마트|터치|겨울|여름|봄|가을|방한|보온보냉|보온|보냉|세척솔|대시보드|특가|증정|무료배송|1\+1|세트|단품|미니|슬림|휴대용|접이식)$/;
     const spec = t => /^\d|\d+(mg|g|kg|ml|l|개|캡슐|정|매|p|도|cm|mm|인치|w)\b|x\d/i.test(t) && !/^[가-힣a-z]+\d+$/i.test(t);
-    const isMod = t => /(는|한|된|용)$/.test(t) && t.length <= 4;
+    const isMod = t => /(는|한|된|용|방지|차단|전용|호환|타입|형)$/.test(t) && t.length <= 6;
     const cand = toks.filter(t => !spec(t) && !STOP.test(t) && !isMod(t) && t.length >= 2);
     const mods = toks.filter(t => /용$/.test(t) && t.length <= 4);
-    const NOUN_SUFFIX = /(정|환|캡슐|스틱|분말|가루|원액|즙|차|오일|세럼|크림|로션|샴푸|패치|패드|거치대|매트|선풍기|텀블러|청소기|마사지기|워시|토너|앰플|마스크|비누|티슈|세제|치약|칫솔|홀더|걸이|선반|트레이|보틀|쿠션|방석|베개|슬리퍼|양말|장갑|모자|밴드)$/;
+    const NOUN_SUFFIX = /(정|환|캡슐|스틱|분말|가루|원액|즙|차|오일|세럼|크림|로션|샴푸|패치|패드|거치대|매트|선풍기|텀블러|청소기|마사지기|워시|토너|앰플|마스크|비누|티슈|세제|치약|칫솔|홀더|걸이|선반|트레이|보틀|쿠션|방석|베개|슬리퍼|양말|장갑|모자|밴드|스토퍼|도어스토퍼|말굽|도어체크|도어락|고정기|가드)$/;
     const nounMatch = cand.find(t => NOUN_SUFFIX.test(t));
     const tail = t => t.slice(-3);
-    const rep = cand.filter(t => t.length >= 4 && cand.some(u => u !== t && u.length >= 4 && tail(u) === tail(t)));
+    const rep = cand.filter(t => t.length >= 3 && cand.some(u => u !== t && u.length >= 3 && tail(u) === tail(t)));
     const cat = dash[1] ? dash[1].split(/[\/,]/)[0].trim() : "";
-    const main = nounMatch || rep[0] || (cat && cat.length >= 2 && !spec(cat) && !/일반|기타/.test(cat) ? cat : "") || cand.slice(0, 4).pop() || toks[0] || "";
+    const main = nounMatch || rep[0] || (cat && cat.length >= 2 && !spec(cat) && !/일반|기타/.test(cat) ? cat : "") || cand[0] || toks[0] || "";
     const alts = rep.filter(t => t !== main), out = [main];
     const add = x => { x = x.trim(); if (x && out.indexOf(x) === -1) out.push(x); };
     alts.forEach(add);
@@ -470,20 +470,20 @@
   if (!opt) { const oe = document.querySelector('.prod-option__selected .value, .prod-option__selected-container .value'); if (oe) opt = oe.textContent.replace(/\s+/g, " ").trim().slice(0, 60); }
   if (!opt) { const om = document.body.innerText.match(/(?:색상|옵션|구성|사이즈|수량|선택|용량)[^\n]{0,12}[:：]\s*([^\n]{1,40})/); if (om && !/선택하세요|선택해\s*주세요/.test(om[1])) opt = om[1].trim(); }
   if (!opt) opt = "단일옵션";
-  const hk = (L.hash.match(/kw=([^&]+)/) || [])[1];
-  const hp = Number((L.hash.match(/pr=(\d+)/) || [])[1] || 0);
-  /* 썸네일 파일 이름 = 폼 제목 (생성기가 &fn= 으로 넘김, 사용자 요청 10/24). 주소에서 #이 빠졌으면 복사해 둔 주소에서 */
+  const hk = (L.search.match(/[?&]kw=([^&]+)/) || L.hash.match(/[#&]kw=([^&]+)/) || [])[1];
+  const hp = Number((L.search.match(/[?&]pr=(\d+)/) || L.hash.match(/[#&]pr=(\d+)/) || [])[1] || 0);
+  /* 썸네일 파일 이름 = 폼 제목 (생성기가 &fn= 으로 넘김, 사용자 요청 10/24). 주소에서 파라미터가 빠졌으면 복사해 둔 주소에서 */
   let fnIn = "";
-  try { fnIn = decodeURIComponent((L.hash.match(/fn=([^&]+)/) || [])[1] || ""); } catch (e) {}
-  if (!fnIn) { try { const cb0 = ((await navigator.clipboard.readText()) || ""); fnIn = decodeURIComponent((cb0.match(/[#&]fn=([^&\s]+)/) || [])[1] || ""); } catch (e) {} }
-  /* 키워드: 생성기 [상품 페이지 열기]가 주소 뒤(#kw=)에 붙여 줌. 쿠팡 단축 링크가 넘어가면서 #을 버리면, 그 버튼이 복사해 둔 의뢰서 키워드(클립보드)를 씀. */
+  try { fnIn = decodeURIComponent((L.search.match(/[?&]fn=([^&]+)/) || L.hash.match(/[#&]fn=([^&]+)/) || [])[1] || ""); } catch (e) {}
+  if (!fnIn) { try { const cb0 = ((await navigator.clipboard.readText()) || ""); fnIn = decodeURIComponent((cb0.match(/[?#&]fn=([^&\s]+)/) || [])[1] || ""); } catch (e) {} }
+  /* 키워드: 생성기 [상품 페이지 열기]가 주소 뒤(?kw= 또는 #kw=)에 붙여 줌. 쿠팡이 단축링크/SPA 라우팅하며 해시를 지워도 쿼리 스트링에서 보존 */
   let kwIn = hk ? decodeURIComponent(hk) : "", kwFrom = hk ? "생성기 주소" : "";
   if (!kwIn) {
     let cb = "";
     try { cb = ((await navigator.clipboard.readText()) || "").trim(); } catch (e) {}
     const nmN = name.replace(/\s+/g, "");
-    /* 생성기 [상품 페이지 열기]가 복사한 상품 주소(#kw=…)에서 키워드 (아이폰: 쿠팡이 모바일 주소로 넘어가며 #을 버림) */
-    const ck = (cb.match(/[#&]kw=([^&\s]+)/) || [])[1];
+    /* 생성기 [상품 페이지 열기]가 복사한 상품 주소에서 키워드 */
+    const ck = (cb.match(/[?#&]kw=([^&\s]+)/) || [])[1];
     if (ck) {
       kwIn = decodeURIComponent(ck);
       kwFrom = "생성기 주소 (클립보드)";
@@ -492,10 +492,21 @@
       kwFrom = "복사해 둔 의뢰서 키워드";
     }
   }
-  // 사용자가 직접 입력하는 prompt는 제거: 없으면 알아서 상품명 자동 추천으로 탐색
+  // URL이나 클립보드에 키워드가 없으면, 추천 키워드를 기본값으로 프롬프트 확인 (오추출 방지)
   if (!kwIn) {
-    kwIn = sugKw(name).join("|");
-    kwFrom = "상품명 자동 추천";
+    const sug = sugKw(name);
+    const guessed = sug[0] || "";
+    let u = "";
+    try {
+      u = prompt("의뢰서 검색 키워드를 입력해 주세요 (추천 키워드):", guessed);
+    } catch (e) {}
+    if (u && u.trim()) {
+      kwIn = u.trim();
+      kwFrom = "사용자 직접 입력";
+    } else if (guessed) {
+      kwIn = guessed;
+      kwFrom = "상품명 자동 추천";
+    }
   }
   const kws = kwIn.split("|").map(x => x.trim()).filter(Boolean);
   const kw = kws[0] || "";
