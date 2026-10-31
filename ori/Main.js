@@ -3128,6 +3128,29 @@ function checkFullInner_() {
     }
   }
 }
+// 진행목록 링크·ID 칸, 일정 탭 ID·설정 칸: 고치려 하면 '실수로 변경하면 안 되는…' 경고 (사용자 요청 10/31: 링크를 잘못 건드려 없어질 뻔함)
+//  시트 주인은 구글이 완전히 못 막게 해서 경고만 됨. 스크립트는 그대로 씀. 한 번만 (PROT_V1), 같은 설명의 보호가 이미 있으면 안 만듦
+const PROT_DESC = '자동 칸 (스크립트가 씀, 고치지 마세요)';
+function protectAutoCols_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('PROT_V1')) return;
+  const ss = adminSs_(), add = function (sh, head, names) {
+    if (!sh) return;
+    const have = sh.getProtections(SpreadsheetApp.ProtectionType.RANGE).map(function (p) { return p.getRange().getA1Notation(); });
+    names.forEach(function (n) {
+      const c = head.indexOf(n) + 1;
+      if (c < 1) return;
+      const rg = sh.getRange(1, c, sh.getMaxRows(), 1);
+      if (have.indexOf(rg.getA1Notation()) >= 0) return;
+      rg.protect().setDescription(PROT_DESC + ' ' + n).setWarningOnly(true);
+    });
+  };
+  const list = ss.getSheetByName(CONFIG.LIST_SHEET);
+  if (list) add(list, list.getRange(1, 1, 1, list.getLastColumn()).getValues()[0].map(String), ['폼 링크', '시트 링크', '폴더 링크', '시트ID', '폼ID', '요청ID']);
+  try { const ps = planSheet_(); add(ps, PLAN_HEAD, ['ID', '설정']); } catch (e) {}
+  props.setProperty('PROT_V1', '1');
+  note_('✓ 진행목록 링크·ID 칸, 일정 ID·설정 칸에 고치기 전 경고 걸어 둠');
+}
 // 30분 정리: 다 끝나야 시각을 적음 (중간에 끊기면 다음 확인에서 다시)
 function slowTasks_(rr, listed) {
   rr = rr || readRuns_(); listed = listed || {};
@@ -3141,6 +3164,7 @@ function slowTasks_(rr, listed) {
   try { subTime_('정리: 명단 시트 표시', function () { cleanListSheetsOnce_(rr); }); } catch (e) { note_('명단 시트 표시 정리 실패: ' + e); }
   try { subTime_('정리: 보낸 메시지', function () { pruneOutbox_(); }); } catch (e) { note_('보낸 메시지 정리 실패: ' + e); }
   try { subTime_('정리: 폼수정 탭', function () { ensureEditTab_(); }); } catch (e) { note_('폼수정 탭 만들기 실패: ' + e); }
+  try { protectAutoCols_(); } catch (e) { note_('자동 칸 경고 걸기 실패: ' + e); }
   PropertiesService.getScriptProperties().setProperty('SLOW_AT', String(Date.now()));
 }
 
@@ -8405,9 +8429,7 @@ function morningCheck_() {
     return !rows.some(function (x) { return x[2] === '방 공지' && String(x[4]).indexOf(link) >= 0 && dateTok_(String(x[3])) === dateTok_(room); });
   }).map(roomOf);
   if (noNotice.length) issues.push('방 공지가 보낼메시지에 없음: ' + noNotice.join(', '));
-  // 2. 보낼 날짜가 지났는데 안 보낸 메시지 (할 일·포토 가이드 빼고)
-  const late = rows.filter(function (x) { return x[5] === '대기' && x[1] instanceof Date && dayStart_(x[1]) < t0 && x[2] !== '할 일' && x[2] !== '포토 가이드'; });
-  if (late.length) issues.push('보낼 날짜가 지났는데 안 보낸 메시지 ' + late.length + '개: ' + late.slice(0, 6).map(function (x) { return x[3] + '(' + x[2] + ')'; }).join(', '));
+  // 2. (10/31 뺌) 보낼 날짜가 지난 안 보낸 메시지는 보낼메시지에 그대로 보여서 새벽 점검에 또 적으면 두 번 확인하게 됨 (사용자 요청)
   // 3. 보낼 날짜 칸이 날짜가 아닌 대기 줄 (포토 가이드 빼고)
   const odd = rows.filter(function (x) { return x[5] === '대기' && x[2] !== '포토 가이드' && !(x[1] instanceof Date); });
   if (odd.length) issues.push('보낼 날짜 칸이 날짜가 아님: ' + odd.slice(0, 6).map(function (x) { return x[3] + '(' + x[1] + ')'; }).join(', '));
