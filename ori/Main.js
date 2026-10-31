@@ -3102,6 +3102,7 @@ function checkFullInner_() {
   } catch (e) { note_('한눈에 오류 칸 확인 실패: ' + e); }
   // 리뷰 사진 AI 분류가 남은 의뢰가 있으면 이어서 (10/31)
   if (props.getProperty('RVAI_Q') && !late_(200)) { step_('리뷰 사진 AI'); rvAiQueue_(); }
+  if (geminiKey_() && !late_(200)) { try { subTime_('리뷰 사진 받는 곳', function () { rvInboxSort_(null); }); } catch (e) { note_('리뷰 사진 받는 곳 실패: ' + e); } }
   // 사용법 탭 글이 바뀌었으면 바로 (정리는 30분마다라 새 칸이 늦게 생김. 같으면 속성 하나만 보고 끝)
   try { ensureUsageTab_(); } catch (e) {}
   // 월급시트·배정 수식은 진행이 바뀌었을 때(인원·방제·날짜·상태) 또는 30분마다만 (10/23 정리: 매번 하면 확인이 5분 넘게 걸려 명단이 늦게 뜸)
@@ -5635,7 +5636,9 @@ function rvUploadMsg_(name, url, mine) {
     lines.push('', '방 ' + rooms.length + '개 (빠뜨리지 않게 하나씩):');
     rooms.forEach(function (rm) { const u = roomLinkOf_(rm, links); lines.push('☐ ' + rm + (u ? ' ' + u : '')); });
   }
-  lines.push('', 'PC 카톡: 방 열기 → 서랍(사진·동영상) → 사진 고르기 → 저장 위치 = 위 폴더 (PC 구글 드라이브 앱)');
+  let inboxUrl = ''; if (ai) { try { inboxUrl = rvInbox_().getUrl(); } catch (e) {} }
+  if (inboxUrl) lines.push('', 'PC 카톡: 방 열기 → 서랍(사진·동영상) → 전체 선택 → 저장. 카톡 저장 폴더를 드라이브 \'' + RV_INBOX + '\'로 한 번 정해 두면 위 폴더에 안 넣어도 AI가 상품 이름으로 이 의뢰를 찾아 옮겨요', inboxUrl);
+  else lines.push('', 'PC 카톡: 방 열기 → 서랍(사진·동영상) → 사진 고르기 → 저장 위치 = 위 폴더 (PC 구글 드라이브 앱)');
   if (ai) lines.push('구매 인증·공지 사진이 섞여도 돼요: AI가 리뷰만 골라 포토·텍스트·별점으로 나누고 나머지는 \'(압축 제외)\' 폴더로 옮겨요. 개수가 의뢰서·배정과 다르면 할 일에 알려요');
   lines.push('올리고 10~40분 뒤 자동으로 압축돼요. 압축 파일 안에 포토·텍스트·별점 개수가 적히고, 보낼메시지 \'리뷰 보고\'(사장님)에 압축 파일 링크가 붙어요 → 받아서 보고 글과 같이 보내기');
   return lines.join('\n');
@@ -5785,7 +5788,7 @@ const RV_AI_DIR = { purchase: '구매인증 (압축 제외)', other: '기타 (�
 const GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash'];
 const GEMINI_PROMPT = [
   '이 이미지는 한국 쇼핑몰(쿠팡·네이버·올리브영 등) 체험단 참여자가 카카오톡 방에 올린 휴대폰 캡처예요.',
-  'JSON 하나로만 답하세요: {"kind": "review" | "purchase" | "other", "stars": 0~5 정수, "text": true/false, "photo": true/false}',
+  'JSON 하나로만 답하세요: {"kind": "review" | "purchase" | "other", "stars": 0~5 정수, "text": true/false, "photo": true/false, "product": "화면에 보이는 상품 이름 그대로 (없으면 빈 글자)"}',
   '- review: 상품 리뷰를 쓰는 화면이나 다 쓴 리뷰 화면 (별점·리뷰 글이 보임)',
   '- purchase: 주문·결제 완료·주문 상세·배송 조회 화면 (구매 인증)',
   '- other: 그 밖 (상품 사진만, 공지, 대화 캡처 등)',
@@ -5796,7 +5799,8 @@ const GEMINI_PROMPT = [
 const GEMINI_CELL_LABEL = '🔑 리뷰 사진 AI 키';
 function geminiCellText_() {
   const k = geminiKey_();
-  return k ? '✓ 키 넣음 (…' + k.slice(-4) + ') — 리뷰이미지 폴더 사진을 AI가 나눠요. 바꾸려면 새 키를 이 칸에 붙여넣기, 끄려면 "지움"'
+  let inbox = ''; if (k) { try { inbox = '\n카톡 PC 저장 폴더 = 드라이브 \'' + RV_INBOX + '\' (여기 저장하면 AI가 의뢰를 찾아 옮김): ' + rvInbox_().getUrl(); } catch (e) {} }
+  return k ? '✓ 키 넣음 (…' + k.slice(-4) + ') — 리뷰이미지 폴더 사진을 AI가 나눠요. 바꾸려면 새 키를 이 칸에 붙여넣기, 끄려면 "지움"' + inbox
     : '여기에 Gemini 키(AIza… 또는 AQ.…로 시작)를 붙여넣기 → 키 만들기: 컴퓨터에서 aistudio.google.com → Get API key → Create API key (무료)';
 }
 // 사용법 탭 5행 B칸에 붙여넣은 키 → 저장하고 바로 시험. 칸에는 키 대신 결과만 남김
@@ -5850,7 +5854,7 @@ function geminiReadCapture_(blob) {
   const m = String(t).replace(/```(json)?/g, '').match(/\{[\s\S]*\}/);
   if (!m) throw new Error('Gemini 답을 못 읽음: ' + String(t).slice(0, 80));
   const o = JSON.parse(m[0]);
-  return { kind: /review|purchase|other/.test(o.kind) ? o.kind : 'other', stars: Math.max(0, Math.min(5, Number(o.stars) || 0)), text: o.text === true, photo: o.photo === true };
+  return { kind: /review|purchase|other/.test(o.kind) ? o.kind : 'other', stars: Math.max(0, Math.min(5, Number(o.stars) || 0)), text: o.text === true, photo: o.photo === true, product: String(o.product || '').slice(0, 120) };
 }
 // 읽은 결과 → 옮길 폴더 이름
 function rvAiDir_(o) {
@@ -5921,6 +5925,88 @@ function rvAiSort_(f, sid, props) {
   setQ(left.length - done > 0);
   return left.length - done;
 }
+// 리뷰 사진 받는 곳 (10/31: PC 카톡은 저장 위치를 매번 못 고르고 다운로드 폴더에 바로 저장됨)
+//  → 카톡 다운로드 폴더를 드라이브 '리뷰 사진 받는 곳' 하나로 정해 두면, AI가 캡처 속 상품 이름으로 어느 의뢰인지 찾아 그 의뢰 리뷰이미지 폴더로 옮김
+//  찾을 의뢰 = 리뷰가 다 끝났고(RVRPT_) 아직 압축 안 된 의뢰. 하나뿐이면 그 의뢰로. 못 찾으면 '어느 의뢰인지 모름' 폴더 + 할 일
+const RV_INBOX = '리뷰 사진 받는 곳', RV_INBOX_UNKNOWN = '어느 의뢰인지 모름';
+function rvInbox_() {
+  const props = PropertiesService.getScriptProperties(), id = props.getProperty('RVINBOX_ID');
+  if (id) { try { const f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) {} }
+  const root = rootFolder_(), it = root.getFoldersByName(RV_INBOX);
+  const f = it.hasNext() ? it.next() : root.createFolder(RV_INBOX);
+  props.setProperty('RVINBOX_ID', f.getId());
+  return f;
+}
+// 상품 이름 비교용 낱말 (2글자 이상, 띄어쓰기·기호로 나눔)
+function rvWords_(t) { return String(t || '').replace(/\[[^\]]*\]|\([^)]*\)/g, ' ').split(/[\s,·/|+\-_:：]+/).map(function (w) { return w.replace(/[^\w가-힣]/g, ''); }).filter(function (w) { return w.length >= 2 && !/^\d+$/.test(w); }); }
+// 압축을 기다리는 의뢰들 → [{ sid, name, img, parent, words }]
+function rvPendingCamps_(runs, props) {
+  const all = props.getProperties(), cut = today_().getTime() - 40 * 86400000, by = {};
+  runs.forEach(function (r) { if (r['시트ID'] && !isExpect_(r) && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut) (by[r['시트ID']] = by[r['시트ID']] || []).push(r); });
+  const out = [];
+  Object.keys(by).forEach(function (sid) {
+    if (!all['RVRPT_' + sid] || all['RVZIPURL_' + sid] || !all['RVIMG_' + sid]) return;
+    const mine = by[sid], words = {};
+    mine.forEach(function (r) {
+      rvWords_(campOf_(r['명단 제목'])).forEach(function (w) { words[w] = 1; });
+      String(formDescRead_(r['폼ID'], descAge_(r))).split('\n').forEach(function (l) { if (/상품명|키워드|판매처/.test(l)) rvWords_(l.replace(/^.*?[:：]/, '')).forEach(function (w) { words[w] = 1; }); });
+    });
+    out.push({ sid: sid, name: campOf_(mine[0]['명단 제목']), imgId: all['RVIMG_' + sid], words: Object.keys(words) });
+  });
+  return out;
+}
+// 캡처 속 상품 이름 → 의뢰 (낱말이 가장 많이 겹치는 의뢰, 같으면 못 정함). 압축 기다리는 의뢰가 하나뿐이면 그 의뢰
+function rvMatchCamp_(product, camps) {
+  if (!camps.length) return null;
+  const p = String(product || '').replace(/\s+/g, '');
+  const sc = camps.map(function (c) { return { c: c, n: c.words.filter(function (w) { return p.indexOf(w) >= 0; }).length }; }).sort(function (a, b) { return b.n - a.n; });
+  if (sc[0].n > 0 && (sc.length === 1 || sc[1].n < sc[0].n)) return sc[0].c;
+  return camps.length === 1 ? camps[0] : null;
+}
+// 받는 곳 사진을 의뢰별로 나눔 (15분 확인, 한 번에 60초까지). 종류(포토·텍스트·별점·구매인증…)도 같이 → 그 의뢰 리뷰이미지 안 폴더로 바로
+function rvInboxSort_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (!geminiKey_() || Number(props.getProperty('GEMINI_WAIT') || 0) > Date.now()) return;
+  let inbox; try { inbox = rvInbox_(); } catch (e) { return; }
+  const files = [], it = inbox.getFiles();
+  while (it.hasNext()) { const x = it.next(); if (/^image\//.test(x.getMimeType())) files.push(x); }
+  if (!files.length) return;
+  const camps = rvPendingCamps_(runs || readRuns_(), props), dirs = {};
+  const sub = function (parent, name) { const k = parent.getId() + '|' + name; if (dirs[k]) return dirs[k]; const i2 = parent.getFoldersByName(name); return (dirs[k] = i2.hasNext() ? i2.next() : parent.createFolder(name)); };
+  const t0 = Date.now(), got = {};
+  let unknown = 0;
+  for (let i = 0; i < files.length; i++) {
+    if (Date.now() - t0 > 60000 || late_(230)) break;
+    const x = files[i];
+    let o;
+    try { o = subTime_('리뷰 사진 AI', function () { return geminiReadCapture_(x.getBlob()); }); }
+    catch (e) {
+      if (e && e.quota) { props.setProperty('GEMINI_WAIT', String(Date.now() + 90000)); break; }
+      note_('리뷰 사진 AI 읽기 실패 (받는 곳 ' + x.getName() + '): ' + (e && e.message || e));
+      if (/키가 안 맞아요|키 없음/.test(String(e && e.message))) break;
+      continue;
+    }
+    try { x.setDescription('AI ' + JSON.stringify(o)); } catch (e) {}
+    const c = o.kind === 'other' && !o.product ? (camps.length === 1 ? camps[0] : null) : rvMatchCamp_(o.product, camps);
+    if (!c) { x.moveTo(sub(inbox, RV_INBOX_UNKNOWN)); unknown++; }
+    else {
+      const img = c.img = c.img || DriveApp.getFolderById(c.imgId);
+      x.moveTo(sub(img, rvAiDir_(o)));
+      got[c.name] = (got[c.name] || 0) + 1;
+    }
+    if (i < files.length - 1) Utilities.sleep(2000);
+  }
+  const done = Object.keys(got);
+  if (done.length) note_('✓ 리뷰 사진 받는 곳 → ' + done.map(function (k) { return k + ' ' + got[k] + '장'; }).join(', '));
+  if (unknown) {
+    const day = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
+    if (props.getProperty('RVINBOX_UNK') !== day) {
+      props.setProperty('RVINBOX_UNK', day);
+      queueMsg_('내 할 일', '📷 리뷰 사진 받는 곳에 어느 의뢰인지 모르는 사진이 있어요 (' + unknown + '장) → 아래 폴더에서 맞는 의뢰 리뷰이미지 폴더로 옮겨 주세요\n' + sub(inbox, RV_INBOX_UNKNOWN).getUrl() +
+        (camps.length ? '\n압축 기다리는 의뢰: ' + camps.map(function (c) { return c.name; }).join(', ') : '\n지금 압축 기다리는 의뢰가 없어요 (리뷰 체크가 다 끝난 의뢰만 받아요)'), '할 일');
+    }
+  }
+}
 // 15분 확인에서 AI 분류 이어 하기 (정리는 30분마다라 한 의뢰 사진 30장이 1시간 넘게 걸려서). 다 나누면 다음 정리에서 압축
 function rvAiQueue_() {
   const props = PropertiesService.getScriptProperties(), q = String(props.getProperty('RVAI_Q') || '').split(',').filter(Boolean);
@@ -5948,7 +6034,7 @@ function setGeminiKey() {
 }
 
 /* ---------------- 사용법 탭 (맨 앞, 사용자 요청 10/20). 글을 바꾸면 USAGE_VER를 올림 → 다시 씀 ---------------- */
-const USAGE_TAB = '사용법', USAGE_VER = '16';
+const USAGE_TAB = '사용법', USAGE_VER = '17';
 const USAGE_ROWS = [
   ['체험단 관리 시트 사용법', '(스크립트가 쓰는 탭이라 여기 고친 글은 다음 업데이트 때 다시 써져요)'],
   ['', ''],
@@ -5978,6 +6064,7 @@ const USAGE_ROWS = [
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
   ['리뷰 완료 (취완)', '명단 시트 "명단" 탭 맨 오른쪽 "리뷰 확인" 체크칸에 체크 → 그 방 사람 전부 체크되면 보낼메시지에 그 방 "취완". 의뢰 전체가 끝나고 전부 체크되면 보낼메시지 "할 일"에 리뷰 캡처 올릴 폴더 링크'],
   ['리뷰 사진 압축', '날마다 말고 의뢰가 다 끝난 뒤 한 번에: 그 의뢰 리뷰 캡처를 전부 의뢰 폴더 안 "리뷰이미지"(할 일·한눈에 "리뷰 취합할 것" 줄의 링크)에 올리기. 날짜·포토·텍스트·별점으로 안 나눠도 됨 → 10~40분 뒤 캠페인명.zip이 생기고(안에 "포토 N, 텍스트 N, 별점 N" 메모 파일, 개수는 방마다 보낸 리뷰 가이드대로 자동) 보낼메시지 "리뷰 보고"(사장님)에 압축 파일 링크 → 받아서 보고 글과 같이 업체에 보내고, 한눈에 그 줄 체크. 사진이 리뷰 건수보다 적거나 개수가 의뢰서와 다르면 할 일에 ⚠'],
+  ['리뷰 사진 받는 곳', 'PC 카톡 저장 폴더를 구글 드라이브 데스크톱의 "리뷰 사진 받는 곳"(맨 위 🔑 줄에 링크)으로 한 번만 바꿔 두면: 방마다 서랍 → 전체 선택 → 저장만 하면 됨. AI가 캡처 속 상품 이름으로 리뷰 체크가 끝난 의뢰를 찾아 그 의뢰 리뷰이미지 폴더(포토·텍스트·별점)로 옮김. 못 찾은 사진은 "어느 의뢰인지 모름" 폴더 + 할 일'],
   ['리뷰 사진 AI 분류', '사용법 탭 맨 위 "🔑 리뷰 사진 AI 키" 칸에 Gemini 무료 키(aistudio.google.com → Get API key)를 한 번 붙여넣으면: PC 카톡 서랍에서 방 사진을 통째로 리뷰이미지 폴더에 저장해도 AI가 리뷰만 골라 포토·텍스트·별점 폴더로 나누고, 구매 인증·다른 사진·같은 사진은 "(압축 제외)" 폴더로 옮김(안 지움). AI가 틀렸으면 파일을 맞는 폴더로 옮기면 다시 압축. 개수가 의뢰서·배정과 다르거나 별점이 5개가 아니면 할 일에 알림'],
   ['블랙리스트 사람이 폼을 냄', '한눈에 "확인 필요" 칸에 ⛔ + 메일 → 폼수정 탭에서 그 응답 지우기'],
   ['명단이 안 보임', '메뉴 체험단 도구 → 지금 명단 마감 확인 (명단 탭만 바로 새로고침, 나머지는 1분 뒤 자동)'],

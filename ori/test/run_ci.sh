@@ -12,5 +12,5 @@ npx -y eslint@8.57.0 --no-eslintrc --env es2021 --parser-options ecmaVersion:202
 echo "== 단위 시험"
 export TZ=Asia/Seoul
 node ori/test/ci_test.js
-for t in pay selfcheck roomlink html asgclean expcount noprice zip guide_parser dashopen orphan synclist fdesc rvai; do echo "-- $t"; node "ori/test/${t}_test.js" "$M"; done
+for t in pay selfcheck roomlink html asgclean expcount noprice zip guide_parser dashopen orphan synclist fdesc rvai rvinbox; do echo "-- $t"; node "ori/test/${t}_test.js" "$M"; done
 echo "✓ 모든 시험 통과"
