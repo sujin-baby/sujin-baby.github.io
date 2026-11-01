@@ -319,10 +319,10 @@ if (gFull.option !== '10개') throw new Error('gFull option should be 10개, got
 // Test 9: 텀블러 의뢰서 파싱 및 4색상·리뷰·신상품 검증 (10/31)
 // 1) 4색상 5개씩 -> 검정·아이보리·연그린·하늘색 자동 분할
 // 2) 2개 정도만 사진 나머지는 별점만 -> 포토리뷰 2개 / 텍스트리뷰 3개
-// 3) 신상품 순위 -> 1p
+// 3) 신상품 순위 -> 위치 빈칸 (1p로 채우지 않음, 11/1 사용자)
 // 4) 판매처 바나바스토어 보존
 // ==========================================
-console.log('-- Test 9: 텀블러 의뢰서 파싱 (4색상 분할, 구어체 리뷰, 신상품 1p, 바나바스토어 보존)');
+console.log('-- Test 9: 텀블러 의뢰서 파싱 (4색상 분할, 구어체 리뷰, 신상품 위치 빈칸, 바나바스토어 보존)');
 const reqTumblerFull = `#입금대행 실배 교차불가9500
 
 1. 검색 키워드(미노출시 저희가 키워드땁니다): 런치버스 미니 보온보냉 텀블러
@@ -340,7 +340,7 @@ https://www.coupang.com/vp/products/9775450298?vendorItemId=96180413598
 
 const headTumblerFull = P.parseAll(reqTumblerFull);
 const gTumblerFull = headTumblerFull.guides[0];
-if (gTumblerFull.page !== '1p') throw new Error('gTumblerFull page should be 1p, got: ' + gTumblerFull.page);
+if (gTumblerFull.page) throw new Error('gTumblerFull page should stay empty for 신상품 (no fake 1p, 11/1), got: ' + gTumblerFull.page);
 if (!/포토리뷰 2개 \/ 텍스트리뷰 3개/.test(gTumblerFull.review)) throw new Error('gTumblerFull review should split 2 photo / 3 text, got: ' + gTumblerFull.review);
 if (gTumblerFull.optBase.length !== 4) throw new Error('gTumblerFull optBase should have 4 colors, got: ' + gTumblerFull.optBase.length);
 if (!gTumblerFull.optBase.some(o => o.label === '아이보리') || !gTumblerFull.optBase.some(o => o.label === '검정')) {
@@ -416,7 +416,7 @@ if (headWithSeller.guides[0].seller !== '아이누빅') throw new Error('headWit
 // 1) isBlockedText: '요청하신 페이지의 사용권한이 없습니다', 'Access Denied', '접속이 제한' 감지
 // 2) parseCoupang: 차단 화면 글자가 상품명/판매처에 유입되지 않고 차단(r.blocked) 처리되는지
 // 3) baseName: 차단 문구 입력 시 빈 문자열 반환
-// 4) posText: 차단 문구 입력 시 안전한 기본값 1p 반환
+// 4) posText: 차단 문구는 위치가 아님 → 빈칸 (1p로 채우지 않음, 11/1 사용자)
 // ==========================================
 console.log('-- Test 12: 쿠팡 403 차단 문구 공지 유입 방지 및 필터링 검증');
 if (!P.isBlockedText('요청하신 페이지의 사용권한이 없습니다.')) throw new Error('isBlockedText should detect 사용권한 없음');
@@ -426,11 +426,13 @@ if (!P.isBlockedText('비정상적인 접근으로 접속이 제한되었습니�
 const blockedParse = P.parseCoupang('상품명 : 요청하신 페이지의 사용권한이 없습니다.\n판매처 : 사용권한이 없습니다\n위치 : 요청하신 페이지의 사용권한이 없습니다');
 if (blockedParse.pname) throw new Error('parseCoupang should not set pname for blocked text, got: ' + blockedParse.pname);
 if (blockedParse.seller) throw new Error('parseCoupang should not set seller for blocked text, got: ' + blockedParse.seller);
-if (blockedParse.page !== '1p') throw new Error('parseCoupang should convert blocked page to 1p, got: ' + blockedParse.page);
+if (blockedParse.page) throw new Error('parseCoupang should not turn blocked text into a position, got: ' + blockedParse.page);
 if (!blockedParse.blocked) throw new Error('parseCoupang should set blocked flag');
 
 if (P.baseName('요청하신 페이지의 사용권한이 없습니다.') !== '') throw new Error('baseName should return empty for blocked text');
-if (P.posText({ page: '요청하신 페이지의 사용권한이 없습니다' }) !== '1p') throw new Error('posText should return 1p for blocked text, got: ' + P.posText({ page: '요청하신 페이지의 사용권한이 없습니다' }));
+if (P.posText({ page: '요청하신 페이지의 사용권한이 없습니다' }) !== '') throw new Error('posText should be empty for blocked text, got: ' + P.posText({ page: '요청하신 페이지의 사용권한이 없습니다' }));
+if (P.posText({ page: '못 찾음' }) !== '' || P.posText({}) !== '') throw new Error('posText should be empty when position unknown (no fake 1p)');
+if (P.posText({ page: '가검9800 2p' }) !== '가검9800 2p') throw new Error('posText should keep a real position, got: ' + P.posText({ page: '가검9800 2p' }));
 
 // ==========================================
 // Test 13: 텀블러 등 품목 명사 추천 보존 및 prompt 제거 검증 (11/01 v141)
