@@ -7,7 +7,7 @@
  *   @claude·@피클만 부른 글 = Gemini가 바로 "받아 적었어요"로 답하고 담당 AI 답 대기에 남김. 다른 AI가 @gemini로 불러도 답함.
  *   (예전 15분 받아 적기는 roomTick에 그대로 두어 혹시 놓친 글을 줍는 용도)
  */
-const ROOM_VER = '4';
+const ROOM_VER = '5';
 const ROOMS = ['업무', '잡담'];
 const MEMBERS = [
   { id: 'owner', name: '수진', emoji: '👑', role: '사장 · 결정' },
@@ -244,7 +244,7 @@ function slackApi_(method, payload, get) {
 }
 function slackStatus_() {
   const p = rp_();
-  return { token: !!p.getProperty('SLACK_TOKEN'), team: p.getProperty('SLACK_TEAM_NAME') || '', url: url_() + '?slack=1', seen: Number(p.getProperty('SLACK_SEEN') || 0) };
+  return { token: !!p.getProperty('SLACK_TOKEN'), team: p.getProperty('SLACK_TEAM_NAME') || '', url: url_() + '?slack=1', seen: Number(p.getProperty('SLACK_SEEN') || 0), err: p.getProperty('SLACK_ERR') || '' };
 }
 function slackSetToken_(v) {
   const p = rp_();
@@ -287,7 +287,7 @@ function slackEvent_(b) {
   const c = CacheService.getScriptCache(), lock = LockService.getScriptLock(); lock.waitLock(20000);
   try { const id = 'SLE_' + (b.event_id || ev.channel + ev.ts); if (c.get(id)) return ok; c.put(id, '1', 21600); p.setProperty('SLACK_SEEN', String(Date.now())); } finally { lock.releaseLock(); }
   if (!p.getProperty('GEMINI_KEY')) return ok;
-  try { slackReply_(ev, bot); } catch (e) {}
+  try { slackReply_(ev, bot); p.deleteProperty('SLACK_ERR'); } catch (e) { p.setProperty('SLACK_ERR', new Date().toISOString().slice(11, 16) + ' ' + String(e.message || e).slice(0, 300)); }
   return ok;
 }
 function slackReply_(ev, bot) {
@@ -313,7 +313,8 @@ function slackReply_(ev, bot) {
   if (!reply) reply = mode === 'answer' ? '지금 답을 못 만들었어요. 잠시 뒤 다시 불러 주세요.' : '받아 적어 뒀어요.';
   reply = reply.replace(/\*\*(.+?)\*\*/g, '*$1*').replace(/^#{1,6}\s*/gm, '');
   if (mode === 'receipt') reply += '\n\n📌 ' + names + ' 들어오면 이 글 확인 부탁드려요';
-  slackApi_('chat.postMessage', { channel: ev.channel, text: reply, thread_ts: ev.thread_ts || undefined });
+  const pr = slackApi_('chat.postMessage', { channel: ev.channel, text: reply, thread_ts: ev.thread_ts || undefined });
+  if (!pr.ok) throw new Error('chat.postMessage: ' + (pr.error || '?') + (pr.needed ? ' (필요: ' + pr.needed + ')' : ''));
 }
 
 // ---------- 혹시 놓친 글: 15분 답 없으면 Gemini가 받아 적기 (화면·API를 쓸 때 10분에 한 번) ----------
@@ -402,7 +403,7 @@ function side(r) {
   $('tabs').innerHTML = r.rooms.map(x => '<button class="btn' + (x === room ? ' on' : '') + '" data-r="' + x + '">' + x + '방</button>').join('');
   $('chips').innerHTML = r.members.filter(m => m.id !== ME).map(m => '<span class="chip" data-at="' + (m.id === 'pickle' ? '피클' : m.id) + '">@' + esc(m.name) + '</span>').join('') + '<span class="chip" data-at="모두">@모두</span>';
   GEM = !!r.gemini;
-  if (ME === 'owner' && r.slack) { $('slkCard').hidden = false; $('slkUrl').textContent = r.slack.url; $('slkSt').textContent = r.slack.token ? '✓ 연결됨' + (r.slack.team ? ' (' + r.slack.team + ')' : '') + (r.slack.seen ? ' · 마지막 슬랙 글 ' + tm(r.slack.seen) : ' · 아직 받은 슬랙 글 없음') : '토큰을 넣으면 슬랙 #업무·#잡담에 Gemini가 바로 답해요'; }
+  if (ME === 'owner' && r.slack) { $('slkCard').hidden = false; $('slkUrl').textContent = r.slack.url; $('slkSt').textContent = r.slack.token ? '✓ 연결됨' + (r.slack.team ? ' (' + r.slack.team + ')' : '') + (r.slack.seen ? ' · 마지막 슬랙 글 ' + tm(r.slack.seen) : ' · 아직 받은 슬랙 글 없음') + (r.slack.err ? ' · ⚠ ' + r.slack.err : '') : '토큰을 넣으면 슬랙 #업무·#잡담에 Gemini가 바로 답해요'; }
   if (ME === 'owner') { $('gemCard').hidden = false; $('gemSt').textContent = (r.gemErr ? '⚠ Gemini 오류: ' + r.gemErr + ' / ' : '') + (r.gemini ? '✓ 키 있음: 수진님 글에 Gemini가 바로 답해요. @클로드·@피클만 부르면 Gemini가 받아 적고 그 AI 답 대기에 남겨요' : '키를 넣으면 수진님 글에 Gemini가 바로 답해요'); }
 }
 async function load() {
