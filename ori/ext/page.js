@@ -60,7 +60,7 @@
   };
   /* 상품명: 화면에 보이는 제목(h1). og:title은 쿠팡이 ' - 일반거치대' 같은 분류를 붙여서 마지막에 */
   function visibleTitle() {
-    const h = [...document.querySelectorAll("h1, h2, h3")].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).find(t => t.length >= 6 && t.length <= 200 && !/쿠팡|coupang|네이버|장바구니|카테고리/i.test(t));
+    const h = [...document.querySelectorAll("h1, h2, h3")].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).find(t => t.length >= 6 && t.length <= 200 && !/쿠팡|coupang|네이버|장바구니|카테고리|사용권한|Access\s*Denied|접속이\s*제한|요청하신\s*페이지/i.test(t));
     return h || "";
   }
 
@@ -101,6 +101,8 @@
     const num = s => Number(String(s || "").replace(/[^0-9]/g, "")) || 0;
     const firstPrices = (t, n) => (t.match(/\d{1,3}(?:,\d{3})+\s*원/g) || []).slice(0, n).map(num).filter(x => x >= 100);
     if (!isNaver) {
+      /* 쿠팡 차단 화면('사용권한이 없습니다', 'Access Denied')은 상품 정보로 안 씀 (10/31 판매처·상품명에 들어감) */
+      if (/사용권한이\s*없|접속이\s*제한|Access\s*Denied/i.test((document.title || "") + " " + String(txt || "").slice(0, 3000))) return { site: "coupang", name: "", err: "쿠팡 차단 화면('사용권한이 없습니다')이 떴어요." };
       const pm = L.pathname.match(/\/v[pm]\/products\/(\d+)/);
       if (!pm) return { err: "쿠팡 상품 상세 페이지에서 눌러 주세요." };
       const qs = new URLSearchParams(L.search);
@@ -110,15 +112,27 @@
       let name = visibleTitle();
       if (!name) name = (og("title") || document.title).replace(/\s*[-|]\s*쿠팡!?\s*$/, "").replace(/\s+-\s+[^-]{1,20}$/, "").trim();
       let seller = "";
-      const be = document.querySelector('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]');
-      if (be) seller = be.textContent.trim();
-      if (!seller) {
-        const sm = txt.match(/판매자\s*[:：]?\s*([^\n]{1,60})/);
-        if (sm) seller = sm[1].replace(/\s*(판매자\s*)?(상품\s*)?보러\s*가기.*$/, "").replace(/\s*판매자\s*평가.*$/, "").trim();
+      /* 판매처: 첫 후보가 '가입'(쿠팡 위·아래 '판매자 가입' 글자) 같은 엉터리면 버리고 다음 후보로 (10/31 대봉감 '판매처 : 가입').
+         예전엔 엉터리를 알아보고도 지우지 않아서 그대로 남았음. 상품명 첫 단어로 채우지 않음: 판매자 이름은 쿠팡·토스·네이버 페이지에 꼭 있음 (사용자 10/31) */
+      const BAD_SELLER = /가입|보러가기|평가|정보|^특가|로켓|할인|쿠폰|무료|배송|와우|입점/;
+      const okSeller = s => !!s && s.length <= 30 && !BAD_SELLER.test(s);
+      for (const e of document.querySelectorAll('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]')) {
+        const t = (e.textContent || "").replace(/\s+/g, " ").trim();
+        if (okSeller(t)) { seller = t; break; }
       }
-      { const vm = html.match(/"vendorName"\s*:\s*"([^"]{2,60})"/); if (vm && !seller) seller = vm[1]; }
-      if (!seller || seller.length > 30 || /가입|보러가기|평가|정보|^특가|로켓|할인|쿠폰|무료|배송|와우/.test(seller)) { const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/); if (s2 && !seller) seller = s2[1].trim(); }
-      if (!seller && name) { const bg = name.split(/\s+/)[0]; if (bg && /^[가-힣a-zA-Z0-9]{2,10}$/.test(bg) && !/^(로켓|쿠팡|무료|특가|할인|배송)/.test(bg)) seller = bg; }
+      if (!seller) {
+        const re = /판매자\s*[:：]?\s*([^\n]{1,60})/g;
+        let sm;
+        while ((sm = re.exec(txt))) {
+          const t = sm[1].replace(/\s*(판매자\s*)?(상품\s*)?보러\s*가기.*$/, "").replace(/\s*판매자\s*평가.*$/, "").trim();
+          if (okSeller(t)) { seller = t; break; }
+        }
+      }
+      /* '판매자 특가', '판매자로켓' 같은 배지 글자는 판매처가 아님 → 페이지 데이터의 판매자 이름 (따옴표가 \" 로 들어간 데이터도) */
+      if (!seller) { const vn = (String(html).match(/\\?"(?:vendorName|sellerName)\\?"\s*:\s*\\?"([^"\\]{2,60})/) || [])[1] || ""; if (okSeller(vn)) seller = vn; }
+      if (!seller) { const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/); if (s2 && okSeller(s2[1].trim())) seller = s2[1].trim(); }
+      /* 못 읽었으면 왜 그런지 보려고 화면의 '판매자·상호' 줄을 같이 보냄 */
+      const sellerHint = seller ? "" : txt.split("\n").map(x => x.replace(/\s+/g, " ").trim()).filter(x => /판매자|판매처|상호|스토어/.test(x) && x.length <= 60).slice(0, 4).join(" | ") + (/vendorName|sellerName/.test(html) ? " [페이지 데이터에 판매자 칸 있음]" : "");
       let opt = readOption();
       if (!opt) { const oe = document.querySelector('.prod-option__selected .value, .prod-option__selected-container .value'); if (oe) opt = oe.textContent.replace(/\s+/g, " ").trim().slice(0, 60); }
       let price = 0;
@@ -135,7 +149,7 @@
       const isRocket = !!document.querySelector('.prod-badge__rocket, [class*="badge-rocket"], [class*="rocket-badge"], img[alt*="로켓"], [class*="delivery-badge-rocket"]') ||
         /로켓\s*(배송|와우|그로스|직구|프레시)|판매자\s*로켓/i.test(rkTxt) ||
         /로켓\s*(배송|와우|그로스|직구|프레시)|판매자\s*로켓/i.test(html.slice(0, 20000));
-      return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, opt: opt || "단일옵션", price: price, optPrices: optPrices, ship: isRocket ? "무료 (로켓배송)" : shipOf(txt, name, price), rocket: isRocket, img: img };
+      return { site: "coupang", mob: /^m\./.test(L.hostname), pid: pm[1], item: item, name: name, seller: seller, sellerHint: sellerHint, opt: opt || "단일옵션", price: price, optPrices: optPrices, ship: isRocket ? "무료 (로켓배송)" : shipOf(txt, name, price), rocket: isRocket, img: img };
     }
     const pm = L.pathname.match(/products\/(\d+)/);
     if (!pm) return { err: "네이버는 스마트스토어(또는 브랜드스토어) 상품 페이지에서 눌러 주세요." };
@@ -239,7 +253,7 @@
     return toks.filter(x => t.indexOf(x) !== -1).length / toks.length;
   }
   /* 쇼핑몰이 띄운 보안 확인(캡차) 화면인지: 상품 칸이 하나도 없고 보안 확인 문구가 있을 때만 */
-  const BLOCK_RE = /자동\s*입력\s*방지|보안\s*확인|영수증|비정상적인|일시적으로\s*제한|접속이\s*(제한|불가)|로봇이\s*아닙|Access Denied|captcha|unusual traffic/i;
+  const BLOCK_RE = /자동\s*입력\s*방지|보안\s*확인|영수증|비정상적인|일시적으로\s*제한|접속이\s*(제한|불가)|로봇이\s*아닙|Access Denied|captcha|unusual traffic|사용권한이\s*없/i;
   const blockedText = () => !!document.body && BLOCK_RE.test(document.body.innerText.slice(0, 4000)) && cardList().length === 0;
   const snippet = () => ((document.title || "") + " | " + (document.body ? document.body.innerText : "")).replace(/\s+/g, " ").trim().slice(0, 90);
   async function waitReady() {
@@ -413,12 +427,12 @@
   /* 지금 화면의 검색어, 가격 필터, 페이지 */
   function here() {
     const qp = new URL(location.href).searchParams;
-    let query = qp.get("query") || "";
+    let query = qp.get("query") || qp.get("q") || "";   /* 네이버 query, 쿠팡 q */
     if (!query) { const inp = document.querySelector('input[type="search"], input[name="query"], header input[type="text"]'); if (inp) query = inp.value || ""; }
     let lo = numOf(qp.get("minPrice")), hi = numOf(qp.get("maxPrice"));
     const m = document.body.innerText.slice(0, 8000).match(/(\d{1,3}(?:,\d{3})+)\s*원?\s*~\s*(\d{1,3}(?:,\d{3})+)\s*원/);
-    if (m) { lo = numOf(m[1]); hi = numOf(m[2]); }
-    let page = numOf(qp.get("pagingIndex"));
+    if (m && isNaver) { lo = numOf(m[1]); hi = numOf(m[2]); }   /* 쿠팡은 상품 칸 가격('9,800원~12,800원')을 필터로 잘못 읽어서 주소(minPrice·maxPrice)만 */
+    let page = numOf(qp.get("pagingIndex")) || numOf(qp.get("page"));   /* 네이버 pagingIndex, 쿠팡 page */
     if (!page) {
       const cur = [...document.querySelectorAll("a,button,strong,span,em")].find(e => /^\d{1,2}$/.test((e.innerText || "").trim()) && (e.getAttribute("aria-current") === "page" || e.getAttribute("aria-selected") === "true" || /active|current|selected|(^|[\s_-])on($|[\s_-])/i.test(String(e.className || ""))));
       page = cur ? Number(cur.innerText.trim()) : 1;

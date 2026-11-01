@@ -1,15 +1,17 @@
 // 판매처 고르기 (10/31 대봉감 '판매처 : 가입'): 첫 후보가 엉터리면 버리고 다음 후보로.
-//  oy.js(토스·올리브영·아이폰 북마크), 생성기 북마크(bm-src) 두 곳 코드를 (확장 page.js는 11/1 사용자 요청으로 금요일(1.5.0) 코드로 되돌려서 뺌) 그대로 꺼내 가짜 화면으로 돌림.  node seller_test.js
+//  oy.js(토스·올리브영·아이폰 북마크), 생성기 북마크(bm-src) 두 곳 코드를 + 확장 page.js (1.6.0에 다시 넣음) 그대로 꺼내 가짜 화면으로 돌림.  node seller_test.js
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const root = path.join(__dirname, '..', '..');
 const src = {
+  'page.js': fs.readFileSync(path.join(root, 'ori/ext/page.js'), 'utf8'),
   'oy.js': fs.readFileSync(path.join(root, 'ori/ext/oy.js'), 'utf8'),
   '생성기 bm-src': fs.readFileSync(path.join(root, 'guide/index.html'), 'utf8'),
 };
 // 판매처 코드: '/* 판매처: 첫 후보가' 부터 '정리'(브랜드샵 지우기) 바로 앞까지
 function sellerCode(s, label) {
   const a = s.indexOf('/* 판매처: 첫 후보가');
-  const b = s.indexOf('if (seller) {', a);
+  const ends = ['if (seller) {', 'let opt = readOption();'].map(x => s.indexOf(x, a)).filter(x => x > a);
+  const b = ends.length ? Math.min.apply(null, ends) : -1;
   if (a < 0 || b < 0) throw new Error(label + ': 판매처 코드를 못 찾음');
   return s.slice(a, b);
 }

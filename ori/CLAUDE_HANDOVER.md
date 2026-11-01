@@ -100,6 +100,8 @@
 
 ## 8. 검토 요청 (서로 담당 파일을 고쳤을 때 여기 적기)
 
+- 🛠 **[Claude] 확장 1.6.0 / 생성기 v146** (11/1 16:10, 사용자 승인): 쿠팡 위치를 네이버처럼 '지금 화면만 읽기'로. 확장은 쿠팡 검색을 열거나 넘기지 않음(쿠팡이 막음). 생성기 [쿠팡에서 검색] → 검색 화면에서 확장 아이콘 → 위치 칸. **쿠팡 자동 검색을 다시 넣지 말 것.** 참고: fillCoupang의 `못 찾 → "1p"` 바꾸기(r.page/pageP/pageMo)는 못 찾은 걸 1p로 적는 위험이 있어 확인 필요(이번엔 안 건드림).
+
 - ✅ **팀룸·슬랙 설치 끝 (11/1)**:
   - **앱스크립트 팀룸** (`teamroom/`, 설명 `teamroom/README.md`): jinleeda1 프로젝트 '오리방 팀룸', 웹 앱 `https://script.google.com/macros/s/AKfycby9QFtSENA7f3HHpScnZYNZ9InP0EAI0cDFtlLpIf907W8HPxbMWNMzPsiu0Hn22FBOvg/exec`. 저장은 드라이브 파일 `오리 팀룸 대화.json`, 참가자 링크는 `오리 팀룸 열쇠.txt`(주인만 열림, 열쇠 없이 웹 앱을 열면 링크 나옴). 코드는 로더가 GitHub에서 받음(다시 붙여넣기 필요 없음). 용도: PC 회의·기획·인수인계 글·잡담.
   - **슬랙** 워크스페이스 '오리방 팀룸', 채널 `#업무`(C0CDVBM75QS)·`#잡담`(C0CDPAB5S1Z). Claude 봇 = `@claude2`(앱 A0CDXQCNFND, 토큰은 Claude 환경 시크릿에 Bearer로 들어 있어 `slack.com` 요청에 자동으로 붙음). 다른 `@claude`(A0CDXE9C3S5)는 안 쓰는 앱 → 지우기 안내함. 용도: 폰 알림 받는 핫라인(급한 건 Claude 앱으로 바로).

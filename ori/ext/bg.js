@@ -1,6 +1,7 @@
 /* 상품 위치 찾기 (크롬 확장 프로그램)
-   쿠팡 상품 페이지에서 아이콘 한 번: 상품 정보 → 썸네일 저장 → 작은 창에서 PC 검색 → 같은 조건으로 모바일 검색 → 결과 복사
-     검색 순서: 대표 → 대표 + 가격 → 서브 → 서브 + 가격 … (키워드마다 1~5페이지)
+   쿠팡 (1.6.0, 11/1): 확장이 쿠팡 검색 화면을 혼자 여는 건 쿠팡이 막음(금요일과 같은 코드도 11/1 'Access Denied' → 확장 코드 밖 원인).
+     그래서 네이버처럼: 상품 페이지(또는 생성기 [자동 가져오기]) → 상품 정보·썸네일만. 검색은 사람이 열고(생성기 [쿠팡에서 검색]),
+     검색 화면에서 아이콘(Alt+Shift+F) → 그 화면만 읽어서 몇 페이지인지 생성기로. 확장이 쿠팡 검색 주소를 열거나 넘기지 않음
    네이버는 자동으로 여러 페이지를 넘기면 '쇼핑 서비스 접속이 일시적으로 제한' 화면으로 막아서(10/16 실제로 막힘) 자동 넘기기를 안 함:
      상품 페이지에서 아이콘 → 상품 정보·썸네일 + 대표 키워드 검색 탭을 엶 → 그 화면만 읽어서 상품을 찾아 표시
      없으면 [다음 페이지] [가격 넣고 검색] [다음 키워드] 단추 (사람이 한 번 누를 때 한 화면만) */
@@ -207,31 +208,7 @@ async function closeWork() {
   work = null;
 }
 /* 모바일로 보이게: 개발자 도구의 기기 모드와 같은 방법(아이폰 화면). 안 되면 주소 요청만 아이폰으로 */
-async function mobile(on) {
-  const t = { tabId: work.tabId };
-  if (on) {
-    await chrome.windows.update(work.winId, { width: 430, height: 920 });
-    try {
-      await chrome.debugger.attach(t, "1.3");
-      work.dbg = true;
-      /* 안드로이드 크롬 휴대폰으로 (브라우저 정보끼리 서로 맞게: 안 맞으면 쇼핑몰이 이상한 접속으로 봄) */
-      const cv = ((navigator.userAgent.match(/Chrome\/([\d.]+)/) || [])[1] || "141.0.0.0"), major = cv.split(".")[0];
-      const brands = [{ brand: "Chromium", version: major }, { brand: "Google Chrome", version: major }, { brand: "Not?A_Brand", version: "99" }];
-      await chrome.debugger.sendCommand(t, "Emulation.setUserAgentOverride", { userAgent: "Mozilla/5.0 (Linux; Android 14; SM-S921N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + major + ".0.0.0 Mobile Safari/537.36", platform: "Linux armv8l",
-        userAgentMetadata: { brands: brands, fullVersionList: brands.map(b => ({ brand: b.brand, version: b.brand === "Not?A_Brand" ? "99.0.0.0" : cv })), fullVersion: cv, platform: "Android", platformVersion: "14.0.0", architecture: "", model: "SM-S921N", mobile: true } });
-      await chrome.debugger.sendCommand(t, "Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 3, mobile: true });
-      await chrome.debugger.sendCommand(t, "Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
-    } catch (e) {
-      await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [1], addRules: [{ id: 1, priority: 1,
-        action: { type: "modifyHeaders", requestHeaders: [{ header: "user-agent", operation: "set", value: MUA }] },
-        condition: { tabIds: [work.tabId], resourceTypes: ["main_frame", "sub_frame", "xmlhttprequest", "script", "other"] } }] });
-      work.dnr = true;
-    }
-  } else {
-    if (work.dbg) { try { await chrome.debugger.detach(t); } catch (e) {} work.dbg = false; }
-    if (work.dnr) { try { await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [1] }); } catch (e) {} work.dnr = false; }
-  }
-}
+async function mobile(on) { /* 1.6.0: 쿠팡 자동 검색을 안 해서 안 씀. 예전 chrome.debugger 폰 흉내는 지움(debugger 권한도 뺌) */ }
 
 /* ---------- 화면 읽기 (보안 확인이 뜨면 사람이 풀 때까지 기다렸다가 이어서) ---------- */
 let curProg = async () => {};
@@ -443,9 +420,12 @@ const cmpVer = (a, b) => { const x = a.split(".").map(Number), y = b.split(".").
 async function run(tab) {
   const tid = tab.id;
   if (/^https:\/\/(m?search)\.shopping\.naver\.com\//.test(tab.url || "")) return naverHere(tab);
+  if (/^https:\/\/(www|m)\.coupang\.com\/(np|nm)\/search/.test(tab.url || "")) return coupangHere(tab);
   /* 올리브영: 상품 페이지·검색 화면 모두 북마크와 같은 코드(oy.js)로 */
   if (/^https?:\/\/([a-z]+\.)?(oliveyoung\.co\.kr|toss\.shopping|toss\.im)\//.test(tab.url || "")) { await chrome.scripting.executeScript({ target: { tabId: tid }, files: ["oy.js"] }); return; }
-  const info = await call(tid, "readProduct").catch(() => null);
+  let info = await call(tid, "readProduct").catch(() => null);
+  /* 상품 화면이 아직 다 안 그려졌으면(상품명 빈칸) 최대 15초 기다렸다 다시 읽음 (11/1: 열고 2초 만에 읽어서 다 빈칸이었음) */
+  for (let i = 0; i < 15 && info && !info.err && !info.name && /coupang\.com/.test(tab.url || ""); i++) { await sleep(1000); info = await call(tid, "readProduct").catch(() => info); }
   if (!info) { await ui(tid, { title: "상품 위치 찾기", msg: "이 화면은 읽을 수 없어요. 쿠팡·네이버·올리브영 상품 페이지에서 눌러 주세요." }); return; }
   if (info.err) { await ui(tid, { title: "상품 위치 찾기", msg: info.err }); return; }
   if (/사용권한이\s*없|접속이\s*제한|Access\s*Denied/i.test(info.name || "")) {
@@ -454,6 +434,7 @@ async function run(tab) {
   }
   const site = info.site;
   if (site === "naver") return naverProduct(tab, info);
+  if (site === "coupang") return coupangProduct(tab, info);
   PER = 36;
   const h = await tabHash(tab);
   if (fnOf(h)) { info.fn = fnOf(h); await keepFn(info.fn); }
@@ -511,6 +492,80 @@ async function run(tab) {
   const big = (F ? "키워드 : " + F.k + "\n" : "") + "PC " + (filt && pc.found ? filt + " " : "") + (pc.found ? posText(pc.found) : "못 찾음") + "\n모바일 " + (filt && mo.found ? filt + " " : "") + (mo.found ? posText(mo.found) : "못 찾음");
   await ui(tid, { title: copied ? "복사됐어요. 생성기 '상품 정보 붙여넣기' 칸에 Ctrl+V" : "복사를 눌러서 생성기 '상품 정보 붙여넣기' 칸에 붙여넣으세요", big: big, out: out, copied: copied, notes: notes, img: info.img });
   return out;
+}
+
+/* ================= 쿠팡 (1.6.0: 자동 검색 없이, 지금 화면만 읽기) ================= */
+const cpMask = s => s && s.length > 8 ? s.slice(0, 4) + "***" + s.slice(-4) : s;
+const cpInfoLines = (info, price) => [
+  "상품명 : " + info.name,
+  "판매처 : " + (info.seller || ""),
+  "상품번호 : " + info.pid + (info.item ? " - " + cpMask(info.item) : ""),
+  info.opt ? "옵션 : " + info.opt : "",
+  price ? "가격 : " + price.toLocaleString("ko-KR") + "원" : "",
+  info.optPrices && info.optPrices.length ? "옵션별 가격 : " + info.optPrices.map(x => x.o + " " + x.p.toLocaleString("ko-KR") + "원").join(" / ") : "",
+  info.ship ? "배송비 : " + info.ship : "",
+  info.rocket ? "배송 : 로켓배송" : "",
+  info.img ? "썸네일 : " + info.img : ""
+].filter(Boolean);
+/* 지금 화면 위치 글자: PC는 주소의 page(=그 화면 페이지), 모바일(계속 내려가는 화면)은 광고 뺀 순서 ÷ 36 */
+function cpPos(h, s, mob) {
+  const page = mob ? Math.max(1, Math.ceil((s.org || s.hit + 1) / 36)) : (h.page || 1);
+  const filt = h.lo && h.hi ? gageom(h.lo, h.hi) : "";
+  return { page: page, filt: filt, line: (mob ? "모바일 위치 : " : "PC 위치 : ") + page + "p" };
+}
+async function coupangProduct(tab, info) {
+  const tid = tab.id;
+  const h = await tabHash(tab);
+  if (fnOf(h)) { info.fn = fnOf(h); await keepFn(info.fn); }
+  const hp = Number((h.match(/(?:^|&)pr=(\d+)/) || [])[1] || 0);
+  const price = hp || info.price || 0;
+  /* 검색 화면에서 찾을 상품 (상품번호로 찾음). 상품마다 기억 + 마지막 것 */
+  const t = { pid: info.pid, name: info.name, seller: info.seller, price: price, at: Date.now() };
+  const st = await chrome.storage.local.get("cpTargets").catch(() => ({}));
+  const all = Object.assign({}, st.cpTargets || {}); all[info.pid] = t;
+  Object.keys(all).filter(k => Date.now() - (all[k].at || 0) > 3 * 86400000).forEach(k => delete all[k]);
+  await chrome.storage.local.set({ cpTarget: t, cpTargets: all });
+  const out = cpInfoLines(info, price).join("\n");
+  const notes = [];
+  if (!info.seller) notes.push({ t: "판매처를 못 읽었어요" + (info.sellerHint ? " (화면: " + info.sellerHint + ")" : "") + " → 판매처 칸을 직접 채워 주세요", warn: true });
+  if (info.img) { const sv = await saveThumb(info); if (sv) notes.push(sv); }
+  const nv = await newer();
+  if (nv) notes.push({ t: "새 버전(" + nv + ")이 있어요. 생성기에서 확장 프로그램을 다시 받아 바꿔 주세요.", warn: true });
+  const copied = await copyText(out, tid);
+  const how = "위치: 생성기 [쿠팡에서 검색] → 열린 쿠팡 검색 화면에서 확장 아이콘(Alt+Shift+F). 없으면 쿠팡 '다음 페이지' 누르고 한 번 더";
+  pushGen({ status: "상품 정보 넣었어요 ✓ " + how + (info.seller ? "" : " / ⚠ 판매처를 못 읽었어요" + (info.sellerHint ? " (화면: " + info.sellerHint + ")" : "")) });
+  await call(tid, "box", [{ title: copied ? "상품 정보 복사됨 (생성기에도 넣었어요)" : "상품 정보 (복사를 눌러 생성기에 붙여넣기)", out: out, copied: copied, img: info.img,
+    msg: "쿠팡은 확장이 검색 화면을 혼자 열면 막아서(11/1), 위치는 검색 화면에서 확인해요.\n" + how, notes: notes }]).catch(() => null);
+  return out;
+}
+/* 지금 보고 있는 쿠팡 검색 화면에서 찾기 (화면을 넘기거나 새로 열지 않음) */
+async function coupangHere(tab) {
+  const tid = tab.id;
+  const hh = await tabHash(tab);
+  const hpid = (hh.match(/(?:^|&)pid=(\d+)/) || [])[1] || "";
+  const st = await chrome.storage.local.get(["cpTarget", "cpTargets"]).catch(() => ({}));
+  const t = hpid ? ((st.cpTargets || {})[hpid] || { pid: hpid, name: "", seller: "" }) : st.cpTarget;
+  if (!t || !t.pid) { await ui(tid, { title: "상품 위치 찾기", msg: "어떤 상품을 찾을지 몰라요. 먼저 생성기 [자동 가져오기](또는 쿠팡 상품 페이지에서 아이콘)를 한 번 해 주세요." }); return; }
+  const mob = /^https:\/\/m\./.test(tab.url || "");
+  await ui(tid, { title: "이 화면에서 찾는 중…", msg: "상품번호 " + t.pid + (t.name ? " (" + t.name.slice(0, 30) + ")" : "") });
+  const s = await call(tid, "scan", [{ pid: t.pid, nm: t.name, st: t.seller, scroll: mob, max: 200 }]);
+  if (!s || s.error) { await ui(tid, { title: "화면을 못 읽었어요", msg: (s && s.error) || "", notes: [{ t: "화면: " + ((s && s.snip) || ""), warn: true }] }); return; }
+  if (s.blocked) { await ui(tid, { title: "쿠팡이 이 화면을 막았어요", msg: "새로고침하지 말고 몇 분 뒤에 쿠팡에서 다시 검색해 주세요." }); return; }
+  const h = await call(tid, "here");
+  const P = cpPos(h, s, mob);
+  if (s.hit >= 0) {
+    const shot = await shotHit(tid, s.hit, t);
+    const out = [h.query ? "찾은 키워드 : " + h.query : "", P.filt ? "필터 : " + P.filt : "", s.similar ? "주의 : 비슷한 상품 많음" : "", P.line].filter(Boolean).join("\n");
+    pushGen({ text: out });
+    pushGen({ status: "위치 넣었어요 ✓ " + (mob ? "모바일 " : "PC ") + (P.filt ? P.filt + " " : "") + P.page + "p" });
+    await call(tid, "box", [{ title: "찾았어요! 생성기 위치 칸에 넣었어요", big: "키워드 : " + (h.query || "?") + "\n" + (mob ? "모바일 " : "PC ") + (P.filt ? P.filt + " " : "") + P.page + "p", out: out, copied: false,
+      notes: [{ t: "분홍 테두리가 찾은 상품이에요 (광고 빼고 " + s.org + "번째)." }, shot, mob ? null : { t: "모바일 위치는 휴대폰에서 북마크로 확인해 주세요." }].filter(Boolean) }]).catch(() => null);
+    return out;
+  }
+  const where = mob ? "이 화면" : "이 화면(" + (h.page || 1) + "페이지)";
+  pushGen({ status: where + "에는 없어요. 쿠팡 '다음 페이지'를 누르고 아이콘을 한 번 더 눌러 주세요" });
+  await ui(tid, { title: where + "에는 없어요", msg: "검색어 '" + (h.query || "?") + "'" + (P.filt ? ", " + P.filt : "") + ", 상품 " + s.n + "개 확인" + (s.adHit >= 0 ? " (광고 칸에만 있었어요)" : "") + ".\n쿠팡 화면 아래 '다음 페이지'를 직접 누르고, 다 뜨면 아이콘을 한 번 더 눌러 주세요.",
+    notes: [{ t: "찾는 상품: 상품번호 " + t.pid + (t.name ? " / " + t.name.slice(0, 45) : "") + " (다른 상품이면 생성기에서 그 상품의 [쿠팡에서 검색]으로 열어 주세요)" }] });
 }
 
 /* ================= 네이버 (자동 넘기기 없이, 지금 화면만 읽기) ================= */
