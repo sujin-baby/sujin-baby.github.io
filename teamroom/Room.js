@@ -7,21 +7,21 @@
  *   @claude·@피클만 부른 글 = Gemini가 바로 "받아 적었어요"로 답하고 담당 AI 답 대기에 남김. 다른 AI가 @gemini로 불러도 답함.
  *   (예전 15분 받아 적기는 roomTick에 그대로 두어 혹시 놓친 글을 줍는 용도)
  */
-const ROOM_VER = '6';
+const ROOM_VER = '7';
 const ROOMS = ['업무', '잡담'];
 const MEMBERS = [
   { id: 'owner', name: '수진', emoji: '👑', role: '사장 · 결정' },
   { id: 'claude', name: 'Claude', emoji: '🤖', role: '관리 시트 서버·월급·보낼메시지·리뷰 사진 (ori/Main.js)' },
   { id: 'pickle', name: '피클', emoji: '🥒', role: '가이드 생성기·크롬 확장 (guide/, ori/ext/)' },
-  { id: 'gpt', name: 'GPT', emoji: '💬', role: '의견·아이디어·글 다듬기 (코드 안 고침)' },
-  { id: 'gemini', name: 'Gemini', emoji: '✨', role: '바로 답하기 · 의견·정리 (코드 안 고침)' }
+  { id: 'gpt', name: 'GPT', emoji: '💬', role: '의견·아이디어·글 다듬기 (Gemini 통합 수행)' },
+  { id: 'gemini', name: 'Gemini', emoji: '✨', role: '바로 답하기 · 의견·아이디어·글 다듬기 (무료)' }
 ];
 const ROOM_RULES = [
   '업무방 = 오리방 일 (버그·고칠 것·결정). 잡담방 = 그 밖',
   'Claude·피클: 들어오면 제일 먼저 "답 대기"(pending)를 보고 바로 답하기. 고치는 데 오래 걸리면 "확인했어요, ~분 뒤 알려 드릴게요" 먼저',
   '수진 말이 결정. 담당 일이면 바로 확인하고 고친 뒤 무엇을 고쳤는지 한 줄로',
   'Claude: 관리 시트·서버(ori/Main.js). 피클: 생성기·확장(guide/, ori/ext/). 남의 담당이면 고치지 말고 그 AI를 @로 부르기',
-  'GPT·Gemini: 코드는 안 고침. 의견, 아이디어, 글 다듬기, 확인 질문',
+  'Gemini: 의견, 아이디어, 글 다듬기, 확인 질문 (100% 무료 바로 답하기)',
   '@이름 으로 부르기 (예: @claude @피클). 답한 글은 그 AI의 "답 대기"에서 빠짐',
   '열쇠·API 키·비밀번호는 방에 쓰지 않기'
 ];
@@ -100,6 +100,7 @@ function members_() {
 }
 // 답 대기: 그 AI를 부른 글(또는 수진이 업무방에 쓴 글 중 담당이 정해진 것) 뒤에 그 AI가 같은 방에 글을 안 썼으면
 function pending_(id, msgs) {
+  if (id === 'gpt' && !rp_().getProperty('OPENAI_KEY')) return [];
   msgs = msgs || cacheMsgs_();
   return msgs.filter(function (m, i) {
     if (m.from === id || m.to.indexOf(id) < 0) return false;
@@ -241,9 +242,9 @@ function geminiNow_(id) {
   if (!rp_().getProperty('GEMINI_KEY')) return '';
   const all = cacheMsgs_(), m = all.filter(function (x) { return x.id === id; })[0];
   if (!m || m.from === 'gemini' || Date.now() - m.t > 10 * 60000) return '';
-  const askG = m.to.indexOf('gemini') >= 0;
   const hasGpt = !!rp_().getProperty('OPENAI_KEY');
-  const others = m.to.filter(function (x) { return x !== 'gemini' && (!hasGpt || x !== 'gpt'); });
+  const askG = m.to.indexOf('gemini') >= 0 || (!hasGpt && m.to.indexOf('gpt') >= 0);
+  const others = m.to.filter(function (x) { return x !== 'gemini' && x !== 'gpt'; });
   let mode = '';
   if (askG || (m.from === 'owner' && !m.to.length)) mode = 'answer';
   else if (m.from === 'owner' && others.length) mode = 'receipt';
@@ -392,8 +393,9 @@ function slackReply_(ev, bot) {
   if (/<!(channel|here|everyone)>/.test(raw)) ids.push('all');
   const text = slackClean_(raw, bot);
   mentions_(text, 'owner').forEach(function (w) { if (ids.indexOf(w) < 0) ids.push(w); });
-  const askG = ids.indexOf('gemini') >= 0 || ids.indexOf('all') >= 0;
-  const askGPT = (ids.indexOf('gpt') >= 0 || ids.indexOf('all') >= 0) && !!rp_().getProperty('OPENAI_KEY');
+  const hasGpt = !!rp_().getProperty('OPENAI_KEY');
+  const askG = ids.indexOf('gemini') >= 0 || ids.indexOf('all') >= 0 || (!hasGpt && ids.indexOf('gpt') >= 0);
+  const askGPT = (ids.indexOf('gpt') >= 0 || ids.indexOf('all') >= 0) && hasGpt;
   const others = ids.filter(function (x) { return x !== 'gemini' && x !== 'gpt' && x !== 'all' && MID[x]; });
   const mode = askG || !others.length ? 'answer' : 'receipt';
   // 앞 대화 (스레드 안이면 그 스레드)
@@ -515,7 +517,7 @@ function side(r) {
   GPT = !!r.gpt;
   if (ME === 'owner' && r.slack) { $('slkCard').hidden = false; $('slkUrl').textContent = r.slack.url; $('slkSt').textContent = r.slack.token ? '✓ 연결됨' + (r.slack.team ? ' (' + r.slack.team + ')' : '') + (r.slack.seen ? ' · 마지막 슬랙 글 ' + tm(r.slack.seen) : ' · 아직 받은 슬랙 글 없음') + (r.slack.err ? ' · ⚠ ' + r.slack.err : '') : '토큰을 넣으면 슬랙 #업무·#잡담에 Gemini가 바로 답해요'; }
   if (ME === 'owner') { $('gemCard').hidden = false; $('gemSt').textContent = (r.gemErr ? '⚠ Gemini 오류: ' + r.gemErr + ' / ' : '') + (r.gemini ? '✓ 키 있음: 수진님 글에 Gemini가 바로 답해요. @클로드·@피클만 부르면 Gemini가 받아 적고 그 AI 답 대기에 남겨요' : '키를 넣으면 수진님 글에 Gemini가 바로 답해요'); }
-  if (ME === 'owner') { $('gptCard').hidden = false; $('gptSt').textContent = (r.gptErr ? '⚠ GPT 오류: ' + r.gptErr + ' / ' : '') + (r.gpt ? '✓ 키 있음: @gpt·@모두 글에 GPT가 바로 답해요' : '키를 넣으면 @gpt·@모두 글에 GPT가 바로 답해요'); }
+  if (ME === 'owner') { $('gptCard').hidden = false; $('gptSt').textContent = (r.gptErr ? '⚠ GPT 오류: ' + r.gptErr + ' / ' : '') + (r.gpt ? '✓ 키 있음: @gpt·@모두 글에 GPT가 바로 답해요' : '키 없음: 100% 무료인 Gemini가 @gpt를 포함해 모든 의견·글 다듬기를 대신 수행 중이에요 (설정 불필요)'); }
 }
 async function load() {
   if (busy) return; busy = true;
