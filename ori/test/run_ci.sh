@@ -7,6 +7,7 @@ echo "== 문법 검사"
 node -c ori/Main.js
 cp ori/Code.gs "${RUNNER_TEMP:-/tmp}/Code.js" && node -c "${RUNNER_TEMP:-/tmp}/Code.js"
 for f in ori/ext/*.js ori/test/*.js; do node -c "$f"; done
+node -c teamroom/Room.js && cp teamroom/Loader.gs "${RUNNER_TEMP:-/tmp}/RoomLoader.js" && node -c "${RUNNER_TEMP:-/tmp}/RoomLoader.js" && node teamroom/room_test.js
 echo "== Code.gs ESLint"
 npx -y eslint@8.57.0 --no-eslintrc --env es2021 --parser-options ecmaVersion:2022 ori/Code.gs
 echo "== 단위 시험"
