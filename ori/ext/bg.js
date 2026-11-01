@@ -1,7 +1,8 @@
 /* 상품 위치 찾기 (크롬 확장 프로그램)
-   쿠팡 (1.6.0, 11/1): 확장이 쿠팡 검색 화면을 혼자 여는 건 쿠팡이 막음(금요일과 같은 코드도 11/1 'Access Denied' → 확장 코드 밖 원인).
-     그래서 네이버처럼: 상품 페이지(또는 생성기 [자동 가져오기]) → 상품 정보·썸네일만. 검색은 사람이 열고(생성기 [쿠팡에서 검색]),
-     검색 화면에서 아이콘(Alt+Shift+F) → 그 화면만 읽어서 몇 페이지인지 생성기로. 확장이 쿠팡 검색 주소를 열거나 넘기지 않음
+   1.8.0 (11/1): 금요일(1.5.0) 방식 그대로 + 쿠팡 차단 화면이 뜨면 새로고침·재시도 없이 바로 멈춤.
+     10/31~11/1 막힘은 대봉감 상품 주소(9796919905) 하나를 짧은 시간에 너무 많이 열어서(차단 시 새로고침 재시도 1.5.1~1.5.8, 시험) 그 주소만 막힌 것 — 다른 상품은 열림(사용자 확인)
+   쿠팡 상품 페이지에서 아이콘 한 번: 상품 정보 → 썸네일 저장 → 작은 창에서 PC 검색 → 같은 조건으로 모바일 검색 → 결과 복사
+     검색 순서: 대표 → 대표 + 가격 → 서브 → 서브 + 가격 … (키워드마다 1~5페이지)
    네이버는 자동으로 여러 페이지를 넘기면 '쇼핑 서비스 접속이 일시적으로 제한' 화면으로 막아서(10/16 실제로 막힘) 자동 넘기기를 안 함:
      상품 페이지에서 아이콘 → 상품 정보·썸네일 + 대표 키워드 검색 탭을 엶 → 그 화면만 읽어서 상품을 찾아 표시
      없으면 [다음 페이지] [가격 넣고 검색] [다음 키워드] 단추 (사람이 한 번 누를 때 한 화면만) */
@@ -26,7 +27,7 @@ chrome.runtime.onMessage.addListener((m, sender) => {
   else if (m.type === "plResult") { pushGen({ text: m.text }); if (!m.shot) oyThumb(m.text); }
   else if (m.type === "plShot") shotRect(sender.tab.id, m.rc, { name: m.name, pid: m.pid }).then(r => r && pushGen({ status: r.t })).catch(e => { self.__shotErr = String((e && e.message) || e); pushGen({ status: "캡처 저장 실패: " + self.__shotErr }); });
   else if (m.type === "plStatus") pushGen({ status: m.text });
-  else if (m.type === "plAuto" && m.url) { setGen(sender); (m.plt ? autoOpened(m.url, sender.tab, m.plt) : autoRun(m.url, sender.tab)).catch(e => pushGen({ status: "멈췄어요: " + ((e && e.message) || e) })); }
+  else if (m.type === "plAuto" && m.url) { setGen(sender); autoRun(m.url, sender.tab).catch(e => pushGen({ status: "멈췄어요: " + ((e && e.message) || e) })); }
 });
 /* 올리브영(oy.js) 결과의 썸네일도 다운로드 폴더에 저장 (쿠팡·네이버와 같은 곳, 상품마다 한 번) */
 let oyThumbDone = "";
@@ -39,8 +40,6 @@ function oyThumb(text) {
 }
 async function autoRun(url, gt) {
   if (busy && Date.now() - busySince < 12 * 60000) { pushGen({ status: "이미 찾는 중이에요. 끝나고 다시 눌러 주세요." }); return; }
-  /* 1.7.0: 쿠팡은 확장이 탭을 열지 않음(확장이 연 쿠팡 탭은 쿠팡이 바로 막음). 예전 생성기에서 누른 거면 새로고침 안내 */
-  if (/coupang\.com/i.test(String(url))) { pushGen({ status: "생성기를 새로고침(⌘R)한 뒤 다시 눌러 주세요. 쿠팡은 이제 생성기가 직접 열어요 (확장 1.7.0)" }); return; }
   pushGen({ status: "상품 페이지 여는 중…" });
   await keepFn(fnOf(String(url).split("#")[1] || ""));   /* 단축 링크는 넘어가며 #을 버려서 미리 기억 */
   const t = await chrome.tabs.create({ url: url, active: false, windowId: gt.windowId, index: gt.index + 1 });
@@ -59,34 +58,6 @@ async function autoRun(url, gt) {
     /* 쿠팡: 끝나면 상품 탭 닫음 (결과는 생성기에). 네이버: 검색 탭이 따로 열려서 상품 탭만 닫음. 못 찾으면 상품 탭을 보여 줌 */
     if (out || isNv) chrome.tabs.remove(t.id).catch(() => {});
     else chrome.tabs.update(t.id, { active: true }).catch(() => {});
-  } finally { autoTab = 0; }
-}
-/* 쿠팡 (1.7.0, 11/1): 생성기가 사람 클릭으로 연 상품 탭(주소 # 뒤 plt=표시)을 찾아서, 다 뜨면 읽고 닫음. 확장은 쿠팡 주소를 열거나 새로고침하지 않음.
-   이유: 쿠키를 지운 직후에도 확장이 연 쿠팡 탭은 바로 '사용권한 없음', 사람이 연 탭은 열림(10/31 20:33, 11/1 12:02·15:58) */
-async function autoOpened(url, gt, plt) {
-  if (busy && Date.now() - busySince < 12 * 60000) { pushGen({ status: "이미 찾는 중이에요. 끝나고 다시 눌러 주세요. (방금 열린 쿠팡 탭은 닫아 주세요)" }); return; }
-  pushGen({ status: "생성기가 연 쿠팡 상품 탭을 기다리는 중…" });
-  await keepFn(fnOf(String(url).split("#")[1] || ""));
-  const mark = "plt=" + plt;
-  let tid = 0;
-  for (let i = 0; i < 30 && !tid; i++) {
-    const all = await chrome.storage.session.get(null).catch(() => ({}));
-    const k = Object.keys(all).find(x => /^hash_\d+$/.test(x) && all[x] && String(all[x].h || "").indexOf(mark) !== -1);
-    if (k) tid = Number(k.slice(5));
-    if (!tid) { const ts = await chrome.tabs.query({}).catch(() => []); const t = ts.find(x => String(x.url || x.pendingUrl || "").indexOf(mark) !== -1); if (t) tid = t.id; }
-    if (!tid) await sleep(500);
-  }
-  if (!tid) { pushGen({ status: "쿠팡 상품 탭이 안 열렸어요 (크롬이 새 탭을 막았을 수 있어요). [자동 가져오기]를 다시 눌러 주세요." }); return; }
-  autoTab = tid;
-  try {
-    let tab = await chrome.tabs.get(tid);
-    for (let i = 0; i < 80; i++) { if (tab.status === "complete" && /\/products\/\d+/.test(tab.url || "")) break; await sleep(500); tab = await chrome.tabs.get(tid); }
-    await sleep(1500);
-    tab = await chrome.tabs.get(tid);
-    if (!/\/products\/\d+/.test(tab.url || "")) { pushGen({ status: "쿠팡 상품 페이지가 안 열렸어요. 열린 탭을 확인해 주세요." }); return; }
-    const out = await start(tab);
-    /* 읽었으면 탭 닫고 생성기로. 못 읽었으면(차단 화면 등) 탭을 그대로 둬서 보이게 */
-    if (out) { chrome.tabs.remove(tid).catch(() => {}); if (gt && gt.id) chrome.tabs.update(gt.id, { active: true }).catch(() => {}); }
   } finally { autoTab = 0; }
 }
 /* 올리브영: 상품 페이지에서 oy.js(상품 정보) → 같은 탭을 검색 화면으로 → oy.js(몇 번째). 결과는 oy.js가 생성기로 보냄. 탭은 분홍 테두리 확인용으로 둠 */
@@ -110,7 +81,7 @@ chrome.runtime.onMessage.addListener((m, sender) => {
 });
 /* 생성기 [상품 페이지 열기]로 연 탭: 주소 뒤 #kw=…&pr=… (의뢰서 키워드)를 탭마다 기억해 둠.
    쿠팡 단축 링크(link.coupang.com)가 상품 페이지로 넘어가면서 # 뒤를 버려서 (10/18 '런치버스 미니 텀블러' 대신 추천 키워드로 찾음) */
-const hashOf = u => { const h = String(u || "").split("#")[1] || ""; return /(?:^|&)(kw|plt)=/.test(h) ? h : ""; };
+const hashOf = u => { const h = String(u || "").split("#")[1] || ""; return /(?:^|&)kw=/.test(h) ? h : ""; };
 const pidOf = u => (String(u || "").match(/\/(?:vp|vm)\/products\/(\d+)|\/products\/(\d+)/) || []).slice(1).find(Boolean) || "";
 async function keepHash(id, u) {
   const k = "hash_" + id, h = hashOf(u);
@@ -238,7 +209,31 @@ async function closeWork() {
   work = null;
 }
 /* 모바일로 보이게: 개발자 도구의 기기 모드와 같은 방법(아이폰 화면). 안 되면 주소 요청만 아이폰으로 */
-async function mobile(on) { /* 1.6.0: 쿠팡 자동 검색을 안 해서 안 씀. 예전 chrome.debugger 폰 흉내는 지움(debugger 권한도 뺌) */ }
+async function mobile(on) {
+  const t = { tabId: work.tabId };
+  if (on) {
+    await chrome.windows.update(work.winId, { width: 430, height: 920 });
+    try {
+      await chrome.debugger.attach(t, "1.3");
+      work.dbg = true;
+      /* 안드로이드 크롬 휴대폰으로 (브라우저 정보끼리 서로 맞게: 안 맞으면 쇼핑몰이 이상한 접속으로 봄) */
+      const cv = ((navigator.userAgent.match(/Chrome\/([\d.]+)/) || [])[1] || "141.0.0.0"), major = cv.split(".")[0];
+      const brands = [{ brand: "Chromium", version: major }, { brand: "Google Chrome", version: major }, { brand: "Not?A_Brand", version: "99" }];
+      await chrome.debugger.sendCommand(t, "Emulation.setUserAgentOverride", { userAgent: "Mozilla/5.0 (Linux; Android 14; SM-S921N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + major + ".0.0.0 Mobile Safari/537.36", platform: "Linux armv8l",
+        userAgentMetadata: { brands: brands, fullVersionList: brands.map(b => ({ brand: b.brand, version: b.brand === "Not?A_Brand" ? "99.0.0.0" : cv })), fullVersion: cv, platform: "Android", platformVersion: "14.0.0", architecture: "", model: "SM-S921N", mobile: true } });
+      await chrome.debugger.sendCommand(t, "Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 3, mobile: true });
+      await chrome.debugger.sendCommand(t, "Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+    } catch (e) {
+      await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [1], addRules: [{ id: 1, priority: 1,
+        action: { type: "modifyHeaders", requestHeaders: [{ header: "user-agent", operation: "set", value: MUA }] },
+        condition: { tabIds: [work.tabId], resourceTypes: ["main_frame", "sub_frame", "xmlhttprequest", "script", "other"] } }] });
+      work.dnr = true;
+    }
+  } else {
+    if (work.dbg) { try { await chrome.debugger.detach(t); } catch (e) {} work.dbg = false; }
+    if (work.dnr) { try { await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [1] }); } catch (e) {} work.dnr = false; }
+  }
+}
 
 /* ---------- 화면 읽기 (보안 확인이 뜨면 사람이 풀 때까지 기다렸다가 이어서) ---------- */
 let curProg = async () => {};
@@ -254,7 +249,7 @@ async function scanW(o) {
   }
   return s;
 }
-const HARD_BLOCK = /일시적으로\s*제한|접속이\s*(제한|불가)|Access Denied/i;
+const HARD_BLOCK = /일시적으로\s*제한|접속이\s*(제한|불가)|Access Denied|사용권한이\s*없/i;   /* 쿠팡 '사용권한이 없습니다'도 바로 멈춤 (11/1) */
 async function waitHuman() {
   if (HARD_BLOCK.test(work.blockSnip || "")) return false;   /* 접속 제한은 풀 수 있는 확인 화면이 아님 → 바로 멈춤 */
   try { await chrome.windows.update(work.winId, { focused: true, state: "normal" }); } catch (e) {}
@@ -464,7 +459,8 @@ async function run(tab) {
   }
   const site = info.site;
   if (site === "naver") return naverProduct(tab, info);
-  if (site === "coupang") return coupangProduct(tab, info);
+  /* 검색 화면에서 아이콘을 누를 때 찾을 상품 (마지막 상품) */
+  if (site === "coupang") await chrome.storage.local.set({ cpTarget: { pid: info.pid, name: info.name, seller: info.seller, at: Date.now() } }).catch(() => {});
   PER = 36;
   const h = await tabHash(tab);
   if (fnOf(h)) { info.fn = fnOf(h); await keepFn(info.fn); }
@@ -524,49 +520,12 @@ async function run(tab) {
   return out;
 }
 
-/* ================= 쿠팡 (1.6.0: 자동 검색 없이, 지금 화면만 읽기) ================= */
-const cpMask = s => s && s.length > 8 ? s.slice(0, 4) + "***" + s.slice(-4) : s;
-const cpInfoLines = (info, price) => [
-  "상품명 : " + info.name,
-  "판매처 : " + (info.seller || ""),
-  "상품번호 : " + info.pid + (info.item ? " - " + cpMask(info.item) : ""),
-  info.opt ? "옵션 : " + info.opt : "",
-  price ? "가격 : " + price.toLocaleString("ko-KR") + "원" : "",
-  info.optPrices && info.optPrices.length ? "옵션별 가격 : " + info.optPrices.map(x => x.o + " " + x.p.toLocaleString("ko-KR") + "원").join(" / ") : "",
-  info.ship ? "배송비 : " + info.ship : "",
-  info.rocket ? "배송 : 로켓배송" : "",
-  info.img ? "썸네일 : " + info.img : ""
-].filter(Boolean);
+/* ================= 쿠팡 검색 화면에서 아이콘: 지금 화면만 읽기 (자동 위치를 못 찾았을 때 손으로) ================= */
 /* 지금 화면 위치 글자: PC는 주소의 page(=그 화면 페이지), 모바일(계속 내려가는 화면)은 광고 뺀 순서 ÷ 36 */
 function cpPos(h, s, mob) {
   const page = mob ? Math.max(1, Math.ceil((s.org || s.hit + 1) / 36)) : (h.page || 1);
   const filt = h.lo && h.hi ? gageom(h.lo, h.hi) : "";
   return { page: page, filt: filt, line: (mob ? "모바일 위치 : " : "PC 위치 : ") + page + "p" };
-}
-async function coupangProduct(tab, info) {
-  const tid = tab.id;
-  const h = await tabHash(tab);
-  if (fnOf(h)) { info.fn = fnOf(h); await keepFn(info.fn); }
-  const hp = Number((h.match(/(?:^|&)pr=(\d+)/) || [])[1] || 0);
-  const price = hp || info.price || 0;
-  /* 검색 화면에서 찾을 상품 (상품번호로 찾음). 상품마다 기억 + 마지막 것 */
-  const t = { pid: info.pid, name: info.name, seller: info.seller, price: price, at: Date.now() };
-  const st = await chrome.storage.local.get("cpTargets").catch(() => ({}));
-  const all = Object.assign({}, st.cpTargets || {}); all[info.pid] = t;
-  Object.keys(all).filter(k => Date.now() - (all[k].at || 0) > 3 * 86400000).forEach(k => delete all[k]);
-  await chrome.storage.local.set({ cpTarget: t, cpTargets: all });
-  const out = cpInfoLines(info, price).join("\n");
-  const notes = [];
-  if (!info.seller) notes.push({ t: "판매처를 못 읽었어요" + (info.sellerHint ? " (화면: " + info.sellerHint + ")" : "") + " → 판매처 칸을 직접 채워 주세요", warn: true });
-  if (info.img) { const sv = await saveThumb(info); if (sv) notes.push(sv); }
-  const nv = await newer();
-  if (nv) notes.push({ t: "새 버전(" + nv + ")이 있어요. 생성기에서 확장 프로그램을 다시 받아 바꿔 주세요.", warn: true });
-  const copied = await copyText(out, tid);
-  const how = "위치: 생성기 [쿠팡에서 검색] → 열린 쿠팡 검색 화면에서 확장 아이콘(Alt+Shift+F). 없으면 쿠팡 '다음 페이지' 누르고 한 번 더";
-  pushGen({ status: "상품 정보 넣었어요 ✓ " + how + (info.seller ? "" : " / ⚠ 판매처를 못 읽었어요" + (info.sellerHint ? " (화면: " + info.sellerHint + ")" : "")) });
-  await call(tid, "box", [{ title: copied ? "상품 정보 복사됨 (생성기에도 넣었어요)" : "상품 정보 (복사를 눌러 생성기에 붙여넣기)", out: out, copied: copied, img: info.img,
-    msg: "쿠팡은 확장이 검색 화면을 혼자 열면 막아서(11/1), 위치는 검색 화면에서 확인해요.\n" + how, notes: notes }]).catch(() => null);
-  return out;
 }
 /* 지금 보고 있는 쿠팡 검색 화면에서 찾기 (화면을 넘기거나 새로 열지 않음) */
 async function coupangHere(tab) {
