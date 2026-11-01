@@ -23,7 +23,7 @@ G("CONFIG.PAY_SHEET_ID = 'PAY'");
 env.__pay = pay; G("payTab_ = function () { return globalThis.__payS; }"); vm.runInContext('globalThis.__payS = null', env); env.__payS = pay;
 vm.runInContext("globalThis.__payS = this.__pay", env);
 const got = G("selfCheck_(readRuns_().filter(function (r) { return r['진행 상태'] !== '종료'; }), today_().getTime())");
-const want = [/방제 숫자와 목표인원이 안 맞음: .*유러피안샐러드외 20/, /월급시트에 줄이 없음: .*거치대 5/, /그날 수량이 인원과 다름: .*밴드 10 \(월급시트 7 \/ 실제 10\)/, /스토어 빈칸: .*유러피안/, /진행시간 빈칸: .*유러피안/, /한눈에 탭에 오류 칸\(1개\): B1/];
+const want = [/방제 숫자와 목표인원이 안 맞음: .*유러피안샐러드외 20/, /월급시트에 줄이 없음: .*거치대 5/, /그날 수량이 인원과 다름: .*밴드 10 \(월급시트 7 \/ 실제 10\)/, /스토어 빈칸: .*유러피안/, /진행시간 빈칸: .*유러피안/];
 let ok = got.length === want.length && want.every((re, i) => re.test(got[i]));
 console.log(got.join('\n')); console.log(ok ? '✓ 자가 점검 시험 통과' : 'XX 자가 점검 결과가 다름');
 process.exit(ok ? 0 : 1);

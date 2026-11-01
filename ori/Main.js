@@ -8598,7 +8598,7 @@ function morningCheck_() {
   // 7. 지난 12시간 확인 결과 중 문제
   try {
     // 월급시트 나눠서 하는 중(오류 아님) 줄만 있는 결과는 빼고
-    const realProb = function (t) { return t.split('\n').slice(1).some(function (l) { return /^⚠/.test(l) && !/월급시트.*(이어서|나눠서)/.test(l); }); };
+    const realProb = function (t) { return t.split('\n').slice(1).some(function (l) { return /^⚠/.test(l) && !/월급시트.*(이어서|나눠서)/.test(l) && !/한눈에 오류 칸/.test(l); }); };   // 한눈에 오류 칸은 사용자 할 일에서 뺌 (11/2)
     const log = JSON.parse(CacheService.getScriptCache().get('REPORT_LOG') || '[]').filter(function (t) { return /^⚠/.test(t) && !/다른 작업 중이라 건너뜀/.test(t) && realProb(t); });
     if (log.length) issues.push('최근 자동 확인에서 문제 ' + log.length + '번 (한눈에 Q열/실행 기록): ' + log[0].split('\n').slice(1, 3).join(' / ').slice(0, 160));
   } catch (e) {}
@@ -8700,10 +8700,10 @@ function selfCheck_(runs, t0) {
     if (noStore.length) out.push('월급시트 스토어 빈칸: ' + noStore.slice(0, 6).join(', '));
     if (noTime.length) out.push('월급시트 진행시간 빈칸: ' + noTime.slice(0, 6).join(', '));
   }
-  // 10. 한눈에 탭 오류 칸
+  // 10. 한눈에 탭 오류 칸: 사용자 할 일로 안 올림 (11/2 사용자 요청 '너만 알고 빼'). 다시 그려서 고치고 실행 기록에만
   try {
     const bad = dashErrorCells_();
-    if (bad.length) out.push('한눈에 탭에 오류 칸(' + bad.length + '개): ' + bad.slice(0, 5).join(', ') + ' → 한눈에 탭 새로 만들기');
+    if (bad.length) { try { buildDashboard_(true); } catch (e) {} const left = dashErrorCells_(); note_(left.length ? '한눈에 오류 칸 ' + left.join(', ') + ' (다시 그려도 남음, Claude가 볼 것)' : '✓ 한눈에 오류 칸 ' + bad.join(', ') + ' 다시 그려서 고침'); }
   } catch (e) {}
   return out;
 }
