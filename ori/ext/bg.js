@@ -237,31 +237,12 @@ async function closeWork() {
   try { await chrome.windows.remove(work.winId); } catch (e) {}
   work = null;
 }
-/* 모바일로 보이게: 개발자 도구의 기기 모드와 같은 방법(아이폰 화면). 안 되면 주소 요청만 아이폰으로 */
+/* 모바일 위치: 좁은 창에서 모바일 쿠팡(m.coupang.com)을 그대로 엶 (1.5.12, 11/1).
+   예전엔 chrome.debugger(개발자 도구 연결)로 안드로이드 폰인 척했는데, 개발자 도구가 붙은 탭은 쿠팡이 자동화로 봄:
+   Claude in Chrome(개발자 도구 연결)으로 연 쿠팡 탭은 두 프로필 다 첫 화면부터 '사용권한 없음'(10/31 20:09·20:11·21:03, 4번 중 4번).
+   모바일 단계에서 그 표시가 쿠팡 쿠키에 남아 다음 상품·PC 검색이 막히던 것으로 봄 → 폰인 척 안 함. 모바일 쿠팡은 PC 크롬에서도 열림(예전 PC 북마크 '모바일 위치도 찾기'와 같음) */
 async function mobile(on) {
-  const t = { tabId: work.tabId };
-  if (on) {
-    await chrome.windows.update(work.winId, { width: 430, height: 920 });
-    try {
-      await chrome.debugger.attach(t, "1.3");
-      work.dbg = true;
-      /* 안드로이드 크롬 휴대폰으로 (브라우저 정보끼리 서로 맞게: 안 맞으면 쇼핑몰이 이상한 접속으로 봄) */
-      const cv = ((navigator.userAgent.match(/Chrome\/([\d.]+)/) || [])[1] || "141.0.0.0"), major = cv.split(".")[0];
-      const brands = [{ brand: "Chromium", version: major }, { brand: "Google Chrome", version: major }, { brand: "Not?A_Brand", version: "99" }];
-      await chrome.debugger.sendCommand(t, "Emulation.setUserAgentOverride", { userAgent: "Mozilla/5.0 (Linux; Android 14; SM-S921N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + major + ".0.0.0 Mobile Safari/537.36", platform: "Linux armv8l",
-        userAgentMetadata: { brands: brands, fullVersionList: brands.map(b => ({ brand: b.brand, version: b.brand === "Not?A_Brand" ? "99.0.0.0" : cv })), fullVersion: cv, platform: "Android", platformVersion: "14.0.0", architecture: "", model: "SM-S921N", mobile: true } });
-      await chrome.debugger.sendCommand(t, "Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 3, mobile: true });
-      await chrome.debugger.sendCommand(t, "Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
-    } catch (e) {
-      await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [1], addRules: [{ id: 1, priority: 1,
-        action: { type: "modifyHeaders", requestHeaders: [{ header: "user-agent", operation: "set", value: MUA }] },
-        condition: { tabIds: [work.tabId], resourceTypes: ["main_frame", "sub_frame", "xmlhttprequest", "script", "other"] } }] });
-      work.dnr = true;
-    }
-  } else {
-    if (work.dbg) { try { await chrome.debugger.detach(t); } catch (e) {} work.dbg = false; }
-    if (work.dnr) { try { await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [1] }); } catch (e) {} work.dnr = false; }
-  }
+  if (on && work) { try { await chrome.windows.update(work.winId, { width: 430, height: 920 }); } catch (e) {} }
 }
 
 /* ---------- 화면 읽기 (보안 확인이 뜨면 사람이 풀 때까지 기다렸다가 이어서) ---------- */
@@ -309,6 +290,10 @@ async function look(ctx, dev, k, f) {
   }
   await prog(lab + " 1페이지 확인 중…");
   await nav(urlFor(site, dev, k, f, 1, P));
+  if (site === "coupang" && dev === "mo") {
+    const tb = await chrome.tabs.get(work.tabId).catch(() => null);
+    if (tb && !/^https:\/\/m\.coupang\.com\//.test(tb.url || "")) return { err: "모바일 쿠팡 화면이 안 열리고 PC 화면으로 넘어감 (" + String(tb.url || "").slice(0, 40) + ")" };
+  }
   let s = await scanW(o);
   if (!s) return { err: "화면을 못 읽음" };
   if (s.blocked) return { blocked: true };
@@ -476,7 +461,10 @@ async function run(tab) {
   if (/^https:\/\/(m?search)\.shopping\.naver\.com\//.test(tab.url || "")) return naverHere(tab);
   /* 올리브영: 상품 페이지·검색 화면 모두 북마크와 같은 코드(oy.js)로 */
   if (/^https?:\/\/([a-z]+\.)?(oliveyoung\.co\.kr|toss\.shopping|toss\.im)\//.test(tab.url || "")) { await chrome.scripting.executeScript({ target: { tabId: tid }, files: ["oy.js"] }); return; }
-  const info = await call(tid, "readProduct").catch(() => null);
+  let info = await call(tid, "readProduct").catch(() => null);
+  /* 상품 화면이 아직 다 안 그려졌으면(상품명 빈칸) 최대 15초 기다렸다 다시 읽음. 11/1: 열고 2초 만에 읽어서 상품명·판매처·옵션·배송비가 다 빈칸이었음 */
+  for (let i = 0; i < 15 && info && !info.err && !info.name && /coupang\.com/.test(tab.url || ""); i++) { await sleep(1000); info = await call(tid, "readProduct").catch(() => info); }
+  if (info && !info.err && !info.name && /coupang\.com/.test(tab.url || "")) { await ui(tid, { title: "상품 위치 찾기", msg: "쿠팡 상품 화면을 15초 동안 못 읽었어요 (상품명 빈칸). 쿠팡에 더 접속하지 않고 멈췄어요. 몇 분 뒤 다시 해 주세요." }); return; }
   if (!info) { await ui(tid, { title: "상품 위치 찾기", msg: "이 화면은 읽을 수 없어요. 쿠팡·네이버·올리브영 상품 페이지에서 눌러 주세요." }); return; }
   if (info.err) { await ui(tid, { title: "상품 위치 찾기", msg: info.err }); return; }
   if (/사용권한이\s*없|접속이\s*제한|Access\s*Denied/i.test(info.name || "")) {
