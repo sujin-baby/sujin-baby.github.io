@@ -1,9 +1,8 @@
 // 판매처 고르기 (10/31 대봉감 '판매처 : 가입'): 첫 후보가 엉터리면 버리고 다음 후보로.
-//  확장 page.js, oy.js, 생성기 북마크(bm-src) 세 곳 코드를 그대로 꺼내 가짜 화면으로 돌림.  node seller_test.js
+//  oy.js(토스·올리브영·아이폰 북마크), 생성기 북마크(bm-src) 두 곳 코드를 (확장 page.js는 11/1 사용자 요청으로 금요일(1.5.0) 코드로 되돌려서 뺌) 그대로 꺼내 가짜 화면으로 돌림.  node seller_test.js
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const root = path.join(__dirname, '..', '..');
 const src = {
-  'page.js': fs.readFileSync(path.join(root, 'ori/ext/page.js'), 'utf8'),
   'oy.js': fs.readFileSync(path.join(root, 'ori/ext/oy.js'), 'utf8'),
   '생성기 bm-src': fs.readFileSync(path.join(root, 'guide/index.html'), 'utf8'),
 };
