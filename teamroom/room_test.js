@@ -12,7 +12,17 @@ Sheet.prototype = {
 };
 const sheets = {}; let created = 0;
 const ss = { getSheets: () => [sheets['시트1']], getSheetByName: n => Object.values(sheets).find(s => s.name === n) || null, insertSheet: n => (sheets[n] = new Sheet(n)), getId: () => 'SS1', getUrl: () => 'https://sheet/SS1' };
-let fetched = [];
+let fetched = [], posted = [];
+const USERS = { U1: { name: 'sujin', profile: { display_name: '수진' } }, UC: { name: 'claude', is_bot: true, profile: { real_name: '클로드' } }, UG: { name: 'gemini', is_bot: true, profile: { real_name: 'Gemini' } } };
+function slackFake(u, o) {
+  if (!/slack\.com\/api\//.test(u)) return null;
+  const m = u.split('/api/')[1].split('?')[0];
+  if (m === 'auth.test') return /xoxb-good/.test(o.headers.Authorization) ? { ok: true, team_id: 'T1', user_id: 'UG', team: '오리방 팀룸' } : { ok: false, error: 'invalid_auth' };
+  if (m === 'users.info') { const id = decodeURIComponent(u.split('user=')[1]); return { ok: true, user: USERS[id] }; }
+  if (m === 'conversations.history') return { ok: true, messages: [{ user: 'U1', text: '앞 글', ts: '1' }] };
+  if (m === 'chat.postMessage') { posted.push(JSON.parse(o.payload)); return { ok: true }; }
+  return { ok: true };
+}
 const env = {
   console, Date, JSON, Math, Object, Array, String, Number, RegExp, Error, Promise,
   PropertiesService: { getScriptProperties: () => ({ getProperty: k => props.has(k) ? props.get(k) : null, setProperty: (k, v) => props.set(k, String(v)), deleteProperty: k => props.delete(k) }) },
@@ -23,8 +33,8 @@ const env = {
   ScriptApp: { getService: () => ({ getUrl: () => 'https://room/exec' }), getProjectTriggers: () => [], newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create() {} }) }) }) },
   Session: { getEffectiveUser: () => ({ getEmail: () => 'jinleeda1@gmail.com' }) },
   HtmlService: { createHtmlOutput: h => ({ html: h, setTitle() { return this; } }), createTemplate: h => ({ evaluate: () => ({ setTitle() { return this; }, addMetaTag() { return this; }, setXFrameOptionsMode() { return this; } }) }), XFrameOptionsMode: {} },
-  ContentService: { createTextOutput: t => ({ t, setMimeType() { return this; } }), MimeType: { JSON: 'json' } },
-  UrlFetchApp: { fetch: (u, o) => { fetched.push(u); return { getContentText: () => JSON.stringify({ candidates: [{ content: { parts: [{ text: '요청 정리: 쿠팡 차단 확인' }] } }] }) }; } }
+  ContentService: { createTextOutput: t => ({ t, setMimeType() { return this; } }), MimeType: { JSON: 'json', TEXT: 'text' } },
+  UrlFetchApp: { fetch: (u, o) => { fetched.push(u); const out = slackFake(u, o); return { getContentText: () => JSON.stringify(out || { candidates: [{ content: { parts: [{ text: '요청 정리: **쿠팡** 차단 확인' }] } }] }) }; } }
 };
 env.globalThis = env; vm.createContext(env);
 vm.runInContext(fs.readFileSync(path.join(__dirname, 'Room.js'), 'utf8'), env);
@@ -75,3 +85,23 @@ if (!ok) process.exit(1);
 const html = vm.runInContext('ROOM_HTML', env).replace(/<\?!=[^?]*\?>/g, '"x"');
 const js = (html.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
 try { new vm.Script(js); console.log('✓ 팀룸 화면 스크립트 문법 OK'); } catch (e) { console.log('XX 팀룸 화면 스크립트 문법 오류: ' + e.message); process.exit(1); }
+// 슬랙: 토큰 확인 → 주소 확인(challenge) → 수진 글에 Gemini 바로 답, @클로드만 부르면 받아 적기, 같은 이벤트 두 번 와도 한 번만, 남의 워크스페이스·봇 글 무시
+const post = b => G('doPost(' + JSON.stringify({ parameter: { slack: '1' }, postData: { contents: JSON.stringify(b) } }) + ')').t;
+const badTok = (() => { try { api('owner', { api: 'slack', token: 'xoxb-bad-aaaaaaaaaaaaaaaaaaaaaaaa' }); return 'no error'; } catch (e) { return 'err'; } })();
+const badRes = api('owner', { api: 'slack', token: 'xoxb-bad-aaaaaaaaaaaaaaaaaaaaaaaa' });
+const goodRes = api('owner', { api: 'slack', token: 'xoxb-good-aaaaaaaaaaaaaaaaaaaaaaaa' });
+const ownerRead = api('owner', { api: 'read' }), gptRead = api('gpt', { api: 'read' });
+const ch = post({ type: 'url_verification', challenge: 'abc123' });
+const ev = (id, text, extra) => Object.assign({ type: 'event_callback', team_id: 'T1', event_id: id, authorizations: [{ user_id: 'UG' }], event: Object.assign({ type: 'message', channel: 'C1', user: 'U1', text, ts: id + '.1' }, extra || {}) });
+post(ev('E1', '오늘 할 일 정리해 줘')); post(ev('E1', '오늘 할 일 정리해 줘'));
+post(ev('E2', '<@UC> 시트 오류 봐 줘'));
+post(ev('E3', '봇 글', { bot_id: 'B1' }));
+post(Object.assign(ev('E4', '남의 워크스페이스'), { team_id: 'T9' }));
+post(ev('E5', '스레드 질문', { thread_ts: '9.9' }));
+console.log('슬랙:', badRes.ok, goodRes.slack.token, goodRes.slack.team, '/ 수진만 주소:', !!ownerRead.slack, gptRead.slack, '/ challenge', ch, '/ 올린 글', posted.length, posted.map(x => x.text.slice(0, 30)).join(' | '));
+const okS = badRes.ok === false && goodRes.slack.token === true && /\?slack=1$/.test(ownerRead.slack.url) && gptRead.slack === null && ch === 'abc123' &&
+  posted.length === 3 && posted[0].text === '요청 정리: *쿠팡* 차단 확인' && /📌 Claude 들어오면/.test(posted[1].text) && posted[2].thread_ts === '9.9' && posted.every(x => x.channel === 'C1') &&
+  api('owner', { api: 'send', room: '업무', text: '토큰 xoxb-1234567890-abcdefghij' }).ok === false;
+console.log(okS ? '✓ 슬랙 바로 답 통과' : 'XX 슬랙 시험 실패');
+if (!okS) process.exit(1);
+
