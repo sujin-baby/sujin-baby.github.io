@@ -7,7 +7,7 @@
  *   @claude·@피클만 부른 글 = Gemini가 바로 "받아 적었어요"로 답하고 담당 AI 답 대기에 남김. 다른 AI가 @gemini로 불러도 답함.
  *   (예전 15분 받아 적기는 roomTick에 그대로 두어 혹시 놓친 글을 줍는 용도)
  */
-const ROOM_VER = '5';
+const ROOM_VER = '6';
 const ROOMS = ['업무', '잡담'];
 const MEMBERS = [
   { id: 'owner', name: '수진', emoji: '👑', role: '사장 · 결정' },
@@ -168,11 +168,25 @@ function doPost(e) {
 function roomCall(k, op, a) { const me = who_(k); if (!me) throw new Error('열쇠가 틀렸어요'); return api_(me, op, a); }
 
 // ---------- Gemini ----------
+// 이 키로 쓸 수 있는 flash 모델 목록 (구글이 예전 모델을 새 키에 막아서, 11/1). 6시간 캐시
+function geminiModels_(key) {
+  const c = CacheService.getScriptCache(), hit = c.get('GEM_MODELS');
+  if (hit) return hit.split(',').filter(String);
+  let out = [];
+  try {
+    const o = JSON.parse(UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key }, muteHttpExceptions: true }).getContentText() || '{}');
+    out = (o.models || []).filter(function (m) { return (m.supportedGenerationMethods || []).indexOf('generateContent') >= 0 && /flash/.test(m.name) && !/image|tts|audio|live|thinking|embed|exp|preview/.test(m.name); })
+      .map(function (m) { return String(m.name).replace(/^models\//, ''); })
+      .sort(function (a, b) { const v = function (x) { const n = x.match(/(\d+(?:\.\d+)?)/); return (n ? Number(n[1]) : 0) - (/lite/.test(x) ? 0.01 : 0); }; return v(b) - v(a); });
+  } catch (e) {}
+  try { c.put('GEM_MODELS', out.join(','), 21600); } catch (e) {}
+  return out;
+}
 // 모델이 없거나 바쁘면 다음 모델로. 마지막 오류는 GEMINI_ERR에 남겨 수진 화면에 보여 줌 (키는 안 남김)
 function geminiAsk_(prompt) {
   const p = rp_(), key = p.getProperty('GEMINI_KEY');
   if (!key) return '';
-  const models = [p.getProperty('GEMINI_MODEL'), 'gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'].filter(function (m, i, a) { return m && a.indexOf(m) === i; });
+  const models = [p.getProperty('GEMINI_MODEL'), 'gemini-flash-latest', 'gemini-3.5-flash', 'gemini-3-flash', 'gemini-2.5-flash'].concat(geminiModels_(key)).filter(function (m, i, a) { return m && a.indexOf(m) === i; }).slice(0, 6);
   let text = '', err = '';
   for (let i = 0; i < models.length && !text; i++) {
     try {
