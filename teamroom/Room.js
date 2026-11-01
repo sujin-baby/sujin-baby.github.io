@@ -401,15 +401,7 @@ function slackReply_(ev, bot) {
   if (!hist.some(function (x) { return x.ts === ev.ts; })) hist.push(ev);
   const ctx = hist.slice(-15).map(function (x) { const n = x.user === bot ? 'Gemini' : x.user ? slackName_(x.user).replace(/^봇:/, '') : ((x.bot_profile && x.bot_profile.name) || x.username || '봇'); return n + ': ' + slackClean_(x.text, bot); }).join('\n');
   const who = slackName_(ev.user).replace(/^봇:/, ''), names = others.map(function (x) { return (MID[x] || {}).name; }).join('·');
-  if (askGPT) {
-    let replyGpt = '';
-    try { replyGpt = gptAsk_(gptBase_('슬랙 채널', '글', who, ctx) + '마지막 글에 바로 답해 줘. 잡담이면 편하고 다정하게, 일 얘기면 요점만 3~6줄로 명확하게.'); } catch (e) {}
-    if (!replyGpt) replyGpt = '지금 GPT 답을 만들지 못했어요. 잠시 뒤 다시 불러 주세요.';
-    replyGpt = replyGpt.replace(/\*\*(.+?)\*\*/g, '*$1*').replace(/^#{1,6}\s*/gm, '');
-    const prGpt = slackApi_('chat.postMessage', { channel: ev.channel, text: '*[GPT]* ' + replyGpt, thread_ts: ev.thread_ts || undefined });
-    if (!prGpt.ok) throw new Error('chat.postMessage (GPT): ' + (prGpt.error || '?') + (prGpt.needed ? ' (필요: ' + prGpt.needed + ')' : ''));
-  }
-  if (rp_().getProperty('GEMINI_KEY') && (askG || (!others.length && !askGPT) || (mode === 'receipt' && !askGPT))) {
+  if (rp_().getProperty('GEMINI_KEY') && (askG || !others.length || mode === 'receipt')) {
     let reply = '';
     try { reply = geminiAsk_(gemAsk2_(gemBase_('슬랙 채널', '글', who, ctx), mode, '글', names, others.length)); } catch (e) {}
     if (!reply) reply = mode === 'answer' ? '지금 답을 못 만들었어요. 잠시 뒤 다시 불러 주세요.' : '받아 적어 뒀어요.';
