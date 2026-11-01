@@ -46,9 +46,9 @@ const r1 = api('owner', { api: 'send', room: '업무', text: '@클로드 @피클
 const pc = api('claude', { api: 'pending' });
 api('claude', { api: 'send', room: '업무', text: '확인할게요' });
 const pc2 = api('claude', { api: 'pending' }), pp = api('pickle', { api: 'pending' });
-const bad = api('gpt', { api: 'send', room: '업무', text: '키 AIzaSyD_abcdefghijklmnopqrstuvwx' });
+const bad = api('pickle', { api: 'send', room: '업무', text: '키 AIzaSyD_abcdefghijklmnopqrstuvwx' });
 const wrong = JSON.parse(G('doGet({ parameter: { k: "nope", api: "read" } })').t);
-const rd = api('gpt', { api: 'read', since: 0 });
+const rd = api('pickle', { api: 'read', since: 0 });
 // Gemini 키가 생기면 바로 답함: @피클만 부른 글 = 받아 적기, 아무도 안 부른 글 = Gemini가 답, AI끼리 대화 = 끼어들지 않음
 props.set('GEMINI_KEY', 'AQ.test_key_xxxxxxxxxxxxxxxxxxxxxxxxxxxx');
 const sr = api('owner', { api: 'send', room: '업무', text: '@피클 생성기 상세칸 줄여 줘' });
@@ -71,19 +71,16 @@ const ok3 = sr.reply === 'receipt' && last.from === 'gemini' && /@피클 들어�
 if (!ok3) { console.log('XX Gemini 바로 답 실패'); process.exit(1); }
 console.log('✓ Gemini 바로 답 통과');
 
-// GPT 키 등록 및 바로 답 시험
-props.set('OPENAI_KEY', 'sk-test_openai_key_xxxxxxxxxxxxxxxxxxxx');
-const gptBad = api('owner', { api: 'gpt', key: 'bad_key' });
-const gptGood = api('owner', { api: 'gpt', key: 'sk-test_openai_key_xxxxxxxxxxxxxxxxxxxx' });
+// @gpt로 불러도 Gemini가 대신 바로 답함 시험
 const gptSend = api('owner', { api: 'send', room: '잡담', text: '@gpt 점심 뭐 먹을까' });
 const gptLast = msgsNow().slice(-1)[0];
-const okGpt = gptBad.ok === false && gptGood.ok === true && gptLast.from === 'gpt' && gptLast.text === 'GPT 답변입니다';
-console.log('GPT 바로 답:', okGpt, gptLast.from, JSON.stringify(gptLast.text));
-if (!okGpt) { console.log('XX GPT 바로 답 실패'); process.exit(1); }
-console.log('✓ GPT 바로 답 통과');
+const okGpt = gptLast.from === 'gemini' && /요청 정리/.test(gptLast.text);
+console.log('GPT 호출 시 Gemini 대체 답:', okGpt, gptLast.from, JSON.stringify(gptLast.text));
+if (!okGpt) { console.log('XX GPT 대체 답 실패'); process.exit(1); }
+console.log('✓ GPT 대체 답 통과');
 console.log('처음:', /준비 완료/.test(first.html), '/ 열쇠', Object.keys(keys).length, '/ 받는 이', r1.to.join(','), '/ claude 답 대기', pc.msgs.length, '→', pc2.msgs.length, '/ pickle', pp.msgs.length);
 console.log('키 글 막음:', bad.ok === false, bad.error, '/ 틀린 열쇠:', wrong.error, '/ 읽기', rd.msgs.length, '개, 답 대기', JSON.stringify(rd.pending));
-const ok = /준비 완료/.test(first.html) && Object.keys(keys).length === 5 && r1.to.join(',') === 'claude,pickle' && pc.msgs.length === 1 && pc2.msgs.length === 0 && pp.msgs.length === 1 &&
+const ok = /준비 완료/.test(first.html) && Object.keys(keys).length === 4 && r1.to.join(',') === 'claude,pickle' && pc.msgs.length === 1 && pc2.msgs.length === 0 && pp.msgs.length === 1 &&
   bad.ok === false && wrong.ok === false && rd.msgs.length === 3 && rd.pending.pickle === 1 && rd.pending.claude === 0 && created === 2 && /오리 팀룸 열쇠/.test(Object.values(env.DriveApp.files).map(f => f.name).join()) && /수진 \(owner\)\n  링크: https:\/\/room\/exec\?k=/.test(Object.values(env.DriveApp.files).find(f => /열쇠/.test(f.name)).content);
 const kid = props.get('ROOM_KEYFILE'); delete env.DriveApp.files[kid];
 const lockPage = G('doGet({ parameter: {} })').html;
@@ -101,7 +98,7 @@ const post = b => G('doPost(' + JSON.stringify({ parameter: { slack: '1' }, post
 const badTok = (() => { try { api('owner', { api: 'slack', token: 'xoxb-bad-aaaaaaaaaaaaaaaaaaaaaaaa' }); return 'no error'; } catch (e) { return 'err'; } })();
 const badRes = api('owner', { api: 'slack', token: 'xoxb-bad-aaaaaaaaaaaaaaaaaaaaaaaa' });
 const goodRes = api('owner', { api: 'slack', token: 'xoxb-good-aaaaaaaaaaaaaaaaaaaaaaaa' });
-const ownerRead = api('owner', { api: 'read' }), gptRead = api('gpt', { api: 'read' });
+const ownerRead = api('owner', { api: 'read' }), gemRead = api('gemini', { api: 'read' });
 const ch = post({ type: 'url_verification', challenge: 'abc123' });
 const ev = (id, text, extra) => Object.assign({ type: 'event_callback', team_id: 'T1', event_id: id, authorizations: [{ user_id: 'UG' }], event: Object.assign({ type: 'message', channel: 'C1', user: 'U1', text, ts: id + '.1' }, extra || {}) });
 post(ev('E1', '오늘 할 일 정리해 줘')); post(ev('E1', '오늘 할 일 정리해 줘'));
@@ -109,10 +106,10 @@ post(ev('E2', '<@UC> 시트 오류 봐 줘'));
 post(ev('E3', '봇 글', { bot_id: 'B1' }));
 post(Object.assign(ev('E4', '남의 워크스페이스'), { team_id: 'T9' }));
 post(ev('E5', '스레드 질문', { thread_ts: '9.9' }));
-post(ev('E6', '@gpt 슬랙에서도 답해 줘'));
-console.log('슬랙:', badRes.ok, goodRes.slack.token, goodRes.slack.team, '/ 수진만 주소:', !!ownerRead.slack, gptRead.slack, '/ challenge', ch, '/ 올린 글', posted.length, posted.map(x => x.text.slice(0, 30)).join(' | '));
-const okS = badRes.ok === false && goodRes.slack.token === true && /\?slack=1$/.test(ownerRead.slack.url) && gptRead.slack === null && ch === 'abc123' &&
-  posted.length === 4 && posted[0].text === '요청 정리: *쿠팡* 차단 확인' && /📌 Claude 들어오면/.test(posted[1].text) && posted[2].thread_ts === '9.9' && posted[3].text === '*[GPT]* GPT 답변입니다' && posted.every(x => x.channel === 'C1') &&
+post(ev('E6', '@gemini 슬랙에서도 답해 줘'));
+console.log('슬랙:', badRes.ok, goodRes.slack.token, goodRes.slack.team, '/ 수진만 주소:', !!ownerRead.slack, gemRead.slack, '/ challenge', ch, '/ 올린 글', posted.length, posted.map(x => x.text.slice(0, 30)).join(' | '));
+const okS = badRes.ok === false && goodRes.slack.token === true && /\?slack=1$/.test(ownerRead.slack.url) && gemRead.slack === null && ch === 'abc123' &&
+  posted.length === 4 && posted[0].text === '요청 정리: *쿠팡* 차단 확인' && /📌 Claude 들어오면/.test(posted[1].text) && posted[2].thread_ts === '9.9' && /요청 정리/.test(posted[3].text) && posted.every(x => x.channel === 'C1') &&
   api('owner', { api: 'send', room: '업무', text: '토큰 xoxb-1234567890-abcdefghij' }).ok === false;
 console.log(okS ? '✓ 슬랙 바로 답 통과' : 'XX 슬랙 시험 실패');
 if (!okS) process.exit(1);
