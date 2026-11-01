@@ -5609,7 +5609,7 @@ function reviewDone_(runs) {
     const seenK = 'RVSEEN_' + sid;
     let mod = 0, fname = '';
     try { const f = DriveApp.getFileById(sid); mod = f.getLastUpdated().getTime(); fname = f.getName(); } catch (e) {}
-    const sig = ['rv2', mod, Utilities.formatDate(new Date(Date.now() - 5 * 3600000), CONFIG.TIMEZONE, 'yyyyMMdd'),   // rv2: 11/2 끝난 방 독촉 정리를 한 번씩 돌게 pend[campKey_(mine[0]['캠페인'] || mine[0]['명단 제목'])] ? 1 : 0]
+    const sig = ['rv2', mod, Utilities.formatDate(new Date(Date.now() - 5 * 3600000), CONFIG.TIMEZONE, 'yyyyMMdd'), pend[campKey_(mine[0]['캠페인'] || mine[0]['명단 제목'])] ? 1 : 0]
       .concat(mine.map(function (r) { return [r.row, r['마감 시각'] instanceof Date ? r['마감 시각'].getTime() : '', r['인원'], r['총건수']].join(','); })).join('|');
     if (mod && props.getProperty(seenK) === sig) {
       if (!props.getProperty('RVRPT_' + sid)) return;
