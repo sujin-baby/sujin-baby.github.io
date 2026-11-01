@@ -123,15 +123,17 @@ function api_(me, op, a) {
     const r = post_(me, String(a.room || '업무'), a.text);
     // 화면에서 보낸 글은 화면이 곧바로 'autoreply'를 따로 불러서 보내기가 느려지지 않게 함. API로 보낸 글은 여기서 바로 답함
     if (!a.defer) {
-      try { r.reply = geminiNow_(r.id); } catch (e) {}
-      try { if (!r.reply) r.reply = gptNow_(r.id); } catch (e) {}
+      let rep = '';
+      try { const g = gptNow_(r.id); if (g) rep = g; } catch (e) {}
+      try { const gm = geminiNow_(r.id); if (gm) rep = rep ? 'all' : gm; } catch (e) {}
+      r.reply = rep;
     }
     return r;
   }
   if (op === 'autoreply') {
     let rep = '';
-    try { rep = geminiNow_(Number(a.id || 0)); } catch (e) {}
-    try { if (!rep) rep = gptNow_(Number(a.id || 0)); } catch (e) {}
+    try { const g = gptNow_(Number(a.id || 0)); if (g) rep = g; } catch (e) {}
+    try { const gm = geminiNow_(Number(a.id || 0)); if (gm) rep = rep ? 'all' : gm; } catch (e) {}
     return { ok: true, reply: rep };
   }
   if (op === 'pending') return { ok: true, me: me, rules: ROOM_RULES, msgs: pending_(me).map(view_) };
@@ -239,7 +241,9 @@ function geminiNow_(id) {
   if (!rp_().getProperty('GEMINI_KEY')) return '';
   const all = cacheMsgs_(), m = all.filter(function (x) { return x.id === id; })[0];
   if (!m || m.from === 'gemini' || Date.now() - m.t > 10 * 60000) return '';
-  const askG = m.to.indexOf('gemini') >= 0, others = m.to.filter(function (x) { return x !== 'gemini'; });
+  const askG = m.to.indexOf('gemini') >= 0;
+  const hasGpt = !!rp_().getProperty('OPENAI_KEY');
+  const others = m.to.filter(function (x) { return x !== 'gemini' && (!hasGpt || x !== 'gpt'); });
   let mode = '';
   if (askG || (m.from === 'owner' && !m.to.length)) mode = 'answer';
   else if (m.from === 'owner' && others.length) mode = 'receipt';
