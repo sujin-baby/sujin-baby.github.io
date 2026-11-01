@@ -479,7 +479,27 @@ const openCode = fs.readFileSync(path.join(__dirname, '../../guide/open.html'), 
 if (/res\s*\+=\s*sep\s*\+\s*["']kw=["']/.test(openCode)) throw new Error('open.html should not append kw to query string');
 if (/u\s*\+=\s*\(.*\?.*\)\s*\+\s*["']kw=["']/.test(indexCode)) throw new Error('index.html should not append kw to query string');
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (15개 샘플 전원 일치)');
+// ==========================================
+// Test 16: '는 다를 수 있습니다' 등 비정상 판매처 차단 및 괄사/문어괄사 품목 명사 보강 검증 (11/01 v150)
+// 1) okSeller: '는 다를 수 있습니다.', '다를 수 있습니다', '가입' 차단, '코코스무', '아이누빅' 허용
+// 2) parseCoupang: '판매처 : 는 다를 수 있습니다.' 파싱 시 seller가 빈칸으로 차단되는지 검증
+// 3) suggestKeywords: '코코스무 문어 괄사...' 상품명에서 '무'에 의한 '코코스무' 오추출 차단 및 '괄사'/'문어 괄사' 추천 검증
+// ==========================================
+console.log('-- Test 16: 비정상 판매처 차단 및 괄사 품목 명사 보강 검증');
+if (P.okSeller('는 다를 수 있습니다.')) throw new Error('okSeller should reject 는 다를 수 있습니다.');
+if (P.okSeller('다를 수 있습니다')) throw new Error('okSeller should reject 다를 수 있습니다');
+if (P.okSeller('가입')) throw new Error('okSeller should reject 가입');
+if (!P.okSeller('코코스무')) throw new Error('okSeller should accept 코코스무');
+if (!P.okSeller('아이누빅')) throw new Error('okSeller should accept 아이누빅');
+
+const badSellerParse = P.parseCoupang('상품명 : 코코스무 문어 괄사\n판매처 : 는 다를 수 있습니다.\n상품번호 : 9783998793\n위치 : 1p');
+if (badSellerParse.seller !== '') throw new Error('parseCoupang should filter out bad seller, got: ' + badSellerParse.seller);
+
+const sugGuasha = P.suggestKeywords('코코스무 문어 괄사 두피 승모근 바디 마사지기 지압 전신 붓기제거 뷰티 홈케어');
+if (sugGuasha.main === '코코스무') throw new Error('suggestKeywords main should not be 코코스무');
+if (sugGuasha.main !== '괄사' && sugGuasha.main !== '문어 괄사') throw new Error('suggestKeywords main should be 괄사 or 문어 괄사, got: ' + sugGuasha.main);
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (16개 샘플 전원 일치)');
 process.exit(0);
 
 
