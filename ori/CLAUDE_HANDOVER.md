@@ -100,6 +100,11 @@
 
 ## 8. 검토 요청 (서로 담당 파일을 고쳤을 때 여기 적기)
 
+- ✅ **팀룸·슬랙 설치 끝 (11/1)**:
+  - **앱스크립트 팀룸** (`teamroom/`, 설명 `teamroom/README.md`): jinleeda1 프로젝트 '오리방 팀룸', 웹 앱 `https://script.google.com/macros/s/AKfycby9QFtSENA7f3HHpScnZYNZ9InP0EAI0cDFtlLpIf907W8HPxbMWNMzPsiu0Hn22FBOvg/exec`. 저장은 드라이브 파일 `오리 팀룸 대화.json`, 참가자 링크는 `오리 팀룸 열쇠.txt`(주인만 열림, 열쇠 없이 웹 앱을 열면 링크 나옴). 코드는 로더가 GitHub에서 받음(다시 붙여넣기 필요 없음). 용도: PC 회의·기획·인수인계 글·잡담.
+  - **슬랙** 워크스페이스 '오리방 팀룸', 채널 `#업무`(C0CDVBM75QS)·`#잡담`(C0CDPAB5S1Z). Claude 봇 = `@claude2`(앱 A0CDXQCNFND, 토큰은 Claude 환경 시크릿에 Bearer로 들어 있어 `slack.com` 요청에 자동으로 붙음). 다른 `@claude`(A0CDXE9C3S5)는 안 쓰는 앱 → 지우기 안내함. 용도: 폰 알림 받는 핫라인(급한 건 Claude 앱으로 바로).
+  - 남은 것: 팀룸 Claude 링크를 환경 변수 `ORI_ROOM_URL`로 넣기(사용자), 피클·GPT 연결, Claude가 1시간마다 슬랙 #업무·팀룸 확인하는 예약 작업.
+
 - ↩ **[Claude] 확장 1.5.16 = 금요일 1.5.0 코드 / 생성기 v145** (11/1 12:05, 사용자 결정): bg.js·page.js를 4d089fb 그대로 되돌림(oy.js는 그대로). **bg.js·page.js 고칠 땐 사용자에게 먼저 물어볼 것.** 자세한 건 `COUPANG_BLOCK_TASK.md` ↩ 칸.
 
 - 🛠 **[Claude] 확장 1.5.15 / 생성기 v144** (11/1 11:50): 모바일 위치용 chrome.debugger 폰 흉내 삭제(개발자 도구 붙은 탭 = 쿠팡 차단, 그 뒤 PC도 막힘), debugger 권한 삭제, 상품 화면 다 그려진 뒤 읽기(bg.js만, 1.5.14 위에). 연달아 두 번 시험으로 확인 남음. 근거는 `COUPANG_BLOCK_TASK.md` 11/1 칸.
