@@ -102,7 +102,7 @@
     const firstPrices = (t, n) => (t.match(/\d{1,3}(?:,\d{3})+\s*원/g) || []).slice(0, n).map(num).filter(x => x >= 100);
     if (!isNaver) {
       /* 쿠팡 차단 화면('사용권한이 없습니다', 'Access Denied')은 상품 정보로 안 씀 (10/31 판매처·상품명에 들어감) */
-      if (/사용권한이\s*없|접속이\s*제한|Access\s*Denied/i.test((document.title || "") + " " + String(txt || "").slice(0, 3000))) return { site: "coupang", name: "", err: "쿠팡 차단 화면('사용권한이 없습니다')이 떴어요." };
+      if (/사용권한이\s*없|접속이\s*제한|Access\s*Denied/i.test((document.title || "") + " " + String(txt || "").slice(0, 3000))) return { site: "coupang", name: "", err: "쿠팡 차단 화면('사용권한이 없습니다')이 떴어요. 다시 누르지 말고, 크롬 설정에서 쿠팡 사이트 데이터를 지우고 크롬을 껐다 켠 뒤 해 주세요." };
       const pm = L.pathname.match(/\/v[pm]\/products\/(\d+)/);
       if (!pm) return { err: "쿠팡 상품 상세 페이지에서 눌러 주세요." };
       const qs = new URLSearchParams(L.search);

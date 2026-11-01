@@ -8,7 +8,7 @@
   const boot = () => {
     if (!document.getElementById("cp") || !document.getElementById("ext-dl")) return false;
     document.documentElement.setAttribute("data-pl-ext", chrome.runtime.getManifest().version);
-    document.addEventListener("pl-auto", e => { let j = {}; try { j = JSON.parse(e.detail); } catch (x) {} chrome.runtime.sendMessage({ type: "plAuto", url: j.url }).catch(() => {}); });
+    document.addEventListener("pl-auto", e => { let j = {}; try { j = JSON.parse(e.detail); } catch (x) {} chrome.runtime.sendMessage({ type: "plAuto", url: j.url, plt: j.plt || "" }).catch(() => {}); });
     chrome.runtime.onMessage.addListener(m => { if (m && m.type === "plPush") document.dispatchEvent(new CustomEvent("pl-push", { detail: JSON.stringify(m) })); });
     /* 이 화면을 결과 받을 곳으로 등록 (생성기를 새로 열 때마다 마지막 것) */
     chrome.runtime.sendMessage({ type: "plGenHere" }).catch(() => {});

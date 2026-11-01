@@ -26,7 +26,7 @@ chrome.runtime.onMessage.addListener((m, sender) => {
   else if (m.type === "plResult") { pushGen({ text: m.text }); if (!m.shot) oyThumb(m.text); }
   else if (m.type === "plShot") shotRect(sender.tab.id, m.rc, { name: m.name, pid: m.pid }).then(r => r && pushGen({ status: r.t })).catch(e => { self.__shotErr = String((e && e.message) || e); pushGen({ status: "캡처 저장 실패: " + self.__shotErr }); });
   else if (m.type === "plStatus") pushGen({ status: m.text });
-  else if (m.type === "plAuto" && m.url) { setGen(sender); autoRun(m.url, sender.tab).catch(e => pushGen({ status: "멈췄어요: " + ((e && e.message) || e) })); }
+  else if (m.type === "plAuto" && m.url) { setGen(sender); (m.plt ? autoOpened(m.url, sender.tab, m.plt) : autoRun(m.url, sender.tab)).catch(e => pushGen({ status: "멈췄어요: " + ((e && e.message) || e) })); }
 });
 /* 올리브영(oy.js) 결과의 썸네일도 다운로드 폴더에 저장 (쿠팡·네이버와 같은 곳, 상품마다 한 번) */
 let oyThumbDone = "";
@@ -39,6 +39,8 @@ function oyThumb(text) {
 }
 async function autoRun(url, gt) {
   if (busy && Date.now() - busySince < 12 * 60000) { pushGen({ status: "이미 찾는 중이에요. 끝나고 다시 눌러 주세요." }); return; }
+  /* 1.7.0: 쿠팡은 확장이 탭을 열지 않음(확장이 연 쿠팡 탭은 쿠팡이 바로 막음). 예전 생성기에서 누른 거면 새로고침 안내 */
+  if (/coupang\.com/i.test(String(url))) { pushGen({ status: "생성기를 새로고침(⌘R)한 뒤 다시 눌러 주세요. 쿠팡은 이제 생성기가 직접 열어요 (확장 1.7.0)" }); return; }
   pushGen({ status: "상품 페이지 여는 중…" });
   await keepFn(fnOf(String(url).split("#")[1] || ""));   /* 단축 링크는 넘어가며 #을 버려서 미리 기억 */
   const t = await chrome.tabs.create({ url: url, active: false, windowId: gt.windowId, index: gt.index + 1 });
@@ -57,6 +59,34 @@ async function autoRun(url, gt) {
     /* 쿠팡: 끝나면 상품 탭 닫음 (결과는 생성기에). 네이버: 검색 탭이 따로 열려서 상품 탭만 닫음. 못 찾으면 상품 탭을 보여 줌 */
     if (out || isNv) chrome.tabs.remove(t.id).catch(() => {});
     else chrome.tabs.update(t.id, { active: true }).catch(() => {});
+  } finally { autoTab = 0; }
+}
+/* 쿠팡 (1.7.0, 11/1): 생성기가 사람 클릭으로 연 상품 탭(주소 # 뒤 plt=표시)을 찾아서, 다 뜨면 읽고 닫음. 확장은 쿠팡 주소를 열거나 새로고침하지 않음.
+   이유: 쿠키를 지운 직후에도 확장이 연 쿠팡 탭은 바로 '사용권한 없음', 사람이 연 탭은 열림(10/31 20:33, 11/1 12:02·15:58) */
+async function autoOpened(url, gt, plt) {
+  if (busy && Date.now() - busySince < 12 * 60000) { pushGen({ status: "이미 찾는 중이에요. 끝나고 다시 눌러 주세요. (방금 열린 쿠팡 탭은 닫아 주세요)" }); return; }
+  pushGen({ status: "생성기가 연 쿠팡 상품 탭을 기다리는 중…" });
+  await keepFn(fnOf(String(url).split("#")[1] || ""));
+  const mark = "plt=" + plt;
+  let tid = 0;
+  for (let i = 0; i < 30 && !tid; i++) {
+    const all = await chrome.storage.session.get(null).catch(() => ({}));
+    const k = Object.keys(all).find(x => /^hash_\d+$/.test(x) && all[x] && String(all[x].h || "").indexOf(mark) !== -1);
+    if (k) tid = Number(k.slice(5));
+    if (!tid) { const ts = await chrome.tabs.query({}).catch(() => []); const t = ts.find(x => String(x.url || x.pendingUrl || "").indexOf(mark) !== -1); if (t) tid = t.id; }
+    if (!tid) await sleep(500);
+  }
+  if (!tid) { pushGen({ status: "쿠팡 상품 탭이 안 열렸어요 (크롬이 새 탭을 막았을 수 있어요). [자동 가져오기]를 다시 눌러 주세요." }); return; }
+  autoTab = tid;
+  try {
+    let tab = await chrome.tabs.get(tid);
+    for (let i = 0; i < 80; i++) { if (tab.status === "complete" && /\/products\/\d+/.test(tab.url || "")) break; await sleep(500); tab = await chrome.tabs.get(tid); }
+    await sleep(1500);
+    tab = await chrome.tabs.get(tid);
+    if (!/\/products\/\d+/.test(tab.url || "")) { pushGen({ status: "쿠팡 상품 페이지가 안 열렸어요. 열린 탭을 확인해 주세요." }); return; }
+    const out = await start(tab);
+    /* 읽었으면 탭 닫고 생성기로. 못 읽었으면(차단 화면 등) 탭을 그대로 둬서 보이게 */
+    if (out) { chrome.tabs.remove(tid).catch(() => {}); if (gt && gt.id) chrome.tabs.update(gt.id, { active: true }).catch(() => {}); }
   } finally { autoTab = 0; }
 }
 /* 올리브영: 상품 페이지에서 oy.js(상품 정보) → 같은 탭을 검색 화면으로 → oy.js(몇 번째). 결과는 oy.js가 생성기로 보냄. 탭은 분홍 테두리 확인용으로 둠 */
@@ -80,7 +110,7 @@ chrome.runtime.onMessage.addListener((m, sender) => {
 });
 /* 생성기 [상품 페이지 열기]로 연 탭: 주소 뒤 #kw=…&pr=… (의뢰서 키워드)를 탭마다 기억해 둠.
    쿠팡 단축 링크(link.coupang.com)가 상품 페이지로 넘어가면서 # 뒤를 버려서 (10/18 '런치버스 미니 텀블러' 대신 추천 키워드로 찾음) */
-const hashOf = u => { const h = String(u || "").split("#")[1] || ""; return /(?:^|&)kw=/.test(h) ? h : ""; };
+const hashOf = u => { const h = String(u || "").split("#")[1] || ""; return /(?:^|&)(kw|plt)=/.test(h) ? h : ""; };
 const pidOf = u => (String(u || "").match(/\/(?:vp|vm)\/products\/(\d+)|\/products\/(\d+)/) || []).slice(1).find(Boolean) || "";
 async function keepHash(id, u) {
   const k = "hash_" + id, h = hashOf(u);

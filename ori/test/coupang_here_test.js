@@ -67,5 +67,18 @@ ok(g.cpPidOf('https://www.coupang.com/vp/products/123456789?itemId=1', 0) === '1
 ok(/\.pl-auto, \.pl-cp/.test(gen) && /className = "btn ghost pl-cp"/.test(gen), '검색 링크는 확장이 있을 때만 보임 (한 번에 가져오기가 세는 .pl-auto와 따로)');
 ok(!/r\.seller = bCand/.test(gen), '생성기: 판매처를 상품명 첫 단어로 안 채움');
 
+// 5) 1.7.0: 확장은 쿠팡 탭을 직접 열지 않음 — 생성기가 사람 클릭으로 열고(# 뒤 plt=), 확장은 그 탭만 읽음
+const gjs = fs.readFileSync(path.join(root, 'ori/ext/gen.js'), 'utf8');
+const ar = fnSrc(bg, 'async function autoRun(');
+ok(/coupang\\\.com\/i\.test\(String\(url\)\)\) \{ pushGen/.test(ar) && ar.indexOf('coupang\\.com/i.test') < ar.indexOf('tabs.create'), 'autoRun: 쿠팡 주소면 탭을 열기 전에 멈춤 (예전 생성기에서 눌러도 확장이 쿠팡을 안 엶)');
+const ao = fnSrc(bg, 'async function autoOpened(');
+ok(!/tabs\.create|tabs\.update\([^)]*url|tabs\.reload|windows\.create/.test(ao), 'autoOpened: 쿠팡 탭을 열거나 새로고침하지 않음 (생성기가 연 탭을 찾아 읽고 닫기만)');
+ok(/m\.plt \? autoOpened\(/.test(bg), '생성기가 plt를 보내면 autoOpened');
+ok(/plt: j\.plt/.test(gjs), 'gen.js가 plt를 확장에 넘김');
+ok(/\(kw\|plt\)=/.test(bg), 'hashOf: # 뒤 plt=도 탭마다 기억');
+ok(/window\.open\(a\.href \+ \(a\.href\.indexOf\("#"\) === -1 \? "#" : "&"\) \+ "plt=" \+ plt, "_blank", "noopener"\)/.test(gen) && /if \(cpOpen\) ab\.dataset\.cp = "1"/.test(gen), '생성기 [자동 가져오기]: 쿠팡은 사람 클릭 안에서 생성기가 새 탭으로 엶');
+ok(/function batchGesture\(/.test(gen) && /b\.dataset\.cp && !\(navigator\.userActivation && navigator\.userActivation\.isActive\)/.test(gen), '한 번에 가져오기: 쿠팡 상품은 "▶ 다음" 단추 클릭 때 하나씩');
+ok(/\/차단\|사용권한\/\.test\(m\.status\)\) \{ batchStop = true; batchBlocked = true;/.test(gen), '한 번에 가져오기: 쿠팡 차단이면 멈춤 (더 열면 더 오래 막힘)');
+
 if (fail) { console.error(fail + '개 실패'); process.exit(1); }
 console.log('✓ 쿠팡 지금 화면 시험 통과');
