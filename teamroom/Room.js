@@ -7,7 +7,7 @@
  *   @claude·@피클만 부른 글 = Gemini가 바로 "받아 적었어요"로 답하고 담당 AI 답 대기에 남김. 다른 AI가 @gemini로 불러도 답함.
  *   (예전 15분 받아 적기는 roomTick에 그대로 두어 혹시 놓친 글을 줍는 용도)
  */
-const ROOM_VER = '3';
+const ROOM_VER = '4';
 const ROOMS = ['업무', '잡담'];
 const MEMBERS = [
   { id: 'owner', name: '수진', emoji: '👑', role: '사장 · 결정' },
@@ -117,7 +117,7 @@ function api_(me, op, a) {
     const since = Number(a.since || 0), room = a.room && ROOMS.indexOf(a.room) >= 0 ? a.room : '';
     const all = cacheMsgs_(), msgs = all.filter(function (m) { return m.id > since && (!room || m.room === room); }).slice(-150).map(view_);
     const pend = {}; MEMBERS.forEach(function (m) { if (m.id !== 'owner') pend[m.id] = pending_(m.id, all).length; });
-    return { ok: true, me: me, rooms: ROOMS, rules: ROOM_RULES, members: members_(), pending: pend, msgs: msgs, lastId: all.length ? all[all.length - 1].id : 0, ver: ROOM_VER, gemini: !!rp_().getProperty('GEMINI_KEY'), slack: me === 'owner' ? slackStatus_() : null };
+    return { ok: true, me: me, rooms: ROOMS, rules: ROOM_RULES, members: members_(), pending: pend, msgs: msgs, lastId: all.length ? all[all.length - 1].id : 0, ver: ROOM_VER, gemini: !!rp_().getProperty('GEMINI_KEY'), gemErr: me === 'owner' ? (rp_().getProperty('GEMINI_ERR') || '').replace(/AIza[\w-]{20,}|AQ\.[\w.-]{20,}/g, '(키)') : '', slack: me === 'owner' ? slackStatus_() : null };
   }
   if (op === 'send') {
     const r = post_(me, String(a.room || '업무'), a.text);
@@ -168,12 +168,24 @@ function doPost(e) {
 function roomCall(k, op, a) { const me = who_(k); if (!me) throw new Error('열쇠가 틀렸어요'); return api_(me, op, a); }
 
 // ---------- Gemini ----------
+// 모델이 없거나 바쁘면 다음 모델로. 마지막 오류는 GEMINI_ERR에 남겨 수진 화면에 보여 줌 (키는 안 남김)
 function geminiAsk_(prompt) {
-  const key = rp_().getProperty('GEMINI_KEY');
+  const p = rp_(), key = p.getProperty('GEMINI_KEY');
   if (!key) return '';
-  const res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + (rp_().getProperty('GEMINI_MODEL') || 'gemini-flash-latest') + ':generateContent', { method: 'post', contentType: 'application/json', headers: { 'x-goog-api-key': key }, payload: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }), muteHttpExceptions: true });
-  const o = JSON.parse(res.getContentText() || '{}');
-  return ((((o.candidates || [])[0] || {}).content || {}).parts || []).map(function (x) { return x.text || ''; }).join('').trim()
+  const models = [p.getProperty('GEMINI_MODEL'), 'gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'].filter(function (m, i, a) { return m && a.indexOf(m) === i; });
+  let text = '', err = '';
+  for (let i = 0; i < models.length && !text; i++) {
+    try {
+      const res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + models[i] + ':generateContent', { method: 'post', contentType: 'application/json', headers: { 'x-goog-api-key': key }, payload: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }), muteHttpExceptions: true });
+      const o = JSON.parse(res.getContentText() || '{}');
+      text = ((((o.candidates || [])[0] || {}).content || {}).parts || []).map(function (x) { return x.text || ''; }).join('').trim();
+      if (text) { if (p.getProperty('GEMINI_MODEL') !== models[i]) p.setProperty('GEMINI_MODEL', models[i]); }
+      else err = models[i] + ': ' + ((o.error && (o.error.status + ' ' + o.error.message)) || (o.promptFeedback && JSON.stringify(o.promptFeedback)) || ('HTTP ' + (res.getResponseCode ? res.getResponseCode() : '?')));
+      if (o.error && /API key|PERMISSION|UNAUTHENTICATED/i.test(o.error.status + ' ' + o.error.message)) break;
+    } catch (e) { err = models[i] + ': ' + (e.message || e); }
+  }
+  if (text) p.deleteProperty('GEMINI_ERR'); else p.setProperty('GEMINI_ERR', new Date().toISOString().slice(11, 16) + ' ' + String(err).slice(0, 300));
+  return text
     .replace(/AIza[\w-]{20,}|AQ\.[\w.-]{20,}|ghp_[\w]{20,}|sk-[\w-]{20,}|xox[abprs]-[\w-]{10,}/g, '(키 가림)');
 }
 function gemDone_(id) {
@@ -391,7 +403,7 @@ function side(r) {
   $('chips').innerHTML = r.members.filter(m => m.id !== ME).map(m => '<span class="chip" data-at="' + (m.id === 'pickle' ? '피클' : m.id) + '">@' + esc(m.name) + '</span>').join('') + '<span class="chip" data-at="모두">@모두</span>';
   GEM = !!r.gemini;
   if (ME === 'owner' && r.slack) { $('slkCard').hidden = false; $('slkUrl').textContent = r.slack.url; $('slkSt').textContent = r.slack.token ? '✓ 연결됨' + (r.slack.team ? ' (' + r.slack.team + ')' : '') + (r.slack.seen ? ' · 마지막 슬랙 글 ' + tm(r.slack.seen) : ' · 아직 받은 슬랙 글 없음') : '토큰을 넣으면 슬랙 #업무·#잡담에 Gemini가 바로 답해요'; }
-  if (ME === 'owner') { $('gemCard').hidden = false; $('gemSt').textContent = r.gemini ? '✓ 키 있음: 수진님 글에 Gemini가 바로 답해요. @클로드·@피클만 부르면 Gemini가 받아 적고 그 AI 답 대기에 남겨요' : '키를 넣으면 수진님 글에 Gemini가 바로 답해요'; }
+  if (ME === 'owner') { $('gemCard').hidden = false; $('gemSt').textContent = (r.gemErr ? '⚠ Gemini 오류: ' + r.gemErr + ' / ' : '') + (r.gemini ? '✓ 키 있음: 수진님 글에 Gemini가 바로 답해요. @클로드·@피클만 부르면 Gemini가 받아 적고 그 AI 답 대기에 남겨요' : '키를 넣으면 수진님 글에 Gemini가 바로 답해요'); }
 }
 async function load() {
   if (busy) return; busy = true;
