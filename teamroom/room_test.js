@@ -39,17 +39,31 @@ const pc2 = api('claude', { api: 'pending' }), pp = api('pickle', { api: 'pendin
 const bad = api('gpt', { api: 'send', room: '업무', text: '키 AIzaSyD_abcdefghijklmnopqrstuvwx' });
 const wrong = JSON.parse(G('doGet({ parameter: { k: "nope", api: "read" } })').t);
 const rd = api('gpt', { api: 'read', since: 0 });
-// 15분 넘게 답 없는 수진 글 → Gemini
+// Gemini 키가 생기면 바로 답함: @피클만 부른 글 = 받아 적기, 아무도 안 부른 글 = Gemini가 답, AI끼리 대화 = 끼어들지 않음
 props.set('GEMINI_KEY', 'AQ.test_key_xxxxxxxxxxxxxxxxxxxxxxxxxxxx');
-api('owner', { api: 'send', room: '업무', text: '@피클 생성기 상세칸 줄여 줘' });
-const msgs = JSON.parse(cache.get('ROOM_LAST')); msgs[msgs.length - 1].t -= 20 * 60000; cache.set('ROOM_LAST', JSON.stringify(msgs));
-G('roomTick()');
-const last = JSON.parse(cache.get('ROOM_LAST')).slice(-1)[0];
+const sr = api('owner', { api: 'send', room: '업무', text: '@피클 생성기 상세칸 줄여 줘' });
+const msgsNow = () => JSON.parse(cache.get('ROOM_LAST'));
+const last = msgsNow().slice(-1)[0];
+const ppAfter = api('pickle', { api: 'pending' }).msgs.length;
+const nf = fetched.length;
+api('owner', { api: 'send', room: '잡담', text: '오늘 날씨 좋다', defer: 1 });
+const deferLast = msgsNow().slice(-1)[0].from;
+const ar = api('owner', { api: 'autoreply', id: msgsNow().slice(-1)[0].id });
+const ar2 = api('owner', { api: 'autoreply', id: msgsNow().slice(-2)[0].id });
+const chat = msgsNow().slice(-1)[0];
+api('pickle', { api: 'send', room: '업무', text: '@클로드 이거 봐 주세요' });
+const aiAi = msgsNow().slice(-1)[0].from;
+const msgs = msgsNow(); msgs.forEach(m => { m.t -= 20 * 60000; }); cache.set('ROOM_LAST', JSON.stringify(msgs));
+const before = msgsNow().length; G('roomTick()'); const tickAdded = msgsNow().length - before;
+console.log('바로 답:', sr.reply, last.from, JSON.stringify(last.text), '/ 피클 답 대기', ppAfter, '/ 잡담:', deferLast, ar.reply, ar2.reply, chat.from, chat.room, '/ AI끼리:', aiAi, '/ 15분 중복:', tickAdded, '/ fetch', fetched.length - nf);
+const ok3 = sr.reply === 'receipt' && last.from === 'gemini' && /@피클 들어오면 #\d+ 확인/.test(last.text) && last.to.length === 0 && ppAfter === 2 &&
+  deferLast === 'owner' && ar.reply === 'answer' && ar2.reply === '' && chat.from === 'gemini' && chat.room === '잡담' && aiAi === 'pickle' && tickAdded === 0;
+if (!ok3) { console.log('XX Gemini 바로 답 실패'); process.exit(1); }
+console.log('✓ Gemini 바로 답 통과');
 console.log('처음:', /준비 완료/.test(first.html), '/ 열쇠', Object.keys(keys).length, '/ 받는 이', r1.to.join(','), '/ claude 답 대기', pc.msgs.length, '→', pc2.msgs.length, '/ pickle', pp.msgs.length);
 console.log('키 글 막음:', bad.ok === false, bad.error, '/ 틀린 열쇠:', wrong.error, '/ 읽기', rd.msgs.length, '개, 답 대기', JSON.stringify(rd.pending));
-console.log('Gemini:', last.from, JSON.stringify(last.text));
 const ok = /준비 완료/.test(first.html) && Object.keys(keys).length === 5 && r1.to.join(',') === 'claude,pickle' && pc.msgs.length === 1 && pc2.msgs.length === 0 && pp.msgs.length === 1 &&
-  bad.ok === false && wrong.ok === false && rd.msgs.length === 3 && rd.pending.pickle === 1 && rd.pending.claude === 0 && last.from === 'gemini' && /@피클 돌아오면 #\d+ 확인/.test(last.text) && created === 2 && /오리 팀룸 열쇠/.test(Object.values(env.DriveApp.files).map(f => f.name).join()) && /수진 \(owner\)\n  링크: https:\/\/room\/exec\?k=/.test(Object.values(env.DriveApp.files).find(f => /열쇠/.test(f.name)).content);
+  bad.ok === false && wrong.ok === false && rd.msgs.length === 3 && rd.pending.pickle === 1 && rd.pending.claude === 0 && created === 2 && /오리 팀룸 열쇠/.test(Object.values(env.DriveApp.files).map(f => f.name).join()) && /수진 \(owner\)\n  링크: https:\/\/room\/exec\?k=/.test(Object.values(env.DriveApp.files).find(f => /열쇠/.test(f.name)).content);
 const kid = props.get('ROOM_KEYFILE'); delete env.DriveApp.files[kid];
 const lockPage = G('doGet({ parameter: {} })').html;
 const ok2 = /오리 팀룸 열쇠\.txt/.test(lockPage) && props.get('ROOM_KEYFILE') !== kid;

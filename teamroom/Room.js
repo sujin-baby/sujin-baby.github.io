@@ -3,19 +3,22 @@
  *  (11/1: 구글 시트로 했더니 로더 권한에 시트가 없어 시트를 못 만듦 → 이미 허락된 드라이브 파일로. 다시 붙여넣기 필요 없음)
  * 참가자마다 열쇠(k). 화면: ?k=열쇠  /  AI용 API: ?k=열쇠&api=read|send|pending|ack  (doPost도 같은 이름)
  * 담당: Claude = ori/Main.js(관리 시트 서버·월급·보낼메시지·리뷰 사진), 피클 = guide/·ori/ext/(생성기·확장), GPT·Gemini = 의견·아이디어(코드 안 고침)
- * 아무도 답 안 하면: 수진이 업무방에 쓴 글에 15분 동안 담당 AI 답이 없으면 Gemini(키 있을 때)가 받아 적고 '답 대기'로 남김
+ * Gemini 바로 답하기 (11/1): 키가 있으면 수진 글에 Gemini가 바로 답함. @gemini·@모두 또는 아무도 안 부른 글 = Gemini가 답,
+ *   @claude·@피클만 부른 글 = Gemini가 바로 "받아 적었어요"로 답하고 담당 AI 답 대기에 남김. 다른 AI가 @gemini로 불러도 답함.
+ *   (예전 15분 받아 적기는 roomTick에 그대로 두어 혹시 놓친 글을 줍는 용도)
  */
-const ROOM_VER = '1';
+const ROOM_VER = '2';
 const ROOMS = ['업무', '잡담'];
 const MEMBERS = [
   { id: 'owner', name: '수진', emoji: '👑', role: '사장 · 결정' },
   { id: 'claude', name: 'Claude', emoji: '🤖', role: '관리 시트 서버·월급·보낼메시지·리뷰 사진 (ori/Main.js)' },
   { id: 'pickle', name: '피클', emoji: '🥒', role: '가이드 생성기·크롬 확장 (guide/, ori/ext/)' },
   { id: 'gpt', name: 'GPT', emoji: '💬', role: '의견·아이디어·글 다듬기 (코드 안 고침)' },
-  { id: 'gemini', name: 'Gemini', emoji: '✨', role: '의견 · 다른 AI가 없을 때 받아 적기' }
+  { id: 'gemini', name: 'Gemini', emoji: '✨', role: '바로 답하기 · 의견·정리 (코드 안 고침)' }
 ];
 const ROOM_RULES = [
   '업무방 = 오리방 일 (버그·고칠 것·결정). 잡담방 = 그 밖',
+  'Claude·피클: 들어오면 제일 먼저 "답 대기"(pending)를 보고 바로 답하기. 고치는 데 오래 걸리면 "확인했어요, ~분 뒤 알려 드릴게요" 먼저',
   '수진 말이 결정. 담당 일이면 바로 확인하고 고친 뒤 무엇을 고쳤는지 한 줄로',
   'Claude: 관리 시트·서버(ori/Main.js). 피클: 생성기·확장(guide/, ori/ext/). 남의 담당이면 고치지 말고 그 AI를 @로 부르기',
   'GPT·Gemini: 코드는 안 고침. 의견, 아이디어, 글 다듬기, 확인 질문',
@@ -81,7 +84,7 @@ function post_(from, room, text, quiet) {
   if (/AIza[\w-]{20,}|AQ\.[\w.-]{20,}|ghp_[\w]{20,}|sk-[\w-]{20,}/.test(text)) throw new Error('열쇠·API 키처럼 보이는 글은 못 올려요');
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
-    const all = readAll_(), to = mentions_(text, from), t = new Date();
+    const all = readAll_(), to = from === 'gemini' ? [] : mentions_(text, from), t = new Date();
     const id = all.length ? all[all.length - 1].id + 1 : 1;
     all.push({ id: id, t: t.getTime(), room: room, from: from, to: to, text: text });
     msgFile_().setContent(JSON.stringify(all));
@@ -116,7 +119,13 @@ function api_(me, op, a) {
     const pend = {}; MEMBERS.forEach(function (m) { if (m.id !== 'owner') pend[m.id] = pending_(m.id, all).length; });
     return { ok: true, me: me, rooms: ROOMS, rules: ROOM_RULES, members: members_(), pending: pend, msgs: msgs, lastId: all.length ? all[all.length - 1].id : 0, ver: ROOM_VER, gemini: !!rp_().getProperty('GEMINI_KEY') };
   }
-  if (op === 'send') return post_(me, String(a.room || '업무'), a.text);
+  if (op === 'send') {
+    const r = post_(me, String(a.room || '업무'), a.text);
+    // 화면에서 보낸 글은 화면이 곧바로 'autoreply'를 따로 불러서 보내기가 느려지지 않게 함. API로 보낸 글은 여기서 바로 답함
+    if (!a.defer) { try { r.reply = geminiNow_(r.id); } catch (e) {} }
+    return r;
+  }
+  if (op === 'autoreply') return { ok: true, reply: geminiNow_(Number(a.id || 0)) };
   if (op === 'pending') return { ok: true, me: me, rules: ROOM_RULES, msgs: pending_(me).map(view_) };
   if (op === 'gemini' && me === 'owner') {
     const v = String(a.key || '').trim();
@@ -155,7 +164,51 @@ function doPost(e) {
 }
 function roomCall(k, op, a) { const me = who_(k); if (!me) throw new Error('열쇠가 틀렸어요'); return api_(me, op, a); }
 
-// ---------- 아무도 답 안 할 때: Gemini가 받아 적기 (10분마다) ----------
+// ---------- Gemini ----------
+function geminiAsk_(prompt) {
+  const key = rp_().getProperty('GEMINI_KEY');
+  if (!key) return '';
+  const res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + (rp_().getProperty('GEMINI_MODEL') || 'gemini-flash-latest') + ':generateContent', { method: 'post', contentType: 'application/json', headers: { 'x-goog-api-key': key }, payload: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }), muteHttpExceptions: true });
+  const o = JSON.parse(res.getContentText() || '{}');
+  return ((((o.candidates || [])[0] || {}).content || {}).parts || []).map(function (x) { return x.text || ''; }).join('').trim()
+    .replace(/AIza[\w-]{20,}|AQ\.[\w.-]{20,}|ghp_[\w]{20,}|sk-[\w-]{20,}/g, '(키 가림)');
+}
+function gemDone_(id) {
+  const p = rp_(), done = JSON.parse(p.getProperty('ROOM_TICKED') || '[]');
+  if (done.indexOf(id) >= 0) return false;
+  done.push(id); p.setProperty('ROOM_TICKED', JSON.stringify(done.slice(-200)));
+  return true;
+}
+// 글 하나에 Gemini가 바로 답함. 답 안 할 글이면 '' (키 없음 / Gemini 글 / 다른 AI끼리 대화 / 이미 답함 / 10분 지난 글)
+function geminiNow_(id) {
+  if (!rp_().getProperty('GEMINI_KEY')) return '';
+  const all = cacheMsgs_(), m = all.filter(function (x) { return x.id === id; })[0];
+  if (!m || m.from === 'gemini' || Date.now() - m.t > 10 * 60000) return '';
+  const askG = m.to.indexOf('gemini') >= 0, others = m.to.filter(function (x) { return x !== 'gemini'; });
+  let mode = '';
+  if (askG || (m.from === 'owner' && !m.to.length)) mode = 'answer';
+  else if (m.from === 'owner' && others.length) mode = 'receipt';
+  if (!mode) return '';
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try { if (!gemDone_(m.id)) return ''; } finally { lock.releaseLock(); }
+  const ctx = all.filter(function (x) { return x.room === m.room && x.id <= m.id; }).slice(-15).map(function (x) { return '#' + x.id + ' ' + (MID[x.from] || {}).name + ': ' + x.text; }).join('\n');
+  const who = (MID[m.from] || {}).name, names = others.map(function (x) { return '@' + (MID[x] || {}).name; }).join(' ');
+  const base = '너는 "오리 팀룸"의 Gemini야. 오리컴퍼니 체험단(리뷰 체험단 모집·관리) 일을 돕는 AI 팀원이고, 수진이 사장이야. 코드·시트는 못 고쳐.\n' +
+    '팀: Claude=관리 시트·서버(ori/Main.js), 피클=가이드 생성기·크롬 확장, GPT=의견·글 다듬기.\n' +
+    '한국어 존댓말, 짧고 쉽게(전문 용어 쓰지 말기). 모르는 건 지어내지 말고 모른다고 해. 열쇠·API 키는 절대 쓰지 마.\n\n' +
+    '지금 ' + m.room + '방 대화 (마지막 글 #' + m.id + '이 ' + who + '님 글):\n' + ctx + '\n\n';
+  const prompt = mode === 'answer'
+    ? base + '#' + m.id + ' 글에 바로 답해 줘. 잡담이면 편하게, 일 얘기면 3~6줄로 요점만.' + (others.length ? ' ' + names + '도 불렸으니 그쪽 담당 일은 그 AI가 처리한다고 한 줄 덧붙여.' : '')
+    : base + '#' + m.id + ' 글은 ' + names + '에게 한 부탁인데 그 AI는 지금 자리에 없을 수 있어. 2~4줄로: ① 무슨 부탁인지 한 줄 정리 ② ' + names + '가 들어오면 바로 처리하도록 남겨 뒀다고 말하기 ③ 지금 수진님이 바로 해 볼 수 있는 게 있으면 하나만.';
+  let reply = '';
+  try { reply = geminiAsk_(prompt); } catch (e) {}
+  if (!reply) reply = mode === 'answer' ? '지금 답을 못 만들었어요. 잠시 뒤 다시 불러 주세요.' : '받아 적어 뒀어요.';
+  if (mode === 'receipt') reply += '\n\n📌 ' + names + ' 들어오면 #' + m.id + ' 확인 부탁드려요 (답 대기에 남아 있어요)';
+  post_('gemini', m.room, reply);
+  return mode;
+}
+
+// ---------- 혹시 놓친 글: 15분 답 없으면 Gemini가 받아 적기 (화면·API를 쓸 때 10분에 한 번) ----------
 function roomTick() {
   const key = rp_().getProperty('GEMINI_KEY');
   if (!key) return;
@@ -171,13 +224,11 @@ function roomTick() {
   let reply = '';
   try {
     const prompt = '너는 "오리 팀룸"의 Gemini야. 오리컴퍼니 체험단(리뷰 체험단 모집·관리) 일을 돕는 AI 팀원이야. 코드는 못 고쳐.\n담당: Claude=관리 시트 서버, 피클=가이드 생성기·크롬 확장.\n수진(사장)이 아래 마지막 글을 남겼는데 담당 AI가 15분째 답이 없어. 한국어 존댓말로 짧게(3~5줄): ① 무슨 요청인지 한 줄 정리 ② 담당 AI가 돌아오면 처리하도록 남겨 둔다고 말하기 ③ 지금 당장 수진이 해 볼 수 있는 게 있으면 하나. 모르는 건 지어내지 마.\n\n최근 대화:\n' + ctx;
-    const res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + (rp_().getProperty('GEMINI_MODEL') || 'gemini-flash-latest') + ':generateContent', { method: 'post', contentType: 'application/json', headers: { 'x-goog-api-key': key }, payload: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }), muteHttpExceptions: true });
-    const o = JSON.parse(res.getContentText() || '{}');
-    reply = ((((o.candidates || [])[0] || {}).content || {}).parts || []).map(function (x) { return x.text || ''; }).join('').trim();
+    reply = geminiAsk_(prompt);
   } catch (e) {}
   const tgt = (m.to.length ? m.to : ['claude', 'pickle']).filter(function (x) { return x !== 'gemini'; }).map(function (x) { return '@' + (MID[x] || {}).name; }).join(' ');
+  if (!gemDone_(m.id)) return;
   post_('gemini', '업무', (reply || '담당 AI가 아직 답이 없어서 제가 받아 적어 뒀어요.') + '\n\n📌 ' + tgt + ' 돌아오면 #' + m.id + ' 확인 부탁드려요 (답 대기에 남아 있어요)');
-  done.push(m.id); rp_().setProperty('ROOM_TICKED', JSON.stringify(done.slice(-100)));
 }
 
 const ROOM_HTML = String.raw`<!doctype html><html><head><meta charset="utf-8">
@@ -217,13 +268,14 @@ const ROOM_HTML = String.raw`<!doctype html><html><head><meta charset="utf-8">
  <div class="chat">
   <div class="tabs" id="tabs"></div>
   <div class="list" id="list"></div>
+  <div id="typing" hidden style="font-size:12px;color:var(--soft);margin-top:6px">✨ Gemini가 답을 쓰는 중…</div>
   <div class="chips" id="chips"></div>
   <div class="send"><textarea id="txt" placeholder="메시지 (엔터 = 보내기, 시프트+엔터 = 줄바꿈). @claude @피클 @gpt @gemini @모두"></textarea><button class="btn on" id="go">보내기</button></div>
  </div>
 </div></div><div class="toast" id="toast"></div>
 <script>
 const K = <?!= JSON.stringify(k) ?>, ME = <?!= JSON.stringify(me) ?>;
-let room = '업무', last = 0, all = [], busy = false;
+let room = '업무', last = 0, all = [], busy = false, GEM = false;
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const toast = t => { const e = $('toast'); e.textContent = t; e.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => e.style.display = 'none', 2500); };
@@ -240,7 +292,8 @@ function side(r) {
   $('rules').innerHTML = r.rules.map(x => '<li>' + esc(x) + '</li>').join('');
   $('tabs').innerHTML = r.rooms.map(x => '<button class="btn' + (x === room ? ' on' : '') + '" data-r="' + x + '">' + x + '방</button>').join('');
   $('chips').innerHTML = r.members.filter(m => m.id !== ME).map(m => '<span class="chip" data-at="' + (m.id === 'pickle' ? '피클' : m.id) + '">@' + esc(m.name) + '</span>').join('') + '<span class="chip" data-at="모두">@모두</span>';
-  if (ME === 'owner') { $('gemCard').hidden = false; $('gemSt').textContent = r.gemini ? '✓ 키 있음: 수진님 업무방 글에 담당 AI가 15분 답이 없으면 Gemini가 받아 적어요' : '키를 넣으면 담당 AI가 없을 때 Gemini가 대신 받아 적어요'; }
+  GEM = !!r.gemini;
+  if (ME === 'owner') { $('gemCard').hidden = false; $('gemSt').textContent = r.gemini ? '✓ 키 있음: 수진님 글에 Gemini가 바로 답해요. @클로드·@피클만 부르면 Gemini가 받아 적고 그 AI 답 대기에 남겨요' : '키를 넣으면 수진님 글에 Gemini가 바로 답해요'; }
 }
 async function load() {
   if (busy) return; busy = true;
@@ -250,7 +303,9 @@ async function load() {
 async function send() {
   const t = $('txt').value.trim(); if (!t) return;
   $('go').disabled = true;
-  try { await call('send', { room, text: t }); $('txt').value = ''; await load(); } catch (e) { toast('보내기 실패: ' + (e.message || e)); } finally { $('go').disabled = false; }
+  let sent = null;
+  try { sent = await call('send', { room, text: t, defer: 1 }); $('txt').value = ''; await load(); } catch (e) { toast('보내기 실패: ' + (e.message || e)); } finally { $('go').disabled = false; }
+  if (sent && sent.id && GEM) { $('typing').hidden = false; try { await call('autoreply', { id: sent.id }); } catch (e) {} $('typing').hidden = true; load(); }
 }
 $('go').onclick = send;
 $('txt').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
