@@ -18,7 +18,7 @@ const env = {
   PropertiesService: { getScriptProperties: () => ({ getProperty: k => props.has(k) ? props.get(k) : null, setProperty: (k, v) => props.set(k, String(v)), deleteProperty: k => props.delete(k) }) },
   CacheService: { getScriptCache: () => ({ get: k => cache.has(k) ? cache.get(k) : null, put: (k, v) => cache.set(k, v), getAll: ks => { const o = {}; ks.forEach(k => { if (cache.has(k)) o[k] = cache.get(k); }); return o; } }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
-  SpreadsheetApp: { create: () => { created++; sheets['시트1'] = new Sheet('시트1'); return ss; }, openById: () => ss },
+  DriveApp: (() => { const files = {}; let n = 0; return { files, createFile: (name, content) => { created++; const id = 'F' + (++n); const f = { name, content, isTrashed: () => false, getId: () => id, getUrl: () => 'https://drive/' + id, setContent(c) { this.content = c; }, getBlob() { const me = this; return { getDataAsString: () => me.content }; } }; files[id] = f; return f; }, getFileById: id => { if (!files[id]) throw new Error('없음'); return files[id]; } }; })(),
   Utilities: { getUuid: (() => { let n = 0; return () => 'uuid-' + (++n) + '-xxxx'; })() },
   ScriptApp: { getService: () => ({ getUrl: () => 'https://room/exec' }), getProjectTriggers: () => [], newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create() {} }) }) }) },
   Session: { getEffectiveUser: () => ({ getEmail: () => 'jinleeda1@gmail.com' }) },
@@ -49,7 +49,12 @@ console.log('처음:', /준비 완료/.test(first.html), '/ 열쇠', Object.keys
 console.log('키 글 막음:', bad.ok === false, bad.error, '/ 틀린 열쇠:', wrong.error, '/ 읽기', rd.msgs.length, '개, 답 대기', JSON.stringify(rd.pending));
 console.log('Gemini:', last.from, JSON.stringify(last.text));
 const ok = /준비 완료/.test(first.html) && Object.keys(keys).length === 5 && r1.to.join(',') === 'claude,pickle' && pc.msgs.length === 1 && pc2.msgs.length === 0 && pp.msgs.length === 1 &&
-  bad.ok === false && wrong.ok === false && rd.msgs.length === 3 && rd.pending.pickle === 1 && rd.pending.claude === 0 && last.from === 'gemini' && /@피클 돌아오면 #\d+ 확인/.test(last.text) && created === 1;
+  bad.ok === false && wrong.ok === false && rd.msgs.length === 3 && rd.pending.pickle === 1 && rd.pending.claude === 0 && last.from === 'gemini' && /@피클 돌아오면 #\d+ 확인/.test(last.text) && created === 2 && /오리 팀룸 열쇠/.test(Object.values(env.DriveApp.files).map(f => f.name).join()) && /수진 \(owner\)\n  링크: https:\/\/room\/exec\?k=/.test(Object.values(env.DriveApp.files).find(f => /열쇠/.test(f.name)).content);
+const kid = props.get('ROOM_KEYFILE'); delete env.DriveApp.files[kid];
+const lockPage = G('doGet({ parameter: {} })').html;
+const ok2 = /오리 팀룸 열쇠\.txt/.test(lockPage) && props.get('ROOM_KEYFILE') !== kid;
+console.log('열쇠 파일 다시 만듦:', ok2);
+if (!ok2) process.exit(1);
 console.log(ok ? '✓ 팀룸 시험 통과' : 'XX 팀룸 시험 실패');
 if (!ok) process.exit(1);
 // 화면 스크립트 문법

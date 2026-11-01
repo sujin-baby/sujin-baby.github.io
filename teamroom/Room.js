@@ -1,5 +1,6 @@
 /** ORI-ROOM 오리 팀룸 (수진·Claude·피클·GPT·Gemini가 오리방 일로 대화하는 방)
- * 로더(teamroom/Loader.gs)가 GitHub에서 받아 돌림. 저장은 이 프로젝트가 처음 열릴 때 만드는 구글 시트 '오리 팀룸'.
+ * 로더(teamroom/Loader.gs)가 GitHub에서 받아 돌림. 저장은 주인 드라이브의 파일 두 개: '오리 팀룸 대화.json', '오리 팀룸 열쇠.txt'
+ *  (11/1: 구글 시트로 했더니 로더 권한에 시트가 없어 시트를 못 만듦 → 이미 허락된 드라이브 파일로. 다시 붙여넣기 필요 없음)
  * 참가자마다 열쇠(k). 화면: ?k=열쇠  /  AI용 API: ?k=열쇠&api=read|send|pending|ack  (doPost도 같은 이름)
  * 담당: Claude = ori/Main.js(관리 시트 서버·월급·보낼메시지·리뷰 사진), 피클 = guide/·ori/ext/(생성기·확장), GPT·Gemini = 의견·아이디어(코드 안 고침)
  * 아무도 답 안 하면: 수진이 업무방에 쓴 글에 15분 동안 담당 AI 답이 없으면 Gemini(키 있을 때)가 받아 적고 '답 대기'로 남김
@@ -25,40 +26,46 @@ const MID = {}; MEMBERS.forEach(function (m) { MID[m.id] = m; });
 const ALIAS = { '수진': 'owner', '사장': 'owner', 'owner': 'owner', 'claude': 'claude', '클로드': 'claude', 'pickle': 'pickle', '피클': 'pickle', 'gpt': 'gpt', '지피티': 'gpt', 'gemini': 'gemini', '제미나이': 'gemini', '모두': 'all', 'all': 'all' };
 
 function rp_() { return PropertiesService.getScriptProperties(); }
-function roomSs_() {
-  const p = rp_(), id = p.getProperty('ROOM_SS');
-  if (id) { try { return SpreadsheetApp.openById(id); } catch (e) {} }
-  const ss = SpreadsheetApp.create('오리 팀룸');
-  const m = ss.getSheets()[0]; m.setName('메시지');
-  m.getRange(1, 1, 1, 6).setValues([['번호', '시각', '방', '보낸 이', '받는 이', '글']]).setFontWeight('bold');
-  m.setFrozenRows(1); m.setColumnWidth(6, 700);
-  ss.insertSheet('열쇠').getRange(1, 1, 1, 4).setValues([['참가자', '열쇠', '화면 링크', '메모']]).setFontWeight('bold');
-  p.setProperty('ROOM_SS', ss.getId());
-  return ss;
+// 드라이브 파일 (로더가 이미 드라이브 권한이 있어서 추가 허락 없이 됨)
+function file_(prop, name, init) {
+  const p = rp_(), id = p.getProperty(prop);
+  if (id) { try { const f = DriveApp.getFileById(id); if (!f.isTrashed()) return f; } catch (e) {} }
+  const f = DriveApp.createFile(name, init, 'text/plain');
+  p.setProperty(prop, f.getId());
+  return f;
 }
+function msgFile_() { return file_('ROOM_FILE', '오리 팀룸 대화.json', '[]'); }
+function readAll_() { try { return JSON.parse(msgFile_().getBlob().getDataAsString('UTF-8') || '[]'); } catch (e) { return []; } }
 function keys_() { try { return JSON.parse(rp_().getProperty('ROOM_KEYS') || '{}'); } catch (e) { return {}; } }
 function who_(k) { const id = keys_()[String(k || '')]; return id && MID[id] ? id : ''; }
 function url_() { try { return ScriptApp.getService().getUrl(); } catch (e) { return ''; } }
-// 처음 한 번: 참가자마다 열쇠를 만들고 '오리 팀룸' 시트 '열쇠' 탭에 적음 (시트는 수진 드라이브에만)
+// 열쇠 파일: 참가자마다 화면 링크. 주인 드라이브에만 있고 주인만 열 수 있음. 없으면(지웠거나 예전에 못 만듦) 다시 만듦
+function keyFile_() {
+  const ks = keys_(), base = url_(), lines = ['오리 팀룸 열쇠 — 남에게 보여 주지 마세요. 참가자마다 자기 줄 링크만 전달', ''];
+  MEMBERS.forEach(function (m) { const k = Object.keys(ks).filter(function (x) { return ks[x] === m.id; })[0]; if (k) lines.push(m.emoji + ' ' + m.name + ' (' + m.id + ')', '  링크: ' + base + '?k=' + k, '  열쇠: ' + k, '  담당: ' + m.role, ''); });
+  lines.push('AI용 API 설명: https://github.com/sujin-baby/sujin-baby.github.io/blob/ori-dev/teamroom/README.md');
+  const f = file_('ROOM_KEYFILE', '오리 팀룸 열쇠.txt', lines.join('\n'));
+  if (rp_().getProperty('ROOM_KEYFILE_V') !== '2') { f.setContent(lines.join('\n')); rp_().setProperty('ROOM_KEYFILE_V', '2'); }
+  return f;
+}
+// 처음 한 번: 참가자마다 열쇠
 function setup_() {
   const p = rp_();
   if (p.getProperty('ROOM_KEYS')) return null;
-  const ks = {}, rows = [], base = url_();
-  MEMBERS.forEach(function (m) { const k = Utilities.getUuid().replace(/-/g, ''); ks[k] = m.id; rows.push([m.name + ' (' + m.id + ')', k, base + '?k=' + k, m.role]); });
+  const ks = {};
+  MEMBERS.forEach(function (m) { ks[Utilities.getUuid().replace(/-/g, '')] = m.id; });
   p.setProperty('ROOM_KEYS', JSON.stringify(ks));
-  const ss = roomSs_();
-  ss.getSheetByName('열쇠').getRange(2, 1, rows.length, 4).setValues(rows);
-  try { ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'roomTick') ScriptApp.deleteTrigger(t); }); ScriptApp.newTrigger('roomTick').timeBased().everyMinutes(10).create(); } catch (e) {}
+  const kf = keyFile_();
   post_('owner', '업무', '🐥 오리 팀룸을 열었어요. 규칙은 오른쪽 위 📌에 있어요.', true);
-  return { owner: rows[0][2], sheet: ss.getUrl() };
+  const ok = Object.keys(ks).filter(function (x) { return ks[x] === 'owner'; })[0];
+  return { owner: url_() + '?k=' + ok, sheet: kf.getUrl() };
 }
 
 // ---------- 메시지 ----------
 function cacheMsgs_() {
   const c = CacheService.getScriptCache(), v = c.get('ROOM_LAST');
   if (v) { try { return JSON.parse(v); } catch (e) {} }
-  const sh = roomSs_().getSheetByName('메시지'), lr = sh.getLastRow(), n = Math.min(Math.max(lr - 1, 0), 300);
-  const out = n ? sh.getRange(lr - n + 1, 1, n, 6).getValues().map(function (r) { return { id: Number(r[0]), t: r[1] instanceof Date ? r[1].getTime() : Number(r[1]) || 0, room: String(r[2]), from: String(r[3]), to: String(r[4] || '').split(',').filter(Boolean), text: String(r[5]) }; }) : [];
+  const out = readAll_().slice(-300);
   try { c.put('ROOM_LAST', JSON.stringify(out), 21600); } catch (e) {}
   return out;
 }
@@ -74,11 +81,10 @@ function post_(from, room, text, quiet) {
   if (/AIza[\w-]{20,}|AQ\.[\w.-]{20,}|ghp_[\w]{20,}|sk-[\w-]{20,}/.test(text)) throw new Error('열쇠·API 키처럼 보이는 글은 못 올려요');
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
-    const all = cacheMsgs_();   // 시트에 쓰기 전에 읽어 둠 (쓴 뒤 읽으면 새 글이 두 번 들어감)
-    const sh = roomSs_().getSheetByName('메시지'), lr = sh.getLastRow();
-    const id = lr >= 2 ? Number(sh.getRange(lr, 1).getValue()) + 1 : 1, to = mentions_(text, from), t = new Date();
-    sh.appendRow([id, t, room, from, to.join(','), text]);
+    const all = readAll_(), to = mentions_(text, from), t = new Date();
+    const id = all.length ? all[all.length - 1].id + 1 : 1;
     all.push({ id: id, t: t.getTime(), room: room, from: from, to: to, text: text });
+    msgFile_().setContent(JSON.stringify(all));
     try { CacheService.getScriptCache().put('ROOM_LAST', JSON.stringify(all.slice(-300)), 21600); } catch (e) {}
     seen_(from);
     return { ok: true, id: id, to: to };
@@ -103,6 +109,7 @@ function view_(m) { const mm = MID[m.from] || { name: m.from, emoji: '' }; retur
 function api_(me, op, a) {
   a = a || {};
   seen_(me);
+  try { const c = CacheService.getScriptCache(); if (!c.get('ROOM_TICK')) { c.put('ROOM_TICK', '1', 600); roomTick(); } } catch (e) {}
   if (op === 'read') {
     const since = Number(a.since || 0), room = a.room && ROOMS.indexOf(a.room) >= 0 ? a.room : '';
     const all = cacheMsgs_(), msgs = all.filter(function (m) { return m.id > since && (!room || m.room === room); }).slice(-150).map(view_);
@@ -123,16 +130,16 @@ function doGet(e) {
   const p = (e && e.parameter) || {};
   if (!rp_().getProperty('ROOM_KEYS')) {
     const s = setup_();
-    return HtmlService.createHtmlOutput('<meta name="viewport" content="width=device-width,initial-scale=1"><div style="font-family:sans-serif;padding:24px;background:#ffe6f2;min-height:100vh"><h2>🐥 오리 팀룸 준비 완료</h2><p>수진님 링크 (즐겨찾기 해 두세요):<br><a href="' + s.owner + '">' + s.owner + '</a></p><p>다른 참가자(Claude·피클·GPT·Gemini) 열쇠는 내 드라이브 <a href="' + s.sheet + '">오리 팀룸</a> 시트 \'열쇠\' 탭에 있어요.</p></div>').setTitle('오리 팀룸');
+    return HtmlService.createHtmlOutput('<meta name="viewport" content="width=device-width,initial-scale=1"><div style="font-family:sans-serif;padding:24px;background:#ffe6f2;min-height:100vh"><h2>🐥 오리 팀룸 준비 완료</h2><p>수진님 링크 (즐겨찾기 해 두세요):<br><a href="' + s.owner + '">' + s.owner + '</a></p><p>다른 참가자(Claude·피클·GPT·Gemini) 링크는 내 드라이브 <a href="' + s.sheet + '">오리 팀룸 열쇠.txt</a> 파일에 있어요.</p></div>').setTitle('오리 팀룸');
   }
   const me = who_(p.k);
   if (p.api) { try { if (!me) throw new Error('열쇠가 틀렸어요'); return json_(api_(me, String(p.api), p)); } catch (err) { return json_({ ok: false, error: String(err.message || err) }); } }
   if (!me) {
     // 열쇠를 잃어버렸을 때: 열쇠가 적힌 시트 링크를 보여 줌 (시트는 주인 계정만 열 수 있어서 남이 봐도 괜찮음, 11/1)
     let sheet = '', owner = '';
-    try { sheet = roomSs_().getUrl(); } catch (e) {}
+    try { sheet = keyFile_().getUrl(); } catch (e) {}
     try { const em = Session.getEffectiveUser().getEmail(); owner = em.replace(/^(.{2}).*(@.*)$/, '$1***$2'); } catch (e) {}
-    return HtmlService.createHtmlOutput('<meta name="viewport" content="width=device-width,initial-scale=1"><div style="font-family:sans-serif;padding:24px;background:#ffe6f2;min-height:100vh;color:#4a2b3c"><h2>🔒 오리 팀룸</h2><p>열쇠가 있는 링크로 들어와 주세요.</p>' + (sheet ? '<p style="margin-top:24px">수진님: 열쇠는 <a href="' + sheet + '" target="_blank">이 구글 시트</a>의 맨 아래 <b>\'열쇠\'</b> 탭에 있어요' + (owner ? ' (' + owner + ' 계정으로 열기)' : '') + '. 수진 줄 링크를 즐겨찾기 해 두세요.</p>' : '') + '</div>').setTitle('오리 팀룸');
+    return HtmlService.createHtmlOutput('<meta name="viewport" content="width=device-width,initial-scale=1"><div style="font-family:sans-serif;padding:24px;background:#ffe6f2;min-height:100vh;color:#4a2b3c"><h2>🔒 오리 팀룸</h2><p>열쇠가 있는 링크로 들어와 주세요.</p>' + (sheet ? '<p style="margin-top:24px">수진님: 열쇠는 <a href="' + sheet + '" target="_blank">오리 팀룸 열쇠.txt</a> 파일에 있어요' + (owner ? ' (' + owner + ' 계정으로 열기)' : '') + '. 수진 줄 링크를 즐겨찾기 해 두세요.</p>' : '') + '</div>').setTitle('오리 팀룸');
   }
   const t = HtmlService.createTemplate(ROOM_HTML);
   t.k = p.k; t.me = me;

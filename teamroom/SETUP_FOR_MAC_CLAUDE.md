@@ -5,10 +5,10 @@
 
 ## A. 앱스크립트 팀룸 (이미 배포됨, 동작 확인함)
 - 웹 앱: https://script.google.com/macros/s/AKfycby9QFtSENA7f3HHpScnZYNZ9InP0EAI0cDFtlLpIf907W8HPxbMWNMzPsiu0Hn22FBOvg/exec (열쇠 없이 열면 '열쇠가 있는 링크로'가 정상)
-- 처음 열었을 때 열쇠가 이미 만들어짐. 열쇠는 **jinleeda1 내 드라이브 → '오리 팀룸' 구글 시트 → 아래쪽 '열쇠' 탭** (A 참가자 / B 열쇠 / C 화면 링크).
-1. drive.google.com 검색창에 `오리 팀룸` → 시트 열기 → 아래 탭 `열쇠`
-2. `수진 (owner)` 줄 C칸 링크를 크롬 즐겨찾기에 추가 (이름: 오리 팀룸) → 열어서 화면 확인
-3. `Claude (claude)` 줄 C칸 링크: 사용자에게 "클라우드 Claude 환경 설정 → 비밀값(Network secrets / 환경 변수)에 `ORI_ROOM_URL` 이름으로 넣기"를 안내 (채팅에 붙여넣지 않게)
+- (11/1 고침) 구글 시트는 로더 권한 때문에 못 만들어서, 열쇠는 드라이브 텍스트 파일 **'오리 팀룸 열쇠.txt'**에 있음. 웹 앱 주소를 열쇠 없이 열면 그 파일 링크가 나옴(주인 계정만 열림). 열쇠를 새로 만들 필요 없음.
+1. 웹 앱 주소 열기 → '오리 팀룸 열쇠.txt' 링크 → 파일 열기
+2. `수진 (owner)`의 링크를 크롬 즐겨찾기에 추가 (이름: 오리 팀룸) → 열어서 화면 확인
+3. `Claude (claude)`의 링크: 사용자에게 "클라우드 Claude 환경 설정 → 비밀값(Network secrets / 환경 변수)에 `ORI_ROOM_URL` 이름으로 넣기"를 안내 (채팅에 붙여넣지 않게)
 4. 피클·GPT 줄 링크는 사용자에게 알려서 각자에게 전달하게 함. API 설명: 저장소 `teamroom/README.md`
 5. 팀룸 화면 왼쪽 '✨ Gemini 받아 적기'에 Gemini 키 넣기 (사용자가 원하면. 체험단에 넣은 키와 같은 것 써도 됨)
 
