@@ -21,6 +21,7 @@ const env = {
   SpreadsheetApp: { create: () => { created++; sheets['시트1'] = new Sheet('시트1'); return ss; }, openById: () => ss },
   Utilities: { getUuid: (() => { let n = 0; return () => 'uuid-' + (++n) + '-xxxx'; })() },
   ScriptApp: { getService: () => ({ getUrl: () => 'https://room/exec' }), getProjectTriggers: () => [], newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create() {} }) }) }) },
+  Session: { getEffectiveUser: () => ({ getEmail: () => 'jinleeda1@gmail.com' }) },
   HtmlService: { createHtmlOutput: h => ({ html: h, setTitle() { return this; } }), createTemplate: h => ({ evaluate: () => ({ setTitle() { return this; }, addMetaTag() { return this; }, setXFrameOptionsMode() { return this; } }) }), XFrameOptionsMode: {} },
   ContentService: { createTextOutput: t => ({ t, setMimeType() { return this; } }), MimeType: { JSON: 'json' } },
   UrlFetchApp: { fetch: (u, o) => { fetched.push(u); return { getContentText: () => JSON.stringify({ candidates: [{ content: { parts: [{ text: '요청 정리: 쿠팡 차단 확인' }] } }] }) }; } }

@@ -127,7 +127,13 @@ function doGet(e) {
   }
   const me = who_(p.k);
   if (p.api) { try { if (!me) throw new Error('열쇠가 틀렸어요'); return json_(api_(me, String(p.api), p)); } catch (err) { return json_({ ok: false, error: String(err.message || err) }); } }
-  if (!me) return HtmlService.createHtmlOutput('<div style="font-family:sans-serif;padding:24px">🔒 열쇠가 있는 링크로 들어와 주세요.</div>').setTitle('오리 팀룸');
+  if (!me) {
+    // 열쇠를 잃어버렸을 때: 열쇠가 적힌 시트 링크를 보여 줌 (시트는 주인 계정만 열 수 있어서 남이 봐도 괜찮음, 11/1)
+    let sheet = '', owner = '';
+    try { sheet = roomSs_().getUrl(); } catch (e) {}
+    try { const em = Session.getEffectiveUser().getEmail(); owner = em.replace(/^(.{2}).*(@.*)$/, '$1***$2'); } catch (e) {}
+    return HtmlService.createHtmlOutput('<meta name="viewport" content="width=device-width,initial-scale=1"><div style="font-family:sans-serif;padding:24px;background:#ffe6f2;min-height:100vh;color:#4a2b3c"><h2>🔒 오리 팀룸</h2><p>열쇠가 있는 링크로 들어와 주세요.</p>' + (sheet ? '<p style="margin-top:24px">수진님: 열쇠는 <a href="' + sheet + '" target="_blank">이 구글 시트</a>의 맨 아래 <b>\'열쇠\'</b> 탭에 있어요' + (owner ? ' (' + owner + ' 계정으로 열기)' : '') + '. 수진 줄 링크를 즐겨찾기 해 두세요.</p>' : '') + '</div>').setTitle('오리 팀룸');
+  }
   const t = HtmlService.createTemplate(ROOM_HTML);
   t.k = p.k; t.me = me;
   return t.evaluate().setTitle('오리 팀룸').addMetaTag('viewport', 'width=device-width, initial-scale=1').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
