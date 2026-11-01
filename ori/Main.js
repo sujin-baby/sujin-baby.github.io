@@ -5609,7 +5609,7 @@ function reviewDone_(runs) {
     const seenK = 'RVSEEN_' + sid;
     let mod = 0, fname = '';
     try { const f = DriveApp.getFileById(sid); mod = f.getLastUpdated().getTime(); fname = f.getName(); } catch (e) {}
-    const sig = [mod, Utilities.formatDate(new Date(Date.now() - 5 * 3600000), CONFIG.TIMEZONE, 'yyyyMMdd'), pend[campKey_(mine[0]['캠페인'] || mine[0]['명단 제목'])] ? 1 : 0]
+    const sig = ['rv2', mod, Utilities.formatDate(new Date(Date.now() - 5 * 3600000), CONFIG.TIMEZONE, 'yyyyMMdd'),   // rv2: 11/2 끝난 방 독촉 정리를 한 번씩 돌게 pend[campKey_(mine[0]['캠페인'] || mine[0]['명단 제목'])] ? 1 : 0]
       .concat(mine.map(function (r) { return [r.row, r['마감 시각'] instanceof Date ? r['마감 시각'].getTime() : '', r['인원'], r['총건수']].join(','); })).join('|');
     if (mod && props.getProperty(seenK) === sig) {
       if (!props.getProperty('RVRPT_' + sid)) return;
@@ -5646,6 +5646,18 @@ function reviewDone_(runs) {
         const w = windowOf_(runs, r);
         if (live.some(function (i) { const t = v[i][cT].getTime(); return t >= w.from && t < w.to && v[i][cc] === true; })) { props.setProperty(pk, '1'); note_('✓ 포토 전달된 걸로 봄(리뷰 확인 체크 있음): ' + bareTitle_(r['명단 제목'])); }
       });
+      // C-0. 그 방 사람이 다 리뷰 확인(체크)됐으면 아직 안 보낸 그 방 '리뷰 독촉'은 지움 (11/2: 다 끝났다는 할 일과 독촉이 같이 떠 앞뒤가 안 맞았음)
+      try {
+        const doneRooms = mine.filter(function (r) { const w = windowOf_(runs, r), ppl = live.filter(function (i) { const t = v[i][cT].getTime(); return t >= w.from && t < w.to; }); return ppl.length && ppl.every(function (i) { return v[i][cc] === true; }); })
+          .map(function (r) { return String(r['카톡방'] || bareTitle_(r['명단 제목'])); });
+        if (doneRooms.length) {
+          const ob = outboxSheet_(), ol = ob.getLastRow();
+          if (ol >= 2) {
+            const ov = ob.getRange(2, 1, ol - 1, 6).getValues();
+            for (let i = ov.length - 1; i >= 0; i--) if (ov[i][2] === '리뷰 독촉' && ov[i][5] !== '보냄' && doneRooms.indexOf(String(ov[i][3])) >= 0) { ob.deleteRow(i + 2); note_('✓ 리뷰 다 확인돼서 안 보낸 독촉 지움: ' + ov[i][3]); }
+          }
+        }
+      } catch (e) { note_('끝난 방 독촉 정리 실패: ' + e.message); }
       // C. 리뷰 독촉 (사용자 요청 10/20): 진행일부터 주말 포함 10일(쿠팡·네이버. 리뷰 기한이 10일인 다른 플랫폼은 13일) 지나도
       //  체크칸이 안 된 사람 → 그 방에 독촉 글. 3일 뒤에도 남아 있으면 한 번 더. 기한이 10일 넘게 지난 예전 진행은 건너뜀. 명단 시트에는 안 씀
       const cName = (function () { let i = hdr.findIndex(function (h) { return /수령인|계정명/.test(h); }); if (i < 0) i = hdr.findIndex(function (h) { return /이름|성함/.test(h) && !MATCH.nick.test(h); }); return i; })();
@@ -7857,7 +7869,7 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '29';
+const DASH_VER = '30';
 // 한눈에 '리뷰 취합할 것' 칸에 보일 것: 의뢰 전체 리뷰가 끝난(RVRPT_) 의뢰 중 업체 전송 체크 안 했거나 체크한 지 3일 안 된 것. 최근 40일 진행만, 기대평 빼고
 //  날마다 취합하던 줄은 없앰 (사용자 요청 10/26: 날짜별로 말고 한 캠페인이 다 끝나면 그때 한 번에)
 function rvItems_(allRuns, props) {
@@ -8084,6 +8096,8 @@ function buildDashboard_(force) {
     sh.getRange(rr, 7).setFormula('=IF(ISNUMBER(F' + rr + '),E' + rr + '-F' + rr + ',"")');
     sh.getRange(rr, 8).setValue(r['마감 시각']);
     sh.getRange(rr, 9).setFormula('=HYPERLINK(' + q(x.url) + ',"명단")');
+    // 폼·상품·틀린 옵션·택배 옮김·확인 필요 칸은 먼저 비움 (11/2: 다시 그릴 때 줄이 밀리면 앞 진행의 체크칸·숫자가 남아 기대평·실배송 줄에 택배 옮김 체크가 보였음)
+    try { sh.getRange(rr, 10, 1, 5).clearContent().clearDataValidations(); } catch (e) {}
     if (r['폼 링크']) sh.getRange(rr, 10).setFormula('=HYPERLINK(' + q(r['폼 링크']) + ',"폼")');
     { const pp = purlOf_(r, props, obNotices), pu = pp.url, pl = pp.plat;
       if (pu) sh.getRange(rr, 11).setFormula('=HYPERLINK(' + q(pu) + ',' + q(pl || '상품') + ')'); else if (pl) sh.getRange(rr, 11).setValue(pl); }
