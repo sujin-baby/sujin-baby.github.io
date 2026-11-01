@@ -3097,6 +3097,9 @@ function checkFullInner_() {
       r['택대'] === 'Y' ? '\n★ 택배시트에 옮겨 적기 (2시 전까지): 한눈에 탭에서 A~K 복사 → 붙여넣기 → \'택배 옮김\' 체크' : ''
     ].join('\n'));
   }
+  // 리뷰 체크 확인(취완·독촉·리뷰 보고)은 15분마다 (11/2 사용자 요청, 전엔 30분 정리 때만). 한눈에를 그리기 전에 해서 '리뷰 취합할 것'이 바로 보이게
+  //  시간이 빠듯하면(3분 넘음) 건너뜀 → 30분 정리가 대신 함
+  if (!late_(180)) { step_('리뷰 확인'); try { subTime_('리뷰 확인', function () { reviewDone_(readRuns_()); }); globalThis.__RV_DONE_RUN = 1; } catch (e) { note_('리뷰 완료 확인 실패: ' + e); } }
   step_('한눈에');
   try { buildDashboard_(false); } catch (e) { note_('한눈에 탭 실패: ' + e); }
   // 한눈에에 #REF! 같은 오류 칸이 있으면 통째로 다시 그림 (메뉴 '한눈에 탭 새로 만들기'와 같음, 10/30). 한 시간에 한 번까지, 시간이 넉넉할 때만
@@ -3165,7 +3168,8 @@ function protectAutoCols_() {
 function slowTasks_(rr, listed) {
   rr = rr || readRuns_(); listed = listed || {};
   const rvN = function () { return Object.keys(PropertiesService.getScriptProperties().getProperties()).filter(function (k) { return /^(RVDONE_|RVRPT_|RVZIPURL_)/.test(k); }).length; }, rv0 = rvN();
-  try { subTime_('정리: 리뷰 완료', function () { reviewDone_(readRuns_()); }); } catch (e) { note_('리뷰 완료 확인 실패: ' + e); }
+  // 이번 확인에서 이미 했으면 안 함 (15분마다 한눈에 전에 함)
+  if (!globalThis.__RV_DONE_RUN) { try { subTime_('정리: 리뷰 완료', function () { reviewDone_(readRuns_()); }); } catch (e) { note_('리뷰 완료 확인 실패: ' + e); } }
   // 의뢰 리뷰가 다 끝나거나 압축 파일이 처음 생기면 한눈에 '리뷰 취합할 것'에 바로 보이게 다시 그림 (전엔 한눈에를 먼저 그려서 15~30분 늦게 떴음, 10/25)
   if (rvN() !== rv0 && !late_(300)) { try { buildDashboard_(false); } catch (e) { note_('한눈에 탭 실패: ' + e); } }
   try { subTime_('정리: 지난 명단 탭', function () { listTabsRecent_(rr, listed); }); } catch (e) { note_('지난 명단 탭 실패: ' + e); }
