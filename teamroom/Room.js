@@ -117,20 +117,35 @@ function api_(me, op, a) {
     const since = Number(a.since || 0), room = a.room && ROOMS.indexOf(a.room) >= 0 ? a.room : '';
     const all = cacheMsgs_(), msgs = all.filter(function (m) { return m.id > since && (!room || m.room === room); }).slice(-150).map(view_);
     const pend = {}; MEMBERS.forEach(function (m) { if (m.id !== 'owner') pend[m.id] = pending_(m.id, all).length; });
-    return { ok: true, me: me, rooms: ROOMS, rules: ROOM_RULES, members: members_(), pending: pend, msgs: msgs, lastId: all.length ? all[all.length - 1].id : 0, ver: ROOM_VER, gemini: !!rp_().getProperty('GEMINI_KEY'), gemErr: me === 'owner' ? (rp_().getProperty('GEMINI_ERR') || '').replace(/AIza[\w-]{20,}|AQ\.[\w.-]{20,}/g, '(키)') : '', slack: me === 'owner' ? slackStatus_() : null };
+    return { ok: true, me: me, rooms: ROOMS, rules: ROOM_RULES, members: members_(), pending: pend, msgs: msgs, lastId: all.length ? all[all.length - 1].id : 0, ver: ROOM_VER, gemini: !!rp_().getProperty('GEMINI_KEY'), gemErr: me === 'owner' ? (rp_().getProperty('GEMINI_ERR') || '').replace(/AIza[\w-]{20,}|AQ\.[\w.-]{20,}/g, '(키)') : '', gpt: !!rp_().getProperty('OPENAI_KEY'), gptErr: me === 'owner' ? (rp_().getProperty('OPENAI_ERR') || '').replace(/sk-[\w-]{20,}/g, '(키)') : '', slack: me === 'owner' ? slackStatus_() : null };
   }
   if (op === 'send') {
     const r = post_(me, String(a.room || '업무'), a.text);
     // 화면에서 보낸 글은 화면이 곧바로 'autoreply'를 따로 불러서 보내기가 느려지지 않게 함. API로 보낸 글은 여기서 바로 답함
-    if (!a.defer) { try { r.reply = geminiNow_(r.id); } catch (e) {} }
+    if (!a.defer) {
+      try { r.reply = geminiNow_(r.id); } catch (e) {}
+      try { if (!r.reply) r.reply = gptNow_(r.id); } catch (e) {}
+    }
     return r;
   }
-  if (op === 'autoreply') return { ok: true, reply: geminiNow_(Number(a.id || 0)) };
+  if (op === 'autoreply') {
+    let rep = '';
+    try { rep = geminiNow_(Number(a.id || 0)); } catch (e) {}
+    try { if (!rep) rep = gptNow_(Number(a.id || 0)); } catch (e) {}
+    return { ok: true, reply: rep };
+  }
   if (op === 'pending') return { ok: true, me: me, rules: ROOM_RULES, msgs: pending_(me).map(view_) };
   if (op === 'gemini' && me === 'owner') {
     const v = String(a.key || '').trim();
     if (v === '지움') rp_().deleteProperty('GEMINI_KEY'); else if (/^[\w.\-]{30,}$/.test(v)) rp_().setProperty('GEMINI_KEY', v); else throw new Error('키 모양이 아니에요');
     return { ok: true, gemini: !!rp_().getProperty('GEMINI_KEY') };
+  }
+  if (op === 'gpt' && me === 'owner') {
+    const v = String(a.key || '').trim();
+    if (v === '지움') { rp_().deleteProperty('OPENAI_KEY'); rp_().deleteProperty('OPENAI_ERR'); }
+    else if (/^sk-[\w\-]{20,}$/.test(v)) { rp_().setProperty('OPENAI_KEY', v); rp_().deleteProperty('OPENAI_ERR'); }
+    else throw new Error('OpenAI 키 모양(sk-…)이 아니에요');
+    return { ok: true, gpt: !!rp_().getProperty('OPENAI_KEY') };
   }
   if (op === 'slack' && me === 'owner') return slackSetToken_(String(a.token || '').trim());
   throw new Error('모르는 요청: ' + op);
@@ -243,6 +258,69 @@ function geminiNow_(id) {
   return mode;
 }
 
+// ---------- GPT (OpenAI) ----------
+function gptAsk_(prompt) {
+  const p = rp_(), key = p.getProperty('OPENAI_KEY');
+  if (!key) return '';
+  const models = [p.getProperty('OPENAI_MODEL'), 'gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo'].filter(function (m, i, a) { return m && a.indexOf(m) === i; });
+  let text = '', err = '';
+  for (let i = 0; i < models.length && !text; i++) {
+    try {
+      const res = UrlFetchApp.fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'post',
+        contentType: 'application/json',
+        headers: { Authorization: 'Bearer ' + key },
+        payload: JSON.stringify({
+          model: models[i],
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.7
+        }),
+        muteHttpExceptions: true
+      });
+      const o = JSON.parse(res.getContentText() || '{}');
+      if (o.choices && o.choices[0] && o.choices[0].message) {
+        text = (o.choices[0].message.content || '').trim();
+        if (p.getProperty('OPENAI_MODEL') !== models[i]) p.setProperty('OPENAI_MODEL', models[i]);
+      } else {
+        err = models[i] + ': ' + ((o.error && (o.error.message || o.error.code)) || ('HTTP ' + (res.getResponseCode ? res.getResponseCode() : '?')));
+      }
+      if (o.error && /invalid_api_key|insufficient_quota/i.test(o.error.code || o.error.message)) break;
+    } catch (e) { err = models[i] + ': ' + (e.message || e); }
+  }
+  if (text) p.deleteProperty('OPENAI_ERR');
+  else p.setProperty('OPENAI_ERR', new Date().toISOString().slice(11, 16) + ' ' + String(err).slice(0, 300));
+  return text.replace(/AIza[\w-]{20,}|AQ\.[\w.-]{20,}|ghp_[\w]{20,}|sk-[\w-]{20,}|xox[abprs]-[\w-]{10,}/g, '(키 가림)');
+}
+function gptDone_(id) {
+  const p = rp_(), done = JSON.parse(p.getProperty('GPT_DONE') || '[]');
+  if (done.indexOf(id) >= 0) return false;
+  done.push(id); p.setProperty('GPT_DONE', JSON.stringify(done.slice(-200)));
+  return true;
+}
+function gptBase_(where, last, who, ctx) {
+  return '너는 "오리 팀룸"의 GPT야. 오리컴퍼니 체험단(리뷰 체험단 모집·관리) 일을 돕는 AI 팀원이고, 수진이 사장이야. 코드·시트는 못 고쳐.\n' +
+    '팀: Claude=관리 시트·서버(ori/Main.js), 피클=가이드 생성기·크롬 확장, Gemini=의견·정리.\n' +
+    '한국어 존댓말, 짧고 명쾌하게(전문 용어 쓰지 말기). 모르는 건 지어내지 말고 모른다고 해. 열쇠·API 키는 절대 쓰지 마. 다른 AI를 @로 부르지 마.\n\n' +
+    '지금 ' + where + ' 대화 (마지막 ' + last + '이 ' + who + '님 글):\n' + ctx + '\n\n';
+}
+function gptNow_(id) {
+  if (!rp_().getProperty('OPENAI_KEY')) return '';
+  const all = cacheMsgs_(), m = all.filter(function (x) { return x.id === id; })[0];
+  if (!m || m.from === 'gpt' || Date.now() - m.t > 10 * 60000) return '';
+  const askGPT = m.to.indexOf('gpt') >= 0 || m.to.indexOf('all') >= 0;
+  if (!askGPT) return '';
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try { if (!gptDone_(m.id)) return ''; } finally { lock.releaseLock(); }
+  const ctx = all.filter(function (x) { return x.room === m.room && x.id <= m.id; }).slice(-15).map(function (x) { return '#' + x.id + ' ' + (MID[x.from] || {}).name + ': ' + x.text; }).join('\n');
+  const who = (MID[m.from] || {}).name;
+  const prompt = gptBase_(m.room + '방', '#' + m.id, who, ctx) + '마지막 #' + m.id + ' 글에 바로 답해 줘. 잡담이면 편하고 다정하게, 일 얘기면 3~6줄로 요점만 명확하게.';
+  let reply = '';
+  try { reply = gptAsk_(prompt); } catch (e) {}
+  if (!reply) reply = '지금 GPT 응답을 생성하지 못했어요. 잠시 뒤 다시 불러 주세요.';
+  post_('gpt', m.room, reply);
+  return 'answer';
+}
+
 // ---------- 슬랙: Gemini 봇이 #업무·#잡담 새 글에 바로 답함 (11/1) ----------
 // 슬랙 앱 'Gemini' → Event Subscriptions 주소 = 웹 앱 URL?slack=1, 받는 일 = message.channels. 봇 토큰은 팀룸 화면(수진)에서 넣음.
 // 남이 흉내 내는 요청 막기: 토큰으로 확인한 워크스페이스·봇 아이디가 맞는 이벤트만 처리.
@@ -310,7 +388,9 @@ function slackReply_(ev, bot) {
   if (/<!(channel|here|everyone)>/.test(raw)) ids.push('all');
   const text = slackClean_(raw, bot);
   mentions_(text, 'owner').forEach(function (w) { if (ids.indexOf(w) < 0) ids.push(w); });
-  const askG = ids.indexOf('gemini') >= 0 || ids.indexOf('all') >= 0, others = ids.filter(function (x) { return x !== 'gemini' && x !== 'all' && MID[x]; });
+  const askG = ids.indexOf('gemini') >= 0 || ids.indexOf('all') >= 0;
+  const askGPT = (ids.indexOf('gpt') >= 0 || ids.indexOf('all') >= 0) && !!rp_().getProperty('OPENAI_KEY');
+  const others = ids.filter(function (x) { return x !== 'gemini' && x !== 'gpt' && x !== 'all' && MID[x]; });
   const mode = askG || !others.length ? 'answer' : 'receipt';
   // 앞 대화 (스레드 안이면 그 스레드)
   let hist = [];
@@ -322,13 +402,23 @@ function slackReply_(ev, bot) {
   if (!hist.some(function (x) { return x.ts === ev.ts; })) hist.push(ev);
   const ctx = hist.slice(-15).map(function (x) { const n = x.user === bot ? 'Gemini' : x.user ? slackName_(x.user).replace(/^봇:/, '') : ((x.bot_profile && x.bot_profile.name) || x.username || '봇'); return n + ': ' + slackClean_(x.text, bot); }).join('\n');
   const who = slackName_(ev.user).replace(/^봇:/, ''), names = others.map(function (x) { return (MID[x] || {}).name; }).join('·');
-  let reply = '';
-  try { reply = geminiAsk_(gemAsk2_(gemBase_('슬랙 채널', '글', who, ctx), mode, '글', names, others.length)); } catch (e) {}
-  if (!reply) reply = mode === 'answer' ? '지금 답을 못 만들었어요. 잠시 뒤 다시 불러 주세요.' : '받아 적어 뒀어요.';
-  reply = reply.replace(/\*\*(.+?)\*\*/g, '*$1*').replace(/^#{1,6}\s*/gm, '');
-  if (mode === 'receipt') reply += '\n\n📌 ' + names + ' 들어오면 이 글 확인 부탁드려요';
-  const pr = slackApi_('chat.postMessage', { channel: ev.channel, text: reply, thread_ts: ev.thread_ts || undefined });
-  if (!pr.ok) throw new Error('chat.postMessage: ' + (pr.error || '?') + (pr.needed ? ' (필요: ' + pr.needed + ')' : ''));
+  if (askGPT) {
+    let replyGpt = '';
+    try { replyGpt = gptAsk_(gptBase_('슬랙 채널', '글', who, ctx) + '마지막 글에 바로 답해 줘. 잡담이면 편하고 다정하게, 일 얘기면 요점만 3~6줄로 명확하게.'); } catch (e) {}
+    if (!replyGpt) replyGpt = '지금 GPT 답을 만들지 못했어요. 잠시 뒤 다시 불러 주세요.';
+    replyGpt = replyGpt.replace(/\*\*(.+?)\*\*/g, '*$1*').replace(/^#{1,6}\s*/gm, '');
+    const prGpt = slackApi_('chat.postMessage', { channel: ev.channel, text: '*[GPT]* ' + replyGpt, thread_ts: ev.thread_ts || undefined });
+    if (!prGpt.ok) throw new Error('chat.postMessage (GPT): ' + (prGpt.error || '?') + (prGpt.needed ? ' (필요: ' + prGpt.needed + ')' : ''));
+  }
+  if (rp_().getProperty('GEMINI_KEY') && (askG || (!others.length && !askGPT) || (mode === 'receipt' && !askGPT))) {
+    let reply = '';
+    try { reply = geminiAsk_(gemAsk2_(gemBase_('슬랙 채널', '글', who, ctx), mode, '글', names, others.length)); } catch (e) {}
+    if (!reply) reply = mode === 'answer' ? '지금 답을 못 만들었어요. 잠시 뒤 다시 불러 주세요.' : '받아 적어 뒀어요.';
+    reply = reply.replace(/\*\*(.+?)\*\*/g, '*$1*').replace(/^#{1,6}\s*/gm, '');
+    if (mode === 'receipt') reply += '\n\n📌 ' + names + ' 들어오면 이 글 확인 부탁드려요';
+    const pr = slackApi_('chat.postMessage', { channel: ev.channel, text: reply, thread_ts: ev.thread_ts || undefined });
+    if (!pr.ok) throw new Error('chat.postMessage: ' + (pr.error || '?') + (pr.needed ? ' (필요: ' + pr.needed + ')' : ''));
+  }
 }
 
 // ---------- 혹시 놓친 글: 15분 답 없으면 Gemini가 받아 적기 (화면·API를 쓸 때 10분에 한 번) ----------
@@ -388,6 +478,7 @@ const ROOM_HTML = String.raw`<!doctype html><html><head><meta charset="utf-8">
   <div class="card"><h3>📌 방 규칙</h3><ol class="rules" id="rules"></ol></div>
   <div class="card" id="slkCard" hidden><h3>💬 슬랙 바로 답 (Gemini)</h3><div style="font-size:12px;color:var(--soft)" id="slkSt"></div><input id="slkTok" placeholder="Gemini 슬랙 봇 토큰 (xoxb-…)" style="width:100%;margin-top:6px;border:1.5px solid var(--ink);border-radius:8px;padding:5px"><button class="btn" style="margin-top:6px" id="slkSave">저장</button><div style="font-size:11px;color:var(--soft);margin-top:6px">슬랙 이벤트 주소: <code id="slkUrl" style="word-break:break-all"></code></div></div>
   <div class="card" id="gemCard" hidden><h3>✨ Gemini 받아 적기</h3><div style="font-size:12px;color:var(--soft)" id="gemSt"></div><input id="gemKey" placeholder="Gemini 키 붙여넣기" style="width:100%;margin-top:6px;border:1.5px solid var(--ink);border-radius:8px;padding:5px"><button class="btn" style="margin-top:6px" id="gemSave">저장</button></div>
+  <div class="card" id="gptCard" hidden><h3>💬 GPT 바로 답하기</h3><div style="font-size:12px;color:var(--soft)" id="gptSt"></div><input id="gptKey" placeholder="OpenAI 키 (sk-…)" style="width:100%;margin-top:6px;border:1.5px solid var(--ink);border-radius:8px;padding:5px"><button class="btn" style="margin-top:6px" id="gptSave">저장</button></div>
  </div>
  <div class="chat">
   <div class="tabs" id="tabs"></div>
@@ -399,7 +490,7 @@ const ROOM_HTML = String.raw`<!doctype html><html><head><meta charset="utf-8">
 </div></div><div class="toast" id="toast"></div>
 <script>
 const K = <?!= JSON.stringify(k) ?>, ME = <?!= JSON.stringify(me) ?>;
-let room = '업무', last = 0, all = [], busy = false, GEM = false;
+let room = '업무', last = 0, all = [], busy = false, GEM = false, GPT = false;
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const toast = t => { const e = $('toast'); e.textContent = t; e.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => e.style.display = 'none', 2500); };
@@ -417,8 +508,10 @@ function side(r) {
   $('tabs').innerHTML = r.rooms.map(x => '<button class="btn' + (x === room ? ' on' : '') + '" data-r="' + x + '">' + x + '방</button>').join('');
   $('chips').innerHTML = r.members.filter(m => m.id !== ME).map(m => '<span class="chip" data-at="' + (m.id === 'pickle' ? '피클' : m.id) + '">@' + esc(m.name) + '</span>').join('') + '<span class="chip" data-at="모두">@모두</span>';
   GEM = !!r.gemini;
+  GPT = !!r.gpt;
   if (ME === 'owner' && r.slack) { $('slkCard').hidden = false; $('slkUrl').textContent = r.slack.url; $('slkSt').textContent = r.slack.token ? '✓ 연결됨' + (r.slack.team ? ' (' + r.slack.team + ')' : '') + (r.slack.seen ? ' · 마지막 슬랙 글 ' + tm(r.slack.seen) : ' · 아직 받은 슬랙 글 없음') + (r.slack.err ? ' · ⚠ ' + r.slack.err : '') : '토큰을 넣으면 슬랙 #업무·#잡담에 Gemini가 바로 답해요'; }
   if (ME === 'owner') { $('gemCard').hidden = false; $('gemSt').textContent = (r.gemErr ? '⚠ Gemini 오류: ' + r.gemErr + ' / ' : '') + (r.gemini ? '✓ 키 있음: 수진님 글에 Gemini가 바로 답해요. @클로드·@피클만 부르면 Gemini가 받아 적고 그 AI 답 대기에 남겨요' : '키를 넣으면 수진님 글에 Gemini가 바로 답해요'); }
+  if (ME === 'owner') { $('gptCard').hidden = false; $('gptSt').textContent = (r.gptErr ? '⚠ GPT 오류: ' + r.gptErr + ' / ' : '') + (r.gpt ? '✓ 키 있음: @gpt·@모두 글에 GPT가 바로 답해요' : '키를 넣으면 @gpt·@모두 글에 GPT가 바로 답해요'); }
 }
 async function load() {
   if (busy) return; busy = true;
@@ -430,7 +523,7 @@ async function send() {
   $('go').disabled = true;
   let sent = null;
   try { sent = await call('send', { room, text: t, defer: 1 }); $('txt').value = ''; await load(); } catch (e) { toast('보내기 실패: ' + (e.message || e)); } finally { $('go').disabled = false; }
-  if (sent && sent.id && GEM) { $('typing').hidden = false; try { await call('autoreply', { id: sent.id }); } catch (e) {} $('typing').hidden = true; load(); }
+  if (sent && sent.id && (GEM || GPT)) { $('typing').hidden = false; try { await call('autoreply', { id: sent.id }); } catch (e) {} $('typing').hidden = true; load(); }
 }
 $('go').onclick = send;
 $('txt').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
@@ -441,5 +534,6 @@ document.addEventListener('click', e => {
 $('sideBtn').onclick = () => $('side').classList.toggle('show');
 $('slkSave').onclick = async () => { try { await call('slack', { token: $('slkTok').value }); $('slkTok').value = ''; toast('✓ 슬랙 토큰 저장'); load(); } catch (e) { toast(e.message || e); } };
 $('gemSave').onclick = async () => { try { const r = await call('gemini', { key: $('gemKey').value }); $('gemKey').value = ''; toast(r.gemini ? '✓ Gemini 키 저장' : '키 지움'); load(); } catch (e) { toast(e.message || e); } };
+$('gptSave').onclick = async () => { try { const r = await call('gpt', { key: $('gptKey').value }); $('gptKey').value = ''; toast(r.gpt ? '✓ GPT 키 저장' : '키 지움'); load(); } catch (e) { toast(e.message || e); } };
 load(); setInterval(load, 8000);
 </script></body></html>`;
