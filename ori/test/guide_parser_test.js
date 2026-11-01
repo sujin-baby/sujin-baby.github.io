@@ -499,7 +499,40 @@ const sugGuasha = P.suggestKeywords('코코스무 문어 괄사 두피 승모근
 if (sugGuasha.main === '코코스무') throw new Error('suggestKeywords main should not be 코코스무');
 if (sugGuasha.main !== '괄사' && sugGuasha.main !== '문어 괄사') throw new Error('suggestKeywords main should be 괄사 or 문어 괄사, got: ' + sugGuasha.main);
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (16개 샘플 전원 일치)');
+// ==========================================
+// Test 17: 코코스무 신발 뒤꿈치 패드 복합명사 키워드 추출 및 sugKw 대표 키워드('패드' 단일어 오추출 방지) 검증 (11/01 v151)
+// 1) sugKw: '코코스무 신발 뒤꿈치 수선 보호 패드...' -> 대표 키워드(0번) '코코스무 신발 뒤꿈치 패드'
+// 2) sugKw: '코코스무 문어 괄사...' -> 대표 키워드(0번) '코코스무 문어 괄사'
+// 3) '패드' 단일어가 대표 키워드로 선택되지 않는지(0번이 아님) 검증
+// 4) 의뢰서 키워드 '코코스무 신발 뒤꿈치 패드' 정상 파싱
+// ==========================================
+console.log('-- Test 17: 복합명사 키워드 추출 및 sugKw 대표 키워드 검증');
+const sugPad = P.sugKw('코코스무 신발 뒤꿈치 수선 보호 패드 구두 운동화 발까짐 잘라서쓰는 만능패치 6개');
+if (sugPad[0] !== '코코스무 신발 뒤꿈치 패드') throw new Error('sugKw[0] should be 코코스무 신발 뒤꿈치 패드, got: ' + sugPad[0]);
+if (sugPad[0] === '패드') throw new Error('sugKw[0] should not be single word 패드');
+
+const sugOct = P.sugKw('코코스무 문어 괄사 두피 승모근 바디 마사지기 지압 전신 붓기제거 뷰티 홈케어');
+if (sugOct[0] !== '코코스무 문어 괄사') throw new Error('sugKw[0] should be 코코스무 문어 괄사, got: ' + sugOct[0]);
+
+const reqPad = `#입금대행 실배 
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 코코스무 신발 뒤꿈치 패드
+2. 키워드 검색 시 현재 순위 :
+3. 총 결제하신 건수 : 5
+4. 하루 진행 건수 : 5
+5. 상품주소(URL) : https://www.coupang.com/vp/products/9785776578?vendorItemId=96214179259
+6. 구매옵션 : 블랙 (옵션단일)
+7. 포토제공 (몇명) /포토없음 선택: 포토5명
+8. 리뷰 가이드 : 잘 붙음
+9. 입금하실 입금자명 : 유종욱
+10.택배대행 Y/N: n`;
+
+const headPad = P.parseAll(reqPad);
+const gPad = headPad.guides[0];
+if (gPad.keyword !== '코코스무 신발 뒤꿈치 패드') throw new Error('gPad keyword should be 코코스무 신발 뒤꿈치 패드, got: ' + gPad.keyword);
+if (gPad.option !== '블랙 (옵션단일)') throw new Error('gPad option should be 블랙 (옵션단일), got: ' + gPad.option);
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (17개 샘플 전원 일치)');
 process.exit(0);
 
 
