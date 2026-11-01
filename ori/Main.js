@@ -2905,6 +2905,8 @@ function checkFullInner_() {
   step_('진행목록');
   try { removeOldUpdateTrigger_(); } catch (e) {}
   try { subTime_('진행목록 정리', normalizeRuns_); } catch (e) { note_('진행목록 정리 실패: ' + e); }
+  // 진행일이 된 진행은 '진행예정' → '진행중' (11/2: 9시 현황 업데이트 때만 바뀌어서 새벽에 끝난 진행도 '진행예정'으로 남았음)
+  try { readRuns_().forEach(function (r) { if (r['진행 상태'] === '진행예정' && r['진행일'] instanceof Date && r['진행일'] <= today_()) setRun_(r.row, '진행 상태', '진행중'); }); } catch (e) {}
   // (10/24) 밀린 월급시트·정리를 맨 앞에서 하던 것 없앰: 월급시트가 6분 안에 안 끝나서 확인이 매번 맨 앞에서 끊겼고,
   //  그 뒤 일(다음 일차 만들기, 방 공지, 폼 트리거, 보낼 날짜)이 몇 시간 동안 하나도 안 됨. 이제 급한 일 먼저, 월급시트는 끝에서 나눠서 이어 함
   // 단계를 잘게 나눠서 폼수정 탭 삭제 같은 직접 하는 일이 덜 기다리게 (10/26 '진행목록' 단계가 126초 걸려 삭제가 2분 늦음)
@@ -8600,6 +8602,8 @@ function morningCheck_() {
   try { selfCheck_(runs, t0).forEach(function (x) { issues.push(x); }); } catch (e) { issues.push('자가 점검 실패: ' + e); }
   const when = Utilities.formatDate(now, CONFIG.TIMEZONE, 'M/d HH:mm');
   props.setProperty('MORNING_LAST', when + ' ' + (issues.length ? issues.length + '개: ' + issues.join(' | ') : '이상 없음').slice(0, 1500));
+  // 어제 새벽 점검 할 일이 안 보낸 채 남아 있으면 지움 (11/2: 오늘은 이상 없는데 어제 것이 남아 헷갈림)
+  try { const ob = outboxSheet_(), ol = ob.getLastRow(); if (ol >= 2) { const ov = ob.getRange(2, 1, ol - 1, 6).getValues(); for (let i = ov.length - 1; i >= 0; i--) if (ov[i][2] === '할 일' && ov[i][5] !== '보냄' && /^🌅 새벽 점검/.test(String(ov[i][4]))) ob.deleteRow(i + 2); } } catch (e) {}
   if (!issues.length) { note_('✓ 새벽 점검: 이상 없음'); return; }
   queueMsg_('내 할 일', '🌅 새벽 점검 (' + when + '): 확인할 것 ' + issues.length + '개\n' + issues.map(function (x) { return '- ' + x; }).join('\n'), '할 일');
   try { MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[체험단] 새벽 점검: 확인할 것 ' + issues.length + '개', issues.map(function (x) { return '- ' + x; }).join('\n') + '\n\n보낼메시지 탭 할 일에도 넣었어요.'); } catch (e) {}
