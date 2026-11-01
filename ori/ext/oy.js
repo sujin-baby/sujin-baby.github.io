@@ -472,36 +472,21 @@
   /* 판매처: 첫 후보가 '가입', '다를 수 있습니다' 같은 엉터리면 버리고 다음 후보로 (11/01 판매처 오류 해결).
      조사로 시작하거나 안내/배송 문장은 판매자가 아님 */
   const BAD_SELLER = /가입|보러가기|평가|정보|^특가|로켓|할인|쿠폰|무료|배송|와우|입점|다를\s*수|있습니다|없습니다|합니다|바랍니다|드립니다|확인|주의|안내|참고|동일|상이|기준|경우|제외|배지|인증/;
-  const okSeller = s => {
-    if (!s) return false;
-    s = String(s).replace(/\s+/g, " ").trim();
-    if (s.length < 2 || s.length > 30) return false;
-    if (/^[는은이가을를에의도로와과]/.test(s)) return false;
-    if (BAD_SELLER.test(s)) return false;
-    return true;
-  };
-  /* 1. 페이지 JSON 데이터(vendorName, sellerName) 우선 탐색: 쿠팡 백엔드 정형 데이터로 오염 없음 */
-  if (!seller) {
-    const vn = (String(document.documentElement.innerHTML).match(/\\?"(?:vendorName|sellerName)\\?"\s*:\s*\\?"([^"\\]{2,60})/) || [])[1] || "";
-    if (okSeller(vn)) seller = vn;
+  const okSeller = s => !!s && s.length <= 30 && !/^[는은]\s/.test(s) && !BAD_SELLER.test(s);
+  for (const e of document.querySelectorAll('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]')) {
+    const t = (e.textContent || "").replace(/\s+/g, " ").trim();
+    if (okSeller(t)) { seller = t; break; }
   }
-  /* 2. 브랜드 태그 탐색 */
   if (!seller) {
-    for (const e of document.querySelectorAll('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]')) {
-      const t = (e.textContent || "").replace(/\s+/g, " ").trim();
-      if (okSeller(t)) { seller = t; break; }
-    }
-  }
-  /* 3. 텍스트 라벨 탐색 (줄바꿈 \n을 넘지 않도록 [^\S\r\n]* 사용, 같은 줄의 콜론 뒤 값만 인정) */
-  if (!seller) {
-    const re = /판매자[^\S\r\n]*[:：][^\S\r\n]*([^\r\n]{1,60})/g;
+    const re = /판매자\s*[:：]?\s*([^\n]{1,60})/g;
     let sm;
     while ((sm = re.exec(txt))) {
       const t = sm[1].replace(/\s*(판매자\s*)?(상품\s*)?보러\s*가기.*$/, "").replace(/\s*판매자\s*평가.*$/, "").trim();
       if (okSeller(t)) { seller = t; break; }
     }
   }
-  /* 4. 상호 / 대표자 */
+  /* '판매자 특가', '판매자로켓' 같은 배지 글자는 판매처가 아님 → 페이지 데이터의 판매자 이름 */
+  if (!seller) { const vn = (String(document.documentElement.innerHTML).match(/\\?"(?:vendorName|sellerName)\\?"\s*:\s*\\?"([^"\\]{2,60})/) || [])[1] || ""; if (okSeller(vn)) seller = vn; }
   if (!seller) { const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/); if (s2 && okSeller(s2[1].trim())) seller = s2[1].trim(); }
   if (seller) {
     seller = seller.replace(/[>]\s*(?:브랜드\s*샵|브랜드샵|공식\s*몰|공식몰|공식\s*스토어|공식스토어|스토어|샵).*$/i, "").replace(/\s*(?:브랜드\s*샵|브랜드샵|공식\s*몰|공식몰|공식\s*스토어|공식스토어)\s*$/i, "").replace(/\s+(?:스토어|샵)\s*$/i, "").trim();

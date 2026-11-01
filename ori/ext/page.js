@@ -112,10 +112,10 @@
       let name = visibleTitle();
       if (!name) name = (og("title") || document.title).replace(/\s*[-|]\s*쿠팡!?\s*$/, "").replace(/\s+-\s+[^-]{1,20}$/, "").trim();
       let seller = "";
-      /* 판매처: 첫 후보가 '가입'(쿠팡 위·아래 '판매자 가입' 글자) 같은 엉터리면 버리고 다음 후보로 (10/31 대봉감 '판매처 : 가입').
-         예전엔 엉터리를 알아보고도 지우지 않아서 그대로 남았음. 상품명 첫 단어로 채우지 않음: 판매자 이름은 쿠팡·토스·네이버 페이지에 꼭 있음 (사용자 10/31) */
-      const BAD_SELLER = /가입|보러가기|평가|정보|^특가|로켓|할인|쿠폰|무료|배송|와우|입점/;
-      const okSeller = s => !!s && s.length <= 30 && !BAD_SELLER.test(s);
+      /* 판매처: 첫 후보가 '가입', '다를 수 있습니다' 같은 엉터리면 버리고 다음 후보로 (11/01 판매처 오류 해결).
+         조사로 시작하거나 안내/배송 문장은 판매자가 아님. 상품명 첫 단어로 채우지 않음: 판매자 이름은 쿠팡·토스·네이버 페이지에 꼭 있음 (사용자 10/31) */
+      const BAD_SELLER = /가입|보러가기|평가|정보|^특가|로켓|할인|쿠폰|무료|배송|와우|입점|다를\s*수|있습니다|없습니다|합니다|바랍니다|드립니다|확인|주의|안내|참고|동일|상이|기준|경우|제외|배지|인증/;
+      const okSeller = s => !!s && s.length <= 30 && !/^[는은]\s/.test(s) && !BAD_SELLER.test(s);
       for (const e of document.querySelectorAll('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]')) {
         const t = (e.textContent || "").replace(/\s+/g, " ").trim();
         if (okSeller(t)) { seller = t; break; }
