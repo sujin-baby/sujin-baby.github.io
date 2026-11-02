@@ -7877,7 +7877,7 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '31';
+const DASH_VER = '32';
 // 한눈에 '리뷰 취합할 것' 칸에 보일 것: 의뢰 전체 리뷰가 끝난(RVRPT_) 의뢰 중 업체 전송 체크 안 했거나 체크한 지 3일 안 된 것. 최근 40일 진행만, 기대평 빼고
 //  날마다 취합하던 줄은 없앰 (사용자 요청 10/26: 날짜별로 말고 한 캠페인이 다 끝나면 그때 한 번에)
 function rvItems_(allRuns, props) {
@@ -8176,7 +8176,8 @@ function buildDashboard_(force) {
     const x = sheets[id], top = x.top, n = x.n, width = Math.max(x.layout.length + (x.chk ? 1 : 0), 6);
     const titles = x.runs.map(function (r) { return String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''); }).reverse();
     // 덩어리 자리는 쓰기 전에 그 자리만 비움 (통째 지우기를 없앤 뒤 예전 덩어리 머리줄·값이 새 명단이 펼쳐질 자리에 남아 #REF! 날 수 있어서, 10/30)
-    try { sh.getRange(top, 1, n + 2, sh.getMaxColumns()).clear().clearDataValidations().clearNote(); } catch (e) {}
+    // 덩어리 뒤 빈 줄 2개까지 (11/2: 빈 줄에 예전 덩어리 제목이 남아 '■ 아텍스' 바로 밑에 '■ 노티아'가 붙어 보였음)
+    try { sh.getRange(top, 1, n + 4, sh.getMaxColumns()).clear().clearDataValidations().clearNote(); } catch (e) {}
     sh.getRange(top, 1, 1, width).setBackground('#f0e8f8');
     // 제목 + 안 산 사람 (관리 시트 배정 탭에서 '아직'인 사람, 응답이 들어오면 바로 바뀜)
     const label = '■ ' + titles[0] + '   (명단 시트: ' + sheetName_(titles[0]) + ')';
