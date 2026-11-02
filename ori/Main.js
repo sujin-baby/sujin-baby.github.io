@@ -3460,7 +3460,8 @@ function ensureReviewGuideMsgs_(runs) {
       const first = c.runs.filter(function (x) { return x['시트ID']; })[0] || r;
       let rv = null; try { rv = JSON.parse(props.getProperty('RV_' + first['시트ID']) || 'null'); } catch (e) {}
       // 포토제공(사진 받은 뒤 진행 도우미로 세트 배정)·구매확정만은 리뷰 가이드 없음. 리뷰 정보가 없는 예전 진행도 이름은 넣고 가이드는 '사장님께 물어보기'로 (10/21)
-      if (!rv) rv = { kind: 'text', mix: '', guide: '' };
+      // 리뷰 정보가 없으면 진행목록 '포토' 칸이 '유'일 때 포토대기, 아니면 텍스트 (11/2 노티아 제주레몬: 포토 유인데 텍스트리뷰 30명으로 나감)
+      if (!rv) rv = { kind: /^\s*(유|y)/i.test(String(first['포토'] || '')) ? 'photo' : 'text', mix: '', guide: '' };
       if (rv.kind === 'confirm') return;
       // 원고제공·자율 의뢰는 사용자 원고 가이드 글 (전체 포토리뷰, 10/23)
       if (isWongo_(rv)) { queueMsg_(String(r['카톡방'] || bareTitle_(r['명단 제목'])), WONGO_GUIDE, '방 공지'); note_('✓ 원고 리뷰 가이드 넣음: ' + bareTitle_(r['명단 제목'])); return; }
@@ -5303,6 +5304,12 @@ function onAdminEditInner_(e) {
     if (!r) return;
     // 상품 이름(업체명)만 바꾸는 것도 받음 (11/2: '(업체명)황금향외' → '오늘과일 황금향외'). 날짜·숫자가 같고 옛 이름(괄호 자리표시 뺀 것)이 새 이름 안에 있을 때만.
     //  같은 명단 시트를 쓰는 다른 날 진행도 같이 바꿈 (안 그러면 캠페인이 둘로 갈림)
+    // 날짜·숫자를 빼고 이름만 쓴 경우(예: '#택 오늘과일 황금향외 40')는 원래 날짜·숫자를 채움 (11/2)
+    let nv = String(e.value).trim();
+    const oBare = bareTitle_(r['명단 제목']), oDate = dateTok_(oBare), oNum = (oBare.match(/(\d+)\s*$/) || [])[1];
+    if (oDate && !dateTok_(nv)) { const mm = nv.match(/^([#업택\s]*)(.*)$/); nv = mm[1].replace(/\s+/g, '') + (oBare.match(/^[#업택\s]*(\d{1,2}\.\d{1,2})/) || [, oDate])[1] + ' ' + mm[2].trim(); }
+    if (oNum && !/\d+\s*$/.test(nv)) nv += ' ' + oNum;
+    if (nv !== String(e.value).trim()) { try { e.range.setValue(nv); } catch (err) {} e.value = nv; }
     const oKey = campKey_(r['명단 제목']), nKey = campKey_(String(e.value)), core = oKey.replace(/\([^)]*\)/g, '');
     const nameOnly = oKey !== nKey && dateTok_(String(e.value)) === dateTok_(r['명단 제목']) && (String(e.value).match(/(\d+)\s*$/) || [])[1] === (bareTitle_(r['명단 제목']).match(/(\d+)\s*$/) || [])[1] &&
       core.length >= 2 && (nKey.indexOf(core) >= 0 || core.indexOf(nKey) >= 0);

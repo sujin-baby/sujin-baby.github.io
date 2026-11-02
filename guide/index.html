@@ -197,7 +197,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v152 (쿠팡 vendorItemId-옵션 itemId 매칭 보강, 화면 상품번호 1순위 조회, 확장 1.8.3)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v153 (포토:텍스트 비율 문장이 포토제공을 덮어쓰던 것 고침)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -371,7 +371,7 @@ details.help-box summary {
         <div class="card-out" id="box-bug-report" style="margin: 14px 0; background: #fff5f7; border: 2px solid #e03131; border-radius: 12px; padding: 14px; box-shadow: 2px 2px 0 var(--ink, #3a2230);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:4px;">
             <span style="font-weight: 900; font-size: 13.5px; color: #c92a2a;">🚨 공지 오류 제보 / 수정 요청 (피클·클로드 전달용)</span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v152</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v153</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 8px;">
             공지가 이상하게 나왔나요? 아래 태그를 누르거나 문제점을 적고 <b>[원터치 복사]</b>를 누르면, <b>의뢰서 원문 + 생성된 공지 + 문제점</b>이 한 번에 복사되어 피클 채팅창이나 클로드 코드에 바로 전달할 수 있어요.
@@ -1334,6 +1334,13 @@ details.help-box summary {
       const nOpt = (g.optBase || []).length;
       if (nOpt > 1 && lines(g.price).length === 1) g.price = Array(nOpt).fill(lines(g.price)[0]).join("\n");
       if (pre.length && i === 0) g.review = [pre.join(" / "), g.review].filter(Boolean).join(" / ");
+      // 포토:텍스트 비율 (예: '포토리뷰와 텍스트 리뷰 비율은 6:4') + 포토제공 '유' + 개수 안 적힘 → 유 N개, 무 M개 (11/2 미니사과)
+      const rm = String(c + "\n" + body).match(/포토[^\n]*?텍스트[^\n]*?(\d+)\s*[:：]\s*(\d+)/);
+      const tot0 = Number(g.total) || 0;
+      if (rm && tot0 && /^\s*(유|y)/i.test(g.photo || "") && !/\d/.test(g.photo || "") && !/\d+\s*(개|건|명)/.test(g.review || "")) {
+        const a = Number(rm[1]), b = Number(rm[2]);
+        if (a + b > 0) { const np = Math.round(tot0 * a / (a + b)); g.photo = "유 " + np + "개, 무 " + (tot0 - np) + "개"; }
+      }
       return g;
     });
     // 장바구니건이 아니고, 한 가이드 내에 건수가 명시된 서로 다른 상품 URL이 여러 개 있는 경우 독립 가이드로 자동 분할 (대봉감 쿠팡/토스 등)
@@ -1424,7 +1431,9 @@ details.help-box summary {
     const l = String(raw).replace(/^\s*(?:\d+\s*[.)]\s*)+/, "").trim();
     if (!l) return "";
     const ci = l.search(/[:：]/), hi = l.search(/https?:\/\//);
-    if (ci > 0 && (hi === -1 || ci < hi)) { const hit = LABELS.find(x => x[1].test(l.slice(0, ci))); if (hit) return hit[0]; }
+    // '포토리뷰와 텍스트 리뷰 비율은 6:4정도로' 같은 비율 문장은 라벨이 아님 (11/2: 포토제공 '유'를 '4정도로…'로 덮어써 전체 텍스트리뷰가 됨)
+    const ratio = ci > 0 && /\d\s*$/.test(l.slice(0, ci)) && /^\s*\d/.test(l.slice(ci + 1));
+    if (ci > 0 && !ratio && (hi === -1 || ci < hi)) { const hit = LABELS.find(x => x[1].test(l.slice(0, ci))); if (hit) return hit[0]; }
     if (KW_SENT.test(l)) return "keyword";   // "데르온 오토바이/ 방한 장갑 등을 검색하시고 찾아주시길 바랍니다"
     // 번호 붙은 라벨이 두 줄로 나뉘어 ':'가 다음 줄에 있음 (10/28 '4. 하루 구매하는건수 (어뷰징 피하기위해 ⏎ 조금씩 변동될수 있습니다 : 3 / 3 / 4 건씩')
     if (ci === -1 && /^\s*\d+\s*[.)]/.test(raw)) { const hit = LABELS.find(x => x[1].test(l)); if (hit) return hit[0]; }
@@ -3115,7 +3124,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v152 공지 오류 제보]",
+        "🚨 [가이드 생성기 v153 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",
