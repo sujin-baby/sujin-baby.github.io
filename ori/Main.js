@@ -3373,7 +3373,14 @@ function reviewGuideMsg_(rv, ppl, counts, k) {
   totals.forEach(function (t, i) {
     const who = (pre[i] || []).slice();
     let need = today[i] - who.reduce(function (a, y) { return a + y.n; }, 0);
-    while (need > 0 && queue.length) { const p = queue.shift(); who.push(p); need -= p.n; }
+    // 여러 계정 산 사람은 별점·텍스트로, 한 계정인 사람은 포토 먼저 (11/2 사용자 요청, 리뷰 배정 화면과 같은 규칙)
+    const photoT = /포토|사진/.test(t.label);
+    while (need > 0 && queue.length) {
+      let qi = queue.findIndex(function (y) { return (photoT ? y.n === 1 : y.n > 1) && y.n <= need; });
+      if (qi < 0) qi = queue.findIndex(function (y) { return photoT ? y.n === 1 : true; });
+      if (qi < 0) qi = 0;
+      const p = queue.splice(qi, 1)[0]; who.push(p); need -= p.n;
+    }
     if (today[i] <= 0) return;
     if (/포토\s*대기/.test(t.label)) { pw = pw.concat(who); return; }
     const note = rv.lineNote && rv.lineNote[pretty(t.label)];   // 종류 줄 밑 한 줄 설명 (→ 별점 5점만 …)
@@ -4355,8 +4362,13 @@ function rvAssign_(items, mix, nDays) {
     order.sort(function (a, b) { return groups[b].length - groups[a].length; }).forEach(function (key) {
       groups[key].forEach(function (it) {
         let bi = -1;
-        const fit = room.map(function (x, i) { return [x, i]; }).filter(function (q) { return q[0] >= groups[key].length; });
-        const pickFrom = fit.length ? fit : room.map(function (x, i) { return [x, i]; }).filter(function (q) { return q[0] > 0; });
+        // 여러 계정으로 산 사람은 쓰기 쉬운 별점·텍스트로, 한 계정인 사람은 포토 먼저 (11/2 사용자 요청)
+        const multi = groups[key].length > 1, isPhoto = function (i) { return /포토|사진/.test(mix[i].label); };
+        const prefer = function (q) { return multi ? !isPhoto(q[1]) : isPhoto(q[1]); };
+        const all = room.map(function (x, i) { return [x, i]; });
+        const fitAll = all.filter(function (q) { return q[0] >= groups[key].length; }), anyAll = all.filter(function (q) { return q[0] > 0; });
+        const fitP = fitAll.filter(prefer), anyP = anyAll.filter(prefer);
+        const pickFrom = multi ? (fitP.length ? fitP : fitAll.length ? fitAll : anyP.length ? anyP : anyAll) : (anyP.length ? anyP : anyAll);
         if (pickFrom.length) bi = pickFrom.sort(function (a, b) { return b[0] - a[0] || a[1] - b[1]; })[0][1];
         if (it.__rvKey === key && it.__rvI !== undefined && room[it.__rvI] > 0) bi = it.__rvI;
         if (bi < 0) { it.rv = ''; return; }
@@ -4464,6 +4476,15 @@ function reviewPage_(p) {
     try { saved = JSON.parse(pr.getProperty('RV_' + sid) || '{}'); } catch (e) {}
     let desc = '';
     try { desc = FormApp.openById(chain.runs[0]['폼ID']).getDescription() || ''; } catch (e) {}
+    // 숫자 칸으로 넣은 개수 (11/2: '상품 : 포토 18 / 텍스트 12'처럼 글로 쓰면 / 가 상품 나눔이라 헷갈림) → 'mix' 글로 합침
+    if (p.np != null) {
+      const RT = ['포토대기', '포토리뷰', '텍스트리뷰', '별점'], segs = [];
+      for (let i = 0; i < Math.min(Number(p.np) || 0, 10); i++) {
+        const parts = RT.map(function (t, j) { const n = Number(String(p['n' + i + '_' + j] || '').replace(/\D/g, '')) || 0; return n ? t + ' ' + n : ''; }).filter(Boolean);
+        if (parts.length) segs.push((p['pn' + i] ? String(p['pn' + i]).trim() + ' : ' : '') + parts.join(', '));
+      }
+      p.mix = segs.join(' / ');
+    }
     const o = { kind: String(p.kind || saved.kind || (/^\s*유/.test(String(chain.runs[0]['포토'] || '')) ? 'photo' : 'mix')), mix: p.mix != null ? String(p.mix) : String(saved.mix || noticeProducts_(desc).map(function (x) { return x.name + ' : '; }).join(' / ')), guide: p.guide != null ? String(p.guide) : String(saved.guide || ''),
       sets: p.sets != null ? String(p.sets).replace(/\D/g, '') : String(saved.sets || '') };
     // 고친 값은 다음에 열 때도 그대로
@@ -4475,9 +4496,24 @@ function reviewPage_(p) {
     body += '<p class="h">' + esc(campOf_(chain.runs[0]['명단 제목'])) + ' <a class="s" href="' + url({}) + '" target="_top">(다른 의뢰)</a></p>' + (msg ? '<p class="ok">' + esc(msg) + '</p>' : '') +
       '<form method="get" action="' + esc(CONFIG.WEBAPP_URL || '') + '" target="_top">' + hidden +
       '<label>공지 종류<select name="kind">' + Object.keys(RV_KINDS).map(function (x) { return '<option value="' + x + '"' + (x === o.kind ? ' selected' : '') + '>' + RV_KINDS[x] + '</option>'; }).join('') + '</select></label>' +
-      '<label>리뷰 종류와 개수 (의뢰서 전체 기준. 상품마다 / 로 나눔)<textarea name="mix" placeholder="옥광밤 : 별점 4, 텍스트리뷰 6 / 황금향 : 별점 5, 텍스트리뷰 9">' + esc(o.mix) + '</textarea></label>' +
+      (function () {
+        // 상품마다 숫자 칸 (의뢰서 전체 개수). 상품 이름은 공지의 상품명, 없으면 의뢰 이름
+        const RT = ['포토대기', '포토리뷰', '텍스트리뷰', '별점'], RTL = ['포토대기 (업체 사진)', '포토리뷰 (직접 찍음)', '텍스트', '별점만'];
+        const have = parseRvMix_(o.mix);
+        let names = noticeProducts_(desc).map(function (x) { return x.name; }).filter(Boolean);
+        have.forEach(function (h) { if (h.name && names.indexOf(h.name) < 0) names.push(h.name); });
+        if (!names.length) names = [campOf_(chain.runs[0]['명단 제목'])];
+        const lab = function (l) { return /대기/.test(l) ? 0 : /포토|사진/.test(l) ? 1 : /별점/.test(l) ? 3 : 2; };
+        return '<div class="lab">리뷰 종류별 개수 <span class="s">(의뢰서 전체 기준. 숫자만 넣으면 돼요)</span></div><input type="hidden" name="np" value="' + names.length + '">' +
+          names.map(function (nm, i) {
+            const h = have.filter(function (x) { return x.name === nm; })[0] || (names.length === 1 ? have[0] : null) || { mix: [] };
+            const val = [0, 0, 0, 0]; h.mix.forEach(function (m) { val[lab(m.label)] += m.n; });
+            return '<div class="prod">' + (names.length > 1 ? '<div class="pn">' + esc(nm) + '</div>' : '') + '<input type="hidden" name="pn' + i + '" value="' + esc(names.length > 1 ? nm : '') + '"><div class="nums">' +
+              RT.map(function (t, j) { return '<label class="num">' + RTL[j] + '<input name="n' + i + '_' + j + '" inputmode="numeric" value="' + (val[j] || '') + '" placeholder="0"></label>'; }).join('') + '</div></div>';
+          }).join('');
+      })() +
       '<label>리뷰내용 가이드<input name="guide" value="' + esc(o.guide) + '" placeholder="예: 너무 길지 않게 간단하게 부탁드려요"></label>' +
-      '<label>포토대기일 때: 업체에서 받은 사진 세트 수 (같은 배경 사진끼리 한 세트, 비우면 \'포토대기\' 공지)<input name="sets" inputmode="numeric" value="' + esc(o.sets) + '" placeholder="예: 16"></label><button>이대로 나누기</button></form>';
+      '<label>업체한테 리뷰 사진을 이미 받았으면: 받은 사진 묶음 수 <span class="s">(사람마다 쓸 사진이 한 묶음. 아직 안 받았으면 비워 두세요 → \'포토대기\'로 나가요)</span><input name="sets" inputmode="numeric" value="' + esc(o.sets) + '" placeholder="안 받았으면 비움"></label><button>이대로 나누기</button></form>';
     if (plan.err) body += '<p class="err">' + esc(plan.err) + '</p>';
     else {
       body += '<p class="s">' + esc(plan.total + '명 · ' + plan.sum.join(' / ')) + (plan.unknown ? '<br><b class="err">' + plan.unknown + '명은 어느 상품을 샀는지 몰라요 (아래 공지에 따로 표시)</b>' : '') + '</p>';
@@ -4490,12 +4526,17 @@ function reviewPage_(p) {
       });
     }
   }
-  const html = '<style>body{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;margin:0;padding:16px;background:#f4f4f8;color:#1d1a24;max-width:720px}h1{font-size:20px;margin:0 0 6px}' +
-    '.h{font-weight:700;margin:14px 0 6px}.s{color:#666;font-size:13px;font-weight:400}.ok{color:#2f7a2f}.err{color:#a3271b;white-space:pre-wrap}label{display:block;margin:8px 0;font-size:13px;color:#444}' +
-    'textarea,input,select{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #cfc9db;border-radius:8px;margin:4px 0;background:#fff}textarea{height:90px}.day textarea{height:220px;font-size:14px}' +
-    'button,.btn{display:block;width:100%;box-sizing:border-box;text-align:center;padding:12px;border:0;border-radius:8px;background:#5b2a86;color:#fff;font:inherit;font-weight:700;margin-top:6px;text-decoration:none}.row{display:flex;gap:8px}.row>*{flex:1}' +
-    '.pick{display:block;padding:12px;margin:6px 0;background:#fff;border:1px solid #ddd;border-radius:8px;color:#1d1a24;text-decoration:none;font-weight:700}.day{background:#fff;border-radius:10px;padding:10px 12px;margin:12px 0}' +
-    'table{border-collapse:collapse;width:100%;font-size:13px}td,th{border-bottom:1px solid #eee;padding:4px;text-align:left;white-space:nowrap}details{overflow-x:auto}</style>' + body +
+  // 디자인은 가이드 생성기처럼 핑크 (11/2 사용자 요청)
+  const html = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap"><style>' +
+    'body{font-family:"Noto Sans KR",-apple-system,sans-serif;font-size:15px;margin:0;padding:16px;color:#4a2b3c;background:#ffe6f2;background-image:radial-gradient(#ffc6e0 1.2px,transparent 1.2px);background-size:20px 20px;max-width:760px}' +
+    'h1{font-size:18px;margin:0 0 8px;padding:10px 14px;border:2px solid #4a2b3c;border-radius:14px;background:linear-gradient(90deg,#ff8fc0,#c9a7ff);color:#fff;box-shadow:3px 3px 0 #4a2b3c}' +
+    '.h{font-weight:900;margin:14px 0 6px}.s{color:#8a6076;font-size:13px;font-weight:400}.ok{color:#2f7a2f;font-weight:700}.err{color:#b91c1c;white-space:pre-wrap}label,.lab{display:block;margin:10px 0 4px;font-size:13px;font-weight:700;color:#4a2b3c}' +
+    'textarea,input,select{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:2px solid #4a2b3c;border-radius:12px;margin:4px 0;background:#fff;color:#4a2b3c}textarea{height:90px}.day textarea{height:220px;font-size:14px}' +
+    '.prod{background:#fff;border:2px solid #4a2b3c;border-radius:14px;padding:8px 10px;margin:6px 0;box-shadow:2px 2px 0 #4a2b3c}.pn{font-weight:900;margin-bottom:4px}.nums{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.num{margin:0;font-size:12px;font-weight:500}.num input{text-align:center;font-size:18px;font-weight:700;padding:6px}' +
+    '@media(max-width:520px){.nums{grid-template-columns:repeat(2,1fr)}}' +
+    'button,.btn{display:block;width:100%;box-sizing:border-box;text-align:center;padding:12px;border:2px solid #4a2b3c;border-radius:12px;background:#ff5fa8;color:#fff;font:inherit;font-weight:900;margin-top:8px;text-decoration:none;box-shadow:3px 3px 0 #4a2b3c;cursor:pointer}.row{display:flex;gap:8px}.row>*{flex:1}' +
+    '.pick{display:block;padding:12px;margin:6px 0;background:#fff;border:2px solid #4a2b3c;border-radius:12px;color:#4a2b3c;text-decoration:none;font-weight:700;box-shadow:2px 2px 0 #4a2b3c}.day{background:#fff;border:2px solid #4a2b3c;border-radius:14px;padding:10px 12px;margin:12px 0;box-shadow:3px 3px 0 #4a2b3c}' +
+    'table{border-collapse:collapse;width:100%;font-size:13px}td,th{border-bottom:1px solid #ffc6e0;padding:4px;text-align:left;white-space:nowrap}details{overflow-x:auto}</style>' + body +
     '<script>function c(i,b){var t=document.getElementById("t"+i);t.select();try{navigator.clipboard.writeText(t.value).then(function(){b.textContent="복사됨"},function(){document.execCommand("copy");b.textContent="복사됨"})}catch(e){document.execCommand("copy");b.textContent="복사됨"}}</' + 'script>';
   return HtmlService.createHtmlOutput(html).setTitle('리뷰 배정').addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
