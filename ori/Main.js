@@ -3373,7 +3373,14 @@ function reviewGuideMsg_(rv, ppl, counts, k) {
   totals.forEach(function (t, i) {
     const who = (pre[i] || []).slice();
     let need = today[i] - who.reduce(function (a, y) { return a + y.n; }, 0);
-    while (need > 0 && queue.length) { const p = queue.shift(); who.push(p); need -= p.n; }
+    // 여러 계정 산 사람은 별점·텍스트로, 한 계정인 사람은 포토 먼저 (11/2 사용자 요청, 리뷰 배정 화면과 같은 규칙)
+    const photoT = /포토|사진/.test(t.label);
+    while (need > 0 && queue.length) {
+      let qi = queue.findIndex(function (y) { return (photoT ? y.n === 1 : y.n > 1) && y.n <= need; });
+      if (qi < 0) qi = queue.findIndex(function (y) { return photoT ? y.n === 1 : true; });
+      if (qi < 0) qi = 0;
+      const p = queue.splice(qi, 1)[0]; who.push(p); need -= p.n;
+    }
     if (today[i] <= 0) return;
     if (/포토\s*대기/.test(t.label)) { pw = pw.concat(who); return; }
     const note = rv.lineNote && rv.lineNote[pretty(t.label)];   // 종류 줄 밑 한 줄 설명 (→ 별점 5점만 …)

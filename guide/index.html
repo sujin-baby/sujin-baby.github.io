@@ -197,7 +197,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v153 (포토:텍스트 비율 문장이 포토제공을 덮어쓰던 것 고침)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v154 (쿠팡 상품번호 11자리 이상이면 ❗)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -371,7 +371,7 @@ details.help-box summary {
         <div class="card-out" id="box-bug-report" style="margin: 14px 0; background: #fff5f7; border: 2px solid #e03131; border-radius: 12px; padding: 14px; box-shadow: 2px 2px 0 var(--ink, #3a2230);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:4px;">
             <span style="font-weight: 900; font-size: 13.5px; color: #c92a2a;">🚨 공지 오류 제보 / 수정 요청 (피클·클로드 전달용)</span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v153</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v154</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 8px;">
             공지가 이상하게 나왔나요? 아래 태그를 누르거나 문제점을 적고 <b>[원터치 복사]</b>를 누르면, <b>의뢰서 원문 + 생성된 공지 + 문제점</b>이 한 번에 복사되어 피클 채팅창이나 클로드 코드에 바로 전달할 수 있어요.
@@ -2838,7 +2838,8 @@ details.help-box summary {
         g.short || null,
         "🐥판매처 : " + (isBlockedText(g.seller) || !okSeller(g.seller) ? "" : (g.seller || "")) + ((g.platform === "쿠팡" || !g.platform) && g.cpFetched && !g.cpRocket && (g.seller || "").trim() && !isBlockedText(g.seller) && okSeller(g.seller) ? " (판매자변경 로켓xxxxxx)" : ""),
         "🐥상품명 : " + (isBlockedText(g.pname) ? (g.keyword || "") : baseName(g.pname || "", null, g)),
-        "🐥상품번호 : " + lines(g.pno).join("\n"),
+        // 쿠팡 상품번호는 10자리 안팎. 11자리 넘게 붙으면(11/2 황금향 99799819790: 앞에 9가 하나 더) 공지에 ❗를 붙여 보내기 전에 보이게
+        "🐥상품번호 : " + lines(g.pno).map(l => ((g.platform === "쿠팡" || !g.platform) && /^\s*\d{11,}/.test(l) ? "❗자리수 확인 " : "") + l).join("\n"),
         "🐥★키워드 : " + (g.keyword || ""),
         "🐥위치 : " + (isBlockedText(posText(g)) ? "" : posText(g))
       ].concat(optLines).concat([photo]).filter(x => x !== null).join("\n");
@@ -3124,7 +3125,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v153 공지 오류 제보]",
+        "🚨 [가이드 생성기 v154 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",
