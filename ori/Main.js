@@ -7877,7 +7877,7 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '32';
+const DASH_VER = '33';
 // 한눈에 '리뷰 취합할 것' 칸에 보일 것: 의뢰 전체 리뷰가 끝난(RVRPT_) 의뢰 중 업체 전송 체크 안 했거나 체크한 지 3일 안 된 것. 최근 40일 진행만, 기대평 빼고
 //  날마다 취합하던 줄은 없앰 (사용자 요청 10/26: 날짜별로 말고 한 캠페인이 다 끝나면 그때 한 번에)
 function rvItems_(allRuns, props) {
@@ -8091,6 +8091,8 @@ function buildDashboard_(force) {
   const fmt = function (t) { return 'DATE(' + Utilities.formatDate(new Date(t), CONFIG.TIMEZONE, 'yyyy,M,d') + ')'; };
   runs.forEach(function (r, i) {
     const rr = i + 2, x = sheets['b' + i];
+    // 줄이 밀리면 예전 줄의 체크칸·드롭다운 규칙이 남아 방제 칸에 '잘못됨: 유효성 검사 규칙 위반'이 뜸 (11/2) → 위 표 줄 규칙은 먼저 지움 (택배 옮김 체크칸은 아래에서 다시)
+    try { sh.getRange(rr, 1, 1, 14).clearDataValidations(); } catch (e) {}
     // 기대평은 건수로 (의뢰 총건수 405, 그날 목표·신청 = 사람 × 그 주 건수, 사용자 요청 10/24)
     const per = isExpect_(r) ? expPer_(r) : cartN_(r), mixDay = isExpect_(r) && !!EXP_MIX[dateTok_(r['명단 제목'])];   // A·B묶음 섞인 기대평 날은 건수를 직접 셈 (10/26)
     sh.getRange(rr, 1, 1, 5).setValues([[r['진행일'], String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''), dashStatus_(r), isExpect_(r) ? EXP_LINKS.length * 15 : ((Number(r['총건수']) || 0) * per || ''), (mixDay ? expCount_(r, Number(r['목표인원']) || 0, allRuns) : (Number(r['목표인원']) || 0) * per) || r['목표인원']]]);
@@ -8182,7 +8184,7 @@ function buildDashboard_(force) {
     // 제목 + 안 산 사람 (관리 시트 배정 탭에서 '아직'인 사람, 응답이 들어오면 바로 바뀜)
     const label = '■ ' + titles[0] + '   (명단 시트: ' + sheetName_(titles[0]) + ')';
     const rt = String(x.runs[0]['명단 제목']).replace(/"/g, '""');
-    sh.getRange(top, 1).setFormula('=' + q(label) + '&IFERROR("   ▶ 안 산 사람: "&TEXTJOIN(" ",TRUE,FILTER(' + A + 'B2:B&IF(' + A + 'F2:F="아직 1","","("&MID(' + A + 'F2:F,4,9)&"건)"),' + A + 'A2:A="' + rt + '",LEFT(' + A + 'F2:F,2)="아직")),"")')
+    sh.getRange(top, 1).setFormula('=' + q(label) + '&IFERROR("   ▶ 안 산 사람: "&TEXTJOIN(" ",TRUE,FILTER(' + A + 'B2:B&IF(' + A + 'F2:F="아직 1",IF(N(' + A + 'D2:D)>1,"(1건 남음)",""),"("&MID(' + A + 'F2:F,4,9)&"건 남음)"),' + A + 'A2:A="' + rt + '",LEFT(' + A + 'F2:F,2)="아직")),"")')
       .setFontWeight('bold');
     const width2 = x.layout.length + (x.chk ? 1 : 0);
     const c = function (k) { return 'CHOOSECOLS(e,' + k + ')'; };
