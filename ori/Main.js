@@ -5301,9 +5301,23 @@ function onAdminEditInner_(e) {
     // 한눈에 탭 방제를 고치면 진행목록, 카톡방, 보낼 메시지함, 월급시트까지 같이
     const r = readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']) === String(e.oldValue).trim() || sameRunTitle_(x['명단 제목'], e.oldValue); }).pop();
     if (!r) return;
+    // 상품 이름(업체명)만 바꾸는 것도 받음 (11/2: '(업체명)황금향외' → '오늘과일 황금향외'). 날짜·숫자가 같고 옛 이름(괄호 자리표시 뺀 것)이 새 이름 안에 있을 때만.
+    //  같은 명단 시트를 쓰는 다른 날 진행도 같이 바꿈 (안 그러면 캠페인이 둘로 갈림)
+    const oKey = campKey_(r['명단 제목']), nKey = campKey_(String(e.value)), core = oKey.replace(/\([^)]*\)/g, '');
+    const nameOnly = oKey !== nKey && dateTok_(String(e.value)) === dateTok_(r['명단 제목']) && (String(e.value).match(/(\d+)\s*$/) || [])[1] === (bareTitle_(r['명단 제목']).match(/(\d+)\s*$/) || [])[1] &&
+      core.length >= 2 && (nKey.indexOf(core) >= 0 || core.indexOf(nKey) >= 0);
+    if (nameOnly) {
+      const oCamp = campOf_(r['명단 제목']), nCamp = campOf_(String(e.value));
+      const sibs = readRuns_().filter(function (x) { return x.row !== r.row && String(x['시트ID']) === String(r['시트ID']) && campKey_(x['명단 제목']) === oKey; });
+      const ok = renameRun_(r, e.value, '한눈에 탭에서 이름 바꿈');
+      sibs.forEach(function (x) { try { renameRun_(x, bareTitle_(x['명단 제목']).replace(oCamp, nCamp), '같은 의뢰 이름 같이 바꿈'); } catch (err) {} });
+      try { e.source.toast(ok ? '이름을 바꿨어요: ' + oCamp + ' → ' + nCamp + (sibs.length ? ' (같은 의뢰 ' + sibs.length + '개 진행도)' : '') + '. 명단 시트·폼·폴더·보낼메시지·월급시트도 같이 바뀌어요' : '이름을 못 바꿨어요 (오른쪽 실행 기록 확인)', '방제', 15); } catch (err) {}
+      if (ok) { try { buildDashboard_(true); } catch (err) {} }
+      return;
+    }
     // 같은 상품(같은 날짜·캠페인)의 숫자만 바꾸는 것만 받음. 다른 진행 방제가 들어오면(붙여넣기 실수 등) 칸을 되돌리고 안 바꿈 (10/23)
     if (campKey_(String(e.value)) !== campKey_(r['명단 제목']) || !renameRun_(r, e.value, '한눈에 탭에서 고침')) {
-      try { e.range.setValue(e.oldValue); e.source.toast('한눈에 탭 방제 칸에 다른 진행 이름이 들어와서 되돌렸어요. 방제는 같은 상품의 숫자만 여기서 바꿀 수 있어요.', '방제', 15); } catch (err) {}
+      try { e.range.setValue(e.oldValue); e.source.toast('한눈에 탭 방제 칸에 다른 진행 이름이 들어와서 되돌렸어요. 방제는 같은 상품의 숫자나 업체명만 여기서 바꿀 수 있어요.', '방제', 15); } catch (err) {}
       if (campKey_(String(e.value)) !== campKey_(r['명단 제목'])) note_('⛔ 한눈에 탭 방제 칸 되돌림: ' + e.oldValue + ' 자리에 ' + e.value + ' (다른 상품)');
       return;
     }
@@ -6189,9 +6203,11 @@ function rvInboxSort_(runs) {
     if (book) {
       try {
         const er = expRunNow_(runs || readRuns_());
+        // 기대평 리뷰이미지 폴더는 수진님이 정한 곳 (11/2: 백발백중 리뷰이미지 폴더 링크), 없으면 진행 폴더 안 '리뷰이미지'
         const fid = er && (String(er['폴더 링크'] || '').match(/[-\w]{25,}/) || [])[0];
-        if (fid) {
-          const day = sub(sub(DriveApp.getFolderById(fid), RV_IMG_FOLDER), dateTok_(er['명단 제목']) || '날짜 모름');
+        if (fid || EXP_RVIMG_ID) {
+          let base0 = null; try { base0 = DriveApp.getFolderById(EXP_RVIMG_ID); } catch (e) {}
+          const day = sub(base0 || sub(DriveApp.getFolderById(fid), RV_IMG_FOLDER), dateTok_(er['명단 제목']) || '날짜 모름');
           const site = /교보/.test(o.site + o.product) ? '교보문고' : /알라딘/.test(o.site + o.product) ? '알라딘' : /예스|yes/i.test(o.site + o.product) ? '예스24' : '기타';
           put(x, sub(day, o.kind === 'review' ? site : RV_AI_DIR[o.kind === 'purchase' ? 'purchase' : 'other']));
           got['기대평 ' + dateTok_(er['명단 제목']) + ' ' + site] = (got['기대평 ' + dateTok_(er['명단 제목']) + ' ' + site] || 0) + 1;
@@ -6223,6 +6239,7 @@ function rvInboxSort_(runs) {
     }
   }
 }
+const EXP_RVIMG_ID = '1Ovb5gA-HCMlfhRwpvLou85fXuRTmpOYu';   // 백발백중 기대평 리뷰이미지 폴더 (사용자 지정 11/2)
 // 오늘(없으면 가장 최근) 기대평 진행
 function expRunNow_(runs) {
   const t = today_().getTime();
