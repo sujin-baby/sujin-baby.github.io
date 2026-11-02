@@ -3099,7 +3099,7 @@ function checkFullInner_() {
   }
   // 리뷰 체크 확인(취완·독촉·리뷰 보고)은 15분마다 (11/2 사용자 요청, 전엔 30분 정리 때만). 한눈에를 그리기 전에 해서 '리뷰 취합할 것'이 바로 보이게
   //  시간이 빠듯하면(3분 넘음) 건너뜀 → 30분 정리가 대신 함
-  if (!late_(180)) { step_('리뷰 확인'); try { subTime_('리뷰 확인', function () { reviewDone_(readRuns_()); }); globalThis.__RV_DONE_RUN = 1; } catch (e) { note_('리뷰 완료 확인 실패: ' + e); } }
+  if (!late_(180)) { step_('리뷰 확인'); try { subTime_('리뷰 확인', function () { reviewDone_(readRuns_()); }); globalThis.__RV_DONE_RUN = 1; } catch (e) { if (e && e.yieldLock) throw e; note_('리뷰 완료 확인 실패: ' + e); } }
   step_('한눈에');
   try { buildDashboard_(false); } catch (e) { note_('한눈에 탭 실패: ' + e); }
   // 한눈에에 #REF! 같은 오류 칸이 있으면 통째로 다시 그림 (메뉴 '한눈에 탭 새로 만들기'와 같음, 10/30). 한 시간에 한 번까지, 시간이 넉넉할 때만
@@ -3171,7 +3171,7 @@ function slowTasks_(rr, listed) {
   rr = rr || readRuns_(); listed = listed || {};
   const rvN = function () { return Object.keys(PropertiesService.getScriptProperties().getProperties()).filter(function (k) { return /^(RVDONE_|RVRPT_|RVZIPURL_)/.test(k); }).length; }, rv0 = rvN();
   // 이번 확인에서 이미 했으면 안 함 (15분마다 한눈에 전에 함)
-  if (!globalThis.__RV_DONE_RUN) { try { subTime_('정리: 리뷰 완료', function () { reviewDone_(readRuns_()); }); } catch (e) { note_('리뷰 완료 확인 실패: ' + e); } }
+  if (!globalThis.__RV_DONE_RUN) { try { subTime_('정리: 리뷰 완료', function () { reviewDone_(readRuns_()); }); } catch (e) { if (e && e.yieldLock) throw e; note_('리뷰 완료 확인 실패: ' + e); } }
   // 의뢰 리뷰가 다 끝나거나 압축 파일이 처음 생기면 한눈에 '리뷰 취합할 것'에 바로 보이게 다시 그림 (전엔 한눈에를 먼저 그려서 15~30분 늦게 떴음, 10/25)
   if (rvN() !== rv0 && !late_(300)) { try { buildDashboard_(false); } catch (e) { note_('한눈에 탭 실패: ' + e); } }
   try { subTime_('정리: 지난 명단 탭', function () { listTabsRecent_(rr, listed); }); } catch (e) { note_('지난 명단 탭 실패: ' + e); }
@@ -5610,6 +5610,7 @@ function reviewDone_(runs) {
   let pend = {};
   try { const ps = planSheet_(), pl = ps.getLastRow(); if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x) { if (x[8] === '대기') pend[campKey_(x[1])] = 1; }); } catch (e) {}
   Object.keys(bySheet).forEach(function (sid) {
+    yieldIfWanted_();   // 새 진행 만들기 같은 직접 하는 일이 기다리면 의뢰 하나 끝날 때마다 바로 넘김 (11/2: 리뷰 확인 76초 동안 새 진행이 기다림)
     const mine = bySheet[sid].sort(function (a, b) { return a['진행일'] - b['진행일']; });
     if (!mine.some(function (r) { return r['마감 시각'] instanceof Date; })) return;   // 아직 명단이 하나도 안 끝난 의뢰
     // 빠른 길 (10/30: 이 단계가 의뢰마다 명단 시트를 열어 117초): 명단 시트가 지난번 본 뒤로 안 바뀌었고, 같은 날(새벽 5시 기준)이고,
@@ -6063,7 +6064,7 @@ function rvAiSort_(f, sid, props) {
   const t0 = Date.now();
   let done = 0, moved = {};
   for (let i = 0; i < left.length; i++) {
-    if (Date.now() - t0 > 60000 || late_(230)) break;
+    if (Date.now() - t0 > 60000 || late_(230) || (globalThis.__ORI_T0 && Date.now() - Number(props.getProperty('WANT_LOCK') || 0) < 300000)) break;   // 직접 하는 일이 기다리면 멈춤
     const x = left[i];
     let o;
     try { o = subTime_('리뷰 사진 AI', function () { return geminiReadCapture_(x.getBlob()); }); }
@@ -6145,7 +6146,7 @@ function rvInboxSort_(runs) {
   const t0 = Date.now(), got = {};
   let unknown = 0;
   for (let i = 0; i < files.length; i++) {
-    if (Date.now() - t0 > 60000 || late_(230)) break;
+    if (Date.now() - t0 > 60000 || late_(230) || (globalThis.__ORI_T0 && Date.now() - Number(props.getProperty('WANT_LOCK') || 0) < 300000)) break;   // 직접 하는 일이 기다리면 멈춤
     const x = files[i];
     let o;
     try { o = subTime_('리뷰 사진 AI', function () { return geminiReadCapture_(x.getBlob()); }); }
