@@ -8,7 +8,7 @@ function Folder(name) { this.name = name; this.files = []; this.subs = []; }
 Folder.prototype = { getName() { return this.name; }, setName(n) { this.name = n; }, getUrl() { return 'https://drive/' + this.name; }, getId() { return 'D_' + this.name; },
   getFiles() { return it(this.files); }, getFolders() { return it(this.subs); },
   getFoldersByName(n) { return it(this.subs.filter(s => s.name === n)); }, createFolder(n) { const f = new Folder(n); this.subs.push(f); return f; },
-  getFilesByName() { return it([]); }, createFile() { return { getUrl: () => 'https://zip' }; } };
+  getFilesByName() { return it([]); }, createFile(name, body) { const f = { name, body, getUrl: () => 'https://zip', setContent(b) { this.body = b; }, setSharing() {} }; (globalThis.__made = globalThis.__made || []).push(f); return f; } };
 let fid = 0;
 function File(name, ans, bytes) {
   this.id = 'F' + (++fid); this.name = name; this.ans = ans; this.bytes = bytes || ('b' + fid); this.desc = ''; this.parent = null;
@@ -85,6 +85,9 @@ env.UrlFetchApp = { fetch: () => ({ getResponseCode: () => 200, getContentText: 
 G('onAdminEdit(__ev)');
 const ok3 = env.__props.get('GEMINI_KEY') === 'AQ.Ab8RN_NEWKEY-yyyyyyyyyyyyyyyyyyyy' && /✓ 키 넣음 \(…yyyy\)/.test(cell) && cell.indexOf('AQ.Ab8RN') < 0 && /잘 돼요/.test(toast);
 console.log('키 칸:', cell, '/', toast);
-const okAll = ok && ok2 && ok3;
+const card = (globalThis.__made || []).find(f => /리뷰 확인표/.test(f.name));
+console.log('확인표:', card ? card.body.split('\n').slice(0, 9).join(' | ') : '없음');
+const ok4 = !!card && /의뢰서 기준 개수: 포토 2, 텍스트 3, 별점 5/.test(card.body) && /리뷰이미지 폴더 사진: 10장 \(포토 2, 텍스트 3, 별점 5\)/.test(card.body);
+const okAll = ok && ok2 && ok3 && ok4;
 console.log(okAll ? '✓ 리뷰 사진 AI 분류 시험 통과' : 'XX 리뷰 사진 AI 분류 시험 실패');
 process.exit(okAll ? 0 : 1);

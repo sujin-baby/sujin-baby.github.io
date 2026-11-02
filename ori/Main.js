@@ -5922,8 +5922,30 @@ function rvZip_(f, name, props, sid, mine) {
   if (!done) queueMsg_('사장님', msg, '리뷰 보고');
   const skTxt = Object.keys(skipped).map(function (k) { return k.replace(/\s*\(?압축\s*제외\)?\s*/, '') + ' ' + skipped[k] + '장'; }).join(', ');
   if (skTxt) warn.push('ℹ 리뷰가 아니라고 뺀 사진: ' + skTxt + ' (의뢰 폴더 안 \'(압축 제외)\' 폴더. 리뷰인데 빠졌으면 리뷰이미지 안 포토·텍스트·별점 폴더로 옮기면 다시 세요)');
+  try { rvCheckFile_(f, base, sid, mine, cnt, files.length, warn); } catch (e) { note_('리뷰 확인표 실패: ' + e.message); }
   if (warn.length) queueMsg_('내 할 일', '[' + base + '] 리뷰 사진 확인 (사진 ' + files.length + '장 · ' + cntTxt + ')\n' + warn.join('\n'), '할 일');
   note_('✓ 리뷰 보고: ' + base + ' (사진 ' + files.length + '장 · ' + cntTxt + (from ? ', ' + from + ' 기준' : '') + ')' + (warn.length ? ' ' + warn.join(' ') : ''));
+}
+
+// 리뷰 확인표 (11/2 사용자 요청: 의뢰서 리뷰 가이드·종류별 개수와 실제 사진 수를 한 화면에서). 의뢰 폴더(리뷰이미지 위)에 '📋 리뷰 확인표.txt'
+//  사장님께 보내는 건 리뷰이미지 폴더 링크라 이 파일은 안 보임. 파일은 나만 보기로
+function rvCheckFile_(f, base, sid, mine, cnt, nFiles, warn) {
+  if (!f || !f.parent || !f.parent.createFile) return;
+  let rv = {}; try { rv = JSON.parse(PropertiesService.getScriptProperties().getProperty('RV_' + sid) || '{}') || {}; } catch (e) {}
+  let obRows = []; try { const ob = outboxSheet_(), ol = ob.getLastRow(); if (ol >= 2) obRows = ob.getRange(2, 1, ol - 1, 6).getValues(); } catch (e) {}
+  const ex = rvExpect_(sid, mine), g = rvGuideCounts_(mine, obRows);
+  const kind = { mix: '종류 섞음', photo: '전체 포토', text: '전체 텍스트', self: '자율(포토)', confirm: '구매확정만' }[rv.kind] || (rv.kind || '모름');
+  const L = ['📋 ' + base + ' 리뷰 확인표 (자동 · ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'M/d HH:mm') + ' 기준)', '',
+    '■ 의뢰서 리뷰', '  종류: ' + kind + (rv.mix ? '  /  ' + rv.mix : ''), '  의뢰서 기준 개수: ' + (ex ? rvCntText_(ex) : '모름'),
+    '  리뷰 가이드:', String(rv.guide || '(없음)').split('\n').map(function (l) { return '    ' + l; }).join('\n'), '',
+    '■ 실제 배정 (방마다 보낸 리뷰 가이드): ' + (g.miss ? '가이드 못 찾은 방 ' + g.miss.join(', ') : g.odd ? '가이드가 여러 번 나간 방 ' + g.odd.join(', ') : rvCntText_(g)), '',
+    '■ 리뷰이미지 폴더 사진: ' + nFiles + '장' + (cnt ? ' (' + rvCntText_(cnt) + ')' : ''), ''];
+  mine.forEach(function (r) { L.push('  - ' + bareTitle_(r['명단 제목']) + ': ' + (Number(r['인원']) || 0) + '명'); });
+  L.push('', '■ 확인할 것', warn.length ? warn.map(function (w) { return '  ' + w; }).join('\n') : '  없음 (개수 맞음)');
+  const name = '📋 리뷰 확인표.txt', it = f.parent.getFilesByName(name), body = L.join('\n');
+  const file = it.hasNext() ? it.next() : f.parent.createFile(name, body, 'text/plain');
+  file.setContent(body);
+  try { file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE); } catch (e) {}
 }
 
 /* ---------------- 리뷰 캡처 AI 분류 (10/31 사용자 요청: 카톡 방마다 사진 골라 저장하는 시간 줄이기) ---------------- */
@@ -5936,7 +5958,7 @@ const RV_AI_DIR = { purchase: '구매인증 (압축 제외)', other: '기타 (�
 const GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash'];
 const GEMINI_PROMPT = [
   '이 이미지는 한국 쇼핑몰(쿠팡·네이버·올리브영 등) 체험단 참여자가 카카오톡 방에 올린 휴대폰 캡처예요.',
-  'JSON 하나로만 답하세요: {"kind": "review" | "purchase" | "other", "stars": 0~5 정수, "text": true/false, "photo": true/false, "product": "화면에 보이는 상품 이름 그대로 (없으면 빈 글자)"}',
+  'JSON 하나로만 답하세요: {"kind": "review" | "purchase" | "other", "stars": 0~5 정수, "text": true/false, "photo": true/false, "product": "화면에 보이는 상품 이름 그대로 (없으면 빈 글자)", "site": "쇼핑몰 이름 (쿠팡, 네이버, 예스24, 알라딘, 교보문고, 올리브영 등. 모르면 빈 글자)"}',
   '- review: 상품 리뷰를 쓰는 화면이나 다 쓴 리뷰 화면 (별점·리뷰 글이 보임)',
   '- purchase: 주문·결제 완료·주문 상세·배송 조회 화면 (구매 인증)',
   '- other: 그 밖 (상품 사진만, 공지, 대화 캡처 등)',
@@ -6002,7 +6024,7 @@ function geminiReadCapture_(blob) {
   const m = String(t).replace(/```(json)?/g, '').match(/\{[\s\S]*\}/);
   if (!m) throw new Error('Gemini 답을 못 읽음: ' + String(t).slice(0, 80));
   const o = JSON.parse(m[0]);
-  return { kind: /review|purchase|other/.test(o.kind) ? o.kind : 'other', stars: Math.max(0, Math.min(5, Number(o.stars) || 0)), text: o.text === true, photo: o.photo === true, product: String(o.product || '').slice(0, 120) };
+  return { kind: /review|purchase|other/.test(o.kind) ? o.kind : 'other', stars: Math.max(0, Math.min(5, Number(o.stars) || 0)), text: o.text === true, photo: o.photo === true, product: String(o.product || '').slice(0, 120), site: String(o.site || '').slice(0, 20) };
 }
 // 읽은 결과 → 옮길 폴더 이름
 function rvAiDir_(o) {
@@ -6132,6 +6154,11 @@ function rvInboxSort_(runs) {
   const props = PropertiesService.getScriptProperties();
   if (!geminiKey_() || Number(props.getProperty('GEMINI_WAIT') || 0) > Date.now()) return;
   let inbox; try { inbox = rvInbox_(); } catch (e) { return; }
+  // (11/2 한 번) '어느 의뢰인지 모름'에 들어간 사진을 다시 받는 곳으로 → 기대평(책 사이트) 분류로 다시 봄
+  if (!props.getProperty('RVINBOX_RETRY_V1')) {
+    props.setProperty('RVINBOX_RETRY_V1', '1');
+    try { const ui = inbox.getFoldersByName(RV_INBOX_UNKNOWN); if (ui.hasNext()) { const uf = ui.next(), fi = uf.getFiles(); while (fi.hasNext()) { try { fi.next().moveTo(inbox); } catch (e) {} } } } catch (e) {}
+  }
   const files = [], it = inbox.getFiles();
   // 다른 계정(PC 드라이브 앱 로그인 계정)이 올린 사진은 옮기기가 안 될 수 있어 복사 → 복사한 건 기억해서 다시 안 봄 (10/31)
   let doneIds = String(props.getProperty('RVINBOX_DONE') || '').split(',').filter(Boolean);
@@ -6157,6 +6184,22 @@ function rvInboxSort_(runs) {
       continue;
     }
     try { x.setDescription('AI ' + JSON.stringify(o)); } catch (e) {}
+    // 기대평(백발백중 도서): 책 사이트 리뷰는 오늘 기대평 진행 폴더 → 리뷰이미지 → 날짜 → 사이트별 (11/2 사용자 요청)
+    const book = /예스\s*24|yes\s*24|알라딘|교보/i.test(o.site + ' ' + o.product) || /짱\s*(개념|수학)|백발백중/.test(o.product);
+    if (book) {
+      try {
+        const er = expRunNow_(runs || readRuns_());
+        const fid = er && (String(er['폴더 링크'] || '').match(/[-\w]{25,}/) || [])[0];
+        if (fid) {
+          const day = sub(sub(DriveApp.getFolderById(fid), RV_IMG_FOLDER), dateTok_(er['명단 제목']) || '날짜 모름');
+          const site = /교보/.test(o.site + o.product) ? '교보문고' : /알라딘/.test(o.site + o.product) ? '알라딘' : /예스|yes/i.test(o.site + o.product) ? '예스24' : '기타';
+          put(x, sub(day, o.kind === 'review' ? site : RV_AI_DIR[o.kind === 'purchase' ? 'purchase' : 'other']));
+          got['기대평 ' + dateTok_(er['명단 제목']) + ' ' + site] = (got['기대평 ' + dateTok_(er['명단 제목']) + ' ' + site] || 0) + 1;
+          if (i < files.length - 1) Utilities.sleep(2000);
+          continue;
+        }
+      } catch (e) { note_('기대평 사진 옮기기 실패: ' + e.message); }
+    }
     const c = o.kind === 'other' && !o.product ? (camps.length === 1 ? camps[0] : null) : rvMatchCamp_(o.product, camps);
     if (!c) { put(x, sub(inbox, RV_INBOX_UNKNOWN)); unknown++; }
     else {
@@ -6179,6 +6222,12 @@ function rvInboxSort_(runs) {
         (camps.length ? '\n압축 기다리는 의뢰: ' + camps.map(function (c) { return c.name; }).join(', ') : '\n지금 압축 기다리는 의뢰가 없어요 (리뷰 체크가 다 끝난 의뢰만 받아요)'), '할 일');
     }
   }
+}
+// 오늘(없으면 가장 최근) 기대평 진행
+function expRunNow_(runs) {
+  const t = today_().getTime();
+  return runs.filter(function (r) { return isExpect_(r) && r['진행일'] instanceof Date && dayStart_(r['진행일']) <= t; })
+    .sort(function (a, b) { return b['진행일'] - a['진행일']; })[0] || null;
 }
 // 15분 확인에서 AI 분류 이어 하기 (정리는 30분마다라 한 의뢰 사진 30장이 1시간 넘게 걸려서). 다 나누면 다음 정리에서 압축
 function rvAiQueue_() {
