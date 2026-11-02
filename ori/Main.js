@@ -3109,7 +3109,9 @@ function checkFullInner_() {
       props.setProperty('DASH_AUTOFIX_AT', String(Date.now()));
       step_('한눈에 다시 그림'); buildDashboard_(true);
       const left = dashErrorCells_();
-      note_(left.length ? '⚠ 한눈에 오류 칸(' + bad.slice(0, 3).join(', ') + ')을 다시 그렸는데 ' + left.length + '개 남음: ' + left.slice(0, 3).join(', ') : '✓ 한눈에 오류 칸 ' + bad.length + '개(' + bad.slice(0, 3).join(', ') + ') → 다시 그려서 고침');
+      // 남은 칸의 수식·값 앞부분도 기록 (Claude가 점검 기록으로 원인 보게, 11/2 A43이 계속 남음)
+      let why = ''; try { if (left.length) { const c0 = adminSs_().getSheetByName(DASH_TAB).getRange(left[0]); why = ' [' + left[0] + ' 수식: ' + String(c0.getFormula() || '').slice(0, 140) + ' / 값: ' + String(c0.getDisplayValue()).slice(0, 40) + ' / 옆 B: ' + String(c0.offset(0, 1).getDisplayValue()).slice(0, 40) + ']'; } } catch (e) {}
+      note_(left.length ? '⚠ 한눈에 오류 칸(' + bad.slice(0, 3).join(', ') + ')을 다시 그렸는데 ' + left.length + '개 남음: ' + left.slice(0, 3).join(', ') + why : '✓ 한눈에 오류 칸 ' + bad.length + '개(' + bad.slice(0, 3).join(', ') + ') → 다시 그려서 고침');
     }
   } catch (e) { note_('한눈에 오류 칸 확인 실패: ' + e); }
   // 리뷰 사진 AI 분류가 남은 의뢰가 있으면 이어서 (10/31)
@@ -7875,7 +7877,7 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '30';
+const DASH_VER = '31';
 // 한눈에 '리뷰 취합할 것' 칸에 보일 것: 의뢰 전체 리뷰가 끝난(RVRPT_) 의뢰 중 업체 전송 체크 안 했거나 체크한 지 3일 안 된 것. 최근 40일 진행만, 기대평 빼고
 //  날마다 취합하던 줄은 없앰 (사용자 요청 10/26: 날짜별로 말고 한 캠페인이 다 끝나면 그때 한 번에)
 function rvItems_(allRuns, props) {
@@ -8095,7 +8097,14 @@ function buildDashboard_(force) {
     const w = windowOf_(allRuns, r);
     const ts = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A' + x.start + ':A') + ')';
     // 명단 시트 하나를 여러 날이 같이 쓰면 그날 몫(진행일 0시 ~ 다음 진행 0시)만 셈
-    if (mixDay) sh.getRange(rr, 6).setValue(expCount_(r, Number(r['인원']) || 0, allRuns));
+    // A·B묶음 기대평: 폼 '작성한 링크 묶음' 답으로 바로 셈 (11/2: 값으로 적어서 15분 뒤에야 바뀜). 답 없는 사람은 그날 계획(A 먼저)대로. 수식이 안 되면 예전처럼 값
+    const setCol = mixDay ? (x.hd || []).findIndex(function (h) { return String(h).indexOf(EXP_SET_Q) >= 0; }) + 1 : 0, mxD = mixDay ? EXP_MIX[dateTok_(r['명단 제목'])] : null;
+    if (mixDay && setCol > 0 && x.ref && x.start) {
+      const v = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A' + x.start + ':' + colLetter_(setCol)) + ')';
+      sh.getRange(rr, 6).setFormula('=IFERROR(LET(v,' + v + ',ts,INDEX(v,,1),s,INDEX(v,,' + setCol + '),w,ISNUMBER(ts)*(ts>=' + (w.from ? fmt(w.from) : 0) + ')*(ts<' + (isFinite(w.to) ? fmt(w.to) : 99999) + '),' +
+        'tot,SUMPRODUCT(w),na,SUMPRODUCT(w*(LEFT(s,1)="A")),nb,SUMPRODUCT(w*(LEFT(s,1)="B")),rest,MAX(0,tot-na-nb),adda,MIN(rest,MAX(0,' + mxD[0] + '-na)),(na+adda)*' + EXP_SETS.A.length + '+(nb+rest-adda)*' + EXP_SETS.B.length + '),' + expCount_(r, Number(r['인원']) || 0, allRuns) + ')');
+    }
+    else if (mixDay) sh.getRange(rr, 6).setValue(expCount_(r, Number(r['인원']) || 0, allRuns));
     else sh.getRange(rr, 6).setFormula(w.shared
       ? '=IFERROR(' + (per > 1 ? per + '*' : '') + 'LET(v,' + ts + ',SUMPRODUCT(ISNUMBER(v)*(v>=' + (w.from ? fmt(w.from) : 0) + ')*(v<' + (isFinite(w.to) ? fmt(w.to) : 99999) + '))),"허용 필요")'
       : '=IFERROR(' + (per > 1 ? per + '*' : '') + 'SUMPRODUCT(ISNUMBER(' + ts + ')),"허용 필요")');   // 응답 없는 새 명단 시트는 빈 글자("")가 와서 COUNTA면 1로 셈 → 날짜(타임스탬프)만 셈
