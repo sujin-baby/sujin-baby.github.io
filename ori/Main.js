@@ -3460,7 +3460,8 @@ function ensureReviewGuideMsgs_(runs) {
       const first = c.runs.filter(function (x) { return x['시트ID']; })[0] || r;
       let rv = null; try { rv = JSON.parse(props.getProperty('RV_' + first['시트ID']) || 'null'); } catch (e) {}
       // 포토제공(사진 받은 뒤 진행 도우미로 세트 배정)·구매확정만은 리뷰 가이드 없음. 리뷰 정보가 없는 예전 진행도 이름은 넣고 가이드는 '사장님께 물어보기'로 (10/21)
-      if (!rv) rv = { kind: 'text', mix: '', guide: '' };
+      // 리뷰 정보가 없으면 진행목록 '포토' 칸이 '유'일 때 포토대기, 아니면 텍스트 (11/2 노티아 제주레몬: 포토 유인데 텍스트리뷰 30명으로 나감)
+      if (!rv) rv = { kind: /^\s*(유|y)/i.test(String(first['포토'] || '')) ? 'photo' : 'text', mix: '', guide: '' };
       if (rv.kind === 'confirm') return;
       // 원고제공·자율 의뢰는 사용자 원고 가이드 글 (전체 포토리뷰, 10/23)
       if (isWongo_(rv)) { queueMsg_(String(r['카톡방'] || bareTitle_(r['명단 제목'])), WONGO_GUIDE, '방 공지'); note_('✓ 원고 리뷰 가이드 넣음: ' + bareTitle_(r['명단 제목'])); return; }
