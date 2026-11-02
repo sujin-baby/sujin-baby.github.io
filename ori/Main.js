@@ -4355,8 +4355,13 @@ function rvAssign_(items, mix, nDays) {
     order.sort(function (a, b) { return groups[b].length - groups[a].length; }).forEach(function (key) {
       groups[key].forEach(function (it) {
         let bi = -1;
-        const fit = room.map(function (x, i) { return [x, i]; }).filter(function (q) { return q[0] >= groups[key].length; });
-        const pickFrom = fit.length ? fit : room.map(function (x, i) { return [x, i]; }).filter(function (q) { return q[0] > 0; });
+        // 여러 계정으로 산 사람은 쓰기 쉬운 별점·텍스트로, 한 계정인 사람은 포토 먼저 (11/2 사용자 요청)
+        const multi = groups[key].length > 1, isPhoto = function (i) { return /포토|사진/.test(mix[i].label); };
+        const prefer = function (q) { return multi ? !isPhoto(q[1]) : isPhoto(q[1]); };
+        const all = room.map(function (x, i) { return [x, i]; });
+        const fitAll = all.filter(function (q) { return q[0] >= groups[key].length; }), anyAll = all.filter(function (q) { return q[0] > 0; });
+        const fitP = fitAll.filter(prefer), anyP = anyAll.filter(prefer);
+        const pickFrom = multi ? (fitP.length ? fitP : fitAll.length ? fitAll : anyP.length ? anyP : anyAll) : (anyP.length ? anyP : anyAll);
         if (pickFrom.length) bi = pickFrom.sort(function (a, b) { return b[0] - a[0] || a[1] - b[1]; })[0][1];
         if (it.__rvKey === key && it.__rvI !== undefined && room[it.__rvI] > 0) bi = it.__rvI;
         if (bi < 0) { it.rv = ''; return; }
@@ -4501,7 +4506,7 @@ function reviewPage_(p) {
           }).join('');
       })() +
       '<label>리뷰내용 가이드<input name="guide" value="' + esc(o.guide) + '" placeholder="예: 너무 길지 않게 간단하게 부탁드려요"></label>' +
-      '<label>포토대기일 때: 업체에서 받은 사진 세트 수 (같은 배경 사진끼리 한 세트, 비우면 \'포토대기\' 공지)<input name="sets" inputmode="numeric" value="' + esc(o.sets) + '" placeholder="예: 16"></label><button>이대로 나누기</button></form>';
+      '<label>업체한테 리뷰 사진을 이미 받았으면: 받은 사진 묶음 수 <span class="s">(사람마다 쓸 사진이 한 묶음. 아직 안 받았으면 비워 두세요 → \'포토대기\'로 나가요)</span><input name="sets" inputmode="numeric" value="' + esc(o.sets) + '" placeholder="안 받았으면 비움"></label><button>이대로 나누기</button></form>';
     if (plan.err) body += '<p class="err">' + esc(plan.err) + '</p>';
     else {
       body += '<p class="s">' + esc(plan.total + '명 · ' + plan.sum.join(' / ')) + (plan.unknown ? '<br><b class="err">' + plan.unknown + '명은 어느 상품을 샀는지 몰라요 (아래 공지에 따로 표시)</b>' : '') + '</p>';
