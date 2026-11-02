@@ -476,6 +476,25 @@
   const html = document.documentElement.innerHTML;
   const qs = new URLSearchParams(L.search);
   let item = qs.get("itemId") || qs.get("itemid") || "";
+  if (!item) {
+    const vid = qs.get("vendorItemId") || qs.get("vendoritemid") || "";
+    if (vid) {
+      const m1 = html.match(new RegExp('["\']?itemId["\']?\\s*[:=]\\s*["\']?(\\d{8,})["\']?[^{}]{0,300}?["\']?vendorItemId["\']?\\s*[:=]\\s*["\']?' + vid + '["\']?'));
+      if (m1) item = m1[1];
+      if (!item) {
+        const m2 = html.match(new RegExp('["\']?vendorItemId["\']?\\s*[:=]\\s*["\']?' + vid + '["\']?[^{}]{0,300}?["\']?itemId["\']?\\s*[:=]\\s*["\']?(\\d{8,})["\']?'));
+        if (m2) item = m2[1];
+      }
+    }
+  }
+  if (!item) { const cm = String(document.body ? document.body.innerText : "").match(/(?:쿠팡\s*)?상품\s*번호\s*[:：]?\s*(\d+)\s*-\s*(\d{6,})/); if (cm && cm[1] === pm[1]) item = cm[2]; }
+  if (!item) {
+    for (const el of document.querySelectorAll('[class*="product-id"], [class*="productId"], .prod-buy-header__product-id')) {
+      const t = el.textContent || "";
+      const cm = t.match(/(\d+)\s*-\s*(\d{6,})/);
+      if (cm && cm[1] === pm[1]) { item = cm[2]; break; }
+    }
+  }
   if (!item) { const m = html.match(/["']?itemId["']?\s*[:=]\s*["']?(\d{8,})/); if (m) item = m[1]; }
   const mask = s => s && s.length > 8 ? s.slice(0, 4) + "***" + s.slice(-4) : s;
   /* 상품명: 화면에 보이는 제목. og:title은 ' - 일반거치대' 같은 분류가 붙어서 마지막에 */
