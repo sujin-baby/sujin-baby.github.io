@@ -197,7 +197,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v154 (쿠팡 상품번호 11자리 이상이면 ❗)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v155 (확장이 예전 버전이면 알려 주고 멈춤, 확장 1.8.3)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -371,7 +371,7 @@ details.help-box summary {
         <div class="card-out" id="box-bug-report" style="margin: 14px 0; background: #fff5f7; border: 2px solid #e03131; border-radius: 12px; padding: 14px; box-shadow: 2px 2px 0 var(--ink, #3a2230);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:4px;">
             <span style="font-weight: 900; font-size: 13.5px; color: #c92a2a;">🚨 공지 오류 제보 / 수정 요청 (피클·클로드 전달용)</span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v154</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v155</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 8px;">
             공지가 이상하게 나왔나요? 아래 태그를 누르거나 문제점을 적고 <b>[원터치 복사]</b>를 누르면, <b>의뢰서 원문 + 생성된 공지 + 문제점</b>이 한 번에 복사되어 피클 채팅창이나 클로드 코드에 바로 전달할 수 있어요.
@@ -2419,7 +2419,7 @@ details.help-box summary {
       if (noUrl) return;
       const ab = document.createElement("button"); ab.type = "button"; ab.className = "pl-auto"; ab.hidden = !document.documentElement.hasAttribute("data-pl-ext");
       ab.textContent = urls.length > 1 ? (u.label || "상품 " + (i + 1)) + " 자동 가져오기" : "자동 가져오기";
-      ab.addEventListener("click", () => { autoIdx = { g: cur, i: i, at: Date.now() }; $("auto-st").textContent = "확장 프로그램에 보냈어요…"; document.dispatchEvent(new CustomEvent("pl-auto", { detail: JSON.stringify({ url: a.href }) })); });
+      ab.addEventListener("click", () => { const ov = extOld(); if (ov) { extOldSay(ov); return; } autoIdx = { g: cur, i: i, at: Date.now() }; $("auto-st").textContent = "확장 프로그램에 보냈어요…"; document.dispatchEvent(new CustomEvent("pl-auto", { detail: JSON.stringify({ url: a.href }) })); });
       box.appendChild(ab);
     });
 
@@ -3125,7 +3125,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v154 공지 오류 제보]",
+        "🚨 [가이드 생성기 v155 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",
@@ -3216,7 +3216,22 @@ details.help-box summary {
   const cpRead = () => { const t = $("cp").value; if (t === cpLast) return; cpLast = t; fillCoupang(parseCoupang(t)); };
   $("cp").addEventListener("input", cpRead);
   // 확장 프로그램(gen.js)이 붙으면 [자동 가져오기] 보이기, 결과가 오면 '상품 정보 붙여넣기' 칸에 넣고 바로 읽음
-  new MutationObserver(() => { const on = document.documentElement.hasAttribute("data-pl-ext"); document.querySelectorAll(".pl-auto").forEach(b => { b.hidden = !on; }); })
+  // 확장 프로그램이 예전 버전이면 알려 주고 [자동 가져오기]·[한 번에 가져오기]를 안 보냄
+  //  (11/3: 1.7.0이 깔린 채라 쿠팡마다 '생성기 새로고침' 안내만 하고 한 번에 가져오기가 몇십 분 멈춤). EXT_VER = 이 페이지 EXT_ZIP 버전 (확장을 고치면 같이, 시험이 확인)
+  const EXT_VER = "1.8.3";
+  function extOld() {
+    const v0 = document.documentElement.getAttribute("data-pl-ext"); if (!v0) return "";
+    const a = v0.split(".").map(Number), b = EXT_VER.split(".").map(Number);
+    for (let k = 0; k < 3; k++) if ((a[k] || 0) !== (b[k] || 0)) return (a[k] || 0) < (b[k] || 0) ? v0 : "";
+    return "";
+  }
+  function extOldSay(v0) {
+    const t = "⚠ 확장 프로그램이 예전 버전(" + v0 + ")이에요. 아래 [확장 프로그램 받기]로 " + EXT_VER + "를 받아 쓰던 폴더에 덮어쓰고, chrome://extensions 에서 ↻ 누른 뒤 이 페이지를 새로고침(⌘R)해 주세요.";
+    $("auto-st").textContent = t;
+    const d = $("ext-dl").closest("details"); if (d) d.open = true;
+    return t;
+  }
+  new MutationObserver(() => { const on = document.documentElement.hasAttribute("data-pl-ext"); document.querySelectorAll(".pl-auto").forEach(b => { b.hidden = !on; }); const ov = extOld(); if (ov) extOldSay(ov); })
     .observe(document.documentElement, { attributes: true, attributeFilter: ["data-pl-ext"] });
   document.addEventListener("pl-push", e => {
     let m = {}; try { m = JSON.parse(e.detail); } catch (x) { return; }
@@ -3264,6 +3279,7 @@ details.help-box summary {
     // 확장 프로그램이 멈춘 경우(상품 페이지가 안 열림 등)는 4분 기다리지 않고 다음 상품으로
     // 쿠팡 차단 화면이면 다음 쿠팡 상품도 막히니(더 열면 더 오래 막힘) 한 번에 가져오기를 멈춤 (11/1)
     else if (/차단|사용권한/.test(m.status)) { batchStop = true; batchBlocked = true; const w = batchWait; batchWait = null; w("fail"); }
+    else if (/생성기를\s*새로고침/.test(m.status)) { batchStop = true; const w = batchWait; batchWait = null; w("fail"); const ov = extOld(); if (ov) extOldSay(ov); }
     else if (/안 열렸어요|멈췄어요|못 읽었어요|읽을 수 없어요/.test(m.status)) { const w = batchWait; batchWait = null; w("fail"); }
   });
   const bsleep = ms => new Promise(r => setTimeout(r, ms));
@@ -3293,6 +3309,7 @@ details.help-box summary {
       return;
     }
     if (!guides.length || !String(v("req") || "").trim()) { batchSay("의뢰서를 먼저 붙여넣어 주세요.", true); return; }
+    { const ov = extOld(); if (ov) { batchSay(extOldSay(ov), true); return; } }
     batchOn = true; batchStop = false; batchBlocked = false;
     $("batch-go").textContent = "■ 멈추기 (가져오는 중)";
     const fails = [];
