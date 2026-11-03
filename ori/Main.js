@@ -1781,12 +1781,16 @@ function setOptionChoices_(form, opts) {
   });
 }
 
+// 닉네임 질문 아래 안내 (11/3 사용자: 너무 딱딱함 → 부드럽게)
+const NICK_HELP = '카톡방에서 쓰시는 닉네임 그대로 적어 주세요 😊 두 계정으로 구매하셨다면 두 번 모두 같은 닉네임으로 부탁드려요!';
+const NICK_HELP_OLD = '공지에 적힌 이름과 같게 적어 주세요. 두 계정으로 사면 두 번 다 같은 닉네임으로.';
 // 폼 맨 위에 '방에 참여한 카카오톡 닉네임' 질문 (필수). 수취인 이름이 아니라 이 닉네임으로 옵션을 맞게 샀는지 확인함
 function ensureNickQuestion_(form) {
-  const has = form.getItems().some(function (it) { return MATCH.nick.test(it.getTitle()); });
-  if (has) return false;
+  const hit = form.getItems().filter(function (it) { return MATCH.nick.test(it.getTitle()); })[0];
+  /* 이미 있는 질문은 예전 딱딱한 안내 글일 때만 새 글로 바꿈 (사용자가 직접 고친 글은 그대로, 11/3) */
+  if (hit) { try { const ti = hit.asTextItem(); if (ti.getHelpText() === NICK_HELP_OLD) ti.setHelpText(NICK_HELP); } catch (e) {} return false; }
   const item = form.addTextItem().setTitle(NICK_Q).setRequired(true)
-    .setHelpText('공지에 적힌 이름과 같게 적어 주세요. 두 계정으로 사면 두 번 다 같은 닉네임으로.');
+    .setHelpText(NICK_HELP);
   form.moveItem(item.getIndex(), 0);
   return true;
 }
