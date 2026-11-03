@@ -6243,7 +6243,7 @@ function rvPendingCamps_(runs, props) {
     }
     ow.w.forEach(function (w) { words[w] = 1; });
     mine.forEach(function (r) {
-      rvWords_(campOf_(r['명단 제목'])).forEach(function (w) { words[w] = 1; });
+      rvWords_(campOf_(r['명단 제목']).replace(/외(?=\s|\d|$)/g, ' ')).forEach(function (w) { words[w] = 1; });   // '효자손외' → '효자손' (11/3: '외'가 붙어 캡처 속 '효자손'과 안 맞았음)
       String(formDescRead_(r['폼ID'], descAge_(r))).split('\n').forEach(function (l) { if (/상품명|키워드|판매처/.test(l)) rvWords_(l.replace(/^.*?[:：]/, '')).forEach(function (w) { words[w] = 1; }); });
     });
     out.push({ sid: sid, name: campOf_(mine[0]['명단 제목']), imgId: imgId, words: Object.keys(words) });
