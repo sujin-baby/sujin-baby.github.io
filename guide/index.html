@@ -192,12 +192,18 @@ details.help-box summary {
   margin: 10px 0 !important;
 }
 
+/* 카톡 방제·명단 제목 줄: 이름표 · 글 · 글자 수 · 복사 단추 사이 띄우기 (11/3) */
+.title-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 10px 0; }
+.title-line .k { flex: 0 0 auto; min-width: 64px; font-weight: 700; color: var(--ink-soft); }
+.title-line code { flex: 1 1 220px; min-width: 0; padding: 6px 12px; background: var(--tint); border: 1px dashed var(--pink-line); border-radius: 8px; word-break: break-all; line-height: 1.5; }
+.title-line .note { flex: 0 0 auto; font-size: 12px; color: var(--ink-faint); }
+.title-line button { flex: 0 0 auto; margin-left: auto; }
 </style>
 </head>
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v155 (확장이 예전 버전이면 알려 주고 멈춤, 확장 1.8.3)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v156 (과일건 사업자 줄 없음, 방제·명단 제목 줄 간격, 확장 1.8.3)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -371,7 +377,7 @@ details.help-box summary {
         <div class="card-out" id="box-bug-report" style="margin: 14px 0; background: #fff5f7; border: 2px solid #e03131; border-radius: 12px; padding: 14px; box-shadow: 2px 2px 0 var(--ink, #3a2230);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:4px;">
             <span style="font-weight: 900; font-size: 13.5px; color: #c92a2a;">🚨 공지 오류 제보 / 수정 요청 (피클·클로드 전달용)</span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v155</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v156</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 8px;">
             공지가 이상하게 나왔나요? 아래 태그를 누르거나 문제점을 적고 <b>[원터치 복사]</b>를 누르면, <b>의뢰서 원문 + 생성된 공지 + 문제점</b>이 한 번에 복사되어 피클 채팅창이나 클로드 코드에 바로 전달할 수 있어요.
@@ -2768,8 +2774,7 @@ details.help-box summary {
       "참고하여 주세요!",
       "실배송은 방에 인원이 다쓰셔야 페이백 요청됩니다",
       "",
-      "★사업자 " + BIZ + " ★",
-      "★사업자 " + BIZ + " ★",
+      ...($("fruit").checked ? [] : ["★사업자 " + BIZ + " ★", "★사업자 " + BIZ + " ★"]),   // 과일건은 사업자 줄 없음 (사용자 11/3)
       "☆★☆★☆★☆★☆★☆★☆★",
       "양식 작성 폼▼",
       v("form") || "(구글폼 링크)",
@@ -2789,8 +2794,7 @@ details.help-box summary {
       "실배송은 방에 인원이 다쓰셔야 페이백 요청됩니다",
       "일정기간 지나면 회오리가 방탈합니다!",
       "지급이 어려울수 있으니 안내된 기간은 지켜주세요! 감사합니다",
-      "★사업자 " + BIZ + " ★",
-      "★사업자 " + BIZ + " ★",
+      ...($("fruit").checked ? [] : ["★사업자 " + BIZ + " ★", "★사업자 " + BIZ + " ★"]),   // 과일건은 사업자 줄 없음 (사용자 11/3)
       "",
       "☆★☆★ 양식 작성 폼 ☆★☆★",
       v("form") || "(구글폼 링크)"
@@ -3125,7 +3129,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v155 공지 오류 제보]",
+        "🚨 [가이드 생성기 v156 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",
