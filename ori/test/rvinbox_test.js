@@ -1,4 +1,4 @@
-// 리뷰 사진 받는 곳(rvInboxSort_): 캡처 속 상품 이름으로 압축 기다리는 의뢰를 찾아 그 의뢰 리뷰이미지/종류 폴더로, 못 찾으면 '어느 의뢰인지 모름' + 할 일  node rvinbox_test.js <Main.js>
+// 리뷰 사진 받는 곳(rvInboxSort_): (11/3) 리뷰가 아직 다 안 끝난 의뢰(실링팬, RVRPT_ 없음)도 명단이 끝났으면 받음. 캡처 속 상품 이름으로 압축 기다리는 의뢰를 찾아 그 의뢰 리뷰이미지/종류 폴더로, 못 찾으면 '어느 의뢰인지 모름' + 할 일  node rvinbox_test.js <Main.js>
 const { makeEnv, Sheet } = require('./harness'); const vm = require('vm');
 const env = makeEnv({ main: process.argv[2] }); const G = k => vm.runInContext(k, env);
 const it = a => { let i = 0; const c = a.slice(); return { hasNext: () => i < c.length, next: () => c[i++] }; };
@@ -33,11 +33,11 @@ const msgs = []; env.__msgs = msgs; G("queueMsg_ = function (room, msg, kind) { 
 G("formDescRead_ = function (id) { return id === 'FA' ? '🐥상품명 : 엔케이 감홍사과 부사 5kg\\n🐥판매처 : 모두의농수산' : '🐥상품명 : 모야무 실링팬 천장 선풍기'; }");
 const LH = G('LIST_HEADER'), mk = o => LH.map(h => o[h] !== undefined ? o[h] : ''), d0 = new Date(); d0.setHours(0, 0, 0, 0);
 env.__ss.sheets['진행목록'] = new Sheet('진행목록', [LH.slice(),
-  mk({ '진행일': new Date(d0 - 10 * 864e5), '명단 제목': '#택10.19 모두의농수산감홍사과 5 (뽀짝오리)', '시트ID': 'SA', '폼ID': 'FA', '진행 상태': '진행중' }),
-  mk({ '진행일': new Date(d0 - 5 * 864e5), '명단 제목': '#10.26 실링팬 2 (뽀짝오리)', '시트ID': 'SB', '폼ID': 'FB', '진행 상태': '진행중' }),
-  mk({ '진행일': new Date(d0 - 5 * 864e5), '명단 제목': '#10.26 텀블러 2 (뽀짝오리)', '시트ID': 'SC', '폼ID': 'FC', '진행 상태': '진행중' }),
+  mk({ '진행일': new Date(d0 - 10 * 864e5), '명단 제목': '#택10.19 모두의농수산감홍사과 5 (뽀짝오리)', '시트ID': 'SA', '폼ID': 'FA', '진행 상태': '진행중', '마감 시각': new Date(d0 - 9 * 864e5) }),
+  mk({ '진행일': new Date(d0 - 5 * 864e5), '명단 제목': '#10.26 실링팬 2 (뽀짝오리)', '시트ID': 'SB', '폼ID': 'FB', '진행 상태': '진행중', '마감 시각': new Date(d0 - 4 * 864e5) }),
+  mk({ '진행일': new Date(d0 - 5 * 864e5), '명단 제목': '#10.26 텀블러 2 (뽀짝오리)', '시트ID': 'SC', '폼ID': 'FC', '진행 상태': '진행중', '마감 시각': new Date(d0 - 4 * 864e5) }),
   mk({ '진행일': new Date(d0), '명단 제목': '11.02 백발백중 도서 기대평 39', '플랫폼': '기대평', '시트ID': 'SE', '폼ID': 'FE', '진행 상태': '진행중', '폴더 링크': 'https://drive.google.com/drive/folders/EXPFOLDER0000000000000000000' })]);
-[['GEMINI_KEY', 'AQ.testkey_zzzzzzzzzzzzzzzzzzzzzzzzzz'], ['RVRPT_SA', '1'], ['RVIMG_SA', 'D_리뷰이미지A'], ['RVRPT_SB', '1'], ['RVIMG_SB', 'D_리뷰이미지B'], ['RVINBOX_ID', 'D_리뷰 사진 받는 곳']].forEach(([k, v]) => env.__props.set(k, v));
+[['GEMINI_KEY', 'AQ.testkey_zzzzzzzzzzzzzzzzzzzzzzzzzz'], ['RVRPT_SA', '1'], ['RVIMG_SA', 'D_리뷰이미지A'], ['RVIMG_SB', 'D_리뷰이미지B'], ['RVINBOX_ID', 'D_리뷰 사진 받는 곳']].forEach(([k, v]) => env.__props.set(k, v));
 G('rvInboxSort_(null)');
 const cnt = (f, n) => { const s = f.subs.find(x => x.name === n || x.name.indexOf(n + ' (') === 0); return s ? s.files.length : 0; };
 const res = 'A 포토 ' + cnt(imgA, '포토') + ', A 구매인증 ' + cnt(imgA, '구매인증 (압축 제외)') + ', B 텍스트 ' + cnt(imgB, '텍스트') + ', 모름 ' + cnt(inbox, '어느 의뢰인지 모름') + ', 남음 ' + inbox.files.length;

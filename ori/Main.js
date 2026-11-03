@@ -6215,19 +6215,38 @@ function rvInbox_() {
 }
 // 상품 이름 비교용 낱말 (2글자 이상, 띄어쓰기·기호로 나눔)
 function rvWords_(t) { return String(t || '').replace(/\[[^\]]*\]|\([^)]*\)/g, ' ').split(/[\s,·/|+\-_:：]+/).map(function (w) { return w.replace(/[^\w가-힣]/g, ''); }).filter(function (w) { return w.length >= 2 && !/^\d+$/.test(w); }); }
-// 압축을 기다리는 의뢰들 → [{ sid, name, img, parent, words }]
+// 리뷰 사진을 받을 의뢰들 → [{ sid, name, imgId, words }]
+//  11/3: 예전엔 '의뢰 리뷰가 다 끝난(RVRPT_) 의뢰'만 받아서, 날짜별로 미리 저장한 사진(실 효자손외 10/27·28)이 다 '어느 의뢰인지 모름'으로 감
+//  → 명단이 끝난(마감) 의뢰면 리뷰 중이어도 받음. 상품 낱말은 의뢰 이름·공지 상품명에 더해 명단 시트 '옵션' 칸(상품명(옵션명))도
 function rvPendingCamps_(runs, props) {
   const all = props.getProperties(), cut = today_().getTime() - 40 * 86400000, by = {};
   runs.forEach(function (r) { if (r['시트ID'] && !isExpect_(r) && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut) (by[r['시트ID']] = by[r['시트ID']] || []).push(r); });
-  const out = [];
+  const out = [], day = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
   Object.keys(by).forEach(function (sid) {
     const mine = by[sid], words = {};
-    if (!all['RVRPT_' + sid] || !all['RVIMG_' + sid] || mine[0]['업체 전송']) return;
+    if (mine[0]['업체 전송'] || !mine.some(function (r) { return r['마감 시각'] instanceof Date; })) return;
+    let imgId = all['RVIMG_' + sid];
+    if (!imgId) { try { const f = rvFolder_(mine, props, sid); if (f) imgId = f.img.getId(); } catch (e) {} }
+    if (!imgId) return;
+    // 명단 시트 '옵션' 칸 낱말 (하루 한 번 읽어서 기억)
+    let ow = null; try { ow = JSON.parse(all['RVOPTW_' + sid] || 'null'); } catch (e) {}
+    if (!ow || ow.d !== day) {
+      ow = { d: day, w: [] };
+      try {
+        const lsh = SpreadsheetApp.openById(sid).getSheetByName(LIST_TAB);
+        if (lsh && lsh.getLastRow() >= 3) {
+          const hd = lsh.getRange(2, 1, 1, lsh.getLastColumn()).getValues()[0], oc = hd.findIndex(function (h) { return MATCH.opt.test(String(h)); });
+          if (oc >= 0) { const seen = {}; lsh.getRange(3, oc + 1, lsh.getLastRow() - 2, 1).getValues().forEach(function (v) { rvWords_(String(v[0]).replace(/[()]/g, ' ')).forEach(function (w) { seen[w] = 1; }); }); ow.w = Object.keys(seen).slice(0, 80); }
+        }
+      } catch (e) {}
+      try { props.setProperty('RVOPTW_' + sid, JSON.stringify(ow)); } catch (e) {}
+    }
+    ow.w.forEach(function (w) { words[w] = 1; });
     mine.forEach(function (r) {
       rvWords_(campOf_(r['명단 제목'])).forEach(function (w) { words[w] = 1; });
       String(formDescRead_(r['폼ID'], descAge_(r))).split('\n').forEach(function (l) { if (/상품명|키워드|판매처/.test(l)) rvWords_(l.replace(/^.*?[:：]/, '')).forEach(function (w) { words[w] = 1; }); });
     });
-    out.push({ sid: sid, name: campOf_(mine[0]['명단 제목']), imgId: all['RVIMG_' + sid], words: Object.keys(words) });
+    out.push({ sid: sid, name: campOf_(mine[0]['명단 제목']), imgId: imgId, words: Object.keys(words) });
   });
   return out;
 }
@@ -6245,8 +6264,8 @@ function rvInboxSort_(runs) {
   if (!geminiKey_() || Number(props.getProperty('GEMINI_WAIT') || 0) > Date.now()) return;
   let inbox; try { inbox = rvInbox_(); } catch (e) { return; }
   // (11/2 한 번) '어느 의뢰인지 모름'에 들어간 사진을 다시 받는 곳으로 → 기대평(책 사이트) 분류로 다시 봄
-  if (!props.getProperty('RVINBOX_RETRY_V1')) {
-    props.setProperty('RVINBOX_RETRY_V1', '1');
+  if (!props.getProperty('RVINBOX_RETRY_V2')) {
+    props.setProperty('RVINBOX_RETRY_V1', '1'); props.setProperty('RVINBOX_RETRY_V2', '1');   // V2 (11/3): 리뷰 중인 의뢰도 받게 바꾼 뒤 한 번 더
     try { const ui = inbox.getFoldersByName(RV_INBOX_UNKNOWN); if (ui.hasNext()) { const uf = ui.next(), fi = uf.getFiles(); while (fi.hasNext()) { try { fi.next().moveTo(inbox); } catch (e) {} } } } catch (e) {}
   }
   const files = [], it = inbox.getFiles();
@@ -6265,15 +6284,17 @@ function rvInboxSort_(runs) {
   for (let i = 0; i < files.length; i++) {
     if (Date.now() - t0 > 60000 || late_(230) || (globalThis.__ORI_T0 && Date.now() - Number(props.getProperty('WANT_LOCK') || 0) < 300000)) break;   // 직접 하는 일이 기다리면 멈춤
     const x = files[i];
-    let o;
-    try { o = subTime_('리뷰 사진 AI', function () { return geminiReadCapture_(x.getBlob()); }); }
+    let o = null;
+    // 전에 AI가 읽은 사진이면(사진 설명 'AI {…}') 다시 안 물어봄
+    try { const ds = String(x.getDescription() || ''); if (/^AI \{/.test(ds)) o = JSON.parse(ds.slice(3)); } catch (e) { o = null; }
+    if (!o) try { o = subTime_('리뷰 사진 AI', function () { return geminiReadCapture_(x.getBlob()); }); }
     catch (e) {
       if (e && e.quota) { props.setProperty('GEMINI_WAIT', String(Date.now() + 90000)); break; }
       note_('리뷰 사진 AI 읽기 실패 (받는 곳 ' + x.getName() + '): ' + (e && e.message || e));
       if (/키가 안 맞아요|키 없음/.test(String(e && e.message))) break;
       continue;
     }
-    try { x.setDescription('AI ' + JSON.stringify(o)); } catch (e) {}
+    try { if (!/^AI \{/.test(String(x.getDescription() || ''))) x.setDescription('AI ' + JSON.stringify(o)); } catch (e) {}
     // 기대평(백발백중 도서): 책 사이트 리뷰는 오늘 기대평 진행 폴더 → 리뷰이미지 → 날짜 → 사이트별 (11/2 사용자 요청)
     const book = /예스\s*24|yes\s*24|알라딘|교보/i.test(o.site + ' ' + o.product) || /짱\s*(개념|수학)|백발백중/.test(o.product);
     if (book) {
@@ -6311,7 +6332,7 @@ function rvInboxSort_(runs) {
     if (props.getProperty('RVINBOX_UNK') !== day) {
       props.setProperty('RVINBOX_UNK', day);
       queueMsg_('내 할 일', '📷 리뷰 사진 받는 곳에 어느 의뢰인지 모르는 사진이 있어요 (' + unknown + '장) → 아래 폴더에서 맞는 의뢰 리뷰이미지 폴더로 옮겨 주세요\n' + sub(inbox, RV_INBOX_UNKNOWN).getUrl() +
-        (camps.length ? '\n압축 기다리는 의뢰: ' + camps.map(function (c) { return c.name; }).join(', ') : '\n지금 압축 기다리는 의뢰가 없어요 (리뷰 체크가 다 끝난 의뢰만 받아요)'), '할 일');
+        (camps.length ? '\n리뷰 사진 받는 의뢰: ' + camps.map(function (c) { return c.name; }).join(', ') : '\n지금 리뷰 사진을 받을 의뢰가 없어요 (명단이 끝난 의뢰만 받아요)'), '할 일');
     }
   }
 }
