@@ -53,5 +53,18 @@ ok(!/pl-cp|cpSearchUrl|batchGesture|window\.open\(a\.href/.test(gen), '생성기
 ok(/\/차단\|사용권한\/\.test\(m\.status\)\) \{ batchStop = true; batchBlocked = true;/.test(gen), '한 번에 가져오기: 쿠팡 차단이면 멈춤');
 ok(!/r\.seller = bCand/.test(gen), '생성기: 판매처를 상품명 첫 단어로 안 채움');
 
+// 5) 확장 버전: 생성기 EXT_VER = manifest 버전 (확장을 고치면 같이 올려야 예전 확장 경고가 맞게 뜸), 예전 확장이면 안 보내고 알림 (11/3)
+const man = JSON.parse(fs.readFileSync(path.join(root, 'ori/ext/manifest.json'), 'utf8'));
+const ev = (gen.match(/const EXT_VER = "([\d.]+)"/) || [])[1];
+ok(ev === man.version, '생성기 EXT_VER(' + ev + ') = 확장 manifest 버전(' + man.version + ') — 확장을 고치면 EXT_VER도 같이');
+{
+  const c = { document: { documentElement: { getAttribute: () => c.__v } }, EXT_VER: ev }; vm.createContext(c);
+  vm.runInContext('const EXT_VER = "' + ev + '";\n' + fnSrc(gen, 'function extOld(') + '\nthis.extOld = extOld;', c);
+  c.__v = '1.7.0'; const o1 = c.extOld(); c.__v = ev; const o2 = c.extOld(); c.__v = null; const o3 = c.extOld(); c.__v = '9.0.0'; const o4 = c.extOld();
+  ok(o1 === '1.7.0' && o2 === '' && o3 === '' && o4 === '', '예전 확장(1.7.0)만 경고, 같거나 새 버전·확장 없음은 경고 안 함');
+}
+ok(/const ov = extOld\(\); if \(ov\) \{ batchSay\(extOldSay\(ov\), true\); return; \}/.test(gen) && /if \(ov\) \{ extOldSay\(ov\); return; \} autoIdx/.test(gen), '예전 확장이면 [한 번에 가져오기]·[자동 가져오기]를 안 보내고 알림');
+ok(/\/생성기를\\s\*새로고침\/\.test\(m\.status\)\) \{ batchStop = true;/.test(gen), "예전 확장이 '생성기를 새로고침'만 하면 한 번에 가져오기 바로 멈춤 (4분씩 안 기다림)");
+
 if (fail) { console.error(fail + '개 실패'); process.exit(1); }
 console.log('✓ 쿠팡 시험 통과');

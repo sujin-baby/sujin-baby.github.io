@@ -1,4 +1,4 @@
-// 리뷰 사진 받는 곳(rvInboxSort_): 캡처 속 상품 이름으로 압축 기다리는 의뢰를 찾아 그 의뢰 리뷰이미지/종류 폴더로, 못 찾으면 '어느 의뢰인지 모름' + 할 일  node rvinbox_test.js <Main.js>
+// 리뷰 사진 받는 곳(rvInboxSort_): (11/3) 리뷰가 아직 다 안 끝난 의뢰(실링팬, RVRPT_ 없음)도 명단이 끝났으면 받음. 캡처 속 상품 이름으로 압축 기다리는 의뢰를 찾아 그 의뢰 리뷰이미지/종류 폴더로, 못 찾으면 '어느 의뢰인지 모름' + 할 일  node rvinbox_test.js <Main.js>
 const { makeEnv, Sheet } = require('./harness'); const vm = require('vm');
 const env = makeEnv({ main: process.argv[2] }); const G = k => vm.runInContext(k, env);
 const it = a => { let i = 0; const c = a.slice(); return { hasNext: () => i < c.length, next: () => c[i++] }; };
@@ -12,9 +12,9 @@ File.prototype = { getId() { return this.id; }, getName() { return this.id + '.j
   getBlob() { const me = this; return { getContentType: () => 'image/jpeg', getBytes: () => Array.from(Buffer.from(me.id)) }; },
   moveTo(f) { const p = this.parent; p.files.splice(p.files.indexOf(this), 1); f.files.push(this); this.parent = f; } };
 const root = new Folder('체험단'), inbox = root.createFolder('리뷰 사진 받는 곳');
-const imgA = new Folder('리뷰이미지A'), imgB = new Folder('리뷰이미지B');
+const imgA = new Folder('리뷰이미지A'), imgB = new Folder('리뷰이미지B'), imgD = new Folder('리뷰이미지D');
 const expF = new Folder('기대평'); expF.id = 'EXPFOLDER0000000000000000000';
-const folders = { 'D_리뷰이미지A': imgA, 'D_리뷰이미지B': imgB, 'D_리뷰 사진 받는 곳': inbox, 'EXPFOLDER0000000000000000000': expF };
+const folders = { 'D_리뷰이미지A': imgA, 'D_리뷰이미지B': imgB, 'D_리뷰이미지D': imgD, 'D_리뷰 사진 받는 곳': inbox, 'EXPFOLDER0000000000000000000': expF };
 env.DriveApp = { getFolderById: id => folders[id] };
 G("rootFolder_ = function () { return globalThis.__root; }"); env.__root = root;
 const R = (product, photo) => ({ kind: 'review', stars: 5, text: true, photo, product });
@@ -24,26 +24,28 @@ add(R('[스마트스토어] 모두의농수산 엔케이 감홍사과 5kg', true
 add(R('모야무 실링팬 천장 선풍기 주방 식탁 조명', false));
 add({ kind: 'purchase', stars: 0, text: false, photo: false, product: '엔케이 감홍사과 가정용 3kg' });
 add(R('전혀 다른 상품 텀블러', false));
+add(R('국산 대나무 효자손 등긁개', true));
 add({ kind: 'review', stars: 5, text: true, photo: false, product: '짱 개념수학 3-1', site: '예스24' });
 add({ kind: 'review', stars: 5, text: true, photo: false, product: '짱 개념연산 1-1', site: '알라딘' });
 env.Utilities.base64Encode = b => Buffer.from(typeof b === 'string' ? b : b.map(x => x & 255)).toString('base64');
 env.Utilities.sleep = () => {};
 env.UrlFetchApp = { fetch: (u, o) => { const d = JSON.parse(o.payload).contents[0].parts[1].inline_data.data; return { getResponseCode: () => 200, getContentText: () => JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(env.__ans[d]) }] } }] }) }; } };
 const msgs = []; env.__msgs = msgs; G("queueMsg_ = function (room, msg, kind) { __msgs.push(room + ' | ' + kind + ' | ' + msg); }");
-G("formDescRead_ = function (id) { return id === 'FA' ? '🐥상품명 : 엔케이 감홍사과 부사 5kg\\n🐥판매처 : 모두의농수산' : '🐥상품명 : 모야무 실링팬 천장 선풍기'; }");
+G("formDescRead_ = function (id) { return id === 'FA' ? '🐥상품명 : 엔케이 감홍사과 부사 5kg\\n🐥판매처 : 모두의농수산' : id === 'FB' ? '🐥상품명 : 모야무 실링팬 천장 선풍기' : ''; }");
 const LH = G('LIST_HEADER'), mk = o => LH.map(h => o[h] !== undefined ? o[h] : ''), d0 = new Date(); d0.setHours(0, 0, 0, 0);
 env.__ss.sheets['진행목록'] = new Sheet('진행목록', [LH.slice(),
-  mk({ '진행일': new Date(d0 - 10 * 864e5), '명단 제목': '#택10.19 모두의농수산감홍사과 5 (뽀짝오리)', '시트ID': 'SA', '폼ID': 'FA', '진행 상태': '진행중' }),
-  mk({ '진행일': new Date(d0 - 5 * 864e5), '명단 제목': '#10.26 실링팬 2 (뽀짝오리)', '시트ID': 'SB', '폼ID': 'FB', '진행 상태': '진행중' }),
-  mk({ '진행일': new Date(d0 - 5 * 864e5), '명단 제목': '#10.26 텀블러 2 (뽀짝오리)', '시트ID': 'SC', '폼ID': 'FC', '진행 상태': '진행중' }),
+  mk({ '진행일': new Date(d0 - 10 * 864e5), '명단 제목': '#택10.19 모두의농수산감홍사과 5 (뽀짝오리)', '시트ID': 'SA', '폼ID': 'FA', '진행 상태': '진행중', '마감 시각': new Date(d0 - 9 * 864e5) }),
+  mk({ '진행일': new Date(d0 - 5 * 864e5), '명단 제목': '#10.26 실링팬 2 (뽀짝오리)', '시트ID': 'SB', '폼ID': 'FB', '진행 상태': '진행중', '마감 시각': new Date(d0 - 4 * 864e5) }),
+  mk({ '진행일': new Date(d0 - 7 * 864e5), '명단 제목': '#10.28 실 효자손외 6 (뽀짝오리)', '시트ID': 'SD', '폼ID': 'FD', '진행 상태': '진행중', '마감 시각': new Date(d0 - 6 * 864e5) }),
+  mk({ '진행일': new Date(d0 - 5 * 864e5), '명단 제목': '#10.26 텀블러 2 (뽀짝오리)', '시트ID': 'SC', '폼ID': 'FC', '진행 상태': '진행중', '마감 시각': new Date(d0 - 4 * 864e5) }),
   mk({ '진행일': new Date(d0), '명단 제목': '11.02 백발백중 도서 기대평 39', '플랫폼': '기대평', '시트ID': 'SE', '폼ID': 'FE', '진행 상태': '진행중', '폴더 링크': 'https://drive.google.com/drive/folders/EXPFOLDER0000000000000000000' })]);
-[['GEMINI_KEY', 'AQ.testkey_zzzzzzzzzzzzzzzzzzzzzzzzzz'], ['RVRPT_SA', '1'], ['RVIMG_SA', 'D_리뷰이미지A'], ['RVRPT_SB', '1'], ['RVIMG_SB', 'D_리뷰이미지B'], ['RVINBOX_ID', 'D_리뷰 사진 받는 곳']].forEach(([k, v]) => env.__props.set(k, v));
+[['GEMINI_KEY', 'AQ.testkey_zzzzzzzzzzzzzzzzzzzzzzzzzz'], ['RVRPT_SA', '1'], ['RVIMG_SA', 'D_리뷰이미지A'], ['RVIMG_SB', 'D_리뷰이미지B'], ['RVIMG_SD', 'D_리뷰이미지D'], ['RVINBOX_ID', 'D_리뷰 사진 받는 곳']].forEach(([k, v]) => env.__props.set(k, v));
 G('rvInboxSort_(null)');
 const cnt = (f, n) => { const s = f.subs.find(x => x.name === n || x.name.indexOf(n + ' (') === 0); return s ? s.files.length : 0; };
-const res = 'A 포토 ' + cnt(imgA, '포토') + ', A 구매인증 ' + cnt(imgA, '구매인증 (압축 제외)') + ', B 텍스트 ' + cnt(imgB, '텍스트') + ', 모름 ' + cnt(inbox, '어느 의뢰인지 모름') + ', 남음 ' + inbox.files.length;
+const res = 'A 포토 ' + cnt(imgA, '포토') + ', A 구매인증 ' + cnt(imgA, '구매인증 (압축 제외)') + ', B 텍스트 ' + cnt(imgB, '텍스트') + ', D 포토 ' + cnt(imgD, '포토') + ', 모름 ' + cnt(inbox, '어느 의뢰인지 모름') + ', 남음 ' + inbox.files.length;
 console.log(res); console.log(msgs.join('\n'));
 const day = ((expF.subs[0] || { subs: [] }).subs[0]) || { subs: [] }, bookRes = day.subs.map(f => f.name + ' ' + f.files.length).sort().join(', ');
 console.log('기대평:', (expF.subs[0] || {}).name, day.name, bookRes);
-const ok = bookRes === '알라딘 1, 예스24 1' && res === 'A 포토 1, A 구매인증 1, B 텍스트 1, 모름 1, 남음 0' && msgs.length === 1 && /모르는 사진이 있어요 \(1장\)/.test(msgs[0]) && /모두의농수산감홍사과, 실링팬/.test(msgs[0]);
+const ok = bookRes === '알라딘 1, 예스24 1' && res === 'A 포토 1, A 구매인증 1, B 텍스트 1, D 포토 1, 모름 1, 남음 0' && msgs.length === 1 && /모르는 사진이 있어요 \(1장\)/.test(msgs[0]) && /모두의농수산감홍사과, 실링팬/.test(msgs[0]);
 console.log(ok ? '✓ 리뷰 사진 받는 곳 시험 통과' : 'XX 리뷰 사진 받는 곳 시험 실패');
 process.exit(ok ? 0 : 1);
