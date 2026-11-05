@@ -6198,8 +6198,31 @@ function rvAiSort_(f, sid, props) {
   }
   if (done) note_('✓ 리뷰 사진 AI 분류 ' + done + '장: ' + Object.keys(moved).map(function (k) { return k.replace(/\s*\(압축 제외\)/, '') + ' ' + moved[k]; }).join(', ') + (left.length - done > 0 ? ' (남은 ' + (left.length - done) + '장은 다음 확인에서)' : ''));
   setQ(left.length - done > 0);
+  if (left.length - done > 0) { try { ensureAiQueueTrigger_(); } catch (e) {} }
   if (done) { try { rvCountDirs_(f.img); } catch (e) {} }
   return left.length - done;
+}
+// 리뷰 사진 AI 분류 1분 연쇄 트리거 (남은 사진이 있으면 15분 대기 없이 1분 뒤 바로 실행, 11/6 패치)
+function ensureAiQueueTrigger_() {
+  const props = PropertiesService.getScriptProperties();
+  const q = String(props.getProperty('RVAI_Q') || '').split(',').filter(Boolean);
+  if (!q.length) { cleanAiQueueTrigger_(); return; }
+  const nextAt = Number(props.getProperty('RVAI_NEXT_AT') || 0);
+  if (nextAt && Date.now() < nextAt) return;
+  cleanAiQueueTrigger_();
+  try {
+    ScriptApp.newTrigger('rvAiQueue_').timeBased().after(60 * 1000).create();
+    props.setProperty('RVAI_NEXT_AT', String(Date.now() + 60 * 1000));
+  } catch (e) { note_('AI 큐 연쇄 트리거 실패: ' + e.message); }
+}
+function cleanAiQueueTrigger_() {
+  const props = PropertiesService.getScriptProperties();
+  props.deleteProperty('RVAI_NEXT_AT');
+  try {
+    ScriptApp.getProjectTriggers().forEach(function (t) {
+      if (t.getHandlerFunction() === 'rvAiQueue_') ScriptApp.deleteTrigger(t);
+    });
+  } catch (e) {}
 }
 // 리뷰 사진 받는 곳 (10/31: PC 카톡은 저장 위치를 매번 못 고르고 다운로드 폴더에 바로 저장됨)
 //  → 카톡 다운로드 폴더를 드라이브 '리뷰 사진 받는 곳' 하나로 정해 두면, AI가 캡처 속 상품 이름으로 어느 의뢰인지 찾아 그 의뢰 리뷰이미지 폴더로 옮김
@@ -6343,18 +6366,21 @@ function expRunNow_(runs) {
   return runs.filter(function (r) { return isExpect_(r) && r['진행일'] instanceof Date && dayStart_(r['진행일']) <= t; })
     .sort(function (a, b) { return b['진행일'] - a['진행일']; })[0] || null;
 }
-// 15분 확인에서 AI 분류 이어 하기 (정리는 30분마다라 한 의뢰 사진 30장이 1시간 넘게 걸려서). 다 나누면 다음 정리에서 압축
+// 15분 확인에서 AI 분류 이어 하기 (남은 사진이 있으면 1분 연쇄 트리거로 3~4분 만에 완결, 11/6)
 function rvAiQueue_() {
   const props = PropertiesService.getScriptProperties(), q = String(props.getProperty('RVAI_Q') || '').split(',').filter(Boolean);
+  let hasLeft = false;
   q.forEach(function (sid) {
     if (late_(200)) return;
     try {
       const imgId = props.getProperty('RVIMG_' + sid);
       if (!imgId) return;
       const img = DriveApp.getFolderById(imgId), pa = img.getParents();
-      rvAiSort_({ img: img, parent: pa.hasNext() ? pa.next() : img }, sid, props);
+      const left = rvAiSort_({ img: img, parent: pa.hasNext() ? pa.next() : img }, sid, props);
+      if (left > 0) hasLeft = true;
     } catch (e) { note_('리뷰 사진 AI 분류 실패: ' + e); }
   });
+  if (hasLeft) { ensureAiQueueTrigger_(); } else { cleanAiQueueTrigger_(); }
 }
 // 메뉴: 키 넣기 (aistudio.google.com에서 무료로 만든 키). 넣고 바로 한 번 시험
 function setGeminiKey() {
