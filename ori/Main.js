@@ -8066,6 +8066,7 @@ function rvItems_(allRuns, props) {
   return items;
 }
 // 한눈에 '리뷰 취합할 것' 체크칸 상태 → 진행목록 '리뷰 취합'/'업체 전송' (편집 트리거가 못 받은 체크도 다시 그릴 때 저장. 10/25 # 10.15 고구마말랭이 체크가 안 남았음)
+//  11/5 패치: 진행목록에 수동/자동 입력된 날짜가 있으면, 대시보드 체크박스가 false라고 해서 빈칸으로 덮어써 삭제하지 않음 (수동 입력 날짜 영구 보존)
 function syncRvChecks_(ss, allRuns, props) {
   let m = {}; try { m = JSON.parse(props.getProperty('DASH_RV') || '{}'); } catch (e) { return; }
   const sh = ss.getSheetByName(DASH_TAB);
@@ -8077,10 +8078,17 @@ function syncRvChecks_(ss, allRuns, props) {
     const col = it.type === 'day' ? '리뷰 취합' : '업체 전송';
     const mine = it.type === 'day' ? allRuns.filter(function (x) { return bareTitle_(x['명단 제목']) === it.title; }).slice(-1) : allRuns.filter(function (x) { return String(x['시트ID']) === String(it.sid); });
     mine.forEach(function (r) {
-      if (v[0] === (r[col] instanceof Date)) return;
-      const val = v[0] ? today_() : '';
-      setRun_(r.row, col, val); r[col] = val;
-      note_('✓ 리뷰 취합 체크 ' + (v[0] ? '저장' : '풀림') + ': ' + bareTitle_(r['명단 제목']) + ' (' + col + ')');
+      const hasVal = (r[col] instanceof Date) || (r[col] != null && String(r[col]).trim() !== '');
+      if (v[0]) {
+        if (!hasVal) {
+          const val = today_();
+          setRun_(r.row, col, val); r[col] = val;
+          note_('✓ 리뷰 취합 체크 저장: ' + bareTitle_(r['명단 제목']) + ' (' + col + ')');
+        }
+      } else {
+        // 대시보드가 false여도 진행목록에 수동/자동 입력된 날짜가 있으면 절대 지우지 않고 보존
+        if (hasVal) return;
+      }
     });
   });
 }
