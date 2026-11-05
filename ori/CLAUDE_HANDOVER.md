@@ -579,4 +579,9 @@
    - **피클 조치**: Sheets API `batch-request`로 상단 요약표(A2:N32) 텍스트를 `bold: false, color: #000000`으로 전면 일괄 초기화 완료 (조건부 서식으로 G열 빨간 볼드, C열 회색은 정상 작동).
    - **요청 사항 (`Main.js`)**: `buildDashboard_` 8336행 부근에서 상단 표 영역에 `sh.getRange(2, 1, runs.length, head.length).setFontWeight('normal').setFontColor('#000000')`를 명시적으로 실행해 서식 잔류를 원천 방어해 주세요.
 
+3. **`syncRvChecks_` 수동 입력 날짜 삭제 치명적 버그 (`setRun_` 빈칸 덮어쓰기)**:
+   - **현상**: 사용자가 진행목록 AB열(리뷰 취합) 또는 AC열(업체 전송)에 수동으로 날짜를 적어두어도, 15분마다 `syncRvChecks_`(8072행)가 돌 때 한눈에 탭 체크박스가 false이면 `v[0] === (r[col] instanceof Date)` 불일치로 판정해 `val = ''`로 진행목록의 수동 입력 날짜를 통째로 지워버림. 이로 인해 밤사이 사용자가 기입한 날짜가 전수 증발함.
+   - **요청 사항 (`Main.js`)**: `syncRvChecks_`에서 `r[col]`에 이미 날짜가 들어가 있는 경우(`r[col] instanceof Date`), 한눈에 탭의 체크박스가 false라고 해서 진행목록의 값을 지우지 말고, 오히려 한눈에 탭 체크박스를 true로 반영(`sh.getRange(Number(row), 1).setValue(true)`)하거나 수동 기입 날짜를 절대 지우지 않도록 보호 로직을 추가해 주세요.
+
+
 
