@@ -5538,10 +5538,13 @@ function onRunSubmit_(e) {
       if (Number(r['인원']) !== n) setRun_(r.row, '인원', n);
       if (r['목표인원'] && !r['마감 시각'] && n >= Number(r['목표인원'])) {
         full = true;
-        // 즉시 마감 패스트트랙: 목표 인원이 찬 순간 즉시 마감 시각 기록 & 명단방 글 보낼메시지에 투입
+        // 즉시 마감 패스트트랙: 목표 인원이 찬 순간 즉시 마감 시각 기록 & 명단 시트 먼저 100% 채운 뒤 보낼메시지에 투입
         try {
           r['마감 시각'] = new Date();
           setRun_(r.row, '마감 시각', r['마감 시각']);
+          // 1) 명단 시트 먼저 동기화 (보낼메시지 투입 전 100% 채움)
+          if (sid) { try { syncList_(SpreadsheetApp.openById(sid)); } catch (errSync) {} }
+          // 2) 명단 시트가 완전히 채워진 것을 확인한 뒤 보낼메시지 투입
           if (!pendingListMsg_(r)) queueListMsgs_(r);
           try { ensureReviewGuideMsgs_(runs); } catch (e) {}
         } catch (e) { note_('즉시 마감 패스트트랙 실패: ' + e); }
@@ -8065,6 +8068,8 @@ function dashStatus_(r) {
   if (!(r['진행일'] instanceof Date)) return r['진행 상태'];
   const d = dayStart_(r['진행일']), t = today_().getTime();
   if (d > t) return '진행예정';
+  const got = Number(r['인원']) || 0, target = Number(r['목표인원']) || 0;
+  if (target > 0 && got > target) return '초과진행';
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
@@ -8302,8 +8307,9 @@ function buildDashboard_(force) {
     const setCol = mixDay ? (x.hd || []).findIndex(function (h) { return String(h).indexOf(EXP_SET_Q) >= 0; }) + 1 : 0, mxD = mixDay ? EXP_MIX[dateTok_(r['명단 제목'])] : null;
     if (mixDay && setCol > 0 && x.ref && x.start) {
       const v = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A' + x.start + ':' + colLetter_(setCol)) + ')';
+      const fallbackVal = expCount_(r, Number(r['인원']) || 0, allRuns);
       sh.getRange(rr, 6).setFormula('=IFERROR(LET(v,' + v + ',ts,INDEX(v,,1),s,INDEX(v,,' + setCol + '),w,ISNUMBER(ts)*(ts>=' + (w.from ? fmt(w.from) : 0) + ')*(ts<' + (isFinite(w.to) ? fmt(w.to) : 99999) + '),' +
-        'tot,SUMPRODUCT(w),na,SUMPRODUCT(w*(LEFT(s,1)="A")),nb,SUMPRODUCT(w*(LEFT(s,1)="B")),rest,MAX(0,tot-na-nb),adda,MIN(rest,MAX(0,' + mxD[0] + '-na)),(na+adda)*' + EXP_SETS.A.length + '+(nb+rest-adda)*' + EXP_SETS.B.length + '),' + expCount_(r, Number(r['인원']) || 0, allRuns) + ')');
+        'tot,SUMPRODUCT(w),na,SUMPRODUCT(w*(LEFT(s,1)="A")),nb,SUMPRODUCT(w*(LEFT(s,1)="B")),rest,MAX(0,tot-na-nb),adda,MIN(rest,MAX(0,' + mxD[0] + '-na)),calc,(na+adda)*' + EXP_SETS.A.length + '+(nb+rest-adda)*' + EXP_SETS.B.length + ',IF(tot=0,' + fallbackVal + ',calc)),' + fallbackVal + ')');
     }
     else if (mixDay) sh.getRange(rr, 6).setValue(expCount_(r, Number(r['인원']) || 0, allRuns));
     else sh.getRange(rr, 6).setFormula(w.shared
