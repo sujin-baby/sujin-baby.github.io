@@ -1319,7 +1319,9 @@ function go(){
     clearInterval(timer);
     document.getElementById('fields').style.display='block';
     document.getElementById('go').disabled=false;
-    document.getElementById('msg').textContent='실패: '+e.message;
+    // 응답이 너무 늦으면 브라우저가 오류 내용 없이 끊음 (11/4 '실패: undefined'인데 실제로는 다 만들어졌음, 피클 인계)
+    var em=(e&&e.message)||(typeof e==='string'?e:'');
+    document.getElementById('msg').textContent=em?'실패: '+em:'응답이 늦어서 화면이 끊겼어요. 진행은 만들어졌을 수 있어요.\\n진행목록을 확인하거나 같은 버튼을 한 번 더 눌러 주세요 (이미 만든 진행이면 두 번 안 만들어지고 "이미 만든 진행"으로 나와요).';
   }).createRun(d);
 }
 function autoGo(){
@@ -5271,7 +5273,7 @@ function go(d, label) {
     busy(false); show(o || {});
     if (!(o && o.msg) && label && /불러오는 중…$/.test(label)) say(label.replace(/\n\n중복·인원 불러오는 중…$/, ''));
     if (o && o.saved) go({ act: 'info', title: o.title }, (o.msg || '저장했어요.') + '\n\n중복·인원 불러오는 중…');
-  }).withFailureHandler(function (e) { busy(false); say('오류: ' + e.message + '\n(한 번 더 눌러 보고, 또 나오면 이 글을 캡처해서 보내 주세요)'); }).createRun(d);
+  }).withFailureHandler(function (e) { busy(false); var em = (e && e.message) || (typeof e === 'string' ? e : ''); say(em ? '오류: ' + em + '\n(한 번 더 눌러 보고, 또 나오면 이 글을 캡처해서 보내 주세요)' : '응답이 늦어서 화면이 끊겼어요. 저장은 됐을 수 있어요. 한 번 더 눌러 확인해 주세요.'); }).createRun(d);
 }
 function roomBits(x, K, EXEC, c, before, linkEl) {
   // 썸네일 (방 공지): 길게 눌러 저장 → 카톡에 사진으로
