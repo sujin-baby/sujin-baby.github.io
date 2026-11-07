@@ -1474,7 +1474,8 @@ function diag_(p) {
   try { out.obUserEdit = JSON.parse(CacheService.getScriptCache().get('OB_USEREDIT') || '[]'); } catch (e) {}
   // &tab=탭이름&r0=N&n=줄수: 아무 탭이나 N행부터 최대 30줄·45칸의 보이는 값·수식·배경색 (읽기만, 11/7 메시지 모아보기 점검)
   if (p.tab) try {
-    const tsh = adminSs_().getSheetByName(String(p.tab));
+    const tss = adminSs_(), tsh = tss.getSheetByName(String(p.tab)) || tss.getSheets().filter(function (x) { return x.getName().indexOf(String(p.tab)) === 0; })[0];   // 이름 앞부분만 줘도 (메시지 탭은 이름 뒤에 개수)
+    out.tabNames = tss.getSheets().map(function (x) { return x.getName() + (x.isSheetHidden() ? ' (숨김)' : ''); });
     if (!tsh) throw new Error('탭 없음');
     const r0 = Math.max(1, Number(p.r0) || 1), n = Math.min(30, Math.max(1, Number(p.n) || 15)), lc = Math.min(tsh.getLastColumn(), 45), rg = tsh.getRange(r0, 1, n, lc);
     const fm = rg.getFormulas(), dv = rg.getDisplayValues(), bg = rg.getBackgrounds();
