@@ -8393,8 +8393,8 @@ function buildDashboard_(force) {
   props.setProperty('DASH_RV', JSON.stringify(rvMap));
   // 월급시트·진행 도우미 링크는 위 표 바로 아래 줄에만 (O1, P1은 비움)
   if (runs.length) {
-    // 위 표 글자 서식 명시적 초기화: 과거 진행 도우미 바 등의 bold/보라색 서식이 상속되지 않게 전면 리셋
-    sh.getRange(2, 1, runs.length, head.length).setFontWeight('normal').setFontColor(null);
+    // 위 표 글자·배경 서식 명시적 초기화: 과거 진행 도우미 바 등의 bold/보라색/연보라 배경이 상속되지 않게 전면 리셋
+    sh.getRange(2, 1, runs.length, head.length).setFontWeight('normal').setFontColor(null).setBackground(null);
     // 위 표 보기 좋게: 가운데 맞춤, 방제·메모는 왼쪽, 테두리
     sh.getRange(1, 1, runs.length + 1, head.length).setHorizontalAlignment('center').setVerticalAlignment('middle')
       .setBorder(true, true, true, true, true, true, '#d9d2e9', SpreadsheetApp.BorderStyle.SOLID);
