@@ -1,6 +1,6 @@
 // 메시지 종류별 탭 (11/7): 보낼메시지 전부(2행부터)를 종류마다 탭 하나로, 체크 → 보낼메시지 '보냄', 다시 그린 직후 밀린 줄 체크는 되돌림  node msgview_test.js <Main.js>
 const H = require('./harness'); const vm = require('vm');
-const env = H.makeEnv({ main: process.argv[2] }); const G = k => vm.runInContext(k, env);
+const env = H.makeEnv({ main: process.argv[2], props: { OUTBOX_SORTED: '1', OUTBOX_FMT2: '1' } }); const G = k => vm.runInContext(k, env);   // 실제 시트처럼 예전 한 번 정리는 끝난 상태
 let idc = 100; H.Sheet.prototype.getSheetId = function () { return this.__id || (this.__id = ++idc); };   // 실제처럼 탭마다 다른 번호
 const t0 = new Date(); t0.setHours(0, 0, 0, 0);
 const day = n => new Date(t0.getTime() + n * 86400000);
@@ -17,9 +17,17 @@ const ob = [['ID', '보낼 날짜', '종류', '카톡방', '메시지', '보냄 
   ['m9', day(0), '방 공지', '#택11.9 취소된 방', '취소된 공지', '취소'],
   ['m10', day(0), '명단 전달', '오리명단방', '명단 전달 글', '대기'],
   ['m11', day(-2), '리뷰 보고', '사장님', '리뷰 취합 링크', '대기'],
+  ['m12', day(-1), '리뷰 보고', '사장님', 'https://drive.google.com/drive/folders/FOLDER12345abc\n#10.27 실링팬 총 4건 리뷰 취합본 전달드립니다!', '대기'],
 ];
+// 같은 방 결제금액 확인 3명 → 할일에서 한 줄 (11/8)
+['김', '이', '박'].forEach((nm, i) => ob.push(['p' + i, day(-1), '할 일', '내 할 일', '[결제금액 확인] #택11.6 봉상회 감홍사과외 30\n' + nm + ': 15,900원 결제 (공지 14,500원, 더 비싸게 삼)\n→ 결제 캡처를 보고, 다르면 그분께 따로 물어보기', '대기']));
 for (let i = 0; i < 30; i++) ob.push(['n' + i, day(-2), '할 일', '내 할 일', '할 일 ' + i, '대기']);   // 27행 넘게 (피클 수식 판은 27행부터만 읽었음)
 env.__ss.sheets['보낼메시지'] = new H.Sheet('보낼메시지', ob);
+const LH = G('LIST_HEADER'), mkr = o => LH.map(h => o[h] !== undefined ? o[h] : '');
+env.__ss.sheets['진행목록'] = new H.Sheet('진행목록', [LH.slice(),
+  mkr({ '진행일': day(-12), '명단 제목': '#10.27 실링팬 2 (뽀짝오리)', '시트ID': 'S9', '진행 상태': '진행중', '인원': 2 }),
+  mkr({ '진행일': day(-11), '명단 제목': '#10.28 실링팬 2 (뽀짝오리)', '시트ID': 'S9', '진행 상태': '진행중', '인원': 2 })]);
+env.__props.set('RVIMG_S9', 'FOLDER12345abc');
 env.__ss.sheets['메시지 모아보기'] = new H.Sheet('메시지 모아보기', [['예전 탭', '', '', ''], ['x']]);
 const fails = [], ok = (c, m) => { if (!c) fails.push(m); };
 let err = '';
@@ -39,8 +47,13 @@ const expect = { m1: '🐥방공지', m2: '🐥방공지', m3: '🐥방공지', 
 Object.keys(expect).forEach(id => ok(where(id)[0] === expect[id], id + ' → ' + where(id)[0] + ' (기대 ' + expect[id] + ')'));
 ['m3b', 'm4', 'm9'].forEach(id => ok(rowOf(id) === 0, id + ' 보이면 안 됨'));
 ok(T['🐥방공지'].name === '🐥방공지 2', '탭 이름 개수 ' + T['🐥방공지'].name);
-ok(T['🚫취완'].name === '🚫취완' && /보낼 것 없어요/.test(T['🚫취완'].rows[2][3]), '빈 탭');
-ok(T['📝할일'].name === '📝할일 32', '할일 탭 이름 ' + T['📝할일'].name);
+ok(T['✅취완'].name === '✅취완' && /보낼 것 없어요/.test(T['✅취완'].rows[2][3]), '빈 탭');
+ok(T['📝할일'].name === '📝할일 33', '할일 탭 이름 ' + T['📝할일'].name);
+const pr = ids(T['📝할일']).indexOf('p0,p1,p2') + 1;
+ok(pr > 0, '결제금액 확인 3개가 한 줄이 아님: ' + ids(T['📝할일']).filter(x => /^p/.test(x)).join(' / '));
+const pm = pr ? T['📝할일'].rows[pr - 1][4] : '';
+ok(pm === '[결제금액 확인] #택11.6 봉상회 감홍사과외 30\n김: 15,900원 결제 (공지 14,500원, 더 비싸게 삼)\n이: 15,900원 결제 (공지 14,500원, 더 비싸게 삼)\n박: 15,900원 결제 (공지 14,500원, 더 비싸게 삼)\n→ 결제 캡처를 보고, 다르면 그분께 따로 물어보기', '묶은 글: ' + JSON.stringify(pm));
+ok(pr && / · 3건/.test(T['📝할일'].rows[pr - 1][3]), '건수 표시 ' + (pr && T['📝할일'].rows[pr - 1][3]));
 ok(rowOf('m1') < rowOf('m2') && rowOf('m2') < rowOf('m3'), '방 공지 순서 (오늘 → 내일 → 보낸 것)');
 ok(cellOf('m3', 1) === true && cellOf('m1', 1) === false, '체크 값');
 ok(String(cellOf('m5', 2)) === '사진 오면', '포토 날짜 ' + cellOf('m5', 2));
@@ -66,7 +79,10 @@ edit(T['📝할일'], rowOf('m6'), true);
 ok(outSt('m6') === '보냄', '할 일 체크 저장');
 G('msgViewBuild_(false)');
 ok(rowOf('m6') > 0 && cellOf('m6', 1) === true, '오늘 체크한 지난 할 일이 사라짐');
-ok(T['📝할일'].name === '📝할일 32' || true, '');
+// 묶은 줄 체크 → 3개 다 보냄
+env.__props.set('MSGV_AT_todo', String(Date.now() - 60000));
+edit(T['📝할일'], ids(T['📝할일']).indexOf('p0,p1,p2') + 1, true);
+ok(['p0', 'p1', 'p2'].every(id => outSt(id) === '보냄'), '묶은 줄 체크가 다 안 됨: ' + ['p0', 'p1', 'p2'].map(outSt).join(','));
 // 다시 그린 직후(20초 안) 다른 메시지가 들어온 줄을 누르면 되돌림
 env.__ss.sheets['보낼메시지'].rows.splice(1, 0, ['m0', day(0), '방 공지', '#택11.9 새 방 5', '새 공지', '대기']);
 G('msgViewBuild_(false)');
@@ -81,6 +97,13 @@ ok(N.rows[r1 - 1][1] === false, '밀린 줄 체크 안 되돌림');
 env.__props.set('MSGV_AT_todo', String(Date.now() - 60000));
 const rn = rowOf('n3'); edit(T['📝할일'], rn, true);
 ok(outSt('n3') === '보냄', '다른 탭 체크가 막힘');
+// 리뷰취합 탭에서 리뷰 보고 보냄 체크 → 진행목록 업체 전송 = 오늘 (그 의뢰 줄 전부), 풀면 지움 (11/8)
+env.__props.set('MSGV_AT_report', String(Date.now() - 60000));
+const sentCol = () => env.__ss.sheets['진행목록'].rows.slice(1).map(r => r[LH.indexOf('업체 전송')]);
+edit(T['📦리뷰취합'], rowOf('m12'), true);
+ok(outSt('m12') === '보냄' && sentCol().every(v => v instanceof Date && v.getTime() === t0.getTime()), '업체 전송 날짜 안 들어감: ' + JSON.stringify(sentCol()));
+edit(T['📦리뷰취합'], rowOf('m12'), false);
+ok(sentCol().every(v => v === ''), '체크 풀었는데 업체 전송이 남음: ' + JSON.stringify(sentCol()));
 // 다른 칸을 고치면 원래대로
 env.__props.set('MSGV_AT_notice', String(Date.now() - 60000));
 const rr = rowOf('m2'); N.cell(rr, 5)[4] = '아무 글';
@@ -90,7 +113,7 @@ ok(cellOf('m2', 4) === '사과 공지', '보기 칸 고친 걸 안 되돌림');
 env.__ss.sheets['블랙리스트'] = new H.Sheet('블랙리스트', [['이름'], ['가']]);
 env.__ss.sheets['보낼메시지'].rows.splice(1, 0, ['mz', day(0), '취완', '실 밴드 (전체 3개 방)', '취완 글', '대기']);
 G('onAdminEdit')({ range: env.__ss.sheets['블랙리스트'].getRange(2, 1), source: { toast() {} }, value: '가' });
-ok(where('mz')[0] === '🚫취완', '다른 탭 고친 뒤 새 메시지 안 들어옴');
+ok(where('mz')[0] === '✅취완', '다른 탭 고친 뒤 새 메시지 안 들어옴');
 // 탭 이름에 없는 사용자 탭은 종류 탭으로 안 봄
 ok(G('msgvGroupOfName_("🐥방공지 메모")') === -1 && G('msgvGroupOfName_("한눈에")') === -1, '탭 이름 구분');
 console.log(fails.length ? 'XX 메시지 종류별 탭 시험 실패:\n- ' + fails.join('\n- ') : '✓ 메시지 종류별 탭 시험 통과 (탭 ' + BASES.length + '개)');

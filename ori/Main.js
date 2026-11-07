@@ -3214,6 +3214,7 @@ function slowTasks_(rr, listed) {
   try { subTime_('정리: 폼수정 탭', function () { ensureEditTab_(); }); } catch (e) { note_('폼수정 탭 만들기 실패: ' + e); }
   try { protectAutoCols_(); } catch (e) { note_('자동 칸 경고 걸기 실패: ' + e); }
   try { moveCampFoldersOnce_(); } catch (e) { note_('월 폴더 정리 실패: ' + e); }
+  try { rvSentBackfill1_(); } catch (e) { note_('리뷰 보고 → 업체 전송 맞추기 실패: ' + e); }
   try { ensureInboxTrigger_(); } catch (e) { note_('받는 곳 5분 트리거 실패: ' + e); }
   PropertiesService.getScriptProperties().setProperty('SLOW_AT', String(Date.now()));
 }
@@ -4197,7 +4198,7 @@ const MSGV_GROUPS = [
   { key: 'report', base: '📦리뷰취합', t: '📦 리뷰 취합 보고 (사장님께)', k: ['리뷰 보고'], bg: '#d0dfe2', tab: '#76a5af' },
   { key: 'nag', base: '⏰리뷰독촉', t: '⏰ 리뷰 독촉 · 안 산 사람', k: ['리뷰 독촉', '안 산 사람'], bg: '#fbe4cd', tab: '#f6a35b' },
   { key: 'pay', base: '💰리뷰비', t: '💰 리뷰비 · 페이백 요청', k: ['리뷰비 요청', '페이백 요청'], bg: '#ead1dc', tab: '#d36f9a' },
-  { key: 'done', base: '🚫취완', t: '🚫 취소 완료 (취완)', k: ['취완'], bg: '#e3e3e3', tab: '#999999' }
+  { key: 'done', base: '✅취완', t: '✅ 취완 (방 사람 리뷰 다 확인됨)', k: ['취완'], bg: '#e3e3e3', tab: '#999999' }
 ];
 const MSGV_ROOM_BG = ['#fde2e4', '#dbeafe', '#dcfce7', '#fef3c7', '#f3e8ff', '#ffedd5', '#cffafe', '#fce7f3', '#e0e7ff', '#ecfccb', '#fee2e2', '#e2e8f0'];
 const MSGV_FIXED_BG = { '내 할 일': '#fff8e1', '사장님': '#e0f2f1', '리뷰비시트': '#fce4ec' };
@@ -4258,19 +4259,51 @@ function msgViewModel_(rows, sentAt) {
       if (pa === 3) return (tm(b) - tm(a)) || (dk(a) - dk(b));
       return tm(b) - tm(a);
     });
-    const pend = g.filter(function (x) { return msgvPending_(x[5]); }), sent = g.filter(function (x) { return !msgvPending_(x[5]); }).slice(0, 60);
+    let pend = g.filter(function (x) { return msgvPending_(x[5]); }).map(function (x) { return [x]; }), sent = g.filter(function (x) { return !msgvPending_(x[5]); }).slice(0, 60).map(function (x) { return [x]; });
+    // 할일: 같은 방(의뢰) 것은 한 줄로 (11/8 사용자: 결제금액 확인이 사람마다 한 줄씩 12줄이라 체크할 게 너무 많음)
+    if (grp.key === 'todo') { pend = msgvGroup_(pend); sent = msgvGroup_(sent); }
     let over = 0;
-    const lines = pend.concat(sent).map(function (x) {
-      const isSent = !msgvPending_(x[5]), od = !isSent && x[1] instanceof Date && x[1].getTime() < t0;
+    const lines = pend.concat(sent).map(function (xs) {
+      const x = xs[0], isSent = !msgvPending_(x[5]), od = !isSent && xs.some(function (y) { return y[1] instanceof Date && y[1].getTime() < t0; });
       if (od) over++;
       const kind = String(x[2]), tag = grp.k.indexOf(kind) < 0 ? '〔' + kind + '〕 ' : grp.k.length > 1 && kind !== grp.k[0] ? '〔' + kind.replace(/ 요청$/, '') + '〕 ' : '';
-      return { type: 'msg', id: String(x[0]), sent: isSent, day: msgvDay_(x[1]), over: od, today: x[1] instanceof Date && x[1].getTime() === t0,
-        room: tag + String(x[3] || '') + (x[5] === '방 못 찾음' ? ' ⚠방 못 찾음' : ''), msg: String(x[4]), bg: msgvRoomBg_(x[3], colors) };
+      const camp = xs.length > 1 || grp.key === 'todo' ? msgvCampOf_(x) : '';
+      return { type: 'msg', id: xs.map(function (y) { return String(y[0]); }).join(','), sent: isSent, day: msgvDay_(x[1]), over: od, today: x[1] instanceof Date && x[1].getTime() === t0,
+        room: tag + String(x[3] || '') + (xs.length > 1 ? ' · ' + xs.length + '건' : '') + (x[5] === '방 못 찾음' ? ' ⚠방 못 찾음' : ''), msg: msgvCombine_(xs), bg: msgvRoomBg_(camp || x[3], colors) };
     });
     const sig = JSON.stringify(lines.map(function (l) { return [l.id, l.sent ? 1 : 0, l.day, l.over ? 1 : 0, l.room, l.msg.length, l.msg.slice(0, 80), l.bg]; }));
     return { lines: lines, pend: pend.length, over: over, sig: sig, name: grp.base + (pend.length ? ' ' + pend.length : '') };
   });
   return { groups: groups, colors: colors };
+}
+// 할일 묶기 기준: 글 첫 줄 속 방제(#택11.6 …) 또는 [ ] 안 이름, 없으면 첫 줄. 보낼 곳(내 할 일·사장님)이 같아야 묶음
+function msgvCampOf_(x) {
+  const first = String(x[4]).split('\n')[0], m = first.match(/#택?\s*\d{1,2}\.\d{1,2}[^\]\n]*/), b = first.match(/\[([^\]]+)\]/);
+  return String(m ? m[0] : b ? b[1] : first).trim();
+}
+function msgvGroup_(list) {
+  const out = [], at = {};
+  list.forEach(function (xs) {
+    const k = String(xs[0][3]) + '|' + msgvCampOf_(xs[0]).replace(/\s+/g, '');
+    if (at[k] == null) { at[k] = out.length; out.push(xs.slice()); } else out[at[k]] = out[at[k]].concat(xs);
+  });
+  return out;
+}
+// 묶은 글: 첫 줄이 같은 것끼리 머리 한 번 + 사람 줄들 + 끝 안내 줄(다 같으면) 한 번. 첫 줄이 다르면 빈 줄로 나눔
+function msgvCombine_(xs) {
+  if (xs.length === 1) return String(xs[0][4]);
+  const heads = [], by = {};
+  xs.forEach(function (x) { const ls = String(x[4]).split('\n'), h = ls[0]; if (!by[h]) { by[h] = []; heads.push(h); } by[h].push(ls.slice(1)); });
+  return heads.map(function (h) {
+    const bodies = by[h];
+    if (bodies.length === 1) return [h].concat(bodies[0]).join('\n');
+    const tailOf = function (b) { return b.length > 1 ? b[b.length - 1] : null; }, tail = tailOf(bodies[0]);
+    const same = tail != null && bodies.every(function (b) { return tailOf(b) === tail; });
+    const lines = [h];
+    bodies.forEach(function (b) { (same ? b.slice(0, -1) : b).forEach(function (l) { if (String(l).trim() && lines.indexOf(l) < 0) lines.push(l); }); });
+    if (same) lines.push(tail);
+    return lines.join('\n');
+  }).join('\n\n');
 }
 function msgvAlign_(l) { return l.type === 'msg' || l.type === 'hdr' ? ['left', 'center', 'center', 'left', 'left'] : ['left', 'left', 'left', 'left', 'left']; }
 function msgvStyle_(l) {
@@ -4395,20 +4428,29 @@ function msgViewEdit_(e, gi) {
   try { sentAt = JSON.parse(props.getProperty('MSGV_SENTAT') || '{}') || {}; } catch (err) {}
   const t0 = dayStart_(today_()), moved = [], gone = [];
   let sentChg = false;
+  const sentNote = [];
   for (let i = 0; i < n; i++) {
-    const id = String(ids[i][0]), row = r0 + i;
-    if (!id) continue;
+    const idStr = String(ids[i][0]), row = r0 + i;
+    if (!idStr) continue;
     const v = vals[i][0], on = v === true || String(v).toUpperCase() === 'TRUE';
     // 방금 다시 그려져서 이 줄에 다른 메시지가 들어왔으면 (옛 화면을 보고 누른 것) 체크 되돌림
-    if (prev && prev[row - 1] !== undefined && prev[row - 1] !== id) { sh.getRange(row, 2).setValue(!on); moved.push(row); continue; }
-    if (at[id] == null) { sh.getRange(row, 2).setValue(!on); gone.push(row); continue; }
-    const x = orows[at[id]];
-    if (on !== (x[5] === '보냄')) obSet_(ob, id, 6, on ? '보냄' : '대기');
-    // 오늘 체크한 건 오늘 안에는 회색으로 남김 (잘못 눌렀으면 다시 풀 수 있게)
-    if (on) { sentAt[id] = Date.now(); sentChg = true; } else if (sentAt[id]) { delete sentAt[id]; sentChg = true; }
-    const st = msgvStyle_({ type: 'msg', sent: on, over: !on && x[1] instanceof Date && x[1].getTime() < t0, today: x[1] instanceof Date && x[1].getTime() === t0, bg: msgvRoomBg_(x[3], colors) });
+    if (prev && prev[row - 1] !== undefined && prev[row - 1] !== idStr) { sh.getRange(row, 2).setValue(!on); moved.push(row); continue; }
+    // 한 줄에 메시지 여럿(할일 묶음)이면 번호가 쉼표로 이어져 있음 → 다 같이
+    const list = idStr.split(',').filter(function (id) { return at[id] != null; });
+    if (!list.length) { sh.getRange(row, 2).setValue(!on); gone.push(row); continue; }
+    let x = null;
+    list.forEach(function (id) {
+      const y = orows[at[id]]; if (!x) x = y;
+      if (on !== (y[5] === '보냄')) obSet_(ob, id, 6, on ? '보냄' : '대기');
+      // 오늘 체크한 건 오늘 안에는 회색으로 남김 (잘못 눌렀으면 다시 풀 수 있게)
+      if (on) { sentAt[id] = Date.now(); sentChg = true; } else if (sentAt[id]) { delete sentAt[id]; sentChg = true; }
+      // 리뷰 보고(사장님께 리뷰이미지 링크)를 보냄 → 진행목록 업체 전송 날짜 (11/8)
+      if (String(y[2]) === '리뷰 보고') { try { if (rvSetSent_(rvSidOfReport_(y[4]), on)) sentNote.push(on ? '진행목록 업체 전송에 오늘 날짜를 넣었어요' : '진행목록 업체 전송 오늘 날짜를 지웠어요'); } catch (err) {} }
+    });
+    const st = msgvStyle_({ type: 'msg', sent: on, over: !on && x[1] instanceof Date && x[1].getTime() < t0, today: x[1] instanceof Date && x[1].getTime() === t0, bg: msgvRoomBg_(key === 'todo' ? msgvCampOf_(x) : x[3], colors) });
     sh.getRange(row, 1, 1, MSGV_COLS).setBackgrounds([st.bg]).setFontColors([st.fc]).setFontWeights([st.fw]);
   }
+  if (sentNote.length && !moved.length) toast(sentNote[0] + ' (한눈에 리뷰 취합 줄도 같이 바뀌어요)', 10);
   if (sentChg) {
     Object.keys(sentAt).forEach(function (k) { if (Number(sentAt[k]) < t0 - 86400000) delete sentAt[k]; });
     try { props.setProperty('MSGV_SENTAT', JSON.stringify(sentAt)); } catch (err) {}
@@ -5654,7 +5696,10 @@ function onAdminEditInner_(e) {
       const on = String(e.value).toUpperCase() === 'TRUE', val = on ? today_() : '';
       const runs = readRuns_();
       if (it.type === 'day') { const r = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === it.title; }).pop(); if (r) setRun_(r.row, '리뷰 취합', val); }
-      else runs.filter(function (x) { return String(x['시트ID']) === String(it.sid); }).forEach(function (x) { setRun_(x.row, '업체 전송', val); });
+      else {
+        runs.filter(function (x) { return String(x['시트ID']) === String(it.sid); }).forEach(function (x) { setRun_(x.row, '업체 전송', val); });
+        if (on) { try { rvMarkReportMsgs_(it.sid); } catch (err) {} }
+      }
       try { sh.getRange(e.range.getRow(), 3).setValue(val).setNumberFormat('M/d'); } catch (err) {}
       try { e.source.toast(on ? '체크한 날 저장했어요 (다음 날 이 줄은 사라져요)' : '체크 풀었어요', '리뷰 취합', 8); } catch (err) {}
       return;
@@ -6032,6 +6077,25 @@ function reviewDone_(runs) {
         note_('✓ ' + (r['실배송'] === 'Y' ? '페이백' : '리뷰비') + ' 요청 넣음: ' + title);
       });
       if (dayReqInit) props.setProperty('RVDAYREQ_INIT_' + sid, '1');
+      // A. 방(날짜)마다: 그 방 사람 리뷰가 다 확인(체크)되면 그 카톡방에 '취완' (사용자 요청 11/8: 의뢰 전체가 끝날 때 한 번이 아니라 방마다)
+      //  같은 카톡방을 쓰는 진행이 여럿이면 그 진행들 사람이 다 체크돼야 함. 방마다 한 번만
+      //  처음 볼 때(RVROOMDONE_INIT_): 의뢰 전체 취완을 이미 넣은 의뢰, 진행일 14일 넘은 방은 보낸 걸로 기억만 (예전 것이 한꺼번에 쏟아지지 않게)
+      const roomInit = !props.getProperty('RVROOMDONE_INIT_' + sid), byRoom = {};
+      mine.forEach(function (r) { if (Number(r['인원']) > 0 || r['마감 시각'] instanceof Date) { const rm = String(r['카톡방'] || bareTitle_(r['명단 제목'])); (byRoom[rm] = byRoom[rm] || []).push(r); } });
+      Object.keys(byRoom).forEach(function (rm) {
+        const rs = byRoom[rm], rkey = 'RVROOMDONE_' + rm.replace(/\s+/g, '');
+        if (props.getProperty(rkey)) return;
+        if (!rs.every(function (r) { return r['마감 시각'] instanceof Date; })) return;
+        let ppl = [];
+        rs.forEach(function (r) { const w = windowOf_(runs, r); ppl = ppl.concat(live.filter(function (i) { const t = v[i][cT].getTime(); return t >= w.from && t < w.to; })); });
+        if (!ppl.length || !ppl.every(function (i) { return v[i][cc] === true; })) return;
+        props.setProperty(rkey, '1');
+        const old = rs.every(function (r) { return today_().getTime() - dayStart_(r['진행일']) > 14 * 86400000; });
+        if (init || (roomInit && (props.getProperty('RVDONE_' + sid) || old))) return;
+        queueMsg_(rm, '취완', '취완');
+        note_('✓ 방 취완 넣음: ' + rm);
+      });
+      if (roomInit) props.setProperty('RVROOMDONE_INIT_' + sid, '1');
       // C. 리뷰 독촉 (사용자 요청 10/20): 진행일부터 주말 포함 10일(쿠팡·네이버. 리뷰 기한이 10일인 다른 플랫폼은 13일) 지나도
       //  체크칸이 안 된 사람 → 그 방에 독촉 글. 3일 뒤에도 남아 있으면 한 번 더. 기한이 10일 넘게 지난 예전 진행은 건너뜀. 명단 시트에는 안 씀
       const cName = (function () { let i = hdr.findIndex(function (h) { return /수령인|계정명/.test(h); }); if (i < 0) i = hdr.findIndex(function (h) { return /이름|성함/.test(h) && !MATCH.nick.test(h); }); return i; })();
@@ -6055,22 +6119,14 @@ function reviewDone_(runs) {
         ].join('\n'), '리뷰 독촉');
         note_('✓ 리뷰 독촉 넣음: ' + bareTitle_(r['명단 제목']) + ' ' + names.length + '명');
       });
-      // A-1. 의뢰 전체 끝 + 전부 체크 → 취완 (캠페인당 1회) 및 사장님 보고 (사용자 요청 10/30: 방마다 날마다 뜨면 너무 많이 떠서, 캠페인 리뷰 취합 완료 시 1회만)
+      // A-1. 의뢰 전체 끝 + 전부 체크 → 다 끝남 표시(RVDONE_) 및 사장님 보고. 취완 글은 방마다(위 A, 11/8 사용자 요청. 10/30엔 의뢰당 1회였음)
       const total = mine.reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0);
       const got = mine.reduce(function (a, x) { return a + (Number(x['인원']) || 0); }, 0);
       const allDone = (!total || got >= total) && !pend[campKey_(mine[0]['캠페인'] || mine[0]['명단 제목'])] && live.every(function (i) { return v[i][cc] === true; });
       const dk = 'RVDONE_' + sid;
       if (allDone && !props.getProperty(dk)) {
         props.setProperty(dk, '1');
-        if (!init) {
-          const campTitle = String(mine[0]['캠페인'] || bareTitle_(mine[0]['명단 제목']));
-          const roomList = mine.map(function (r) { return String(r['카톡방'] || bareTitle_(r['명단 제목'])); }).filter(Boolean);
-          const uniqRooms = [];
-          roomList.forEach(function (rm) { if (uniqRooms.indexOf(rm) === -1) uniqRooms.push(rm); });
-          const roomLabel = uniqRooms.length > 1 ? (campTitle + ' (전체 ' + uniqRooms.length + '개 방)') : (uniqRooms[0] || campTitle);
-          queueMsg_(roomLabel, '취완', '취완');
-          note_('✓ 캠페인 취완 메시지 넣음: ' + campTitle);
-        }
+        // 의뢰 전체 취완 글은 안 넣음 (11/8부터 방마다 위 A에서). 다 끝났다는 표시만
       }
       const rk = 'RVRPT_' + sid;
       // 구매확정만 의뢰는 리뷰 캡처가 없음 → 캡처 올리기·압축 없이 보고 글 바로
@@ -6212,6 +6268,45 @@ function rvCntText_(c) { return RV_TYPES.filter(function (t) { return c[t] > 0; 
 //  다 올릴 때까지 기다림: 마지막 사진을 올리고 10분 동안 새 사진이 없을 때 만듦. 사진을 더 올리면 다시 만듦. 사진 내용은 안 봄
 // 그 의뢰 진행 중 하나라도 '업체 전송'이 적혔으면 보낸 것 (11/7: 첫 줄만 보던 것)
 function rvSentAny_(mine) { return (mine || []).some(function (r) { const v = r['업체 전송']; return v instanceof Date || String(v == null ? '' : v).trim() !== ''; }); }
+// 리뷰 보고 글 속 리뷰이미지 폴더 링크 → 그 의뢰 시트ID (RVIMG_ 폴더 번호로). 못 찾으면 ''
+function rvSidOfReport_(msg, all) {
+  const ids = (String(msg || '').match(/folders\/[A-Za-z0-9_-]{10,}/g) || []).map(function (x) { return x.slice(8); });
+  if (!ids.length) return '';
+  all = all || PropertiesService.getScriptProperties().getProperties();
+  const k = Object.keys(all).filter(function (x) { return x.indexOf('RVIMG_') === 0 && ids.indexOf(String(all[x])) >= 0; })[0];
+  return k ? k.slice(6) : '';
+}
+// 리뷰 보고를 보냄 체크 ↔ 진행목록 '업체 전송' (11/8 사용자: 📦리뷰취합 탭에서 보냄 체크했는데 업체 전송이 비어 있었음)
+//  체크 → 그 의뢰 진행 줄 전부 그날 날짜 (이미 적혀 있으면 그대로). 풀기 → 오늘 적힌 것만 지움 (예전 날짜는 안 건드림)
+function rvSetSent_(sid, on, when) {
+  if (!sid) return 0;
+  const mine = readRuns_().filter(function (x) { return String(x['시트ID']) === String(sid); });
+  if (on) { if (rvSentAny_(mine)) return 0; const d = when || today_(); mine.forEach(function (x) { setRun_(x.row, '업체 전송', d); }); return mine.length; }
+  const t0 = dayStart_(today_()); let n = 0;
+  mine.forEach(function (x) { const v = x['업체 전송']; if (v instanceof Date && dayStart_(v) === t0) { setRun_(x.row, '업체 전송', ''); n++; } });
+  return n;
+}
+// 한눈에 '리뷰 취합할 것'을 체크 → 그 의뢰 안 보낸 리뷰 보고 글도 보냄 (둘 중 어디서 체크해도 같게)
+function rvMarkReportMsgs_(sid) {
+  if (!sid) return 0;
+  const all = PropertiesService.getScriptProperties().getProperties(), ob = outboxSheet_(), ol = ob.getLastRow();
+  let n = 0;
+  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (v[2] === '리뷰 보고' && (v[5] === '대기' || v[5] === '방 못 찾음') && rvSidOfReport_(v[4], all) === String(sid)) { obSet_(ob, v[0], 6, '보냄'); n++; } });
+  return n;
+}
+// (11/8 한 번) 오늘 리뷰취합 탭에서 보냄 체크한 리뷰 보고 → 업체 전송 날짜 (연결 전에 체크한 실링팬)
+function rvSentBackfill1_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('RVSENTLINK1')) return;
+  let at = {}; try { at = JSON.parse(props.getProperty('MSGV_SENTAT') || '{}') || {}; } catch (e) {}
+  const all = props.getProperties(), ob = outboxSheet_(), ol = ob.getLastRow();
+  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
+    if (v[2] !== '리뷰 보고' || v[5] !== '보냄' || !at[String(v[0])]) return;
+    const sid = rvSidOfReport_(v[4], all), d = new Date(Number(at[String(v[0])])); d.setHours(0, 0, 0, 0);
+    if (rvSetSent_(sid, true, d)) note_('✓ 리뷰 보고 보냄 → 업체 전송 날짜 넣음 (' + sid.slice(0, 8) + ')');
+  });
+  props.setProperty('RVSENTLINK1', '1');
+}
 function rvZip_(f, name, props, sid, mine) {
   const sentAny = rvSentAny_(mine);
   if (!props.getProperty('RVRPTFIX_' + sid) && !sentAny) { props.setProperty('RVRPTFIX_' + sid, '1'); props.deleteProperty('RVZIP_' + sid); }   // (10/31 한 번) 덮어써서 사라진 보고 글 다시
@@ -6687,7 +6782,7 @@ const USAGE_ROWS = [
   ['■ 탭', ''],
   ['한눈에', '오늘·앞으로·지난 진행 현황과 날마다 명단. 휴대폰에서는 표 아래 "휴대폰: ▶ 진행 도우미" 링크(홈 화면에 추가)로 보기'],
   ['블랙리스트', '받으면 안 되는 사람. 이름만 아래에 추가. 배정·폼 응답에 있으면 ⛔로 알려 줌'],
-  ['메시지 탭 (🐥방공지 📋명단전달 📝할일 📸포토가이드 📦리뷰취합 ⏰리뷰독촉 💰리뷰비 🚫취완)', '카톡에 보낼 글을 종류마다 탭 하나씩. 탭 이름 뒤 숫자 = 안 보낸 개수. 메시지 칸 글을 복사 → 카톡방에 붙여넣고 보내기 → 왼쪽 "보냄" 체크(바로 저장). 체크한 건 회색, 다음 날 사라짐 (잘못 눌렀으면 그날 안에 다시 풀기). 빨간 날짜 = 날짜 지난 것. 원본 "보낼메시지" 탭은 프로그램이 쓰는 칸이라 숨겨 둠 (지우면 안 돼요)'],
+  ['메시지 탭 (🐥방공지 📋명단전달 📝할일 📸포토가이드 📦리뷰취합 ⏰리뷰독촉 💰리뷰비 ✅취완)', '카톡에 보낼 글을 종류마다 탭 하나씩. 탭 이름 뒤 숫자 = 안 보낸 개수. 메시지 칸 글을 복사 → 카톡방에 붙여넣고 보내기 → 왼쪽 "보냄" 체크(바로 저장). 체크한 건 회색, 다음 날 사라짐 (잘못 눌렀으면 그날 안에 다시 풀기). 빨간 날짜 = 날짜 지난 것. 원본 "보낼메시지" 탭은 프로그램이 쓰는 칸이라 숨겨 둠 (지우면 안 돼요)'],
   ['진행목록', '모든 진행 기록. "진행일" 칸을 고치면 그 진행 날짜가 옮겨짐 (아래 "날짜 바꾸기")'],
   ['폼수정', 'B1에서 진행 고르기 → E2 공지 붙여넣기(배정) / 응답 체크 후 삭제 실행 / I2에 숫자 = 추가 모집'],
   ['배정', '누가 어떤 옵션을 사기로 했는지 (공지 이름에서 자동). 한눈에 탭 "안 산 사람"·"옵션 확인"이 이걸로 나옴. 지우지 마세요 (중복 확인은 배정과 상관없이 한눈에 명단에서 빨간 글씨)'],
@@ -6709,7 +6804,7 @@ const USAGE_ROWS = [
   ['안 산 사람 (인원 모자람)', '그대로 두면 됨. 의뢰 마지막 날이면 그날 오후 2시 이후 다음 진행일에 모자란 만큼 진행이 자동으로 생김(🐥방공지 탭에 방 공지). 그날 방제는 산 인원으로 바뀜(10→8, 월급시트 캠페인명도) → 📝할일 탭대로 카톡방 이름·오리명단방 명단 메시지를 수정. 중간 날 모자란 건 마지막 날 끝난 뒤 한꺼번에. 바로 더 받으려면 폼수정 탭 I2에 인원 숫자'],
   ['잘못 산 사람·방 나간 사람', '폼수정 탭 B1에서 진행 고르기 → 그 응답 체크 → 삭제 실행. 그날 안이면 폼이 다시 열려 다른 사람을 받음'],
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
-  ['리뷰 완료 (취완)', '명단 시트 "명단" 탭 맨 오른쪽 "리뷰 확인" 체크칸에 체크 → 그 방 사람 전부 체크되면 🚫취완 탭에 그 방 "취완". 의뢰 전체가 끝나고 전부 체크되면 📝할일 탭에 리뷰 캡처 올릴 폴더 링크'],
+  ['리뷰 완료 (취완)', '명단 시트 "명단" 탭 맨 오른쪽 "리뷰 확인" 체크칸에 체크 → 그 방 사람 전부 체크되면 ✅취완 탭에 그 방 "취완". 의뢰 전체가 끝나고 전부 체크되면 📝할일 탭에 리뷰 캡처 올릴 폴더 링크'],
   ['리뷰 보고', '의뢰 리뷰가 다 끝나면 카톡 방마다 서랍 → 사진·동영상 → 전체 선택 → 저장만. AI가 나눈 뒤 📦리뷰취합 탭(사장님)에 그 의뢰 리뷰이미지 폴더 링크 + 날짜 캠페인명 + 총 N건 글이 생김 → 보내고 한눈에 "리뷰 취합할 것" 체크. 압축 파일은 안 만듦'],
   ['리뷰 사진 받는 곳', 'PC 카톡 저장 폴더를 구글 드라이브 데스크톱의 "리뷰 사진 받는 곳"(맨 위 🔑 줄에 링크)으로 한 번만 바꿔 두면: 방마다 서랍 → 전체 선택 → 저장만 하면 됨. AI가 캡처 속 상품 이름으로 리뷰 체크가 끝난 의뢰를 찾아 그 의뢰 리뷰이미지 폴더(포토·텍스트·별점)로 옮김. 못 찾은 사진은 "어느 의뢰인지 모름" 폴더 + 할 일'],
   ['리뷰 사진 AI 분류', '사용법 탭 맨 위 "🔑 리뷰 사진 AI 키" 칸에 Gemini 무료 키(aistudio.google.com → Get API key)를 한 번 붙여넣으면: PC 카톡 서랍에서 방 사진을 통째로 리뷰이미지 폴더에 저장해도 AI가 리뷰만 골라 포토·텍스트·별점 폴더로 나누고, 구매 인증·다른 사진·같은 사진은 "(압축 제외)" 폴더로 옮김(안 지움). AI가 틀렸으면 파일을 맞는 폴더로 옮기면 다시 압축. 개수가 의뢰서·배정과 다르거나 별점이 5개가 아니면 할 일에 알림'],
@@ -8428,6 +8523,7 @@ function syncRvChecks_(ss, allRuns, props) {
   let m = {}; try { m = JSON.parse(props.getProperty('DASH_RV') || '{}'); } catch (e) { return; }
   const sh = ss.getSheetByName(DASH_TAB);
   if (!sh) return;
+  const marked = {};
   Object.keys(m).forEach(function (row) {
     const it = m[row], v = sh.getRange(Number(row), 1, 1, 2).getValues()[0];
     if (typeof v[0] !== 'boolean') return;   // 체크칸이 아니면(줄이 바뀜) 안 건드림
@@ -8441,6 +8537,7 @@ function syncRvChecks_(ss, allRuns, props) {
           const val = today_();
           setRun_(r.row, col, val); r[col] = val;
           note_('✓ 리뷰 취합 체크 저장: ' + bareTitle_(r['명단 제목']) + ' (' + col + ')');
+          if (col === '업체 전송' && !marked[it.sid]) { marked[it.sid] = 1; try { rvMarkReportMsgs_(it.sid); } catch (e) {} }
         }
       } else {
         // 대시보드가 false여도 진행목록에 수동/자동 입력된 날짜가 있으면 절대 지우지 않고 보존
