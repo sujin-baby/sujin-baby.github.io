@@ -341,7 +341,7 @@ function renameTodo_(r, oldBare, newBare, fresh) {
   if (!oldBare || oldBare === newBare) return;
   const lines = ['[방제 바뀜] ' + oldBare + ' → ' + newBare, '1. 카톡방 이름을 ' + newBare + ' 로 바꾸기'];
   // 진행일이 지났거나 오늘이면 명단을 이미 보냈을 수 있어서 고칠 글도 같이 (명단 전달을 방금 새로 넣었으면 고칠 글이 없음)
-  if (fresh) lines.push('2. 오리명단방 명단 글(모자란 건수 포함)은 메시지 모아보기에 넣어 뒀어요');
+  if (fresh) lines.push('2. 오리명단방 명단 글(모자란 건수 포함)은 📋명단전달 탭에 넣어 뒀어요');
   else if (r['시트 링크'] && r['진행일'] instanceof Date && dayStart_(r['진행일']) <= today_().getTime()) lines.push('2. 오리명단방에 보낸 명단 카톡 메시지를 아래 글로 수정 (새로 보내지 말고 수정)', '', r['시트 링크'] + '\n\n' + newBare + ((String(r['명단 제목']).match(/\s*\([^)]*\)\s*$/) || [''])[0]));
   queueMsg_('내 할 일', lines.join('\n'), '할 일');
 }
@@ -3083,7 +3083,7 @@ function checkFullInner_() {
         const notices = obAll.filter(function (v) { return String(v[3]) === room && /양식 작성 폼/.test(String(v[4])); });
         const wrong = notices.filter(function (v) { return String(v[4]).indexOf(String(r['폼 링크'])) === -1; });
         const pend = notices.filter(function (v) { return v[5] !== '보냄'; });
-        const msg = !notices.length ? '📭 메시지 모아보기에 방 공지 없음' : wrong.length ? '🔀 방 공지 ' + wrong.length + '개가 다른 진행 내용 (폼 링크 다름)' : pend.length > 1 ? '📑 방 공지가 ' + pend.length + '개 (하나만 보내기)' : '';
+        const msg = !notices.length ? '📭 🐥방공지 탭에 방 공지 없음' : wrong.length ? '🔀 방 공지 ' + wrong.length + '개가 다른 진행 내용 (폼 링크 다름)' : pend.length > 1 ? '📑 방 공지가 ' + pend.length + '개 (하나만 보내기)' : '';
         if (msg) errs[r['명단 제목']] = (errs[r['명단 제목']] ? errs[r['명단 제목']] + ' / ' : '') + msg;
       }
     } catch (e) {}
@@ -3965,7 +3965,7 @@ function ensureRunNoticesInner_(runs) {
     let desc = '';
     if (shared) {
       desc = planNotice_(r, link);
-      if (!desc) { note_('⚠ ' + room + ' 방 공지가 메시지 모아보기에 없는데 일정 탭에 그날 계획이 없어 못 만들었어요. 다른 날 공지를 복사해 인원만 고쳐 보내 주세요'); props.setProperty(pk, '1'); return; }
+      if (!desc) { note_('⚠ ' + room + ' 방 공지가 🐥방공지 탭에 없는데 일정 탭에 그날 계획이 없어 못 만들었어요. 다른 날 공지를 복사해 인원만 고쳐 보내 주세요'); props.setProperty(pk, '1'); return; }
     } else {
       try { desc = FormApp.openById(r['폼ID']).getDescription(); } catch (e) { return; }
       if (!desc || desc.indexOf(link) < 0) return;
@@ -4166,24 +4166,23 @@ function markSentFromPage(k, id) {
   return true;
 }
 
-/* ---------------- 메시지 모아보기 탭 (11/7 사용자 요청: 보낼메시지가 읽기 힘들어서) ----------------
- *  보낼메시지(원본, 프로그램이 쓰고 읽는 칸이라 숨겨 둠)를 종류별로 위→아래로 모아 보여 줌. 피클이 수식으로 만든 탭을 코드로 바꿈
- *  (수식 판은 보낼메시지 27행부터만 읽어 새 메시지 25줄이 안 보였고, 상태가 글자라 체크가 안 됐음)
- *  - 안 보낸 것 먼저 (오늘·앞으로 → 사진 오면 → 지난 날짜), 보낸 건 오늘 체크한 것·오늘 이후 날짜 것만 회색으로 아래에 (자정 지나면 빠짐)
+/* ---------------- 메시지 모아보기: 종류별 탭 (11/7 사용자 요청) ----------------
+ *  보낼메시지(원본, 프로그램이 쓰고 읽는 칸이라 숨겨 둠)를 종류마다 탭 하나로 나눠 보여 줌 → 밑으로 계속 내리지 않고 그 종류만 봄
+ *  (피클 수식 판은 보낼메시지 27행부터만 읽어 새 메시지 25줄이 안 보였고 상태가 글자라 체크가 안 됐음. 그다음 판은 한 탭에 다 이어 붙여 길었음)
+ *  - 탭 이름 뒤 숫자 = 안 보낸 개수 (예: 🐥방공지 8). 탭 안은 안 보낸 것 먼저 (오늘·앞으로 → 사진 오면 → 지난 날짜), 오늘 체크한 건 회색으로 아래에 (자정 지나면 빠짐)
  *  - B칸 체크 = 보낼메시지 그 줄 '보냄' (번호로 찾아서), 체크 풀면 '대기'. 체크한 줄은 그 자리에서 회색만 (줄이 안 움직여 옆 줄을 잘못 누르지 않게)
- *  - 보낼메시지가 바뀌면 실행이 끝날 때 다시 그림 (바뀐 게 없으면 안 그림). 다시 그린 지 20초 안에 누른 칸이 다른 줄로 밀렸으면 체크를 되돌리고 알림
+ *  - 보낼메시지가 바뀌면 실행이 끝날 때 바뀐 탭만 다시 그림. 다시 그린 지 20초 안에 누른 칸이 다른 메시지로 밀렸으면 체크를 되돌리고 알림
  */
-const MSGV_TAB = '메시지 모아보기', MSGV_VER = '1', MSGV_COLS = 5;
-const MSGV_SECTIONS = [
-  { t: '🐥 방 공지', k: ['방 공지'], bg: '#eee6f7' },
-  { t: '📝 내 할 일 · 사장님', k: ['할 일'], bg: '#fff1cc' },
-  { t: '📋 명단 전달 (오리명단방)', k: ['명단 전달', '업체 명단'], bg: '#d9ead2' },
-  { t: '📸 포토 가이드 · 리뷰 안내', k: ['포토 가이드', '리뷰'], bg: '#cfe1f3' },
-  { t: '📦 리뷰 보고 (사장님)', k: ['리뷰 보고'], bg: '#d0dfe2' },
-  { t: '⏰ 리뷰 독촉 · 안 산 사람', k: ['리뷰 독촉', '안 산 사람'], bg: '#fbe4cd' },
-  { t: '💰 리뷰비 · 페이백 요청', k: ['리뷰비 요청', '페이백 요청'], bg: '#ead1dc' },
-  { t: '🚫 취소 완료 (취완)', k: ['취완'], bg: '#e3e3e3' },
-  { t: '📎 그 밖', k: null, bg: '#eeeeee' }
+const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '2', MSGV_COLS = 5;
+const MSGV_GROUPS = [
+  { key: 'notice', base: '🐥방공지', t: '🐥 방 공지', k: ['방 공지'], bg: '#eee6f7', tab: '#b48fd9' },
+  { key: 'list', base: '📋명단전달', t: '📋 명단 전달 (오리명단방)', k: ['명단 전달', '업체 명단'], bg: '#d9ead2', tab: '#7fbf6a' },
+  { key: 'todo', base: '📝할일', t: '📝 내 할 일 · 사장님', k: ['할 일'], other: true, bg: '#fff1cc', tab: '#f2c94c' },
+  { key: 'photo', base: '📸포토가이드', t: '📸 포토 가이드 · 리뷰 안내', k: ['포토 가이드', '리뷰'], bg: '#cfe1f3', tab: '#6fa8dc' },
+  { key: 'report', base: '📦리뷰취합', t: '📦 리뷰 취합 보고 (사장님께)', k: ['리뷰 보고'], bg: '#d0dfe2', tab: '#76a5af' },
+  { key: 'nag', base: '⏰리뷰독촉', t: '⏰ 리뷰 독촉 · 안 산 사람', k: ['리뷰 독촉', '안 산 사람'], bg: '#fbe4cd', tab: '#f6a35b' },
+  { key: 'pay', base: '💰리뷰비', t: '💰 리뷰비 · 페이백 요청', k: ['리뷰비 요청', '페이백 요청'], bg: '#ead1dc', tab: '#d36f9a' },
+  { key: 'done', base: '🚫취완', t: '🚫 취소 완료 (취완)', k: ['취완'], bg: '#e3e3e3', tab: '#999999' }
 ];
 const MSGV_ROOM_BG = ['#fde2e4', '#dbeafe', '#dcfce7', '#fef3c7', '#f3e8ff', '#ffedd5', '#cffafe', '#fce7f3', '#e0e7ff', '#ecfccb', '#fee2e2', '#e2e8f0'];
 const MSGV_FIXED_BG = { '내 할 일': '#fff8e1', '사장님': '#e0f2f1', '리뷰비시트': '#fce4ec' };
@@ -4201,7 +4200,20 @@ function msgvRoomBg_(room, map) {
   if (!map[k]) map[k] = MSGV_ROOM_BG[Object.keys(map).length % MSGV_ROOM_BG.length];
   return map[k];
 }
-// 보낼메시지 줄 → 모아보기 줄 (그리기 전 모양만, 시트는 안 건드림)
+// 탭 이름 → 몇 번째 종류 탭인지 (이름 = 종류 또는 '종류 숫자'). 아니면 -1
+function msgvGroupOfName_(name) {
+  const n = String(name || '');
+  for (let i = 0; i < MSGV_GROUPS.length; i++) { const b = MSGV_GROUPS[i].base; if (n === b || (n.indexOf(b + ' ') === 0 && /^\d+$/.test(n.slice(b.length + 1)))) return i; }
+  return -1;
+}
+function msgvGroupOfSheet_(sh) {
+  const gi = msgvGroupOfName_(sh.getName());
+  if (gi >= 0) return gi;
+  // 사용자가 탭 이름을 바꿨어도 찾게 (번호)
+  try { const ids = JSON.parse(PropertiesService.getScriptProperties().getProperty('MSGV_IDS') || '{}'), id = String(sh.getSheetId()); for (let i = 0; i < MSGV_GROUPS.length; i++) if (String(ids[MSGV_GROUPS[i].key]) === id) return i; } catch (e) {}
+  return -1;
+}
+// 보낼메시지 줄 → 종류 탭마다 줄 (그리기 전 모양만, 시트는 안 건드림)
 function msgViewModel_(rows, sentAt) {
   sentAt = sentAt || {};
   const t0 = dayStart_(today_()), tm = function (x) { return x[1] instanceof Date ? x[1].getTime() : 0; };
@@ -4211,19 +4223,18 @@ function msgViewModel_(rows, sentAt) {
     if (x[1] instanceof Date) return x[1].getTime() >= t0 ? 1 : 3;
     return x[1] === '포토전달대기' ? 2 : 3;
   };
-  const known = {}; MSGV_SECTIONS.forEach(function (s, i) { (s.k || []).forEach(function (k) { known[k] = i; }); });
-  const groups = MSGV_SECTIONS.map(function () { return []; });
+  const known = {}; let otherAt = 0;
+  MSGV_GROUPS.forEach(function (g, i) { g.k.forEach(function (k) { known[k] = i; }); if (g.other) otherAt = i; });
+  const buckets = MSGV_GROUPS.map(function () { return []; });
   rows.forEach(function (x) {
     if (!x[0] || !String(x[4] || '').trim()) return;
     const sent = x[5] === '보냄';
     if (!msgvPending_(x[5]) && !(sent && (x[1] instanceof Date && x[1].getTime() >= t0 || Number(sentAt[String(x[0])] || 0) >= t0))) return;   // 보낸 건 오늘 것만, 취소 등은 안 보임
-    const gi = known[String(x[2])] != null ? known[String(x[2])] : MSGV_SECTIONS.length - 1;
-    groups[gi].push(x);
+    buckets[known[String(x[2])] != null ? known[String(x[2])] : otherAt].push(x);
   });
-  const lines = [], colors = {};
-  let pendAll = 0, overAll = 0;
-  groups.forEach(function (g, gi) {
-    const sec = MSGV_SECTIONS[gi];
+  const colors = {};
+  const groups = buckets.map(function (g, gi) {
+    const grp = MSGV_GROUPS[gi];
     g.sort(function (a, b) {
       const pa = prio(a), pb = prio(b);
       if (pa !== pb) return pa - pb;
@@ -4232,50 +4243,33 @@ function msgViewModel_(rows, sentAt) {
       if (pa === 3) return (tm(b) - tm(a)) || (dk(a) - dk(b));
       return tm(b) - tm(a);
     });
-    const pend = g.filter(function (x) { return msgvPending_(x[5]); }), sent = g.filter(function (x) { return !msgvPending_(x[5]); }).slice(0, 40);
-    if (!sec.k && !g.length) return;
-    pendAll += pend.length;
-    if (lines.length) lines.push({ type: 'gap' });
-    lines.push({ type: 'sec', text: sec.t + (pend.length ? ' · 안 보냄 ' + pend.length + '개' : g.length ? ' · 다 보냄 ✓' : ' · 없음'), bg: sec.bg });
-    const multi = sec.k && sec.k.length > 1;
-    pend.concat(sent).forEach(function (x) {
-      const isSent = !msgvPending_(x[5]), over = !isSent && x[1] instanceof Date && x[1].getTime() < t0;
-      if (over) overAll++;
-      const tag = multi && String(x[2]) !== sec.k[0] ? '〔' + String(x[2]).replace(/ 요청$/, '') + '〕 ' : !sec.k ? '〔' + String(x[2]) + '〕 ' : '';
-      lines.push({ type: 'msg', id: String(x[0]), sent: isSent, day: msgvDay_(x[1]), over: over, today: x[1] instanceof Date && x[1].getTime() === t0,
-        room: tag + String(x[3] || '') + (x[5] === '방 못 찾음' ? ' ⚠방 못 찾음' : ''), rawRoom: String(x[3] || ''), msg: String(x[4]), bg: msgvRoomBg_(x[3], colors) });
+    const pend = g.filter(function (x) { return msgvPending_(x[5]); }), sent = g.filter(function (x) { return !msgvPending_(x[5]); }).slice(0, 60);
+    let over = 0;
+    const lines = pend.concat(sent).map(function (x) {
+      const isSent = !msgvPending_(x[5]), od = !isSent && x[1] instanceof Date && x[1].getTime() < t0;
+      if (od) over++;
+      const kind = String(x[2]), tag = grp.k.indexOf(kind) < 0 ? '〔' + kind + '〕 ' : grp.k.length > 1 && kind !== grp.k[0] ? '〔' + kind.replace(/ 요청$/, '') + '〕 ' : '';
+      return { type: 'msg', id: String(x[0]), sent: isSent, day: msgvDay_(x[1]), over: od, today: x[1] instanceof Date && x[1].getTime() === t0,
+        room: tag + String(x[3] || '') + (x[5] === '방 못 찾음' ? ' ⚠방 못 찾음' : ''), msg: String(x[4]), bg: msgvRoomBg_(x[3], colors) };
     });
+    const sig = JSON.stringify(lines.map(function (l) { return [l.id, l.sent ? 1 : 0, l.day, l.over ? 1 : 0, l.room, l.msg.length, l.msg.slice(0, 80), l.bg]; }));
+    return { lines: lines, pend: pend.length, over: over, sig: sig, name: grp.base + (pend.length ? ' ' + pend.length : '') };
   });
-  const sig = JSON.stringify(lines.map(function (l) { return l.type === 'msg' ? [l.id, l.sent ? 1 : 0, l.day, l.room, l.msg.length, l.msg.slice(0, 80), l.bg] : l.type === 'sec' ? l.text : '-'; }));
-  return { lines: lines, pend: pendAll, over: overAll, sig: sig, colors: colors };
+  return { groups: groups, colors: colors };
 }
 function msgvAlign_(l) { return l.type === 'msg' || l.type === 'hdr' ? ['left', 'center', 'center', 'left', 'left'] : ['left', 'left', 'left', 'left', 'left']; }
 function msgvStyle_(l) {
-  if (l.type === 'sec') return { bg: [null, l.bg, l.bg, l.bg, l.bg], fc: [null, '#3b2a4d', '#3b2a4d', '#3b2a4d', '#3b2a4d'], fw: ['normal', 'bold', 'bold', 'bold', 'bold'] };
   if (l.type !== 'msg') return { bg: [null, null, null, null, null], fc: [null, null, null, null, null], fw: ['normal', 'normal', 'normal', 'normal', 'normal'] };
   if (l.sent) return { bg: [null, '#f3f3f3', '#f3f3f3', '#f3f3f3', '#f3f3f3'], fc: [null, '#9e9e9e', '#9e9e9e', '#9e9e9e', '#9e9e9e'], fw: ['normal', 'normal', 'normal', 'normal', 'normal'] };
   return { bg: [null, '#ffffff', '#ffffff', l.bg, l.bg], fc: [null, '#333333', l.over ? '#d93025' : '#333333', '#222222', '#333333'], fw: ['normal', 'normal', l.today ? 'bold' : 'normal', 'bold', 'normal'] };
 }
-// 보낼메시지 → 모아보기 다시 그리기. force = 바뀐 게 없어도
-function msgViewBuild_(force) {
-  const ss = adminSs_(), props = PropertiesService.getScriptProperties();
-  let sh = ss.getSheetByName(MSGV_TAB);
-  if (!sh && !force && !props.getProperty('MSGV_ON')) return false;
-  const ob = ss.getSheetByName(OUTBOX_SHEET);
-  if (!ob) return false;
-  const ol = ob.getLastRow(), rows = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues() : [];
-  let sentAt = {}; try { sentAt = JSON.parse(props.getProperty('MSGV_SENTAT') || '{}') || {}; } catch (e) {}
-  const m = msgViewModel_(rows, sentAt), fresh = props.getProperty('MSGV_VER') !== MSGV_VER || !sh;
-  if (!force && !fresh && props.getProperty('MSGV_SIG') === m.sig) return false;
-  if (!sh) {
-    let at = 1; try { at = ob.getIndex(); } catch (e) {}
-    sh = ss.insertSheet(MSGV_TAB, at);
-  }
-  const prevN = Math.max(Number(props.getProperty('MSGV_N') || 0), sh.getLastRow());
-  // 다시 그리기 전 줄 번호 → 메시지 번호 (그사이 누른 체크가 밀린 줄인지 보려고)
-  try { const pl = sh.getLastRow(); CacheService.getScriptCache().put('MSGV_PREV', JSON.stringify(pl >= 1 ? sh.getRange(1, 1, pl, 1).getValues().map(function (x) { return String(x[0]); }) : []), 600); } catch (e) {}
+// 종류 탭 하나 그리기
+function msgvWriteTab_(sh, gi, g, fresh, props) {
+  const grp = MSGV_GROUPS[gi], key = grp.key;
+  const prevN = Math.max(Number(props.getProperty('MSGV_N_' + key) || 0), sh.getLastRow());
+  // 다시 그리기 전 줄 → 메시지 번호 (그사이 누른 체크가 밀린 줄인지 보려고)
+  try { const pl = sh.getLastRow(); CacheService.getScriptCache().put('MSGV_PREV_' + key, JSON.stringify(pl >= 1 ? sh.getRange(1, 1, pl, 1).getValues().map(function (x) { return String(x[0]); }) : []), 600); } catch (e) {}
   if (fresh) {
-    // 피클 수식 판 정리 (수식·병합·체크칸·조건부 서식·색) 후 칸 모양
     try { sh.clear(); } catch (e) {}
     try { sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).clearDataValidations().breakApart(); } catch (e) {}
     try { sh.setConditionalFormatRules([]); } catch (e) {}
@@ -4284,26 +4278,24 @@ function msgViewBuild_(force) {
     try { sh.setFrozenColumns(0); } catch (e) {}
     try { const mc = Number(sh.getMaxColumns()) || 0; if (mc > MSGV_COLS + 1) sh.deleteColumns(MSGV_COLS + 2, mc - MSGV_COLS - 1); } catch (e) {}
     try {
-      sh.setColumnWidth(1, 20); sh.setColumnWidth(2, 46); sh.setColumnWidth(3, 82); sh.setColumnWidth(4, 230); sh.setColumnWidth(5, 560); sh.setColumnWidth(6, 20);
+      sh.setColumnWidth(1, 20); sh.setColumnWidth(2, 46); sh.setColumnWidth(3, 82); sh.setColumnWidth(4, 230); sh.setColumnWidth(5, 600); sh.setColumnWidth(6, 20);
       sh.getRange('C:C').setNumberFormat('@');
       sh.getRange(1, 1, sh.getMaxRows(), MSGV_COLS).setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
       sh.hideColumns(1);
       sh.setFrozenRows(2);
+      sh.setTabColor(grp.tab);
     } catch (e) {}
   }
-  const head = [
-    { type: 'title', text: '📨 안 보낸 것 ' + m.pend + '개' + (m.over ? ' (날짜 지난 것 ' + m.over + '개)' : ''), tip: '메시지 칸 글을 복사 → 카톡방에 붙여넣고 보내기 → 왼쪽 보냄 ☑ 체크 (바로 저장). 체크한 건 회색, 다음 날 사라져요. 빨간 날짜 = 날짜 지난 것' },
-    { type: 'hdr' }
-  ];
-  const lines = head.concat(m.lines), n = Math.max(lines.length, prevN);
+  const title = grp.t + ' · ' + (g.pend ? '안 보낸 것 ' + g.pend + '개' + (g.over ? ' (날짜 지난 것 ' + g.over + '개)' : '') : '다 보냈어요 ✓');
+  const lines = [{ type: 'title' }, { type: 'hdr' }].concat(g.lines.length ? g.lines : [{ type: 'empty' }]), n = Math.max(lines.length, prevN);
   if (sh.getMaxRows() < n + 2) { try { sh.insertRowsAfter(sh.getMaxRows(), n + 2 - sh.getMaxRows()); } catch (e) {} }
   const vals = [], bgs = [], fcs = [], fws = [], als = [], dvs = [], cb = SpreadsheetApp.newDataValidation().requireCheckbox().build();
   for (let i = 0; i < n; i++) {
     const l = lines[i] || { type: 'none' };
     let v = ['', '', '', '', ''], st = msgvStyle_(l), dv = null;
-    if (l.type === 'title') { v = ['', l.text, '', '', l.tip]; st = { bg: [null, '#f7d6e6', '#f7d6e6', '#f7d6e6', '#f7d6e6'], fc: [null, '#7a2e57', '#7a2e57', '#7a2e57', '#8a5a73'], fw: ['normal', 'bold', 'bold', 'bold', 'normal'] }; }
+    if (l.type === 'title') { v = ['', title, '', '', '메시지 칸 글을 복사 → 카톡방에 붙여넣고 보내기 → 왼쪽 보냄 ☑ 체크 (바로 저장). 체크한 건 회색, 다음 날 사라져요. 빨간 날짜 = 날짜 지난 것']; st = { bg: [null, grp.bg, grp.bg, grp.bg, grp.bg], fc: [null, '#3b2a4d', '#3b2a4d', '#3b2a4d', '#6b5a7a'], fw: ['normal', 'bold', 'bold', 'bold', 'normal'] }; }
     else if (l.type === 'hdr') { v = ['', '보냄', '날짜', '카톡방', '메시지 (칸 글을 복사해서 카톡에 붙여넣기)']; st = { bg: [null, '#fbe9f2', '#fbe9f2', '#fbe9f2', '#fbe9f2'], fc: [null, '#7a2e57', '#7a2e57', '#7a2e57', '#7a2e57'], fw: ['normal', 'bold', 'bold', 'bold', 'bold'] }; }
-    else if (l.type === 'sec') v = ['', l.text, '', '', ''];
+    else if (l.type === 'empty') { v = ['', '', '', '보낼 것 없어요 ✓', '']; st = { bg: [null, null, null, null, null], fc: [null, null, null, '#9e9e9e', null], fw: ['normal', 'normal', 'normal', 'normal', 'normal'] }; }
     else if (l.type === 'msg') { v = [l.id, !!l.sent, l.day, l.room, l.msg]; dv = cb; }
     vals.push(v); bgs.push(st.bg); fcs.push(st.fc); fws.push(st.fw); als.push(msgvAlign_(l)); dvs.push([dv]);
   }
@@ -4313,19 +4305,53 @@ function msgViewBuild_(force) {
   sh.getRange(1, 2, n, 1).setDataValidations(dvs);
   rg.setBackgrounds(bgs).setFontColors(fcs).setFontWeights(fws).setHorizontalAlignments(als);
   try { sh.setRowHeights(1, n, 22); sh.setRowHeight(1, 30); } catch (e) {}
-  props.setProperty('MSGV_N', String(lines.length));
-  props.setProperty('MSGV_SIG', m.sig);
+  props.setProperty('MSGV_N_' + key, String(lines.length));
+  props.setProperty('MSGV_SIG_' + key, g.sig);
+  props.setProperty('MSGV_AT_' + key, String(Date.now()));
+}
+// 보낼메시지 → 종류 탭들 다시 그리기 (바뀐 탭만). force = 바뀐 게 없어도, only = 그 탭만 (번호)
+function msgViewBuild_(force, only) {
+  const ss = adminSs_(), props = PropertiesService.getScriptProperties();
+  const sheets = ss.getSheets(), found = MSGV_GROUPS.map(function () { return null; });
+  let ids = {}; try { ids = JSON.parse(props.getProperty('MSGV_IDS') || '{}') || {}; } catch (e) {}
+  sheets.forEach(function (s) { const gi = msgvGroupOfName_(s.getName()); if (gi >= 0 && !found[gi]) found[gi] = s; });
+  sheets.forEach(function (s) { let id = ''; try { id = String(s.getSheetId()); } catch (e) {} MSGV_GROUPS.forEach(function (g, gi) { if (!found[gi] && id && String(ids[g.key]) === id && msgvGroupOfName_(s.getName()) < 0) found[gi] = s; }); });
+  const old = ss.getSheetByName(MSGV_OLD_TAB);
+  if (!force && !props.getProperty('MSGV_ON') && !old && !found.some(function (s) { return s; })) return false;
+  const ob = ss.getSheetByName(OUTBOX_SHEET);
+  if (!ob) return false;
+  const ol = ob.getLastRow(), rows = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues() : [];
+  let sentAt = {}; try { sentAt = JSON.parse(props.getProperty('MSGV_SENTAT') || '{}') || {}; } catch (e) {}
+  const m = msgViewModel_(rows, sentAt), fresh = props.getProperty('MSGV_VER') !== MSGV_VER;
+  // 새 탭 넣을 자리: 예전 모아보기 탭 자리(없으면 보낼메시지 뒤)부터 차례로
+  let at = 1; try { at = old ? old.getIndex() - 1 : ob.getIndex(); } catch (e) {}
+  let wrote = false;
+  MSGV_GROUPS.forEach(function (grp, gi) {
+    if (only != null && only !== gi) return;
+    const g = m.groups[gi];
+    let sh = found[gi], made = false;
+    if (!sh) { sh = ss.insertSheet(g.name, Math.max(0, at)); made = true; }
+    try { at = sh.getIndex(); } catch (e) { at++; }
+    try { if (sh.getName() !== g.name) sh.setName(g.name); } catch (e) {}
+    try { ids[grp.key] = sh.getSheetId(); } catch (e) {}
+    const tabFresh = fresh || made;
+    if (!force && !tabFresh && props.getProperty('MSGV_SIG_' + grp.key) === g.sig) return;
+    msgvWriteTab_(sh, gi, g, tabFresh, props);
+    wrote = true;
+  });
+  props.setProperty('MSGV_IDS', JSON.stringify(ids));
   props.setProperty('MSGV_COLORS', JSON.stringify(m.colors));
-  props.setProperty('MSGV_AT', String(Date.now()));
   props.setProperty('MSGV_ON', '1');
-  if (fresh) {
+  if (fresh && only == null) {
     props.setProperty('MSGV_VER', MSGV_VER);
+    // 한 탭에 다 이어 붙인 예전 모아보기는 지움 (종류별 탭으로 바꿈, 보낼메시지에서 만든 보기라 지워도 잃는 것 없음)
+    if (old) { try { ss.deleteSheet(old); } catch (e) {} }
     // 원본 보낼메시지는 숨김 (사용자 요청 11/7 '삭제해줘' → 프로그램이 쓰는 칸이라 지우면 공지·명단 전달·체크가 다 멈춰서 숨기기만)
     if (!props.getProperty('MSGV_HIDE1')) { try { if (!ob.isSheetHidden()) ob.hideSheet(); } catch (e) {} props.setProperty('MSGV_HIDE1', '1'); }
   }
-  return true;
+  return wrote;
 }
-// 실행이 끝날 때 (로더 이름 함수 감쌈): 보낼메시지가 바뀌었으면 모아보기 다시 그림. 모아보기 체크 직후엔 안 그림 (줄이 안 움직이게)
+// 실행이 끝날 때 (로더 이름 함수 감쌈): 보낼메시지가 바뀌었으면 바뀐 탭만 다시 그림. 모아보기 체크 직후엔 안 그림 (줄이 안 움직이게)
 function msgViewSync_() {
   if (globalThis.__MSGV_SKIP) { globalThis.__MSGV_SKIP = false; return; }
   let l = null;
@@ -4334,26 +4360,24 @@ function msgViewSync_() {
   try { msgViewBuild_(false); } catch (e) { Logger.log('모아보기 다시 그리기 실패: ' + e); }
   finally { try { if (l) l.releaseLock(); } catch (e) {} }
 }
-// 모아보기 칸을 고쳤을 때 (onAdminEdit). B칸 체크만 저장, 다른 칸은 보기용이라 원래대로 다시 그림
-function msgViewEdit_(e) {
+// 종류 탭 칸을 고쳤을 때 (onAdminEdit). B칸 체크만 저장, 다른 칸은 보기용이라 원래대로 다시 그림
+function msgViewEdit_(e, gi) {
   globalThis.__MSGV_SKIP = true;
   const sh = e.range.getSheet(), r0 = e.range.getRow(), n = e.range.getNumRows(), c0 = e.range.getColumn(), c1 = c0 + e.range.getNumColumns() - 1;
-  const props = PropertiesService.getScriptProperties();
+  const props = PropertiesService.getScriptProperties(), key = MSGV_GROUPS[gi].key;
   const toast = function (t, s) { try { e.source.toast(t, '메시지 모아보기', s || 8); } catch (err) {} };
   if (c0 !== 2 || c1 !== 2 || r0 < 3) {
     toast('이 탭은 보기용이라 글을 고쳐도 저장 안 돼요. 원래대로 돌려 놨어요. 보낸 뒤 왼쪽 보냄 칸만 체크해 주세요', 10);
-    globalThis.__MSGV_SKIP = false;
-    try { msgViewBuild_(true); } catch (err) {}
-    globalThis.__MSGV_SKIP = true;
+    try { msgViewBuild_(true, gi); } catch (err) {}
     return;
   }
   const ids = sh.getRange(r0, 1, n, 1).getValues(), vals = sh.getRange(r0, 2, n, 1).getValues();
   const ob = outboxSheet_(), ol = ob.getLastRow(), orows = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues() : [];
   const at = {}; orows.forEach(function (x, i) { at[String(x[0])] = i; });
-  let prev = null, colors = {};
-  if (Date.now() - Number(props.getProperty('MSGV_AT') || 0) < 20000) { try { prev = JSON.parse(CacheService.getScriptCache().get('MSGV_PREV') || 'null'); } catch (err) {} }
+  let prev = null, colors = {}, sentAt = {};
+  if (Date.now() - Number(props.getProperty('MSGV_AT_' + key) || 0) < 20000) { try { prev = JSON.parse(CacheService.getScriptCache().get('MSGV_PREV_' + key) || 'null'); } catch (err) {} }
   try { colors = JSON.parse(props.getProperty('MSGV_COLORS') || '{}') || {}; } catch (err) {}
-  let sentAt = {}; try { sentAt = JSON.parse(props.getProperty('MSGV_SENTAT') || '{}') || {}; } catch (err) {}
+  try { sentAt = JSON.parse(props.getProperty('MSGV_SENTAT') || '{}') || {}; } catch (err) {}
   const t0 = dayStart_(today_()), moved = [], gone = [];
   let sentChg = false;
   for (let i = 0; i < n; i++) {
@@ -5484,7 +5508,8 @@ function onAdminEdit(e) {
   // 5분 시계 트리거(로더에 있는 이름을 빌려 씀): 리뷰 사진 받는 곳만 빨리 나눔 (사용자 요청 10/31: 5분 안에)
   if (e && !e.range && e.triggerUid) return rvInboxTick_();
   if (!e || !e.range) return;
-  if (e.range.getSheet().getName() === MSGV_TAB) { try { return msgViewEdit_(e); } catch (err) { try { e.source.toast('체크 저장이 안 됐어요: ' + err.message + ' → 다시 체크해 주세요', '메시지 모아보기', 12); } catch (x) {} return; } }
+  { let mgi = -1; try { mgi = msgvGroupOfSheet_(e.range.getSheet()); } catch (err) {}
+    if (mgi >= 0) { try { return msgViewEdit_(e, mgi); } catch (err) { try { e.source.toast('체크 저장이 안 됐어요: ' + err.message + ' → 다시 체크해 주세요', '메시지 모아보기', 12); } catch (x) {} return; } } }
   try { if (e.range.getSheet().getName() === OUTBOX_SHEET) obUserEdit_(e); } catch (err) {}
   try { if (e.range.getSheet().getName() === USAGE_TAB && e.range.getColumn() === 2 && e.range.getNumRows() === 1 && String(e.range.getSheet().getRange(e.range.getRow(), 1).getValue()) === GEMINI_CELL_LABEL) return geminiCellEdit_(e); } catch (err) {}
   // 한눈에 탭 '진행 도우미' 체크 → 시트 오른쪽에 진행 도우미 (새 탭 없이)
@@ -6629,14 +6654,14 @@ function setGeminiKey() {
 }
 
 /* ---------------- 사용법 탭 (맨 앞, 사용자 요청 10/20). 글을 바꾸면 USAGE_VER를 올림 → 다시 씀 ---------------- */
-const USAGE_TAB = '사용법', USAGE_VER = '20';
+const USAGE_TAB = '사용법', USAGE_VER = '21';
 const USAGE_ROWS = [
   ['체험단 관리 시트 사용법', '(스크립트가 쓰는 탭이라 여기 고친 글은 다음 업데이트 때 다시 써져요)'],
   ['', ''],
   ['■ 탭', ''],
   ['한눈에', '오늘·앞으로·지난 진행 현황과 날마다 명단. 휴대폰에서는 표 아래 "휴대폰: ▶ 진행 도우미" 링크(홈 화면에 추가)로 보기'],
   ['블랙리스트', '받으면 안 되는 사람. 이름만 아래에 추가. 배정·폼 응답에 있으면 ⛔로 알려 줌'],
-  ['메시지 모아보기', '카톡에 보낼 글을 종류별(방 공지·할 일·명단 전달·포토·리뷰 보고·독촉·리뷰비·취완)로 위에서 아래로. 메시지 칸 글을 복사 → 카톡방에 붙여넣고 보내기 → 왼쪽 "보냄" 체크(바로 저장). 체크한 건 회색, 다음 날 사라짐 (잘못 눌렀으면 그날 안에 다시 풀기). 빨간 날짜 = 날짜 지난 것. 원본 "보낼메시지" 탭은 프로그램이 쓰는 칸이라 숨겨 둠 (지우면 안 돼요)'],
+  ['메시지 탭 (🐥방공지 📋명단전달 📝할일 📸포토가이드 📦리뷰취합 ⏰리뷰독촉 💰리뷰비 🚫취완)', '카톡에 보낼 글을 종류마다 탭 하나씩. 탭 이름 뒤 숫자 = 안 보낸 개수. 메시지 칸 글을 복사 → 카톡방에 붙여넣고 보내기 → 왼쪽 "보냄" 체크(바로 저장). 체크한 건 회색, 다음 날 사라짐 (잘못 눌렀으면 그날 안에 다시 풀기). 빨간 날짜 = 날짜 지난 것. 원본 "보낼메시지" 탭은 프로그램이 쓰는 칸이라 숨겨 둠 (지우면 안 돼요)'],
   ['진행목록', '모든 진행 기록. "진행일" 칸을 고치면 그 진행 날짜가 옮겨짐 (아래 "날짜 바꾸기")'],
   ['폼수정', 'B1에서 진행 고르기 → E2 공지 붙여넣기(배정) / 응답 체크 후 삭제 실행 / I2에 숫자 = 추가 모집'],
   ['배정', '누가 어떤 옵션을 사기로 했는지 (공지 이름에서 자동). 한눈에 탭 "안 산 사람"·"옵션 확인"이 이걸로 나옴. 지우지 마세요 (중복 확인은 배정과 상관없이 한눈에 명단에서 빨간 글씨)'],
@@ -6645,21 +6670,21 @@ const USAGE_ROWS = [
   ['', ''],
   ['■ 매일 할 일', ''],
   ['1. 새 의뢰', '생성기에 의뢰서 붙여넣기 → 공지에 살 사람 이름 적기 → [이 내용으로 새 진행 만들기] (폼·명단 시트·방 공지·배정·다음 일차 계획까지 자동)'],
-  ['2. 카톡 보내기', '메시지 모아보기에서 안 보낸 것을 위에서부터 복사 → 카톡방에 붙여넣고 보내기 → 보냄 체크'],
-  ['3. 폼', '진행일 0시에 자동으로 열리고, 인원이 차면 자동으로 닫힘 → 명단 전달·리뷰내용 가이드 메시지가 메시지 모아보기에 들어감'],
+  ['2. 카톡 보내기', '메시지 탭(🐥방공지·📋명단전달 등)에서 안 보낸 것을 위에서부터 복사 → 카톡방에 붙여넣고 보내기 → 보냄 체크'],
+  ['3. 폼', '진행일 0시에 자동으로 열리고, 인원이 차면 자동으로 닫힘 → 명단 전달·리뷰내용 가이드 메시지가 📋명단전달·🐥방공지 탭에 들어감'],
   ['4. 택배대행', '한눈에 탭 그날 명단에서 A~K 복사 → 택배시트에 붙여넣기 → "택배 옮김" 체크 (2시 전)'],
   ['', ''],
   ['■ 이럴 땐', ''],
-  ['방제·업체명 바꾸기', '한눈에 탭 B칸(방제)에서 이름만 고쳐 쓰고 엔터. 예) #택11.03 (업체명)황금향외 40 → #택11.03 오늘과일 황금향외 40. 몇 초~1분 안에 진행목록 명단 제목·카톡방, 명단 시트·폼·폴더 이름, 메시지 모아보기, 배정 탭, 월급시트 캠페인명이 같이 바뀜(오른쪽 아래 알림). 날짜 숫자는 여기서 말고 진행목록 "진행일"에서. 이미 보낸 카톡 공지·방 이름은 직접'],
-  ['날짜 바꾸기', '예) 목요일 건너뛰고 금요일에: 진행목록에서 그 진행 "진행일"을 새 날짜(10/23)로 고치기 → 방제·카톡방 이름·메시지 모아보기·월급시트·뒤 일차까지 같이 바뀜 (오른쪽 아래 알림). 이미 만든 카톡방 이름은 직접 바꾸기. 아직 안 만든 일차는 "일정" 탭 진행일을 고치기'],
-  ['하루 건너뛰기 (예: 오메가3)', '예) 오늘(목)은 그대로 2시 전까지 받고, 내일(금)만 쉬고 월요일에: 진행목록에서 "내일" 진행의 "진행일"을 월요일(10/26)로 고치기 → 그 뒤 일차·일정·방제·메시지 모아보기 날짜가 같이 밀림. 내일 진행이 진행목록에 아직 없으면 "일정" 탭에서 그 줄 진행일을 월요일로 (그 뒤 줄도 하루씩 직접). 오늘 진행은 건드리지 않기. 카톡방 이름이 이미 있으면 직접 바꾸기'],
+  ['방제·업체명 바꾸기', '한눈에 탭 B칸(방제)에서 이름만 고쳐 쓰고 엔터. 예) #택11.03 (업체명)황금향외 40 → #택11.03 오늘과일 황금향외 40. 몇 초~1분 안에 진행목록 명단 제목·카톡방, 명단 시트·폼·폴더 이름, 메시지 탭, 배정 탭, 월급시트 캠페인명이 같이 바뀜(오른쪽 아래 알림). 날짜 숫자는 여기서 말고 진행목록 "진행일"에서. 이미 보낸 카톡 공지·방 이름은 직접'],
+  ['날짜 바꾸기', '예) 목요일 건너뛰고 금요일에: 진행목록에서 그 진행 "진행일"을 새 날짜(10/23)로 고치기 → 방제·카톡방 이름·메시지 탭·월급시트·뒤 일차까지 같이 바뀜 (오른쪽 아래 알림). 이미 만든 카톡방 이름은 직접 바꾸기. 아직 안 만든 일차는 "일정" 탭 진행일을 고치기'],
+  ['하루 건너뛰기 (예: 오메가3)', '예) 오늘(목)은 그대로 2시 전까지 받고, 내일(금)만 쉬고 월요일에: 진행목록에서 "내일" 진행의 "진행일"을 월요일(10/26)로 고치기 → 그 뒤 일차·일정·방제·메시지 탭 날짜가 같이 밀림. 내일 진행이 진행목록에 아직 없으면 "일정" 탭에서 그 줄 진행일을 월요일로 (그 뒤 줄도 하루씩 직접). 오늘 진행은 건드리지 않기. 카톡방 이름이 이미 있으면 직접 바꾸기'],
   ['하루 인원 바꾸기 (예: 실링팬 하루 2명)', '진행목록에서 바꾸기 시작할 날 진행의 "목표인원"을 새 숫자(2)로 고치기 → 그날부터 뒤 일차·일정 탭까지 하루 2명으로 바뀜 (방제 끝 숫자·폼 설명·안 보낸 방 공지 "(N명)"도). 총건수를 넘는 남는 날은 취소, 모자라면 일정 줄이 추가됨 (오른쪽 아래 알림으로 결과). 그날 진행이 진행목록에 아직 없으면 일정 탭 "건수" 칸과 방제·명단 제목 끝 숫자를 직접 고치기. 이미 만든 카톡방 이름은 직접 바꾸기'],
   ['기대평 진행 (백발백중 도서)', '구매 없이 링크에 기대평만. 27개 링크 × 15개 = 405건, 11/6까지(주말 빼고). 매일 27개 링크가 다 나가게 하루 3계정을 A묶음(14개)·B묶음(13개)으로 나눔(10/26부터). 한 계정은 한 주에 한 묶음, 다음 주에 같은 계정이 나머지 묶음. 폼 \'작성한 링크 묶음\'으로 사람마다 14·13건을 세서 방제 끝 건수·월급시트 수량(× 500원)에 씀. 자정 ~ 오전 8시 20분 작성. 진행목록 목표인원은 사람 수. 캡처는 카톡방으로'],
-  ['안 산 사람 (인원 모자람)', '그대로 두면 됨. 의뢰 마지막 날이면 그날 오후 2시 이후 다음 진행일에 모자란 만큼 진행이 자동으로 생김(메시지 모아보기에 방 공지). 그날 방제는 산 인원으로 바뀜(10→8, 월급시트 캠페인명도) → 메시지 모아보기 "할 일"대로 카톡방 이름·오리명단방 명단 메시지를 수정. 중간 날 모자란 건 마지막 날 끝난 뒤 한꺼번에. 바로 더 받으려면 폼수정 탭 I2에 인원 숫자'],
+  ['안 산 사람 (인원 모자람)', '그대로 두면 됨. 의뢰 마지막 날이면 그날 오후 2시 이후 다음 진행일에 모자란 만큼 진행이 자동으로 생김(🐥방공지 탭에 방 공지). 그날 방제는 산 인원으로 바뀜(10→8, 월급시트 캠페인명도) → 📝할일 탭대로 카톡방 이름·오리명단방 명단 메시지를 수정. 중간 날 모자란 건 마지막 날 끝난 뒤 한꺼번에. 바로 더 받으려면 폼수정 탭 I2에 인원 숫자'],
   ['잘못 산 사람·방 나간 사람', '폼수정 탭 B1에서 진행 고르기 → 그 응답 체크 → 삭제 실행. 그날 안이면 폼이 다시 열려 다른 사람을 받음'],
   ['살 사람 배정', '생성기 공지에 이름을 적고 만들었으면 자동. 나중에 바뀌면 폼수정 탭 E2에 카톡 공지를 통째로 붙여넣기'],
-  ['리뷰 완료 (취완)', '명단 시트 "명단" 탭 맨 오른쪽 "리뷰 확인" 체크칸에 체크 → 그 방 사람 전부 체크되면 메시지 모아보기에 그 방 "취완". 의뢰 전체가 끝나고 전부 체크되면 메시지 모아보기 "할 일"에 리뷰 캡처 올릴 폴더 링크'],
-  ['리뷰 보고', '의뢰 리뷰가 다 끝나면 카톡 방마다 서랍 → 사진·동영상 → 전체 선택 → 저장만. AI가 나눈 뒤 메시지 모아보기 "리뷰 보고"(사장님)에 그 의뢰 리뷰이미지 폴더 링크 + 날짜 캠페인명 + 총 N건 글이 생김 → 보내고 한눈에 "리뷰 취합할 것" 체크. 압축 파일은 안 만듦'],
+  ['리뷰 완료 (취완)', '명단 시트 "명단" 탭 맨 오른쪽 "리뷰 확인" 체크칸에 체크 → 그 방 사람 전부 체크되면 🚫취완 탭에 그 방 "취완". 의뢰 전체가 끝나고 전부 체크되면 📝할일 탭에 리뷰 캡처 올릴 폴더 링크'],
+  ['리뷰 보고', '의뢰 리뷰가 다 끝나면 카톡 방마다 서랍 → 사진·동영상 → 전체 선택 → 저장만. AI가 나눈 뒤 📦리뷰취합 탭(사장님)에 그 의뢰 리뷰이미지 폴더 링크 + 날짜 캠페인명 + 총 N건 글이 생김 → 보내고 한눈에 "리뷰 취합할 것" 체크. 압축 파일은 안 만듦'],
   ['리뷰 사진 받는 곳', 'PC 카톡 저장 폴더를 구글 드라이브 데스크톱의 "리뷰 사진 받는 곳"(맨 위 🔑 줄에 링크)으로 한 번만 바꿔 두면: 방마다 서랍 → 전체 선택 → 저장만 하면 됨. AI가 캡처 속 상품 이름으로 리뷰 체크가 끝난 의뢰를 찾아 그 의뢰 리뷰이미지 폴더(포토·텍스트·별점)로 옮김. 못 찾은 사진은 "어느 의뢰인지 모름" 폴더 + 할 일'],
   ['리뷰 사진 AI 분류', '사용법 탭 맨 위 "🔑 리뷰 사진 AI 키" 칸에 Gemini 무료 키(aistudio.google.com → Get API key)를 한 번 붙여넣으면: PC 카톡 서랍에서 방 사진을 통째로 리뷰이미지 폴더에 저장해도 AI가 리뷰만 골라 포토·텍스트·별점 폴더로 나누고, 구매 인증·다른 사진·같은 사진은 "(압축 제외)" 폴더로 옮김(안 지움). AI가 틀렸으면 파일을 맞는 폴더로 옮기면 다시 압축. 개수가 의뢰서·배정과 다르거나 별점이 5개가 아니면 할 일에 알림'],
   ['블랙리스트 사람이 폼을 냄', '한눈에 "확인 필요" 칸에 ⛔ + 메일 → 폼수정 탭에서 그 응답 지우기'],
