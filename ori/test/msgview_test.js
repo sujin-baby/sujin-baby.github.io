@@ -114,6 +114,16 @@ env.__ss.sheets['블랙리스트'] = new H.Sheet('블랙리스트', [['이름'],
 env.__ss.sheets['보낼메시지'].rows.splice(1, 0, ['mz', day(0), '취완', '실 밴드 (전체 3개 방)', '취완 글', '대기']);
 G('onAdminEdit')({ range: env.__ss.sheets['블랙리스트'].getRange(2, 1), source: { toast() {} }, value: '가' });
 ok(where('mz')[0] === '✅취완', '다른 탭 고친 뒤 새 메시지 안 들어옴');
+// 체크한 건 이틀 남음: 어제 체크한 것은 보이고, 사흘 전 체크한 것은 안 보임 (11/8)
+env.__props.set('MSGV_S_m3b', String(Date.now() - 86400000)); env.__props.set('MSGV_S_m4', String(Date.now() - 3 * 86400000));
+G('msgViewBuild_(true)');
+ok(rowOf('m3b') > 0 && cellOf('m3b', 1) === true, '어제 체크한 게 사라짐');
+ok(rowOf('m4') === 0, '사흘 전 체크한 게 남음');
+// 리뷰 보고 날짜 범위: 0명으로 끝난 추가 모집 날짜는 빼기 (11/8 실링팬 10.22~11.4 → 10.22~10.29)
+const rm = G('rvReportMsg_')('https://drive.google.com/drive/folders/X', [
+  { '명단 제목': '#10.22 실링팬 2 (뽀짝오리)', '인원': 2, '총건수': 10 }, { '명단 제목': '#10.29 실링팬 2 (뽀짝오리)', '인원': 2, '총건수': 10 },
+  { '명단 제목': '#10.30 실링팬 1 (뽀짝오리)', '인원': 0, '총건수': 10 }, { '명단 제목': '#11.4 실링팬 1 (뽀짝오리)', '인원': 0, '총건수': 10 }], '');
+ok(rm.split('\n')[2] === '10.22~10.29 #실 실링팬' && rm.split('\n')[3] === '총 10건 리뷰 취합본 전달드립니다!', '리뷰 보고 글: ' + JSON.stringify(rm));
 // 탭 이름에 없는 사용자 탭은 종류 탭으로 안 봄
 ok(G('msgvGroupOfName_("🐥방공지 메모")') === -1 && G('msgvGroupOfName_("한눈에")') === -1, '탭 이름 구분');
 console.log(fails.length ? 'XX 메시지 종류별 탭 시험 실패:\n- ' + fails.join('\n- ') : '✓ 메시지 종류별 탭 시험 통과 (탭 ' + BASES.length + '개)');
