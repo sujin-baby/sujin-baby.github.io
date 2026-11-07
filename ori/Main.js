@@ -3602,6 +3602,8 @@ function rvInboxTick_() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;   // 15분 확인이 도는 중이면 그쪽에서 함
   try { globalThis.__ORI_T0 = Date.now(); rvInboxSort_(null); } catch (e) { try { note_('리뷰 사진 받는 곳(5분) 실패: ' + e); } catch (e2) {} }
+  // AI 분류 대기열도 이어서 (1분 연쇄 트리거도 이 길로 들어옴, 11/7)
+  try { if (PropertiesService.getScriptProperties().getProperty('RVAI_Q') && !late_(200)) rvAiQueue_(); } catch (e) { try { note_('리뷰 사진 AI(연쇄) 실패: ' + e); } catch (e2) {} }
   finally { lock.releaseLock(); }
 }
 // 키가 있으면 5분마다 받는 곳 확인 트리거 (트리거는 계정당 20개 한도라 19개 넘으면 안 만듦 → 15분 확인에서만)
@@ -6224,17 +6226,21 @@ function ensureAiQueueTrigger_() {
   const nextAt = Number(props.getProperty('RVAI_NEXT_AT') || 0);
   if (nextAt && Date.now() < nextAt) return;
   cleanAiQueueTrigger_();
+  // 11/7 고침: 트리거는 로더(Code.gs)에 있는 이름만 부를 수 있음 ('rvAiQueue_'는 GitHub에서 받아 돌리는 코드라 못 부름 → 그동안 1분 연쇄가 안 돌았음).
+  //  로더에 있는 onAdminEdit를 1분 뒤 한 번 → rvInboxTick_가 받는 곳 + AI 대기열을 이어 함. 트리거 20개 한도라 19개 넘으면 안 만듦
   try {
-    ScriptApp.newTrigger('rvAiQueue_').timeBased().after(60 * 1000).create();
+    if (ScriptApp.getProjectTriggers().length >= 19) return;
+    const t = ScriptApp.newTrigger('onAdminEdit').timeBased().after(60 * 1000).create();
+    props.setProperty('RVAI_TRIG_ID', t.getUniqueId());
     props.setProperty('RVAI_NEXT_AT', String(Date.now() + 60 * 1000));
   } catch (e) { note_('AI 큐 연쇄 트리거 실패: ' + e.message); }
 }
 function cleanAiQueueTrigger_() {
-  const props = PropertiesService.getScriptProperties();
-  props.deleteProperty('RVAI_NEXT_AT');
+  const props = PropertiesService.getScriptProperties(), id = props.getProperty('RVAI_TRIG_ID');
+  props.deleteProperty('RVAI_NEXT_AT'); props.deleteProperty('RVAI_TRIG_ID');
   try {
     ScriptApp.getProjectTriggers().forEach(function (t) {
-      if (t.getHandlerFunction() === 'rvAiQueue_') ScriptApp.deleteTrigger(t);
+      if (t.getHandlerFunction() === 'rvAiQueue_' || (id && t.getUniqueId() === id)) ScriptApp.deleteTrigger(t);
     });
   } catch (e) {}
 }
