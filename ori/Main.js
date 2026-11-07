@@ -1458,6 +1458,15 @@ function diag_(p) {
   } catch (e) { out.pnErr = String(e); }
   if (p.rv) try { out.rvExplain = rvExplain_(); } catch (e) { out.rvErr = String(e); }
   try { out.obUserEdit = JSON.parse(CacheService.getScriptCache().get('OB_USEREDIT') || '[]'); } catch (e) {}
+  // &tab=탭이름&r0=N&n=줄수: 아무 탭이나 N행부터 최대 30줄·45칸의 보이는 값·수식·배경색 (읽기만, 11/7 메시지 모아보기 점검)
+  if (p.tab) try {
+    const tsh = adminSs_().getSheetByName(String(p.tab));
+    if (!tsh) throw new Error('탭 없음');
+    const r0 = Math.max(1, Number(p.r0) || 1), n = Math.min(30, Math.max(1, Number(p.n) || 15)), lc = Math.min(tsh.getLastColumn(), 45), rg = tsh.getRange(r0, 1, n, lc);
+    const fm = rg.getFormulas(), dv = rg.getDisplayValues(), bg = rg.getBackgrounds();
+    out.tabInfo = { name: tsh.getName(), lastRow: tsh.getLastRow(), lastCol: tsh.getLastColumn(), hidden: tsh.isSheetHidden() };
+    out.tabRows = fm.map(function (row, i) { return (r0 + i) + ': ' + row.map(function (f, j) { const v = String(dv[i][j]); return (v || f) ? colLetter_(j + 1) + '=' + v.slice(0, 40).replace(/\n/g, '⏎') + (bg[i][j] && bg[i][j] !== '#ffffff' ? '[' + bg[i][j] + ']' : '') + (f ? ' {' + f.slice(0, 300) + '}' : '') : ''; }).filter(Boolean).join(' | '); });
+  } catch (e) { out.tabErr = String(e); }
   // &dashrow=N: 한눈에 탭 N행부터 4줄 수식·보이는 값 (읽기만, 10/28 #REF! 원인 보기)
   if (p.dashrow) try {
     const dsh = adminSs_().getSheetByName(DASH_TAB), r0 = Number(p.dashrow), lc = Math.min(dsh.getLastColumn(), 14);
@@ -5384,13 +5393,15 @@ function onAdminEditInner_(e) {
     // 한눈에 '리뷰 취합할 것' 체크 → 진행목록 '리뷰 취합'(그날) / '업체 전송'(의뢰 전체)에 체크한 날 저장, 풀면 지움
     let m = {}; try { m = JSON.parse(PropertiesService.getScriptProperties().getProperty('DASH_RV') || '{}'); } catch (err) {}
     const it = m[String(e.range.getRow())];
+    // 그 줄이 정말 그 의뢰인지 (다시 그리는 중이거나 줄이 밀렸으면 다른 의뢰 날짜를 지우지 않게, 11/7)
+    if (it && it.type === 'req' && it.label && String(sh.getRange(e.range.getRow(), 2).getValue()).indexOf(it.label.split(' (')[0]) !== 0) { try { e.source.toast('한눈에가 막 바뀌었어요. 1분 뒤 다시 체크해 주세요', '리뷰 취합', 8); } catch (err) {} return; }
     if (it) {
       const on = String(e.value).toUpperCase() === 'TRUE', val = on ? today_() : '';
       const runs = readRuns_();
       if (it.type === 'day') { const r = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === it.title; }).pop(); if (r) setRun_(r.row, '리뷰 취합', val); }
       else runs.filter(function (x) { return String(x['시트ID']) === String(it.sid); }).forEach(function (x) { setRun_(x.row, '업체 전송', val); });
       try { sh.getRange(e.range.getRow(), 3).setValue(val).setNumberFormat('M/d'); } catch (err) {}
-      try { e.source.toast(on ? '체크한 날 저장했어요 (3일 뒤 이 줄은 사라져요)' : '체크 풀었어요', '리뷰 취합', 8); } catch (err) {}
+      try { e.source.toast(on ? '체크한 날 저장했어요 (다음 날 이 줄은 사라져요)' : '체크 풀었어요', '리뷰 취합', 8); } catch (err) {}
       return;
     }
   }
@@ -8086,13 +8097,17 @@ function rvItems_(allRuns, props) {
   runs.forEach(function (r) { (bySheet[r['시트ID']] = bySheet[r['시트ID']] || []).push(r); });
   Object.keys(bySheet).forEach(function (sid) {
     const mine = bySheet[sid];
-    if (!all['RVRPT_' + sid] || !keep(mine[0]['업체 전송'])) return;
+    // 업체 전송 = 그 의뢰 진행 중 하나라도 적힌 날 (11/7: 첫 진행 줄만 봐서, 나중에 생긴 줄·취소 줄에 날짜가 없으면 체크가 풀린 것처럼 다시 떴음)
+    //  글자로 적힌 날짜(예: '11/4')도 보낸 걸로 봄
+    const sentVals = mine.map(function (r) { return r['업체 전송']; }).filter(function (v) { return v instanceof Date || String(v == null ? '' : v).trim() !== ''; });
+    const sentAt = sentVals.filter(function (v) { return v instanceof Date; }).sort(function (a, b) { return b - a; })[0] || (sentVals.length ? new Date(0) : null);
+    if (!all['RVRPT_' + sid] || (sentAt && dayStart_(sentAt) < t0)) return;
     const f = function (r) { return (r['진행일'].getMonth() + 1) + '.' + r['진행일'].getDate(); };
     const span = f(mine[0]) === f(mine[mine.length - 1]) ? f(mine[0]) : f(mine[0]) + '~' + f(mine[mine.length - 1]);
     const aiQ = String(all['RVAI_Q'] || '').split(',').indexOf(sid) >= 0;
     const todo = all['RVZIPURL_' + sid] ? '보고 글 보내고 체크' : aiQ ? '사진 분류 중' : '카톡 사진 저장';
     const img = all['RVIMG_' + sid] ? 'https://drive.google.com/drive/folders/' + all['RVIMG_' + sid] : String(mine[0]['폴더 링크'] || '');
-    items.push({ type: 'req', sid: sid, label: '📦 의뢰 끝: ' + campOf_(mine[0]['명단 제목']) + ' (' + span + ') ' + todo, at: md(mine[0]['업체 전송']), sheet: String(mine[0]['시트 링크'] || ''), folder: img });
+    items.push({ type: 'req', sid: sid, label: '📦 의뢰 끝: ' + campOf_(mine[0]['명단 제목']) + ' (' + span + ') ' + todo, at: md(sentAt && sentAt.getTime() ? sentAt : ''), sheet: String(mine[0]['시트 링크'] || ''), folder: img });
   });
   return items;
 }
@@ -8105,7 +8120,7 @@ function syncRvChecks_(ss, allRuns, props) {
   Object.keys(m).forEach(function (row) {
     const it = m[row], v = sh.getRange(Number(row), 1, 1, 2).getValues()[0];
     if (typeof v[0] !== 'boolean') return;   // 체크칸이 아니면(줄이 바뀜) 안 건드림
-    if (it.type === 'day' ? String(v[1]).trim() !== it.title : String(v[1]).indexOf('📦') !== 0) return;   // 다른 줄이면 안 건드림
+    if (it.type === 'day' ? String(v[1]).trim() !== it.title : (String(v[1]).indexOf('📦') !== 0 || (it.label && String(v[1]).indexOf(it.label.split(' (')[0]) !== 0))) return;   // 다른 줄이면 안 건드림 (11/7: 의뢰 이름까지 맞춰 봄)
     const col = it.type === 'day' ? '리뷰 취합' : '업체 전송';
     const mine = it.type === 'day' ? allRuns.filter(function (x) { return bareTitle_(x['명단 제목']) === it.title; }).slice(-1) : allRuns.filter(function (x) { return String(x['시트ID']) === String(it.sid); });
     mine.forEach(function (r) {
@@ -8380,7 +8395,7 @@ function buildDashboard_(force) {
     sh.getRange(rt, 1, 1, 5).setValues([['보냄', '리뷰 취합할 것 (의뢰 리뷰가 다 끝난 것 · 업체에 보내면 체크 → 다음 날 사라짐)', '체크한 날', '명단', '사진 올릴 곳']]).setFontWeight('bold').setBackground('#e6f4ea');
     rvItems.forEach(function (it, i) {
       const rr = rt + 1 + i;
-      rvMap[rr] = it.type === 'req' ? { type: 'req', sid: it.sid } : { type: 'day', title: it.title };
+      rvMap[rr] = it.type === 'req' ? { type: 'req', sid: it.sid, label: String(it.label).slice(0, 40) } : { type: 'day', title: it.title };
       sh.getRange(rr, 1).insertCheckboxes().setValue(!!it.at);
       sh.getRange(rr, 2).setValue(it.label).setHorizontalAlignment('left');
       if (it.type === 'req') sh.getRange(rr, 2).setFontWeight('bold').setFontColor('#1e5631');
