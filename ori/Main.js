@@ -756,6 +756,15 @@ function syncList_(ss) {
   // (한 번) 리뷰 확인 체크칸 폭 좁게 (사용자 요청 10/31)
   if (!props.getProperty('RVW_' + id)) { props.setProperty('RVW_' + id, '1'); try { const c0 = rvCol_(sh, Math.max(sh.getLastColumn(), 1)); if (c0 > 0) sh.setColumnWidth(c0, 40); } catch (e) {} }
   if (props.getProperty(sigK) === sigNow()) return 0;
+  // 같은 명단 시트를 두 실행이 동시에 채우면(폼 제출 + 15분 확인) 같은 응답이 두 줄 들어갈 수 있음 (피클 인계) → 넣는 부분은 한 번에 하나만
+  let dl = null; try { dl = LockService.getDocumentLock(); } catch (e) {}
+  if (dl && !dl.tryLock(30000)) return 0;
+  try {
+    if (props.getProperty(sigK) === sigNow()) return 0;   // 기다리는 동안 다른 실행이 넣음
+    return syncListBody_(ss, sh, props, id, tabs, sigK, sigNow);
+  } finally { try { if (dl) dl.releaseLock(); } catch (e) {} }
+}
+function syncListBody_(ss, sh, props, id, tabs, sigK, sigNow) {
   const heads = [], rows = [];
   tabs.forEach(function (t) {
     const lr = t.getLastRow(), h = rawHead_(t).map(hk_);
@@ -852,7 +861,10 @@ function syncList_(ss) {
   const cT = hdr.indexOf('타임스탬프') + 1;
   let done = String(props.getProperty('LISTK_' + id) || '').split(',').filter(Boolean);
   if (!done.length && cT && sh.getLastRow() >= 3) done = sh.getRange(3, cT, sh.getLastRow() - 2, 1).getValues().map(function (x) { return x[0] instanceof Date ? String(x[0].getTime()) : ''; }).filter(Boolean);
-  const add = rows.filter(function (x) { return done.indexOf(String(x.t)) === -1; });
+  // 넣기 직전에 명단 탭 타임스탬프 칸도 다시 봄 (넣은 기록이 길어서 앞쪽이 잘렸거나 다른 실행이 막 넣은 응답은 또 안 넣음)
+  const have = {};
+  if (cT && sh.getLastRow() >= 3) sh.getRange(3, cT, sh.getLastRow() - 2, 1).getValues().forEach(function (x) { if (x[0] instanceof Date) have[String(x[0].getTime())] = 1; });
+  const add = rows.filter(function (x) { return done.indexOf(String(x.t)) === -1 && !have[String(x.t)]; });
   if (add.length) {
     const start = Math.max(sh.getLastRow(), 2) + 1, n = add.length;
     if (sh.getMaxRows() < start + n) sh.insertRowsAfter(sh.getMaxRows(), start + n - sh.getMaxRows());
@@ -5954,6 +5966,7 @@ function reviewDone_(runs) {
       .concat(mine.map(function (r) { return [r.row, r['마감 시각'] instanceof Date ? r['마감 시각'].getTime() : '', r['인원'], r['총건수']].join(','); })).join('|');
     if (mod && props.getProperty(seenK) === sig) {
       if (!props.getProperty('RVRPT_' + sid)) return;
+      if (rvSentAny_(mine)) return;   // 업체에 보낸 의뢰는 리뷰이미지 폴더를 다시 안 뒤짐 (11/7 속도: 리뷰 압축 55초가 보낸 의뢰까지 15개를 매번 봐서)
       try {
         let rk0 = ''; try { rk0 = (JSON.parse(props.getProperty('RV_' + sid) || '{}') || {}).kind || ''; } catch (e) {}
         const f0 = rk0 === 'confirm' ? null : subTime_('정리: 리뷰 폴더', function () { return rvFolder_(mine, props, sid); });
@@ -6074,7 +6087,7 @@ function reviewDone_(runs) {
         // '리뷰 다 끝남 → 서랍에서 저장' 할 일은 안 넣음 (사용자 11/3: 리뷰 사진은 전원 완료 때가 아니라 날짜별로 받음)
       }
       // B1. 리뷰이미지 폴더 사진 → 압축 (다 끝난 뒤에 한 번에 업체로)
-      if (capF && props.getProperty(rk)) subTime_('정리: 리뷰 압축', function () { rvZip_(capF, name, props, sid, mine); });
+      if (capF && props.getProperty(rk) && !rvSentAny_(mine)) subTime_('정리: 리뷰 압축', function () { rvZip_(capF, name, props, sid, mine); });
       // 끝까지 봤으면 기억 (위에서 return 한 건 다음에 다시 봄). 이 단계에서 명단 시트에 쓴 게 있으면 수정 시각이 바뀌어 다음에 한 번 더 봄
       if (mod) props.setProperty(seenK, sig);
     } catch (e) { note_('리뷰 완료 확인 실패 ' + sid + ': ' + e.message); }
