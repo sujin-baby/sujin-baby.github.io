@@ -5816,9 +5816,14 @@ function onRunSubmit_(e) {
 }
 
 function editRun_(sh) {
-  const t = String(sh.getRange('B1').getValue());
-  return readRuns_().filter(function (r) { return String(r['명단 제목']) === t; }).pop();
+  const t = String(sh.getRange('B1').getValue()), runs = readRuns_();
+  const exact = runs.filter(function (r) { return String(r['명단 제목']) === t; }).pop();
+  if (exact || !t.trim()) return exact;
+  // 날짜 자릿수·띄어쓰기만 다르면 같은 진행 (11/5 B1 '#택11.05 …'인데 진행목록은 '#택11.5 …'라 "먼저 B1에서 진행을 고르세요"가 뜸, 피클 인계)
+  const nt = normRunTitle_(t), same = runs.filter(function (r) { return normRunTitle_(r['명단 제목']) === nt; });
+  return same.length ? same.pop() : undefined;
 }
+function normRunTitle_(t) { return String(t || '').replace(/(\d{1,2})\.(\d{1,2})/, function (m, a, b) { return Number(a) + '.' + Number(b); }).replace(/\s+/g, '').trim(); }
 
 // 폼수정 탭 체크 상태 (스크립트가 불러온 뒤 사람이 손댔는지 보려고)
 function editMarks_(sh) {
@@ -6189,15 +6194,20 @@ function rvCntText_(c) { return RV_TYPES.filter(function (t) { return c[t] > 0; 
 //  사진은 안 나눠도 됨: 압축 안에 '포토 5, 텍스트 10, 별점 5.txt'(개수 = 방마다 보낸 리뷰 가이드 배정, 못 찾으면 의뢰서)
 //  포토·텍스트·별점으로 시작하는 폴더에 나눠 올린 사진은 압축 안에서도 '포토 N/' 폴더로 (전부 나눴으면 폴더 이름이 개수라 메모 파일 없음)
 //  다 올릴 때까지 기다림: 마지막 사진을 올리고 10분 동안 새 사진이 없을 때 만듦. 사진을 더 올리면 다시 만듦. 사진 내용은 안 봄
+// 그 의뢰 진행 중 하나라도 '업체 전송'이 적혔으면 보낸 것 (11/7: 첫 줄만 보던 것)
+function rvSentAny_(mine) { return (mine || []).some(function (r) { const v = r['업체 전송']; return v instanceof Date || String(v == null ? '' : v).trim() !== ''; }); }
 function rvZip_(f, name, props, sid, mine) {
-  if (!props.getProperty('RVRPTFIX_' + sid) && !(mine && mine[0] && mine[0]['업체 전송'])) { props.setProperty('RVRPTFIX_' + sid, '1'); props.deleteProperty('RVZIP_' + sid); }   // (10/31 한 번) 덮어써서 사라진 보고 글 다시
+  const sentAny = rvSentAny_(mine);
+  if (!props.getProperty('RVRPTFIX_' + sid) && !sentAny) { props.setProperty('RVRPTFIX_' + sid, '1'); props.deleteProperty('RVZIP_' + sid); }   // (10/31 한 번) 덮어써서 사라진 보고 글 다시
   // 안 나눈 사진은 AI(Gemini)로 먼저 나눔 (키가 있을 때만). 남았으면 다 나눈 뒤에 압축 (15분 확인에서 이어서)
   // 예전에 리뷰이미지 안에 만든 '(압축 제외)' 폴더는 의뢰 폴더로 꺼냄 (사장님이 보는 링크에서 빼기)
   try { const xi = f.img.getFolders(); while (xi.hasNext()) { const xf = xi.next(); if (RV_SKIP_RE.test(xf.getName()) && f.parent && f.parent.getId && f.parent.getId() !== f.img.getId()) xf.moveTo(f.parent); } } catch (e) {}
-  const aiLeft = (mine && mine[0] && mine[0]['업체 전송']) ? 0 : rvAiSort_(f, sid, props);
+  const aiLeft = sentAny ? 0 : rvAiSort_(f, sid, props);
   // 사장님께 리뷰이미지 폴더 링크로 보냄 (사용자 허락 10/31: 링크 있으면 보기). 그 의뢰 리뷰이미지 폴더만 열림 (다른 업체 폴더는 안 보임)
   try { f.img.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
   if (aiLeft > 0) return;
+  // 포토·텍스트·별점 폴더 이름 개수를 늘 실제 장수로 (11/5 피클 인계: AI가 나눌 때만 고쳐서, 손으로 넣은 사진은 '포토 (4개)'인데 15장)
+  if (!sentAny) { try { rvCountDirs_(f.img); } catch (e) {} }
   const byType = { 포토: [], 텍스트: [], 별점: [] }, loose = [], seen = {}, skipped = {};
   const walk = function (fo, depth, type) {
     if (depth > 0 && RV_SKIP_RE.test(fo.getName())) { const sk = fo.getFiles(); let n = 0; while (sk.hasNext()) { if (/^image\//.test(sk.next().getMimeType())) n++; } if (n) skipped[fo.getName()] = (skipped[fo.getName()] || 0) + n; return; }
@@ -6505,7 +6515,7 @@ function rvPendingCamps_(runs, props) {
   const out = [], day = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
   Object.keys(by).forEach(function (sid) {
     const mine = by[sid], words = {};
-    if (mine[0]['업체 전송'] || !mine.some(function (r) { return r['마감 시각'] instanceof Date; })) return;
+    if (rvSentAny_(mine) || !mine.some(function (r) { return r['마감 시각'] instanceof Date; })) return;
     let imgId = all['RVIMG_' + sid];
     if (!imgId) { try { const f = rvFolder_(mine, props, sid); if (f) imgId = f.img.getId(); } catch (e) {} }
     if (!imgId) return;
@@ -8347,7 +8357,9 @@ function rvItems_(allRuns, props) {
     const sentAt = sentVals.filter(function (v) { return v instanceof Date; }).sort(function (a, b) { return b - a; })[0] || (sentVals.length ? new Date(0) : null);
     if (!all['RVRPT_' + sid] || (sentAt && dayStart_(sentAt) < t0)) return;
     const f = function (r) { return (r['진행일'].getMonth() + 1) + '.' + r['진행일'].getDate(); };
-    const span = f(mine[0]) === f(mine[mine.length - 1]) ? f(mine[0]) : f(mine[0]) + '~' + f(mine[mine.length - 1]);
+    // 날짜 범위는 사람이 있는 진행만 (11/5 피클 인계: 취소·종료된 0명 줄 '#11.02 밀크텐정 2' 때문에 10.30~11.2로 보였음)
+    const ppl = mine.filter(function (r) { return (Number(r['인원']) || 0) > 0 || (Number(r['목표인원']) || 0) > 0; }), sp = ppl.length ? ppl : mine;
+    const span = f(sp[0]) === f(sp[sp.length - 1]) ? f(sp[0]) : f(sp[0]) + '~' + f(sp[sp.length - 1]);
     const aiQ = String(all['RVAI_Q'] || '').split(',').indexOf(sid) >= 0;
     const todo = all['RVZIPURL_' + sid] ? '보고 글 보내고 체크' : aiQ ? '사진 분류 중' : '카톡 사진 저장';
     const img = all['RVIMG_' + sid] ? 'https://drive.google.com/drive/folders/' + all['RVIMG_' + sid] : String(mine[0]['폴더 링크'] || '');
