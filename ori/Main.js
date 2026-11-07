@@ -8210,6 +8210,9 @@ function writePayRow_(r, name, remain, prevMonth, shared, ex) {
   if (renamed && row === byName && !sh.getRange(L.head + 1 + row, L.name).getFormula()) sh.getRange(L.head + 1 + row, L.name).setValue(name);
   if (row === -1) row = names.indexOf('');
   row = row === -1 ? last + 1 : L.head + 1 + row;
+  // 표 맨 아래에 새 줄을 만들 때: 위 진행 줄의 서식·체크칸과 수식만 복사 (11/5 피클 인계: 값만 써서 테두리와 총액·남은·상태 등 수식이 빠져 상태가 빈칸이었음)
+  //  값(캠페인명·수량·날짜 칸 등)은 절대 안 가져옴. 남은 칸 앞 날 수량(-N)·상태 칸 마지막 날 참조는 아래에서 이 진행 것으로 다시 맞춤
+  if (row === last + 1 && last > L.head) { try { payNewRowFromAbove_(sh, row, L); } catch (e) { note_('월급시트 새 줄 서식·수식 복사 실패 (' + name + '): ' + e.message); } }
   const put = function (col, val) {
     if (!col) return;
     const c = sh.getRange(row, col);
@@ -8256,6 +8259,42 @@ function writePayRow_(r, name, remain, prevMonth, shared, ex) {
   put(col, ex.count != null ? ex.count : (Number(r['인원']) || 0) * (ex.mult || 1));
   if (L.date) { const dc = sh.getRange(row, L.date), dv = dc.getValue(); if (!dc.getFormula() && !(dv instanceof Date && dv.getTime() === day.getTime())) dc.setValue(day).setNumberFormat('M/d'); }
   return { sh: sh, row: row, L: L };
+}
+
+// 월급시트 새 줄(row)을 바로 위 진행 줄 모양으로: 서식·체크칸 복사 + 수식이 있는 칸만 하나씩 복사(상대 참조는 새 줄로 바뀜). 값은 안 가져옴
+//  위 줄 = 남은 칸 수식이 '=X줄-Y줄-Z줄' 모양인 가장 가까운 진행 줄 (합계 줄 같은 건 건너뜀). 상태 칸 OR(…마지막 날…)은 이 줄만 보게 되돌림
+//  자동 칸 보호 범위가 위 줄까지만이면 새 줄까지 늘림 (11/5 피클 인계: 보호가 17행까지라 18행부터 안 막혔음)
+function payNewRowFromAbove_(sh, row, L) {
+  const ncol = sh.getLastColumn(), pat = function (f, r) { const m = String(f || '').match(/^=([A-Z]+)(\d+)-([A-Z]+)(\d+)-([A-Z]+)(\d+)(?:-\d+)?$/); return !!m && Number(m[2]) === r && Number(m[4]) === r && Number(m[6]) === r; };
+  let tpl = 0;
+  for (let r = row - 1; r > L.head && r >= row - 15; r--) {
+    if (!String(sh.getRange(r, L.name).getValue()).trim()) continue;
+    if (L.left && !pat(sh.getRange(r, L.left).getFormula(), r)) continue;
+    tpl = r; break;
+  }
+  if (!tpl) return false;
+  const src = sh.getRange(tpl, 1, 1, ncol), dst = sh.getRange(row, 1, 1, ncol);
+  src.copyTo(dst, SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+  try { src.copyTo(dst, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false); } catch (e) {}
+  const fs = src.getFormulas()[0], skip = {};
+  // 스크립트가 값을 쓰는 칸(캠페인명·계약 수량·전월·진행일·스토어·진행시간·특이사항·날짜별 수량)은 수식도 안 가져옴
+  [L.name, L.qty, L.prev, L.date, L.store, L.time, L.note].concat(Object.keys(L.days).map(function (k) { return L.days[k]; })).forEach(function (c) { if (c) skip[c] = 1; });
+  fs.forEach(function (f, j) {
+    if (!f || skip[j + 1]) return;
+    sh.getRange(tpl, j + 1).copyTo(sh.getRange(row, j + 1));
+  });
+  if (L.status) {
+    const c = sh.getRange(row, L.status), f = c.getFormula(), re = new RegExp('OR\\(\\s*([A-Z]+)' + row + '\\s*=\\s*0\\s*,\\s*[A-Z]+\\d+\\s*=\\s*0\\s*\\)');
+    if (re.test(f)) c.setFormula(f.replace(re, function (m, col) { return col + row + '=0'; }));
+  }
+  if (L.report) { try { const rc = sh.getRange(row, L.report); if (!rc.getFormula()) rc.setValue(false); } catch (e) {} }
+  try {
+    sh.getProtections(SpreadsheetApp.ProtectionType.RANGE).forEach(function (p) {
+      const g = p.getRange(), end = g.getRow() + g.getNumRows() - 1;
+      if (g.getRow() <= L.head + 1 && end >= tpl && end < row) p.setRange(sh.getRange(g.getRow(), g.getColumn(), row - g.getRow() + 1, g.getNumColumns()));
+    });
+  } catch (e) {}
+  return true;
 }
 
 // 상태 칸: 의뢰가 다 끝나면(마지막 날 줄의 남은 = 0) 앞 날 줄도 '완료' (사용자 요청 10/18)
