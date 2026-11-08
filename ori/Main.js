@@ -3207,22 +3207,24 @@ function checkFullInner_() {
 const PROT_DESC = '자동 칸 (스크립트가 씀, 고치지 마세요)';
 function protectAutoCols_() {
   const props = PropertiesService.getScriptProperties();
-  if (props.getProperty('PROT_V2')) return;   // V2 (11/8 사용자: 카톡방도 못 건드리게): 카톡방·업체방 추가, 빠진 칸 다시
+  if (props.getProperty('PROT_V3')) return;   // V2 (11/8 사용자: 카톡방도 못 건드리게): 카톡방·업체방 추가. V3: 열 전체(예전엔 만들 때 줄 수까지라 109행 아래는 안 막혔음)
   const ss = adminSs_(), add = function (sh, head, names) {
     if (!sh) return;
-    const have = sh.getProtections(SpreadsheetApp.ProtectionType.RANGE).map(function (p) { return p.getRange().getA1Notation(); });
+    const ps = sh.getProtections(SpreadsheetApp.ProtectionType.RANGE);
+    // 예전에 걸어 둔 자동 칸 보호는 열 전체로 넓힘 (새 줄도 막히게)
+    ps.forEach(function (p) { try { if (String(p.getDescription()).indexOf(PROT_DESC) === 0) { const L = colLetter_(p.getRange().getColumn()); if (p.getRange().getA1Notation() !== L + ':' + L) p.setRange(sh.getRange(L + ':' + L)); } } catch (e) {} });
+    const cols = ps.map(function (p) { try { return String(p.getDescription()).indexOf(PROT_DESC) === 0 ? p.getRange().getColumn() : -1; } catch (e) { return -1; } });
     names.forEach(function (n) {
       const c = head.indexOf(n) + 1;
-      if (c < 1) return;
-      const rg = sh.getRange(1, c, sh.getMaxRows(), 1);
-      if (have.indexOf(rg.getA1Notation()) >= 0) return;
-      rg.protect().setDescription(PROT_DESC + ' ' + n).setWarningOnly(true);
+      if (c < 1 || cols.indexOf(c) >= 0) return;
+      const L = colLetter_(c);
+      sh.getRange(L + ':' + L).protect().setDescription(PROT_DESC + ' ' + n).setWarningOnly(true);
     });
   };
   const list = ss.getSheetByName(CONFIG.LIST_SHEET);
   if (list) add(list, list.getRange(1, 1, 1, list.getLastColumn()).getValues()[0].map(String), ['카톡방', '업체방', '폼 링크', '시트 링크', '폴더 링크', '시트ID', '폼ID', '요청ID']);
   try { const ps = planSheet_(); add(ps, PLAN_HEAD, ['ID', '설정']); } catch (e) {}
-  props.setProperty('PROT_V1', '1'); props.setProperty('PROT_V2', '1');
+  props.setProperty('PROT_V1', '1'); props.setProperty('PROT_V2', '1'); props.setProperty('PROT_V3', '1');
   note_('✓ 진행목록 카톡방·링크·ID 칸, 일정 ID·설정 칸에 고치기 전 경고 걸어 둠');
 }
 // 30분 정리: 다 끝나야 시각을 적음 (중간에 끊기면 다음 확인에서 다시)
