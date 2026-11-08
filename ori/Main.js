@@ -6308,7 +6308,7 @@ function reviewDone_(runs, only) {
       .concat(mine.map(function (r) { return [r.row, r['마감 시각'] instanceof Date ? r['마감 시각'].getTime() : '', r['인원'], r['총건수']].join(','); })).join('|');
     if (mod && props.getProperty(seenK) === sig) {
       if (!props.getProperty('RVRPT_' + sid)) return;
-      if (rvSentAny_(mine)) return;   // 업체에 보낸 의뢰는 리뷰이미지 폴더를 다시 안 뒤짐 (11/7 속도: 리뷰 압축 55초가 보낸 의뢰까지 15개를 매번 봐서)
+      if (rvSentAny_(mine)) { if (!props.getProperty('RVCHKCLEAN_' + sid)) { props.setProperty('RVCHKCLEAN_' + sid, '1'); try { rvCheckMsgSync_(rvBase_(fname), ''); } catch (e) {} } return; }   // 업체에 보낸 의뢰는 리뷰이미지 폴더를 다시 안 뒤짐, 남은 '리뷰 사진 확인' 할 일은 한 번 지움 (11/7 속도: 리뷰 압축 55초가 보낸 의뢰까지 15개를 매번 봐서)
       try {
         let rk0 = ''; try { rk0 = (JSON.parse(props.getProperty('RV_' + sid) || '{}') || {}).kind || ''; } catch (e) {}
         const f0 = rk0 === 'confirm' ? null : subTime_('정리: 리뷰 폴더', function () { return rvFolder_(mine, props, sid); });
@@ -6487,7 +6487,10 @@ function rvReportMsg_(link, mine, name, cnt) {
   if (tag === '#택 ') camp = camp.replace(/^택\s+/, '');
   const campTitle = (dateStr ? dateStr + ' ' : '') + tag + camp;
 
-  const total = (mine || []).reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0) || (mine || []).reduce(function (s, x) { return s + (Number(x['인원']) || 0); }, 0);
+  let total = (mine || []).reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0) || (mine || []).reduce(function (s, x) { return s + (Number(x['인원']) || 0); }, 0);
+  // 장바구니건은 리뷰 수 = 사람 × 상품 수 (종류별로 센 게 있으면 그 합)
+  const cartK = cartN_(first);
+  if (cartK > 1) total = cnt ? RV_TYPES.reduce(function (a, t) { return a + (Number(cnt[t]) || 0); }, 0) : (mine || []).reduce(function (s, x) { return s + (Number(x['인원']) || 0); }, 0) * cartK;
 
   const lines = [];
   if (link) lines.push(String(link).trim(), '');
@@ -6498,6 +6501,35 @@ function rvReportMsg_(link, mine, name, cnt) {
 }
 function rvReportLine_(name) { return '안녕하세요 ' + String(name).replace(/\s*\(응답\)\s*$/, '').trim() + ' 리뷰완료되어 보고드립니다 !'; }
 function rvTypeOf_(folderName) { const m = String(folderName || '').trim().match(/^(포토|텍스트|별점)/); return m ? m[1] : ''; }
+// 장바구니건 상품 수 (1 = 아님). 생성기가 넘긴 CART_<시트ID>
+function rvCartOf_(sid) { return Number(PropertiesService.getScriptProperties().getProperty('CART_' + sid)) || 1; }
+// 장바구니건 (11/8 사용자: 유러피안샐러드외 = 3개 장바구니, 캡처 1장에 그 사람 리뷰 3개(포토 1 + 텍스트 2, 텍스트만 3인 사람도 있음))
+//  캡처 1장 = 1명. AI가 나눈 '포토' 폴더 = 포토가 들어간 사람(포토 1 + 텍스트 상품수-1), '텍스트' = 텍스트만(텍스트 상품수), '별점' = 별점만
+//  → 리뷰 개수와 확인(캡처 장수 = 사람 수)
+function rvCartCounts_(P, T, S, cart, people) {
+  const cnt = { 포토: P, 텍스트: P * (cart - 1) + T * cart, 별점: S * cart }, warn = [], shots = P + T + S;
+  if (people && shots !== people) warn.push('⚠ 장바구니건: 캡처 ' + shots + '장인데 ' + people + '명이에요' + (shots < people ? ' → ' + (people - shots) + '명 캡처가 빠졌는지 확인' : ' → 같은 사람 캡처가 두 장인지 확인'));
+  return { cnt: cnt, warn: warn };
+}
+// 장바구니건 폴더 이름: '포토 포함 (8명)', '텍스트만 (12명)', '별점만 (0명)'
+function rvCartDirName_(t, n) { return (t === '포토' ? '포토 포함' : t + '만') + ' (' + n + '명)'; }
+// 같은 의뢰의 안 보낸 '리뷰 사진 확인' 할 일: 지금 경고가 없으면(msg 빈칸) 지우고, 있으면 하나만 남겨 지금 글로 (11/8: 사진 10장일 때 경고가 15장 다 올린 뒤에도 남아 있었음)
+function rvCheckMsgSync_(base, msg) {
+  return withObWrite_(function () {
+    const ob = outboxSheet_(), ol = ob.getLastRow(), pre = '[' + base + '] 리뷰 사진 확인';
+    let kept = false, n = 0;
+    if (ol >= 2) {
+      const v = ob.getRange(2, 1, ol - 1, 6).getValues();
+      for (let i = v.length - 1; i >= 0; i--) {
+        if (v[i][2] !== '할 일' || v[i][5] === '보냄' || String(v[i][4]).indexOf(pre) !== 0) continue;
+        if (msg && !kept) { if (String(v[i][4]) !== msg) ob.getRange(i + 2, 5).setValue(msg); kept = true; }
+        else { ob.deleteRow(i + 2); n++; }
+      }
+    }
+    if (msg && !kept) queueMsgInner_('내 할 일', msg, '할 일');
+    return n;
+  });
+}
 // 의뢰서(생성기 리뷰 정보 RV_)의 종류별 개수 → 압축 개수와 다르면 할 일에 알림. 모르면 null
 function rvExpect_(sid, mine) {
   let rv = {}; try { rv = JSON.parse(PropertiesService.getScriptProperties().getProperty('RV_' + sid) || '{}') || {}; } catch (e) {}
@@ -6695,7 +6727,7 @@ function rvZip_(f, name, props, sid, mine) {
   try { f.img.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
   if (aiLeft > 0) return;
   // 포토·텍스트·별점 폴더 이름 개수를 늘 실제 장수로 (11/5 피클 인계: AI가 나눌 때만 고쳐서, 손으로 넣은 사진은 '포토 (4개)'인데 15장)
-  if (!sentAny) { try { rvCountDirs_(f.img); } catch (e) {} }
+  if (!sentAny) { try { rvCountDirs_(f.img, rvCartOf_(sid)); } catch (e) {} }
   const byType = { 포토: [], 텍스트: [], 별점: [] }, loose = [], seen = {}, skipped = {};
   const walk = function (fo, depth, type) {
     if (depth > 0 && RV_SKIP_RE.test(fo.getName())) { const sk = fo.getFiles(); let n = 0; while (sk.hasNext()) { if (/^image\//.test(sk.next().getMimeType())) n++; } if (n) skipped[fo.getName()] = (skipped[fo.getName()] || 0) + n; return; }
@@ -6715,7 +6747,12 @@ function rvZip_(f, name, props, sid, mine) {
   const base = rvBase_(name), zipName = base.replace(/\//g, '／').replace(/[\\:*?"<>|]/g, '') + '.zip', warn = [];   // 파일 이름에 못 쓰는 글자 (# 실/빈 → 실／빈)
   // 개수: 전부 종류 폴더에 나눴으면 폴더 사진 수, 아니면 리뷰 가이드 배정(못 찾으면 의뢰서)
   let cnt = null, from = '';
-  if (!loose.length) {
+  const cart = rvCartOf_(sid);
+  if (!loose.length && cart > 1) {
+    // 장바구니건: 캡처 1장 = 1명 = 리뷰 상품 수만큼 → 사람 기준으로 셈, 의뢰서·배정 종류 개수와는 비교 안 함
+    const people = mine.reduce(function (a, r) { return a + (Number(r['인원']) || 0); }, 0), cc = rvCartCounts_(byType['포토'].length, byType['텍스트'].length, byType['별점'].length, cart, people);
+    cnt = cc.cnt; from = '폴더'; cc.warn.forEach(function (w) { warn.push(w); });
+  } else if (!loose.length) {
     cnt = { 포토: byType['포토'].length, 텍스트: byType['텍스트'].length, 별점: byType['별점'].length }; from = '폴더';
     const ex = rvExpect_(sid, mine);
     if (ex && RV_TYPES.some(function (t) { return ex[t] !== cnt[t]; })) warn.push('⚠ 의뢰서(' + rvCntText_(ex) + ')와 폴더 사진 수(' + rvCntText_(cnt) + ')가 달라요');
@@ -6744,7 +6781,7 @@ function rvZip_(f, name, props, sid, mine) {
     } else warn.push('⚠ 리뷰 종류별 개수를 몰라서 압축 파일에 못 적었어요 (사진 ' + files.length + '장)');
   }
   const total = cnt ? cnt['포토'] + cnt['텍스트'] + cnt['별점'] : 0;
-  if (from !== '폴더' && total && files.length < total) warn.push('⚠ 리뷰 ' + total + '건인데 사진이 ' + files.length + '장이에요 → 빠진 캡처가 없는지 확인 (더 올리면 다시 압축돼요)');
+  if (from !== '폴더' && cart <= 1 && total && files.length < total) warn.push('⚠ 리뷰 ' + total + '건인데 사진이 ' + files.length + '장이에요 → 빠진 캡처가 없는지 확인 (더 올리면 다시 압축돼요)');
   // 압축 파일은 안 만듦 (10/31: 사장님께 리뷰이미지 폴더 링크로 보내서 압축은 안 씀). 개수 확인·보고 글만
   props.setProperty('RVZIP_' + sid, sig);
   props.setProperty('RVZIPURL_' + sid, f.img.getUrl());
@@ -6766,7 +6803,7 @@ function rvZip_(f, name, props, sid, mine) {
   const skTxt = Object.keys(skipped).map(function (k) { return k.replace(/\s*\(?압축\s*제외\)?\s*/, '') + ' ' + skipped[k] + '장'; }).join(', ');
   if (skTxt) warn.push('ℹ 리뷰가 아니라고 뺀 사진: ' + skTxt + ' (의뢰 폴더 안 \'(압축 제외)\' 폴더. 리뷰인데 빠졌으면 리뷰이미지 안 포토·텍스트·별점 폴더로 옮기면 다시 세요)');
   try { rvCheckFile_(f, base, sid, mine, cnt, files.length, warn); } catch (e) { note_('리뷰 확인표 실패: ' + e.message); }
-  if (warn.length) queueMsg_('내 할 일', '[' + base + '] 리뷰 사진 확인 (사진 ' + files.length + '장 · ' + cntTxt + ')\n' + warn.join('\n'), '할 일');
+  try { rvCheckMsgSync_(base, warn.length ? '[' + base + '] 리뷰 사진 확인 (사진 ' + files.length + '장 · ' + cntTxt + (cart > 1 ? ' · 장바구니 ' + cart + '개' : '') + ')\n' + warn.join('\n') : ''); } catch (e) { note_('리뷰 사진 확인 할 일 실패: ' + e.message); }
   note_('✓ 리뷰 보고: ' + base + ' (사진 ' + files.length + '장 · ' + cntTxt + (from ? ', ' + from + ' 기준' : '') + ')' + (warn.length ? ' ' + warn.join(' ') : ''));
 }
 
@@ -6881,14 +6918,14 @@ function rvSubDir_(img, name) {
   return img.createFolder(t ? t + ' (0개)' : name);
 }
 // 종류 폴더 이름에 사진 수 (사용자 요청 10/31: '별점 (5개)'). 0개인 종류는 폴더를 안 둠 (빈 폴더면 휴지통으로)
-function rvCountDirs_(img) {
+function rvCountDirs_(img, cart) {
   const it0 = img.getFolders(), list = [];
   while (it0.hasNext()) { const f = it0.next(); if (rvTypeOf_(f.getName())) list.push(f); }
   list.forEach(function (f) {
     const t = rvTypeOf_(f.getName()), it = f.getFiles();
     let n = 0, any = false; while (it.hasNext()) { any = true; if (/^image\//.test(it.next().getMimeType())) n++; }
     if (!n) { if (!any && !f.getFolders().hasNext()) { try { f.setTrashed(true); } catch (e) {} } return; }
-    const want = t + ' (' + n + '개)';
+    const want = cart > 1 ? rvCartDirName_(t, n) : t + ' (' + n + '개)';
     if (f.getName() !== want) f.setName(want);
   });
 }
@@ -6952,7 +6989,7 @@ function rvAiSort_(f, sid, props) {
   if (done) note_('✓ 리뷰 사진 AI 분류 ' + done + '장: ' + Object.keys(moved).map(function (k) { return k.replace(/\s*\(압축 제외\)/, '') + ' ' + moved[k]; }).join(', ') + (left.length - done > 0 ? ' (남은 ' + (left.length - done) + '장은 다음 확인에서)' : ''));
   setQ(left.length - done > 0);
   if (left.length - done > 0) { try { ensureAiQueueTrigger_(); } catch (e) {} }
-  if (done) { try { rvCountDirs_(f.img); } catch (e) {} }
+  if (done) { try { rvCountDirs_(f.img, rvCartOf_(sid)); } catch (e) {} }
   return left.length - done;
 }
 // 리뷰 사진 AI 분류 1분 연쇄 트리거 (남은 사진이 있으면 15분 대기 없이 1분 뒤 바로 실행, 11/6 패치)
@@ -7104,7 +7141,7 @@ function rvInboxSort_(runs) {
     }
     if (i < files.length - 1) Utilities.sleep(2000);
   }
-  camps.forEach(function (c) { if (c.moved) { try { rvCountDirs_(c.img); } catch (e) {} } });
+  camps.forEach(function (c) { if (c.moved) { try { rvCountDirs_(c.img, rvCartOf_(c.sid)); } catch (e) {} } });
   const done = Object.keys(got);
   if (done.length) note_('✓ 리뷰 사진 받는 곳 → ' + done.map(function (k) { return k + ' ' + got[k] + '장'; }).join(', '));
   if (unknown) {
