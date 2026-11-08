@@ -3669,9 +3669,31 @@ function dupSummary_(sheetId) {
   } catch (e) { return '중복 확인 못 함: ' + e.message; }
 }
 
+// (11/8 한 번, 사용자: 시온스 발마사지기 10장 올렸는데 9장이 없음) 받는 곳에서 '#10.22 실 시온스 양모볼외' 리뷰이미지로 잘못 간
+//  11/8 21:29 카톡 사진 9장 → '시온스 발마사지기' 리뷰이미지 같은 종류 폴더로 옮김 (양모볼외 리뷰이미지에는 이 9장밖에 없었음)
+function rvMoveFix1_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('RVMOVEFIX1')) return;
+  props.setProperty('RVMOVEFIX1', '1');
+  const runs = readRuns_(), sidOf = function (re) { const r = runs.filter(function (x) { return re.test(String(x['명단 제목'])) && props.getProperty('RVIMG_' + x['시트ID']); })[0]; return r ? String(r['시트ID']) : ''; };
+  const from = sidOf(/시온스 양모볼외/), to = sidOf(/시온스 발마사지기/);
+  if (!from || !to || from === to) { note_('⚠ 시온스 사진 옮기기: 의뢰를 못 찾음'); return; }
+  const src = DriveApp.getFolderById(props.getProperty('RVIMG_' + from)), dst = DriveApp.getFolderById(props.getProperty('RVIMG_' + to));
+  let n = 0;
+  const di = src.getFolders();
+  while (di.hasNext()) {
+    const d = di.next(), t = rvTypeOf_(d.getName());
+    if (!t) continue;
+    const fi = d.getFiles();
+    while (fi.hasNext()) { const x = fi.next(); if (/^KakaoTalk_Photo_2026-11-08-21-29/.test(x.getName())) { x.moveTo(rvSubDir_(dst, t)); n++; } }
+  }
+  try { rvCountDirs_(src, 1); rvCountDirs_(dst, rvCartOf_(to)); } catch (e) {}
+  note_('✓ 시온스 발마사지기 사진 ' + n + '장 제자리로 옮김 (양모볼외 리뷰이미지에 잘못 들어갔던 것)');
+}
 function rvInboxTick_() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;   // 15분 확인이 도는 중이면 그쪽에서 함
+  try { rvMoveFix1_(); } catch (e) { try { note_('시온스 사진 옮기기 실패: ' + e.message); } catch (e2) {} }
   try { globalThis.__ORI_T0 = Date.now(); rvInboxSort_(null); } catch (e) { try { note_('리뷰 사진 받는 곳(5분) 실패: ' + e); } catch (e2) {} }
   // 명단 시트 리뷰 확인 체크 → 5분 안에 취완·리뷰비·페이백 요청 (11/8 사용자: 시온스 발마사지기 다 체크했는데 리뷰비 요청이 너무 늦게 뜸)
   try { if (!late_(150)) rvQuickCheck_(); } catch (e) { try { if (!(e && e.yieldLock)) note_('리뷰 확인(5분) 실패: ' + e); } catch (e2) {} }
@@ -7062,7 +7084,7 @@ function rvPendingCamps_(runs, props) {
   runs.forEach(function (r) { if (r['시트ID'] && !isExpect_(r) && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut) (by[r['시트ID']] = by[r['시트ID']] || []).push(r); });
   const out = [], day = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
   Object.keys(by).forEach(function (sid) {
-    const mine = by[sid], words = {};
+    const mine = by[sid], words = {}, nameW = {};
     if (rvSentAny_(mine) || !mine.some(function (r) { return r['마감 시각'] instanceof Date; })) return;
     let imgId = all['RVIMG_' + sid];
     if (!imgId) { try { const f = rvFolder_(mine, props, sid); if (f) imgId = f.img.getId(); } catch (e) {} }
@@ -7082,10 +7104,10 @@ function rvPendingCamps_(runs, props) {
     }
     ow.w.forEach(function (w) { words[w] = 1; });
     mine.forEach(function (r) {
-      rvWords_(campOf_(r['명단 제목']).replace(/외(?=\s|\d|$)/g, ' ')).forEach(function (w) { words[w] = 1; });   // '효자손외' → '효자손' (11/3: '외'가 붙어 캡처 속 '효자손'과 안 맞았음)
+      rvWords_(campOf_(r['명단 제목']).replace(/외(?=\s|\d|$)/g, ' ')).forEach(function (w) { words[w] = 1; nameW[w] = 1; });   // '효자손외' → '효자손' (11/3: '외'가 붙어 캡처 속 '효자손'과 안 맞았음)
       String(formDescRead_(r['폼ID'], descAge_(r))).split('\n').forEach(function (l) { if (/상품명|키워드|판매처/.test(l)) rvWords_(l.replace(/^.*?[:：]/, '')).forEach(function (w) { words[w] = 1; }); });
     });
-    out.push({ sid: sid, name: campOf_(mine[0]['명단 제목']), imgId: imgId, words: Object.keys(words) });
+    out.push({ sid: sid, name: campOf_(mine[0]['명단 제목']), imgId: imgId, words: Object.keys(words), nameWords: Object.keys(nameW), day: mine.reduce(function (m, r) { return Math.max(m, r['진행일'].getTime()); }, 0) });
   });
   return out;
 }
@@ -7093,7 +7115,9 @@ function rvPendingCamps_(runs, props) {
 function rvMatchCamp_(product, camps) {
   if (!camps.length) return null;
   const p = String(product || '').replace(/\s+/g, '');
-  const sc = camps.map(function (c) { return { c: c, n: c.words.filter(function (w) { return p.indexOf(w) >= 0; }).length }; }).sort(function (a, b) { return b.n - a.n; });
+  // 의뢰 이름 낱말이 먼저, 나머지(공지 상품명·옵션) 낱말은 같을 때만 (11/8: '시온스 양모볼외'에도 같은 발마사지기가 있어서 공지 상품명 낱말이 더 많이 겹친 예전 의뢰로 감
+  //  → 이름에 '발마사지기'가 있는 '시온스 발마사지기'가 이기게)
+  const sc = camps.map(function (c) { const nw = c.nameWords || []; return { c: c, n: 100 * nw.filter(function (w) { return p.indexOf(w) >= 0; }).length + c.words.filter(function (w) { return p.indexOf(w) >= 0; }).length }; }).sort(function (a, b) { return b.n - a.n; });
   if (sc[0].n > 0 && (sc.length === 1 || sc[1].n < sc[0].n)) return sc[0].c;
   return camps.length === 1 ? camps[0] : null;
 }

@@ -25,5 +25,9 @@ G("rvCheckMsgSync_('#택 과일쏙 대봉감', '[#택 과일쏙 대봉감] 리�
 ok(left().filter(x => /과일쏙/.test(x)).length === 1 && left().some(x => /14장/.test(x)), '하나만 남기고 지금 글로 ' + JSON.stringify(left()));
 G("rvCheckMsgSync_('#택 과일쏙 대봉감', '')");
 ok(!left().some(x => /과일쏙/.test(x)) && left().some(x => /속눈썹/.test(x)), '경고 없어지면 지움 (다른 의뢰는 그대로) ' + JSON.stringify(left()));
+// 받는 곳 사진 → 의뢰: 의뢰 이름 낱말이 먼저 (11/8 시온스 발마사지기 사진이 같은 상품이 든 '시온스 양모볼외'로 감)
+env.__c = [{ name: '실 시온스 양모볼외', words: ['시온스', '양모볼', '투온스', '데일리케어', '저주파', '발마사지기', 'EMS'], nameWords: ['시온스', '양모볼'] }, { name: '시온스 발마사지기', words: ['시온스', '발마사지기'], nameWords: ['시온스', '발마사지기'] }];
+const m1 = G("rvMatchCamp_('투온스 데일리케어 저주파 발마사지기 EMS 발매트', __c)"), m2 = G("rvMatchCamp_('시온스 양모볼 건조기볼', __c)");
+ok(m1 && m1.name === '시온스 발마사지기' && m2 && m2.name === '실 시온스 양모볼외', '의뢰 찾기 ' + [m1 && m1.name, m2 && m2.name].join(' / '));
 console.log(fails.length ? 'XX 장바구니건 리뷰 시험 실패:\n- ' + fails.join('\n- ') : '✓ 장바구니건 리뷰·리뷰 사진 확인 할 일 시험 통과');
 process.exit(fails.length ? 1 : 0);
