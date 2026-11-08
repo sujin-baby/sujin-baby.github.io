@@ -6507,9 +6507,11 @@ function rvCartOf_(sid) { return Number(PropertiesService.getScriptProperties().
 //  캡처 1장 = 1명. AI가 나눈 '포토' 폴더 = 포토가 들어간 사람(포토 1 + 텍스트 상품수-1), '텍스트' = 텍스트만(텍스트 상품수), '별점' = 별점만
 //  → 리뷰 개수와 확인(캡처 장수 = 사람 수)
 function rvCartCounts_(P, T, S, cart, people) {
-  const cnt = { 포토: P, 텍스트: P * (cart - 1) + T * cart, 별점: S * cart }, warn = [], shots = P + T + S;
-  if (people && shots !== people) warn.push('⚠ 장바구니건: 캡처 ' + shots + '장인데 ' + people + '명이에요' + (shots < people ? ' → ' + (people - shots) + '명 캡처가 빠졌는지 확인' : ' → 같은 사람 캡처가 두 장인지 확인'));
-  return { cnt: cnt, warn: warn };
+  const warn = [], shots = P + T + S;
+  // 캡처 장수 ≠ 사람 수면 종류별 개수를 믿을 수 없음 (한 사람이 두 장 올리면 리뷰가 두 배로 셈, 11/8 유러피안샐러드외 33장 · 20명) → 개수는 안 쓰고 총 = 사람 × 상품 수
+  const cnt = !people || shots === people ? { 포토: P, 텍스트: P * (cart - 1) + T * cart, 별점: S * cart } : null;
+  if (people && shots !== people) warn.push('⚠ 장바구니건: 캡처 ' + shots + '장인데 ' + people + '명이에요' + (shots < people ? ' → ' + (people - shots) + '명 캡처가 빠졌는지 확인' : ' → 같은 사람 캡처가 두 장 이상인지 확인 (한 사람 캡처는 한 장으로 합치거나 하나만 두기)'));
+  return { cnt: cnt, warn: warn, txt: '포토 포함 ' + P + '장, 텍스트만 ' + T + '장' + (S ? ', 별점만 ' + S + '장' : '') };
 }
 // 장바구니건 폴더 이름: '포토 포함 (8명)', '텍스트만 (12명)', '별점만 (0명)'
 function rvCartDirName_(t, n) { return (t === '포토' ? '포토 포함' : t + '만') + ' (' + n + '명)'; }
@@ -6741,17 +6743,18 @@ function rvZip_(f, name, props, sid, mine) {
   const typed = byType['포토'].concat(byType['텍스트'], byType['별점']), files = typed.concat(loose);
   if (!files.length) return;
   const newest = files.reduce(function (m, x) { return Math.max(m, x.getLastUpdated().getTime(), x.getDateCreated().getTime()); }, 0);
-  const sig = 'v3:' + RV_TYPES.map(function (t) { return byType[t].length; }).join(',') + ':' + loose.length + ':' + newest;   // v3 (11/8): 장바구니건·종류별 개수·할 일 하나만 → 한 번 다시
+  const sig = 'v4:' + RV_TYPES.map(function (t) { return byType[t].length; }).join(',') + ':' + loose.length + ':' + newest;   // v3 (11/8): 장바구니건·종류별 개수·할 일 하나만 → 한 번 다시
   if (props.getProperty('RVZIP_' + sid) === sig) return;
   if (Date.now() - newest < 10 * 60000) return;   // 아직 올리는 중일 수 있음 → 다음 확인에서
   const base = rvBase_(name), zipName = base.replace(/\//g, '／').replace(/[\\:*?"<>|]/g, '') + '.zip', warn = [];   // 파일 이름에 못 쓰는 글자 (# 실/빈 → 실／빈)
   // 개수: 전부 종류 폴더에 나눴으면 폴더 사진 수, 아니면 리뷰 가이드 배정(못 찾으면 의뢰서)
   let cnt = null, from = '';
   const cart = rvCartOf_(sid);
+  let cartTxt = '';
   if (!loose.length && cart > 1) {
     // 장바구니건: 캡처 1장 = 1명 = 리뷰 상품 수만큼 → 사람 기준으로 셈, 의뢰서·배정 종류 개수와는 비교 안 함
     const people = mine.reduce(function (a, r) { return a + (Number(r['인원']) || 0); }, 0), cc = rvCartCounts_(byType['포토'].length, byType['텍스트'].length, byType['별점'].length, cart, people);
-    cnt = cc.cnt; from = '폴더'; cc.warn.forEach(function (w) { warn.push(w); });
+    cnt = cc.cnt; from = cc.cnt ? '폴더' : ''; cartTxt = cc.txt; cc.warn.forEach(function (w) { warn.push(w); });
   } else if (!loose.length) {
     cnt = { 포토: byType['포토'].length, 텍스트: byType['텍스트'].length, 별점: byType['별점'].length }; from = '폴더';
     const ex = rvExpect_(sid, mine);
@@ -6785,7 +6788,7 @@ function rvZip_(f, name, props, sid, mine) {
   // 압축 파일은 안 만듦 (10/31: 사장님께 리뷰이미지 폴더 링크로 보내서 압축은 안 씀). 개수 확인·보고 글만
   props.setProperty('RVZIP_' + sid, sig);
   props.setProperty('RVZIPURL_' + sid, f.img.getUrl());
-  const cntTxt = cnt ? rvCntText_(cnt) : '개수 모름';
+  const cntTxt = cartTxt || (cnt ? rvCntText_(cnt) : '개수 모름');
   // 사장님께 보낼 글 하나: 리뷰 완료 보고 + 폴더/압축 파일 링크 (사용자 요청: 폴더 링크 + 날짜 캠페인명 + 총 N건 리뷰 취합본 전달드립니다!)
   const link = f.img.getUrl();
   const msg = rvReportMsg_(link, mine, name, cnt);
