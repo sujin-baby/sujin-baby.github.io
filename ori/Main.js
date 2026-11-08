@@ -8981,7 +8981,7 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '35';
+const DASH_VER = '36';
 // 한눈에 '리뷰 취합할 것' 칸에 보일 것: 의뢰 전체 리뷰가 끝난(RVRPT_) 의뢰 중 업체 전송 체크 안 했거나 체크한 지 3일 안 된 것. 최근 40일 진행만, 기대평 빼고
 //  날마다 취합하던 줄은 없앰 (사용자 요청 10/26: 날짜별로 말고 한 캠페인이 다 끝나면 그때 한 번에)
 function rvItems_(allRuns, props) {
@@ -9246,9 +9246,14 @@ function buildDashboard_(force) {
         'tot,SUMPRODUCT(w),na,SUMPRODUCT(w*(LEFT(s,1)="A")),nb,SUMPRODUCT(w*(LEFT(s,1)="B")),rest,MAX(0,tot-na-nb),adda,MIN(rest,MAX(0,' + mxD[0] + '-na)),calc,(na+adda)*' + EXP_SETS.A.length + '+(nb+rest-adda)*' + EXP_SETS.B.length + ',IF(tot=0,' + fallbackVal + ',calc)),' + fallbackVal + ')');
     }
     else if (mixDay) sh.getRange(rr, 6).setValue(expCount_(r, Number(r['인원']) || 0, allRuns));
-    else sh.getRange(rr, 6).setFormula(w.shared
-      ? '=IFERROR(' + (per > 1 ? per + '*' : '') + 'LET(v,' + ts + ',SUMPRODUCT(ISNUMBER(v)*(v>=' + (w.from ? fmt(w.from) : 0) + ')*(v<' + (isFinite(w.to) ? fmt(w.to) : 99999) + '))),"허용 필요")'
-      : '=IFERROR(' + (per > 1 ? per + '*' : '') + 'SUMPRODUCT(ISNUMBER(' + ts + ')),"허용 필요")');   // 응답 없는 새 명단 시트는 빈 글자("")가 와서 COUNTA면 1로 셈 → 날짜(타임스탬프)만 셈
+    else {
+      // 명단 시트 숫자(IMPORTRANGE)는 구글이 몇 분 늦게 새로 고칠 때가 있음 → 진행목록 인원(마감할 때 바로 적힘)보다 작으면 인원으로 (11/9: 07:34 마감인데 신청 0·남은 10으로 보였음)
+      const known = (per > 1 ? per : 1) * (Number(r['인원']) || 0);
+      const cntF = w.shared
+        ? (per > 1 ? per + '*' : '') + 'LET(v,' + ts + ',SUMPRODUCT(ISNUMBER(v)*(v>=' + (w.from ? fmt(w.from) : 0) + ')*(v<' + (isFinite(w.to) ? fmt(w.to) : 99999) + ')))'
+        : (per > 1 ? per + '*' : '') + 'SUMPRODUCT(ISNUMBER(' + ts + '))';   // 응답 없는 새 명단 시트는 빈 글자("")가 와서 COUNTA면 1로 셈 → 날짜(타임스탬프)만 셈
+      sh.getRange(rr, 6).setFormula('=IFERROR(' + (known > 0 ? 'MAX(' + known + ',' + cntF + ')' : cntF) + ',"허용 필요")');
+    }   // 응답 없는 새 명단 시트는 빈 글자("")가 와서 COUNTA면 1로 셈 → 날짜(타임스탬프)만 셈
     sh.getRange(rr, 7).setFormula('=IF(ISNUMBER(F' + rr + '),E' + rr + '-F' + rr + ',"")');
     sh.getRange(rr, 8).setValue(r['마감 시각']);
     sh.getRange(rr, 9).setFormula('=HYPERLINK(' + q(x.url) + ',"명단")');
