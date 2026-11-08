@@ -142,8 +142,15 @@ const coll = t => env.__ss.sheets['진행목록'].rows.find(r => String(r[LH.ind
 // 리뷰비 요청은 리뷰비 시트 칸대로 나눔: E 주문 날짜, F 진행명, G 진행자, H 구확건수, I 리뷰작성건수, J 진행링크 (11/8)
 const fr = T['💰리뷰비'].rows[rowOf('m14') - 1];
 const wd = ['일', '월', '화', '수', '목', '금', '토'][new Date(t0.getFullYear(), 9, 28).getDay()];
-ok(JSON.stringify(fr.slice(4, 10)) === JSON.stringify([t0.getFullYear() + '.10.28.' + wd, '실링팬', '뽀짝오리', '', 2, 'https://x']), '리뷰비 칸 ' + JSON.stringify(fr.slice(4, 10)));
-ok(T['🐥방공지'].rows[0][4] === '' && /리뷰비 시트 B칸/.test(T['💰리뷰비'].rows[0][4]), '1행 안내 ' + JSON.stringify([T['🐥방공지'].rows[0][4], T['💰리뷰비'].rows[0][4]]));
+const rf = rowOf('m14');
+ok(JSON.stringify(fr.slice(4, 11)) === JSON.stringify([t0.getFullYear() + '.10.28.' + wd, '실링팬', '뽀짝오리', '', 2, '=(H' + rf + '*500)+(I' + rf + '*1000)', 'https://x']), '리뷰비 칸 ' + JSON.stringify(fr.slice(4, 11)));
+ok(T['🐥방공지'].rows[0][4] === '' && T['💰리뷰비'].rows[0][4] === '', '1행 안내 ' + JSON.stringify([T['🐥방공지'].rows[0][4], T['💰리뷰비'].rows[0][4]]));
+// 취완 탭: 리뷰이미지(F)·명단(G) 링크 (11/8)
+env.__ss.sheets['진행목록'].rows[1][LH.indexOf('시트 링크')] = 'https://docs.google.com/spreadsheets/d/S9/edit';
+env.__props.set('RVIMG_S9', 'FOLDER12345abc');
+G('CacheService.getScriptCache().remove("MSGVL_m13")'); G('msgViewBuild_(true)');
+const cr = T['✅취완'].rows[rowOf('m13') - 1];
+ok(/HYPERLINK\("https:\/\/drive.google.com\/drive\/folders\/FOLDER12345abc","리뷰이미지"\)/.test(cr[5]) && /HYPERLINK\("https:\/\/docs.google.com\/spreadsheets\/d\/S9\/edit","명단"\)/.test(cr[6]), '취완 링크 ' + JSON.stringify(cr.slice(5, 7)));
 edit(T['✅취완'], rowOf('m13'), true);
 edit(T['💰리뷰비'], rowOf('m14'), true);
 ok(coll('#10.27 실링팬') instanceof Date && coll('#10.27 실링팬').getTime() === t0.getTime(), '취완 → 리뷰 취합 ' + coll('#10.27 실링팬'));
