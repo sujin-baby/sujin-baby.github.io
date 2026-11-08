@@ -1560,6 +1560,19 @@ function diag_(p) {
     });
     try { const ib = rvInbox_(), l2 = []; walk(ib, 0, l2, ''); out.rvtree['(리뷰 사진 받는 곳)'] = l2.slice(0, 200); } catch (e) { out.rvtree['(리뷰 사진 받는 곳)'] = ['오류 ' + e.message]; }
   } catch (e) { out.rvtreeErr = String(e); }
+  // &colgrp=글자: 진행 제목에 그 글자가 든 의뢰 명단 시트 '명단' 탭 칸마다 숨김·묶음 상태 (읽기만, 11/9 + 대신 <> 로 숨겨진 원인 찾기). 글자가 '*'면 최근 진행 12개
+  if (p.colgrp) try {
+    const seen = {}; out.colgrp = {};
+    readRuns_().filter(function (r) { return r['시트ID'] && (p.colgrp === '*' || String(r['명단 제목']).indexOf(String(p.colgrp)) >= 0); }).slice(0, 40).forEach(function (r) {
+      const sid = String(r['시트ID']); if (seen[sid] || Object.keys(seen).length >= 12) return; seen[sid] = 1;
+      try {
+        const lsh = SpreadsheetApp.openById(sid).getSheetByName(LIST_TAB); if (!lsh) return;
+        const lc = Math.min(lsh.getLastColumn() + 2, 30), hd = lsh.getRange(2, 1, 1, lc).getValues()[0], cols = [];
+        for (let c = 1; c <= lc; c++) { let d = 0, hid = false, col = ''; try { d = lsh.getColumnGroupDepth(c); } catch (e) {} try { hid = lsh.isColumnHiddenByUser(c); } catch (e) {} if (d > 0) { try { col = lsh.getColumnGroup(c, d).isCollapsed() ? '접힘' : '펼침'; } catch (e) { col = '?'; } } if (hid || d) cols.push(colLetter_(c) + '[' + String(hd[c - 1]).slice(0, 8) + ']' + (hid ? ' 숨김' : '') + (d ? ' 묶음' + d + col : '')); }
+        out.colgrp[bareTitle_(r['명단 제목'])] = cols.join(' | ') + ' · LISTHIDE=' + PropertiesService.getScriptProperties().getProperty('LISTHIDE_' + sid) + ' FIX1=' + PropertiesService.getScriptProperties().getProperty('LISTFIX1_' + sid);
+      } catch (e) { out.colgrp[bareTitle_(r['명단 제목'])] = '오류 ' + e.message; }
+    });
+  } catch (e) { out.colgrpErr = String(e); }
   // &rvj=글자: 진행 제목에 그 글자가 든 의뢰의 리뷰 정보(RV_: 종류·개수·가이드) (읽기만)
   if (p.rvj) try { const pr = PropertiesService.getScriptProperties(), seen = {}; out.rvj = []; readRuns_().forEach(function (r) { const sid = String(r['시트ID'] || ''); if (!sid || seen[sid] || String(r['명단 제목']).indexOf(String(p.rvj)) < 0) return; seen[sid] = 1; out.rvj.push(bareTitle_(r['명단 제목']) + ' | ' + String(pr.getProperty('RV_' + sid) || '').slice(0, 600)); }); } catch (e) { out.rvjErr = String(e); }
   // &payhead=1: 월급시트(이달) 위쪽 머리 줄과 맨 아래 합계 줄의 값·수식, 완료보고(H)를 쓰는 수식 (진행비 총액이 어떻게 나오는지 보기, 읽기만)
