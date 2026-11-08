@@ -1541,6 +1541,25 @@ function diag_(p) {
     if (rr) { out.respPm = optPriceMap_(readRuns_().filter(function (x) { return String(x['시트ID']) === String(rr['시트ID']); }).map(function (x) { return String(x['명단 제목']); }));
       try { out.respHead = headers_(rawInfo_(rr['시트ID'], rr['폼ID']).raw); } catch (e) {} }
   } catch (e) { out.respErr = String(e); }
+  // &rvtree=글자: 진행 제목에 그 글자가 든 의뢰 폴더(리뷰이미지·압축 제외 폴더)와 '리뷰 사진 받는 곳'의 사진 목록 (이름·만든 시각·AI 결과). 읽기만 (11/8 사진이 어디 갔는지 찾기)
+  if (p.rvtree) try {
+    const pr = PropertiesService.getScriptProperties(), seen = {}, fmt = function (d) { return Utilities.formatDate(d, CONFIG.TIMEZONE, 'MM-dd HH:mm'); };
+    const walk = function (fo, depth, out, path) {
+      const fi = fo.getFiles(); let n = 0;
+      while (fi.hasNext() && n < 80) { const x = fi.next(); n++; let ds = ''; try { ds = String(x.getDescription() || '').slice(0, 120); } catch (e) {} out.push(path + ' | ' + x.getName() + ' | ' + fmt(x.getDateCreated()) + (ds ? ' | ' + ds : '')); }
+      if (depth < 3) { const di = fo.getFolders(); while (di.hasNext()) { const d = di.next(); out.push(path + '/' + d.getName() + '/'); walk(d, depth + 1, out, path + '/' + d.getName()); } }
+    };
+    out.rvtree = {};
+    readRuns_().forEach(function (r) {
+      const sid = String(r['시트ID'] || '');
+      if (!sid || seen[sid] || String(r['명단 제목']).indexOf(String(p.rvtree)) < 0) return;
+      seen[sid] = 1;
+      const list = [], imgId = pr.getProperty('RVIMG_' + sid);
+      try { if (imgId) { const img = DriveApp.getFolderById(imgId), pa = img.getParents(), par = pa.hasNext() ? pa.next() : null; if (par) { list.push('[의뢰 폴더] ' + par.getName()); walk(par, 0, list, ''); } else walk(img, 0, list, '리뷰이미지'); } else list.push('리뷰이미지 폴더 없음'); } catch (e) { list.push('오류 ' + e.message); }
+      out.rvtree[bareTitle_(r['명단 제목'])] = list;
+    });
+    try { const ib = rvInbox_(), l2 = []; walk(ib, 0, l2, ''); out.rvtree['(리뷰 사진 받는 곳)'] = l2.slice(0, 200); } catch (e) { out.rvtree['(리뷰 사진 받는 곳)'] = ['오류 ' + e.message]; }
+  } catch (e) { out.rvtreeErr = String(e); }
   // &rvj=글자: 진행 제목에 그 글자가 든 의뢰의 리뷰 정보(RV_: 종류·개수·가이드) (읽기만)
   if (p.rvj) try { const pr = PropertiesService.getScriptProperties(), seen = {}; out.rvj = []; readRuns_().forEach(function (r) { const sid = String(r['시트ID'] || ''); if (!sid || seen[sid] || String(r['명단 제목']).indexOf(String(p.rvj)) < 0) return; seen[sid] = 1; out.rvj.push(bareTitle_(r['명단 제목']) + ' | ' + String(pr.getProperty('RV_' + sid) || '').slice(0, 600)); }); } catch (e) { out.rvjErr = String(e); }
   // &payhead=1: 월급시트(이달) 위쪽 머리 줄과 맨 아래 합계 줄의 값·수식, 완료보고(H)를 쓰는 수식 (진행비 총액이 어떻게 나오는지 보기, 읽기만)
