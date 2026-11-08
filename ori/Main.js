@@ -6515,20 +6515,20 @@ function rvCartCounts_(P, T, S, cart, people) {
 function rvCartDirName_(t, n) { return (t === '포토' ? '포토 포함' : t + '만') + ' (' + n + '명)'; }
 // 같은 의뢰의 안 보낸 '리뷰 사진 확인' 할 일: 지금 경고가 없으면(msg 빈칸) 지우고, 있으면 하나만 남겨 지금 글로 (11/8: 사진 10장일 때 경고가 15장 다 올린 뒤에도 남아 있었음)
 function rvCheckMsgSync_(base, msg) {
-  return withObWrite_(function () {
+  const kept = withObWrite_(function () {
     const ob = outboxSheet_(), ol = ob.getLastRow(), pre = '[' + base + '] 리뷰 사진 확인';
-    let kept = false, n = 0;
+    let k = false;
     if (ol >= 2) {
       const v = ob.getRange(2, 1, ol - 1, 6).getValues();
       for (let i = v.length - 1; i >= 0; i--) {
         if (v[i][2] !== '할 일' || v[i][5] === '보냄' || String(v[i][4]).indexOf(pre) !== 0) continue;
-        if (msg && !kept) { if (String(v[i][4]) !== msg) ob.getRange(i + 2, 5).setValue(msg); kept = true; }
-        else { ob.deleteRow(i + 2); n++; }
+        if (msg && !k) { if (String(v[i][4]) !== msg) ob.getRange(i + 2, 5).setValue(msg); k = true; }
+        else ob.deleteRow(i + 2);
       }
     }
-    if (msg && !kept) queueMsgInner_('내 할 일', msg, '할 일');
-    return n;
+    return k;
   });
+  if (msg && !kept) queueMsg_('내 할 일', msg, '할 일');
 }
 // 의뢰서(생성기 리뷰 정보 RV_)의 종류별 개수 → 압축 개수와 다르면 할 일에 알림. 모르면 null
 function rvExpect_(sid, mine) {
