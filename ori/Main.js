@@ -698,7 +698,7 @@ function hk_(h) { return String(h == null ? '' : h).replace(/\s+/g, ' ').trim();
 //  ③ 예전 수식 명단 때 걸어 둔 열 숨김(계좌 칸 묶음)이 엉뚱한 칸을 숨기고 있어서 풀고 다 보이게
 function showAllCols_(sh) {
   try { sh.expandAllColumnGroups(); } catch (e) {}
-  try { for (let c = 1; c <= sh.getMaxColumns(); c++) { let n = 0; while (sh.getColumnGroupDepth(c) > 0 && n++ < 5) sh.getRange(1, c).getEntireColumn().shiftColumnGroupDepth(-1); } } catch (e) {}
+  try { for (let c = 1; c <= sh.getMaxColumns(); c++) { let n = 0; while (sh.getColumnGroupDepth(c) > 0 && n++ < 5) colsRange_(sh, c, c).shiftColumnGroupDepth(-1); } } catch (e) {}
   sh.showColumns(1, sh.getMaxColumns());
 }
 function repairList_(sh, rows) {
@@ -2222,7 +2222,7 @@ function formatResponseSheet_(ss, opts) {
   sh.clearConditionalFormatRules();
   sh.setFrozenRows(0);
   // 열 묶음(숨김)이 남아 있으면 풀기
-  try { for (let c = 1; c <= sh.getMaxColumns(); c++) while (sh.getColumnGroupDepth(c) > 0) sh.getRange(1, c).getEntireColumn().shiftColumnGroupDepth(-1); } catch (e) {}
+  try { for (let c = 1; c <= sh.getMaxColumns(); c++) while (sh.getColumnGroupDepth(c) > 0) colsRange_(sh, c, c).shiftColumnGroupDepth(-1); } catch (e) {}
   sh.showColumns(1, sh.getMaxColumns());
 
   // 1행 요약
@@ -2791,6 +2791,8 @@ function parseAssign_(text, choices) {
   return rows;
 }
 
+// 열 전체 범위 ('H:K'). Range.getEntireColumn()은 구글이 없애서 11/4부터 '…is not a function' → 계좌 칸 묶기(+)가 다 실패하고 그냥 숨김(◀▶)이 됐음 (11/9)
+function colsRange_(sheet, c1, c2) { return sheet.getRange(colLetter_(c1) + ':' + colLetter_(c2)); }
 function groupColumns_(sheet, cols) {
   if (!cols.length) return;
   cols = cols.filter(function (c, i, a) { return a.indexOf(c) === i; }).sort(function (a, b) { return a - b; });
@@ -2802,7 +2804,7 @@ function groupColumns_(sheet, cols) {
   }
   runs.forEach(function (r) {
     try {
-      const range = sheet.getRange(1, r[0], 1, r[1] - r[0] + 1).getEntireColumn();
+      const range = colsRange_(sheet, r[0], r[1]);
       if (range.getColumn() && sheet.getColumnGroupDepth(r[0]) === 0) range.shiftColumnGroupDepth(1);
       const g = sheet.getColumnGroup(r[0], 1);
       if (g) g.collapse();
@@ -2828,8 +2830,8 @@ function listRegroup_(lss, real) {
 // (11/9 한 번) 최근 2주 명단 시트 계좌 칸 묶음 되살림
 function listRegroupAll1_(rr) {
   const props = PropertiesService.getScriptProperties();
-  if (props.getProperty('LISTGRP1')) return;
-  props.setProperty('LISTGRP1', '1');
+  if (props.getProperty('LISTGRP2')) return;   // 2: getEntireColumn 고친 뒤 다시 (1은 같은 이유로 실패)
+  props.setProperty('LISTGRP2', '1');
   const cut = today_().getTime() - 16 * 86400000, seen = {};
   let ok = 0, bad = 0;
   (rr || readRuns_()).forEach(function (r) {
@@ -3820,7 +3822,7 @@ function migrateList_(sh, have) {
   sh.clear();
   sh.clearConditionalFormatRules();
   sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).clearDataValidations();
-  try { for (let c = 1; c <= sh.getMaxColumns(); c++) while (sh.getColumnGroupDepth(c) > 0) sh.getRange(1, c).getEntireColumn().shiftColumnGroupDepth(-1); } catch (e) {}
+  try { for (let c = 1; c <= sh.getMaxColumns(); c++) while (sh.getColumnGroupDepth(c) > 0) colsRange_(sh, c, c).shiftColumnGroupDepth(-1); } catch (e) {}
   sh.showColumns(1, sh.getMaxColumns());
   sh.getRange(1, 1, 1, LIST_HEADER.length).setValues([LIST_HEADER]).setFontWeight('bold').setBackground('#efe6f7');
   formatList_(sh);
