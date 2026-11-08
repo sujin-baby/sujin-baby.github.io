@@ -131,6 +131,8 @@ ok(!!env.__ss.sheets['보낼메시지'].rows.find(r => r[0] === 'm4'), '방금 �
 env.__props.delete('MSGV_S_m4');
 G('pruneOutbox_()');
 ok(!env.__ss.sheets['보낼메시지'].rows.find(r => r[0] === 'm4'), '체크 기록 없는 오래된 메시지가 안 지워짐');
+const rm2 = G('rvReportMsg_')('L', [{ '명단 제목': '#10.21 실 속눈썹영양제 3 (뽀짝오리)', '인원': 3, '총건수': 20, '실배송': 'Y' }, { '명단 제목': '#10.29 실 속눈썹영양제 2 (뽀짝오리)', '인원': 2, '총건수': 20, '실배송': 'Y' }], '');
+ok(rm2.split('\n')[2] === '10.21~10.29 #실 속눈썹영양제', '실 겹침: ' + JSON.stringify(rm2.split('\n')[2]));
 // 탭 이름에 없는 사용자 탭은 종류 탭으로 안 봄
 ok(G('msgvGroupOfName_("🐥방공지 메모")') === -1 && G('msgvGroupOfName_("한눈에")') === -1, '탭 이름 구분');
 console.log(fails.length ? 'XX 메시지 종류별 탭 시험 실패:\n- ' + fails.join('\n- ') : '✓ 메시지 종류별 탭 시험 통과 (탭 ' + BASES.length + '개)');

@@ -3216,7 +3216,7 @@ function slowTasks_(rr, listed) {
   try { moveCampFoldersOnce_(); } catch (e) { note_('월 폴더 정리 실패: ' + e); }
   try { rvSentBackfill1_(); } catch (e) { note_('리뷰 보고 → 업체 전송 맞추기 실패: ' + e); }
   try { rvSentFix2_(); } catch (e) { note_('실링팬 업체 전송 맞추기 실패: ' + e); }
-  try { rvReportFix1_(); } catch (e) { note_('리뷰 보고 날짜 범위 고치기 실패: ' + e); }
+  try { rvReportFix1_(); rvReportFix1_('RVRPTSPAN2'); } catch (e) { note_('리뷰 보고 글 고치기 실패: ' + e); }   // 2: '#실 실' 겹침 (11/8)
   try { ensureInboxTrigger_(); } catch (e) { note_('받는 곳 5분 트리거 실패: ' + e); }
   PropertiesService.getScriptProperties().setProperty('SLOW_AT', String(Date.now()));
 }
@@ -4278,8 +4278,11 @@ function msgViewModel_(rows, sentAt) {
       if (od) over++;
       const kind = String(x[2]), tag = grp.k.indexOf(kind) < 0 ? '〔' + kind + '〕 ' : grp.k.length > 1 && kind !== grp.k[0] ? '〔' + kind.replace(/ 요청$/, '') + '〕 ' : '';
       const camp = xs.length > 1 || grp.key === 'todo' ? msgvCampOf_(x) : '';
+      // 할일: 카톡방 칸 첫 줄에 캠페인 이름(굵게), 둘째 줄에 보낼 곳·건수 (11/8 사용자: 캠페인명이 잘 안 보임)
+      const room = tag + String(x[3] || '') + (xs.length > 1 ? ' · ' + xs.length + '건' : '') + (x[5] === '방 못 찾음' ? ' ⚠방 못 찾음' : '');
+      const head = grp.key === 'todo' && camp && camp !== String(x[4]).split('\n')[0].trim() ? camp.slice(0, 40) : '';   // 방제를 못 찾은 글(첫 줄 그대로)은 안 씀
       return { type: 'msg', id: xs.map(function (y) { return String(y[0]); }).join(','), sent: isSent, day: msgvDay_(x[1]), over: od, today: x[1] instanceof Date && x[1].getTime() === t0,
-        room: tag + String(x[3] || '') + (xs.length > 1 ? ' · ' + xs.length + '건' : '') + (x[5] === '방 못 찾음' ? ' ⚠방 못 찾음' : ''), msg: msgvCombine_(xs), bg: msgvRoomBg_(camp || x[3], colors) };
+        room: head ? head + '\n' + room : room, boldTo: head ? head.length : 0, msg: msgvCombine_(xs), bg: msgvRoomBg_(camp || x[3], colors) };
     });
     const sig = JSON.stringify(lines.map(function (l) { return [l.id, l.sent ? 1 : 0, l.day, l.over ? 1 : 0, l.room, l.msg.length, l.msg.slice(0, 80), l.bg]; }));
     return { lines: lines, pend: pend.length, over: over, sig: sig, name: grp.base + (pend.length ? ' ' + pend.length : '') };
@@ -4362,6 +4365,17 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
   rg.setValues(vals);
   sh.getRange(1, 2, n, 1).setDataValidations(dvs);
   rg.setBackgrounds(bgs).setFontColors(fcs).setFontWeights(fws).setHorizontalAlignments(als);
+  // 할일 탭: 카톡방 칸 첫 줄(캠페인 이름)만 굵게, 둘째 줄(보낼 곳·건수)은 보통
+  if (lines.some(function (l) { return l.boldTo; })) {
+    try {
+      const B = SpreadsheetApp.newTextStyle().setBold(true).build(), N0 = SpreadsheetApp.newTextStyle().setBold(false).build();
+      sh.getRange(1, 4, n, 1).setRichTextValues(vals.map(function (v, i) {
+        const t = String(v[3]), l = lines[i] || {}, b = SpreadsheetApp.newRichTextValue().setText(t);
+        if (l.boldTo && t.length > l.boldTo) b.setTextStyle(0, l.boldTo, B).setTextStyle(l.boldTo, t.length, N0);
+        return [b.build()];
+      }));
+    } catch (e) {}
+  }
   try { sh.setRowHeights(1, n, 22); sh.setRowHeight(1, 30); } catch (e) {}
   props.setProperty('MSGV_N_' + key, String(lines.length));
   props.setProperty('MSGV_SIG_' + key, g.sig);
@@ -6208,7 +6222,10 @@ function rvReportMsg_(link, mine, name) {
   if (first['택대'] === 'Y' || /#?택/.test(String(first['명단 제목'] || ''))) tag = '#택 ';
   else if (first['실배송'] === 'Y' || /#?실/.test(String(first['명단 제목'] || ''))) tag = '#실 ';
 
-  const camp = campOf_(first['명단 제목'] || name);
+  // 캠페인 이름 앞 '실'·'택'은 #실·#택과 겹치면 뺌 (11/8: '#실 실 속눈썹영양제')
+  let camp = campOf_(first['명단 제목'] || name);
+  if (tag === '#실 ') camp = camp.replace(/^실\s+/, '');
+  if (tag === '#택 ') camp = camp.replace(/^택\s+/, '');
   const campTitle = (dateStr ? dateStr + ' ' : '') + tag + camp;
 
   const total = (mine || []).reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0) || (mine || []).reduce(function (s, x) { return s + (Number(x['인원']) || 0); }, 0);
@@ -6335,9 +6352,10 @@ function rvSentFix2_() {
   props.setProperty('RVSENTLINK2', '1');
 }
 // (11/8 한 번) 리뷰 보고 글 날짜 범위 다시 (0명으로 끝난 추가 모집 날짜가 들어간 것, 실링팬 10.22~11.4 → 10.22~10.29). 안 보낸 것과 최근 이틀 안에 체크한 것만
-function rvReportFix1_() {
+function rvReportFix1_(flag) {
+  flag = flag || 'RVRPTSPAN1';
   const props = PropertiesService.getScriptProperties();
-  if (props.getProperty('RVRPTSPAN1')) return;
+  if (props.getProperty(flag)) return;
   const at = msgvSentAt_();
   const all = props.getProperties(), runs = readRuns_(), ob = outboxSheet_(), ol = ob.getLastRow(), cut = Date.now() - 3 * 86400000;
   if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
@@ -6349,7 +6367,7 @@ function rvReportFix1_() {
     const nm = rvReportMsg_(link, mine, '');
     if (nm !== String(v[4])) { obSet_(ob, v[0], 5, nm); note_('✓ 리뷰 보고 날짜 범위 고침: ' + nm.split('\n')[2]); }
   });
-  props.setProperty('RVRPTSPAN1', '1');
+  props.setProperty(flag, '1');
 }
 // (11/8 한 번) 오늘 리뷰취합 탭에서 보냄 체크한 리뷰 보고 → 업체 전송 날짜 (연결 전에 체크한 실링팬)
 function rvSentBackfill1_() {
@@ -8578,7 +8596,7 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '34';
+const DASH_VER = '35';
 // 한눈에 '리뷰 취합할 것' 칸에 보일 것: 의뢰 전체 리뷰가 끝난(RVRPT_) 의뢰 중 업체 전송 체크 안 했거나 체크한 지 3일 안 된 것. 최근 40일 진행만, 기대평 빼고
 //  날마다 취합하던 줄은 없앰 (사용자 요청 10/26: 날짜별로 말고 한 캠페인이 다 끝나면 그때 한 번에)
 function rvItems_(allRuns, props) {
@@ -8851,7 +8869,9 @@ function buildDashboard_(force) {
     sh.getRange(rr, 9).setFormula('=HYPERLINK(' + q(x.url) + ',"명단")');
     // 폼·상품·틀린 옵션·택배 옮김·확인 필요 칸은 먼저 비움 (11/2: 다시 그릴 때 줄이 밀리면 앞 진행의 체크칸·숫자가 남아 기대평·실배송 줄에 택배 옮김 체크가 보였음)
     try { sh.getRange(rr, 10, 1, 5).clearContent().clearDataValidations(); } catch (e) {}
-    if (r['폼 링크']) sh.getRange(rr, 10).setFormula('=HYPERLINK(' + q(r['폼 링크']) + ',"폼")');
+    // 폼 칸 = 폼 수정 화면 (11/8 사용자: 응답 링크 말고 폼 수정 링크). 폼ID가 없으면 예전처럼 응답 링크
+    if (r['폼ID']) sh.getRange(rr, 10).setFormula('=HYPERLINK(' + q('https://docs.google.com/forms/d/' + r['폼ID'] + '/edit') + ',"폼 수정")');
+    else if (r['폼 링크']) sh.getRange(rr, 10).setFormula('=HYPERLINK(' + q(r['폼 링크']) + ',"폼")');
     { const pp = purlOf_(r, props, obNotices), pu = pp.url, pl = pp.plat;
       if (pu) sh.getRange(rr, 11).setFormula('=HYPERLINK(' + q(pu) + ',' + q(pl || '상품') + ')'); else if (pl) sh.getRange(rr, 11).setValue(pl); }
     // 택대면 '택배 옮김' 체크 (명단을 택배시트에 옮겨 적었으면 체크, 2시 전까지). 체크하면 진행목록에도 저장
