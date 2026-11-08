@@ -1606,7 +1606,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -2807,9 +2807,38 @@ function groupColumns_(sheet, cols) {
       const g = sheet.getColumnGroup(r[0], 1);
       if (g) g.collapse();
     } catch (e) {
+      // 묶기가 안 되면 그냥 숨김(◀▶). 왜 안 됐는지 남김 (11/9: 11/4부터 명단 시트 계좌 칸이 + 대신 ◀▶로 숨겨져 있었음)
+      try { PropertiesService.getScriptProperties().setProperty('GRPERR', Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + sheet.getParent().getName() + ' ' + colLetter_(r[0]) + ': ' + (e && e.message || e)); note_('⚠ 명단 계좌 칸 묶기 실패(그냥 숨김): ' + (e && e.message || e)); } catch (e2) {}
       sheet.hideColumns(r[0], r[1] - r[0] + 1);
     }
   });
+}
+// 명단 탭 계좌(실배송이면 리뷰비) 칸이 묶음 없이 숨겨져 있으면(◀▶) 펴고 다시 묶어 접음(+) (11/9 사용자: 원래 + 였는데 ◀▶)
+function listRegroup_(lss, real) {
+  const sh = lss.getSheetByName(LIST_TAB);
+  if (!sh || sh.getLastColumn() < 2) return false;
+  const hd = sh.getRange(2, 1, 1, sh.getLastColumn()).getValues()[0].map(hk_), cols = [];
+  hd.forEach(function (h, i) { if (MATCH.account.test(h) || (real && MATCH.reviewFee.test(h))) cols.push(i + 1); });
+  if (!cols.length || cols.some(function (c) { return sh.getColumnGroupDepth(c) > 0; })) return false;
+  if (!cols.some(function (c) { return sh.isColumnHiddenByUser(c); })) return false;
+  cols.forEach(function (c) { sh.showColumns(c); });
+  groupColumns_(sh, cols);
+  return cols.every(function (c) { return sh.getColumnGroupDepth(c) > 0; });
+}
+// (11/9 한 번) 최근 2주 명단 시트 계좌 칸 묶음 되살림
+function listRegroupAll1_(rr) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('LISTGRP1')) return;
+  props.setProperty('LISTGRP1', '1');
+  const cut = today_().getTime() - 16 * 86400000, seen = {};
+  let ok = 0, bad = 0;
+  (rr || readRuns_()).forEach(function (r) {
+    const sid = String(r['시트ID'] || '');
+    if (!sid || seen[sid] || !(r['진행일'] instanceof Date) || r['진행일'].getTime() < cut) return;
+    seen[sid] = 1;
+    try { const res = listRegroup_(SpreadsheetApp.openById(sid), !!props.getProperty('LISTREAL_' + sid)); if (res === true) ok++; } catch (e) { bad++; }
+  });
+  note_('✓ 명단 계좌 칸 + 묶음 되살림 ' + ok + '개' + (bad ? ' (실패 ' + bad + ')' : ''));
 }
 
 /* 진행목록에서 행을 선택하고 실행: 폼 질문을 바꾼 뒤 서식을 다시 맞출 때 */
@@ -3282,6 +3311,7 @@ function slowTasks_(rr, listed) {
   try { rvSentBackfill1_(); } catch (e) { note_('리뷰 보고 → 업체 전송 맞추기 실패: ' + e); }
   try { rvSentFix2_(); } catch (e) { note_('실링팬 업체 전송 맞추기 실패: ' + e); }
   try { rvCollBackfill1_(); } catch (e) { note_('리뷰 취합 날짜 맞추기 실패: ' + e); }
+  try { listRegroupAll1_(rr); } catch (e) { note_('명단 계좌 칸 묶음 되살리기 실패: ' + e); }
   try { rvReportFix1_(); rvReportFix1_('RVRPTSPAN2'); } catch (e) { note_('리뷰 보고 글 고치기 실패: ' + e); }   // 2: '#실 실' 겹침 (11/8)
   try { ensureInboxTrigger_(); } catch (e) { note_('받는 곳 5분 트리거 실패: ' + e); }
   PropertiesService.getScriptProperties().setProperty('SLOW_AT', String(Date.now()));
