@@ -124,6 +124,13 @@ const rm = G('rvReportMsg_')('https://drive.google.com/drive/folders/X', [
   { '명단 제목': '#10.22 실링팬 2 (뽀짝오리)', '인원': 2, '총건수': 10 }, { '명단 제목': '#10.29 실링팬 2 (뽀짝오리)', '인원': 2, '총건수': 10 },
   { '명단 제목': '#10.30 실링팬 1 (뽀짝오리)', '인원': 0, '총건수': 10 }, { '명단 제목': '#11.4 실링팬 1 (뽀짝오리)', '인원': 0, '총건수': 10 }], '');
 ok(rm.split('\n')[2] === '10.22~10.29 #실 실링팬' && rm.split('\n')[3] === '총 10건 리뷰 취합본 전달드립니다!', '리뷰 보고 글: ' + JSON.stringify(rm));
+// 보낸 지 오래된 메시지 정리: 어제·오늘 체크한 건 안 지움, 체크 기록이 없으면 지움 (11/8 실링팬 리뷰 보고가 체크하자마자 지워졌음)
+env.__props.set('MSGV_S_m4', String(Date.now()));
+G('pruneOutbox_()');
+ok(!!env.__ss.sheets['보낼메시지'].rows.find(r => r[0] === 'm4'), '방금 체크한 오래된 메시지를 지움');
+env.__props.delete('MSGV_S_m4');
+G('pruneOutbox_()');
+ok(!env.__ss.sheets['보낼메시지'].rows.find(r => r[0] === 'm4'), '체크 기록 없는 오래된 메시지가 안 지워짐');
 // 탭 이름에 없는 사용자 탭은 종류 탭으로 안 봄
 ok(G('msgvGroupOfName_("🐥방공지 메모")') === -1 && G('msgvGroupOfName_("한눈에")') === -1, '탭 이름 구분');
 console.log(fails.length ? 'XX 메시지 종류별 탭 시험 실패:\n- ' + fails.join('\n- ') : '✓ 메시지 종류별 탭 시험 통과 (탭 ' + BASES.length + '개)');

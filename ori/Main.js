@@ -4411,12 +4411,29 @@ function msgViewBuild_(force, only) {
   }
   return wrote;
 }
+// (11/8 한 번) 실링팬 리뷰 보고: 체크하자마자 '보낸 지 오래된 메시지 정리'가 지워 버림 → 날짜 범위 고친 글로 다시 넣고(보냄, 회색 이틀) 진행목록 업체 전송 11/8
+function rvSilingRestore1_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('RVSILING1')) return;
+  props.setProperty('RVSILING1', '1');
+  const all = props.getProperties(), runs = readRuns_(), by = {};
+  runs.forEach(function (r) { const sid = String(r['시트ID'] || ''); if (sid && all['RVIMG_' + sid] && all['RVRPT_' + sid] && campOf_(r['명단 제목']) === '실링팬') (by[sid] = by[sid] || []).push(r); });
+  Object.keys(by).forEach(function (sid) {
+    const mine = by[sid].sort(function (a, b) { return a['진행일'] - b['진행일']; }), link = 'https://drive.google.com/drive/folders/' + all['RVIMG_' + sid];
+    rvSetSent_(sid, true, new Date(2026, 10, 8));
+    const ob = outboxSheet_(), has = function () { const ol = ob.getLastRow(); return ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues().filter(function (v) { return v[2] === '리뷰 보고' && String(v[4]).indexOf(link) === 0; }) : []; };
+    if (!has().length) queueMsg_('사장님', rvReportMsg_(link, mine, ''), '리뷰 보고');
+    has().forEach(function (v) { if (v[5] !== '보냄') obSet_(ob, v[0], 6, '보냄'); if (!all['MSGV_S_' + v[0]]) props.setProperty('MSGV_S_' + v[0], String(Date.now())); });
+    note_('✓ 실링팬 리뷰 보고 다시 넣음(보냄, 이틀 회색) · 업체 전송 11/8');
+  });
+}
 // 실행이 끝날 때 (로더 이름 함수 감쌈): 보낼메시지가 바뀌었으면 바뀐 탭만 다시 그림. 모아보기 체크 직후엔 안 그림 (줄이 안 움직이게)
 function msgViewSync_() {
   if (globalThis.__MSGV_SKIP) { globalThis.__MSGV_SKIP = false; return; }
   let l = null;
   try { l = LockService.getUserLock ? LockService.getUserLock() : LockService.getScriptLock(); } catch (e) {}
   if (l && !l.tryLock(5000)) return;
+  try { rvSilingRestore1_(); } catch (e) { Logger.log('실링팬 리뷰 보고 다시 넣기 실패: ' + e); }
   try { msgViewBuild_(false); } catch (e) { Logger.log('모아보기 다시 그리기 실패: ' + e); }
   finally { try { if (l) l.releaseLock(); } catch (e) {} }
 }
@@ -9256,9 +9273,11 @@ function pruneOutboxInner_() {
     const p = t.split('.'), now = new Date();
     return new Date(now.getFullYear(), Number(p[0]) - 1, Number(p[1])).getTime();
   };
-  const t0 = today_().getTime();
+  const t0 = today_().getTime(), sentAt = msgvSentAt_();
   for (let i = v.length - 1; i >= 0; i--) {
     if (v[i][5] === '보냄') {
+      // 메시지 탭에서 어제·오늘 체크한 건 이틀 회색으로 보여야 해서 안 지움 (11/8: 10/22 날짜 실링팬 리뷰 보고를 체크하자마자 여기서 지워 바로 사라졌음)
+      if (Number(sentAt[String(v[i][0])] || 0) >= t0 - 86400000) continue;
       const tm = parseSendTime(v[i]);
       if (tm && tm < cut && roomDay(v[i]) < t0) {
         ob.deleteRow(i + 2);
