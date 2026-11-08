@@ -139,6 +139,11 @@ env.__ss.sheets['보낼메시지'].rows.splice(1, 0, ['m13', day(-1), '취완', 
 G('msgViewBuild_(false)');
 BASES.forEach((b, i) => env.__props.set('MSGV_AT_' + G('MSGV_GROUPS[' + i + '].key'), String(Date.now() - 60000)));
 const coll = t => env.__ss.sheets['진행목록'].rows.find(r => String(r[LH.indexOf('명단 제목')]).indexOf(t) === 0)[LH.indexOf('리뷰 취합')];
+// 리뷰비 요청은 리뷰비 시트 칸대로 나눔: E 주문 날짜, F 진행명, G 진행자, H 구확건수, I 리뷰작성건수, J 진행링크 (11/8)
+const fr = T['💰리뷰비'].rows[rowOf('m14') - 1];
+const wd = ['일', '월', '화', '수', '목', '금', '토'][new Date(t0.getFullYear(), 9, 28).getDay()];
+ok(JSON.stringify(fr.slice(4, 10)) === JSON.stringify([t0.getFullYear() + '.10.28.' + wd, '실링팬', '뽀짝오리', '', 2, 'https://x']), '리뷰비 칸 ' + JSON.stringify(fr.slice(4, 10)));
+ok(T['🐥방공지'].rows[0][4] === '' && /리뷰비 시트 B칸/.test(T['💰리뷰비'].rows[0][4]), '1행 안내 ' + JSON.stringify([T['🐥방공지'].rows[0][4], T['💰리뷰비'].rows[0][4]]));
 edit(T['✅취완'], rowOf('m13'), true);
 edit(T['💰리뷰비'], rowOf('m14'), true);
 ok(coll('#10.27 실링팬') instanceof Date && coll('#10.27 실링팬').getTime() === t0.getTime(), '취완 → 리뷰 취합 ' + coll('#10.27 실링팬'));
