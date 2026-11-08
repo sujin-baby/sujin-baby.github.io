@@ -1561,6 +1561,7 @@ function doGet(e) {
   if (p.p === 'diag' && globalThis.__DIAGKEY && p.k === globalThis.__DIAGKEY) return ContentService.createTextOutput(diagText_(p)).setMimeType(ContentService.MimeType.JSON);
   if (p.k !== CONFIG.KEY) return HtmlService.createHtmlOutput('<p style="font-size:18px">열쇠가 바뀌었거나 링크가 올바르지 않아요.<br>관리 시트 <b>한눈에</b> 탭 표 아래 <b>▶ 가이드 생성기</b> 링크(또는 <b>사용법</b> 탭 맨 위 링크)를 한 번 눌러 주세요.</p>');
   if (p.p === 'queue') return ContentService.createTextOutput(queueText_());
+  if (p.p === 'reqraw') return ContentService.createTextOutput(reqRawSave_(p));   // 생성기가 처음 붙여넣은 의뢰서 조각 (11/8)
   // 읽기 전용 점검 (10/24): 진행목록·일정·보낼메시지·트리거·최근 확인 결과를 JSON으로. 아무것도 안 바꿈 (원격으로 버그 원인 찾기용)
   if (p.p === 'diag') return ContentService.createTextOutput(diagText_(p)).setMimeType(ContentService.MimeType.JSON);
   if (p.p === 'roomlink') return ContentService.createTextOutput(JSON.stringify(saveRoomLink_(p.room, p.url))).setMimeType(ContentService.MimeType.JSON);
@@ -4185,6 +4186,68 @@ function markSentFromPage(k, id) {
   return true;
 }
 
+/* ---------------- 처음 붙여넣은 의뢰서 원문 (11/8 사용자 요청: 리뷰 가이드 더블체크용) ----------------
+ *  생성기가 [새 진행 만들기]를 누를 때 의뢰서를 600자 조각으로 나눠 ?p=reqraw&n=요청ID&i=&of=&t= 로 보냄 (주소 길이 한도)
+ *  조각은 캐시에 모았다가 다 오면 드라이브 '의뢰서 원문 (자동)' 폴더에 '요청ID.txt'로 저장, 속성 RQF_요청ID = 파일 번호
+ *  메시지 탭(📸포토가이드·📦리뷰취합·⏰리뷰독촉) F칸에 리뷰 부분, 칸 메모에 전체 */
+function reqRawSave_(p) {
+  const n = String(p.n || ''), i = Number(p.i), of = Number(p.of), t = String(p.t || '');
+  if (!/^[A-Za-z0-9_-]{4,40}$/.test(n) || !(of >= 1 && of <= 20) || !(i >= 0 && i < of) || t.length > 1500) return 'bad';
+  const c = CacheService.getScriptCache(), props = PropertiesService.getScriptProperties();
+  if (props.getProperty('RQF_' + n)) return 'have';
+  c.put('RQC_' + n + '_' + i, t, 21600);
+  const keys = []; for (let j = 0; j < of; j++) keys.push('RQC_' + n + '_' + j);
+  const got = c.getAll(keys);
+  if (keys.some(function (k) { return got[k] == null; })) return 'ok';
+  const text = keys.map(function (k) { return got[k]; }).join('');
+  // 조각이 동시에 다 모이면 두 실행이 같이 쓸 수 있음 → 같은 이름 파일이 있으면 그걸 씀
+  try {
+    const folder = (function () { const r = rootFolder_(), it = r.getFoldersByName('의뢰서 원문 (자동)'); return it.hasNext() ? it.next() : r.createFolder('의뢰서 원문 (자동)'); })();
+    const ex = folder.getFilesByName(n + '.txt'), f = ex.hasNext() ? ex.next() : folder.createFile(n + '.txt', text, MimeType.PLAIN_TEXT);
+    props.setProperty('RQF_' + n, f.getId());
+    c.put('RQT_' + n, text.slice(0, 90000), 21600);
+  } catch (e) { return 'err ' + e.message; }
+  return 'saved';
+}
+// 요청ID(생성기가 준 번호)의 의뢰서 원문. 없으면 ''
+function reqRawOf_(n) {
+  if (!n) return '';
+  const c = CacheService.getScriptCache(), hit = c.get('RQT_' + n);
+  if (hit != null) return hit;
+  const id = PropertiesService.getScriptProperties().getProperty('RQF_' + n);
+  if (!id) return '';
+  let t = ''; try { t = DriveApp.getFileById(id).getBlob().getDataAsString('UTF-8'); } catch (e) { return ''; }
+  try { c.put('RQT_' + n, t.slice(0, 90000), 21600); } catch (e) {}
+  return t;
+}
+// 진행들의 처음 요청ID (다음 날 진행은 '번호-2', 자동으로 만든 다음 일차는 'next-…' → 같은 명단 시트 진행에서 찾음)
+function runNonceOf_(mine) {
+  const ids = (mine || []).map(function (r) { return String(r['요청ID'] || ''); }).filter(function (x) { return x && !/^next-/.test(x); });
+  return ids.length ? ids[0].replace(/-\d+$/, '') : '';
+}
+// 메시지 줄 → F칸(의뢰서 리뷰 부분 한 줄)과 칸 메모(전체). ctx = { runs, all }
+function msgvReqInfo_(x, ctx) {
+  const kind = String(x[2]), room = String(x[3]);
+  let sid = '';
+  if (kind === '리뷰 보고') sid = rvSidOfReport_(x[4], ctx.all);
+  else {
+    const r = ctx.runs.filter(function (y) { return String(y['카톡방'] || bareTitle_(y['명단 제목'])) === room || bareTitle_(y['명단 제목']) === room; })[0];
+    if (r) sid = String(r['시트ID'] || '');
+  }
+  if (!sid) return null;
+  const mine = ctx.runs.filter(function (y) { return String(y['시트ID']) === sid; });
+  const raw = reqRawOf_(runNonceOf_(mine));
+  if (raw) {
+    const rv = raw.split('\n').map(function (l) { return l.trim(); }).filter(function (l) { return l && /리뷰|포토|텍스트|별점|원고|사진|글자|키워드/.test(l); });
+    return { f: '📄 ' + (rv.length ? rv.join(' / ') : raw.split('\n').filter(Boolean)[0] || '').slice(0, 300), note: raw.slice(0, 20000) };
+  }
+  let rv = null; try { rv = JSON.parse(ctx.all['RV_' + sid] || 'null'); } catch (e) {}
+  if (!rv) return { f: '(의뢰서 원문 없음)', note: '이 진행은 의뢰서 원문이 저장되기 전(11/8 전)에 만들어졌어요. 11/8부터 생성기로 만든 진행은 여기에 처음 붙여넣은 의뢰서가 보여요.' };
+  const mix = rv.mix && typeof rv.mix === 'object' ? Object.keys(rv.mix).filter(function (k) { return rv.mix[k]; }).map(function (k) { return k + ' ' + rv.mix[k]; }).join(' · ') : String(rv.mix || '');
+  const g = String(rv.guide || '').replace(/\s*\n\s*/g, ' / ');
+  return { f: '생성기가 읽은 리뷰: ' + [mix, g].filter(Boolean).join(' / ').slice(0, 300), note: '의뢰서 원문은 11/8부터 만든 진행부터 저장돼요. 이 진행은 생성기가 의뢰서에서 읽은 리뷰 정보만 있어요.\n\n' + [mix, String(rv.guide || '')].filter(Boolean).join('\n') };
+}
+
 /* ---------------- 메시지 모아보기: 종류별 탭 (11/7 사용자 요청) ----------------
  *  보낼메시지(원본, 프로그램이 쓰고 읽는 칸이라 숨겨 둠)를 종류마다 탭 하나로 나눠 보여 줌 → 밑으로 계속 내리지 않고 그 종류만 봄
  *  (피클 수식 판은 보낼메시지 27행부터만 읽어 새 메시지 25줄이 안 보였고 상태가 글자라 체크가 안 됐음. 그다음 판은 한 탭에 다 이어 붙여 길었음)
@@ -4192,14 +4255,14 @@ function markSentFromPage(k, id) {
  *  - B칸 체크 = 보낼메시지 그 줄 '보냄' (번호로 찾아서), 체크 풀면 '대기'. 체크한 줄은 그 자리에서 회색만 (줄이 안 움직여 옆 줄을 잘못 누르지 않게)
  *  - 보낼메시지가 바뀌면 실행이 끝날 때 바뀐 탭만 다시 그림. 다시 그린 지 20초 안에 누른 칸이 다른 메시지로 밀렸으면 체크를 되돌리고 알림
  */
-const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '2', MSGV_COLS = 5;
+const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '3', MSGV_COLS = 5;   // 3: F칸 의뢰서 (11/8)
 const MSGV_GROUPS = [
   { key: 'notice', base: '🐥방공지', t: '🐥 방 공지', k: ['방 공지'], bg: '#eee6f7', tab: '#b48fd9' },
   { key: 'list', base: '📋명단전달', t: '📋 명단 전달 (오리명단방)', k: ['명단 전달', '업체 명단'], bg: '#d9ead2', tab: '#7fbf6a' },
   { key: 'todo', base: '📝할일', t: '📝 내 할 일 · 사장님', k: ['할 일'], other: true, bg: '#fff1cc', tab: '#f2c94c' },
-  { key: 'photo', base: '📸포토가이드', t: '📸 포토 가이드 · 리뷰 안내', k: ['포토 가이드', '리뷰'], bg: '#cfe1f3', tab: '#6fa8dc' },
-  { key: 'report', base: '📦리뷰취합', t: '📦 리뷰 취합 보고 (사장님께)', k: ['리뷰 보고'], bg: '#d0dfe2', tab: '#76a5af' },
-  { key: 'nag', base: '⏰리뷰독촉', t: '⏰ 리뷰 독촉 · 안 산 사람', k: ['리뷰 독촉', '안 산 사람'], bg: '#fbe4cd', tab: '#f6a35b' },
+  { key: 'photo', base: '📸포토가이드', t: '📸 포토 가이드 · 리뷰 안내', k: ['포토 가이드', '리뷰'], bg: '#cfe1f3', tab: '#6fa8dc', req: true },
+  { key: 'report', base: '📦리뷰취합', t: '📦 리뷰 취합 보고 (사장님께)', k: ['리뷰 보고'], bg: '#d0dfe2', tab: '#76a5af', req: true },
+  { key: 'nag', base: '⏰리뷰독촉', t: '⏰ 리뷰 독촉 · 안 산 사람', k: ['리뷰 독촉', '안 산 사람'], bg: '#fbe4cd', tab: '#f6a35b', req: true },
   { key: 'pay', base: '💰리뷰비', t: '💰 리뷰비 · 페이백 요청', k: ['리뷰비 요청', '페이백 요청'], bg: '#ead1dc', tab: '#d36f9a' },
   { key: 'done', base: '✅취완', t: '✅ 취완 (방 사람 리뷰 다 확인됨)', k: ['취완'], bg: '#e3e3e3', tab: '#999999' }
 ];
@@ -4240,7 +4303,7 @@ function msgvGroupOfSheet_(sh) {
   return -1;
 }
 // 보낼메시지 줄 → 종류 탭마다 줄 (그리기 전 모양만, 시트는 안 건드림)
-function msgViewModel_(rows, sentAt) {
+function msgViewModel_(rows, sentAt, reqOf) {
   sentAt = sentAt || {};
   const t0 = dayStart_(today_()), tm = function (x) { return x[1] instanceof Date ? x[1].getTime() : 0; };
   const dk = function (x) { const t = dateTok_(x[3]) || dateTok_(String(x[4]).slice(0, 300)); if (!t) return 9999; const p = t.split('.'); return Number(p[0]) * 100 + Number(p[1]); };
@@ -4282,10 +4345,13 @@ function msgViewModel_(rows, sentAt) {
       // 할일: 카톡방 칸 첫 줄에 캠페인 이름(굵게), 둘째 줄에 보낼 곳·건수 (11/8 사용자: 캠페인명이 잘 안 보임)
       const room = tag + String(x[3] || '') + (xs.length > 1 ? ' · ' + xs.length + '건' : '') + (x[5] === '방 못 찾음' ? ' ⚠방 못 찾음' : '');
       const head = grp.key === 'todo' && camp && camp !== String(x[4]).split('\n')[0].trim() ? camp.slice(0, 40) : '';   // 방제를 못 찾은 글(첫 줄 그대로)은 안 씀
+      // 포토가이드·리뷰취합·리뷰독촉: F칸에 처음 붙여넣은 의뢰서 (리뷰 부분, 메모에 전체)
+      const rq = grp.req && reqOf ? (reqOf(x) || {}) : null;
       return { type: 'msg', id: xs.map(function (y) { return String(y[0]); }).join(','), sent: isSent, day: msgvDay_(x[1]), over: od, today: x[1] instanceof Date && x[1].getTime() === t0,
-        room: head ? head + '\n' + room : room, boldTo: head ? head.length : 0, msg: msgvCombine_(xs), bg: msgvRoomBg_(camp || x[3], colors) };
+        room: head ? head + '\n' + room : room, boldTo: head ? head.length : 0, msg: msgvCombine_(xs), bg: msgvRoomBg_(camp || x[3], colors),
+        reqF: rq ? String(rq.f || '') : null, reqNote: rq ? String(rq.note || '') : '' };
     });
-    const sig = JSON.stringify(lines.map(function (l) { return [l.id, l.sent ? 1 : 0, l.day, l.over ? 1 : 0, l.room, l.msg.length, l.msg.slice(0, 80), l.bg]; }));
+    const sig = JSON.stringify(lines.map(function (l) { return [l.id, l.sent ? 1 : 0, l.day, l.over ? 1 : 0, l.room, l.msg.length, l.msg.slice(0, 80), l.bg, l.reqF, l.reqNote.length]; }));
     return { lines: lines, pend: pend.length, over: over, sig: sig, name: grp.base + (pend.length ? ' ' + pend.length : '') };
   });
   return { groups: groups, colors: colors };
@@ -4340,7 +4406,8 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
     try { sh.setFrozenColumns(0); } catch (e) {}
     try { const mc = Number(sh.getMaxColumns()) || 0; if (mc > MSGV_COLS + 1) sh.deleteColumns(MSGV_COLS + 2, mc - MSGV_COLS - 1); } catch (e) {}
     try {
-      sh.setColumnWidth(1, 20); sh.setColumnWidth(2, 46); sh.setColumnWidth(3, 82); sh.setColumnWidth(4, 230); sh.setColumnWidth(5, 600); sh.setColumnWidth(6, 20);
+      sh.setColumnWidth(1, 20); sh.setColumnWidth(2, 46); sh.setColumnWidth(3, 82); sh.setColumnWidth(4, 230); sh.setColumnWidth(5, grp.req ? 520 : 600); sh.setColumnWidth(6, grp.req ? 420 : 20);
+      if (grp.req) sh.getRange(1, 6, sh.getMaxRows(), 1).setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
       sh.getRange('C:C').setNumberFormat('@');
       sh.getRange(1, 1, sh.getMaxRows(), MSGV_COLS).setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
       sh.hideColumns(1);
@@ -4377,6 +4444,20 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
       }));
     } catch (e) {}
   }
+  if (grp.req) {
+    // F칸: 처음 붙여넣은 의뢰서 리뷰 부분 (한 줄), 마우스를 올리면 칸 메모에 전체
+    const fv = [], fn = [], fb = [], fc = [];
+    for (let i = 0; i < n; i++) {
+      const l = lines[i] || { type: 'none' };
+      if (l.type === 'hdr') { fv.push(['의뢰서 (리뷰 부분 · 칸에 마우스 올리면 전체)']); fn.push(['']); fb.push(['#fbe9f2']); fc.push(['#7a2e57']); }
+      else if (l.type === 'title') { fv.push(['']); fn.push(['']); fb.push([grp.bg]); fc.push([null]); }
+      else if (l.type === 'msg') { fv.push([l.reqF || '']); fn.push([l.reqNote || '']); fb.push([l.sent ? '#f3f3f3' : '#fafafa']); fc.push([l.sent ? '#9e9e9e' : '#555555']); }
+      else { fv.push(['']); fn.push(['']); fb.push([null]); fc.push([null]); }
+    }
+    const fr = sh.getRange(1, 6, n, 1);
+    fr.setValues(fv).setNotes(fn).setBackgrounds(fb).setFontColors(fc);
+    try { sh.getRange(2, 6).setFontWeight('bold'); } catch (e) {}
+  }
   try { sh.setRowHeights(1, n, 22); sh.setRowHeight(1, 30); } catch (e) {}
   props.setProperty('MSGV_N_' + key, String(lines.length));
   props.setProperty('MSGV_SIG_' + key, g.sig);
@@ -4397,7 +4478,19 @@ function msgViewBuild_(force, only) {
   const allP = props.getProperties(), sentAt = msgvSentAt_(allP);
   // 사흘 넘은 체크 시각은 지움
   try { const old = dayStart_(today_()) - 3 * 86400000; Object.keys(allP).forEach(function (k) { if (k.indexOf('MSGV_S_') === 0 && Number(allP[k]) < old) props.deleteProperty(k); }); } catch (e) {}
-  const m = msgViewModel_(rows, sentAt), fresh = props.getProperty('MSGV_VER') !== MSGV_VER;
+  // F칸 의뢰서: 메시지마다 6시간 캐시 (없을 때만 진행목록을 읽음)
+  let rctx = null;
+  const reqOf = function (x) {
+    const c = CacheService.getScriptCache(), ck = 'MSGVF_' + x[0];
+    let hit = null; try { hit = c.get(ck); } catch (e) {}
+    if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+    if (!rctx) rctx = { runs: readRuns_(), all: allP };
+    let info = null; try { info = msgvReqInfo_(x, rctx); } catch (e) {}
+    info = info || { f: '', note: '' };
+    try { c.put(ck, JSON.stringify(info), 21600); } catch (e) {}
+    return info;
+  };
+  const m = msgViewModel_(rows, sentAt, reqOf), fresh = props.getProperty('MSGV_VER') !== MSGV_VER;
   // 새 탭 넣을 자리: 예전 모아보기 탭 자리(없으면 보낼메시지 뒤)부터 차례로
   let at = 1; try { at = old ? old.getIndex() - 1 : ob.getIndex(); } catch (e) {}
   let wrote = false;
@@ -4494,6 +4587,7 @@ function msgViewEdit_(e, gi) {
     });
     const st = msgvStyle_({ type: 'msg', sent: on, over: !on && x[1] instanceof Date && x[1].getTime() < t0, today: x[1] instanceof Date && x[1].getTime() === t0, bg: msgvRoomBg_(key === 'todo' ? msgvCampOf_(x) : x[3], colors) });
     sh.getRange(row, 1, 1, MSGV_COLS).setBackgrounds([st.bg]).setFontColors([st.fc]).setFontWeights([st.fw]);
+    if (MSGV_GROUPS[gi].req) { try { sh.getRange(row, 6).setBackground(on ? '#f3f3f3' : '#fafafa').setFontColor(on ? '#9e9e9e' : '#555555'); } catch (err) {} }
   }
   if (sentNote.length && !moved.length) toast(sentNote.filter(function (x, i, a) { return a.indexOf(x) === i; }).join(' · '), 10);
   if (moved.length) toast('목록이 방금 다시 그려져서 ' + moved.join(', ') + '행 체크는 되돌렸어요. 메시지를 다시 확인하고 체크해 주세요', 12);
