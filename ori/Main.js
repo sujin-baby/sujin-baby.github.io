@@ -3216,6 +3216,7 @@ function slowTasks_(rr, listed) {
   try { moveCampFoldersOnce_(); } catch (e) { note_('월 폴더 정리 실패: ' + e); }
   try { rvSentBackfill1_(); } catch (e) { note_('리뷰 보고 → 업체 전송 맞추기 실패: ' + e); }
   try { rvSentFix2_(); } catch (e) { note_('실링팬 업체 전송 맞추기 실패: ' + e); }
+  try { rvCollBackfill1_(); } catch (e) { note_('리뷰 취합 날짜 맞추기 실패: ' + e); }
   try { rvReportFix1_(); rvReportFix1_('RVRPTSPAN2'); } catch (e) { note_('리뷰 보고 글 고치기 실패: ' + e); }   // 2: '#실 실' 겹침 (11/8)
   try { ensureInboxTrigger_(); } catch (e) { note_('받는 곳 5분 트리거 실패: ' + e); }
   PropertiesService.getScriptProperties().setProperty('SLOW_AT', String(Date.now()));
@@ -4448,6 +4449,7 @@ function msgViewSync_() {
   try { l = LockService.getUserLock ? LockService.getUserLock() : LockService.getScriptLock(); } catch (e) {}
   if (l && !l.tryLock(5000)) return;
   try { rvSilingRestore1_(); } catch (e) { Logger.log('실링팬 리뷰 보고 다시 넣기 실패: ' + e); }
+  try { rvCollBackfill1_(); } catch (e) { Logger.log('리뷰 취합 날짜 맞추기 실패: ' + e); }   // 보낸 지 오래된 메시지 정리 전에 한 번
   try { msgViewBuild_(false); } catch (e) { Logger.log('모아보기 다시 그리기 실패: ' + e); }
   finally { try { if (l) l.releaseLock(); } catch (e) {} }
 }
@@ -4487,11 +4489,13 @@ function msgViewEdit_(e, gi) {
       try { if (on) props.setProperty('MSGV_S_' + id, String(Date.now())); else props.deleteProperty('MSGV_S_' + id); } catch (err) {}
       // 리뷰 보고(사장님께 리뷰이미지 링크)를 보냄 → 진행목록 업체 전송 날짜 (11/8)
       if (String(y[2]) === '리뷰 보고') { try { if (rvSetSent_(rvSidOfReport_(y[4]), on)) sentNote.push(on ? '진행목록 업체 전송에 오늘 날짜를 넣었어요' : '진행목록 업체 전송 오늘 날짜를 지웠어요'); } catch (err) {} }
+      // 리뷰비·페이백 요청, 취완 → 그 방 진행 '리뷰 취합' 날짜 (11/8)
+      if (/^(리뷰비 요청|페이백 요청|취완)$/.test(String(y[2]))) { try { if (rvSetColl_(y, on)) sentNote.push(on ? '진행목록 리뷰 취합에 오늘 날짜를 넣었어요' : '진행목록 리뷰 취합 오늘 날짜를 지웠어요'); } catch (err) {} }
     });
     const st = msgvStyle_({ type: 'msg', sent: on, over: !on && x[1] instanceof Date && x[1].getTime() < t0, today: x[1] instanceof Date && x[1].getTime() === t0, bg: msgvRoomBg_(key === 'todo' ? msgvCampOf_(x) : x[3], colors) });
     sh.getRange(row, 1, 1, MSGV_COLS).setBackgrounds([st.bg]).setFontColors([st.fc]).setFontWeights([st.fw]);
   }
-  if (sentNote.length && !moved.length) toast(sentNote[0] + ' (한눈에 리뷰 취합 줄도 같이 바뀌어요)', 10);
+  if (sentNote.length && !moved.length) toast(sentNote.filter(function (x, i, a) { return a.indexOf(x) === i; }).join(' · '), 10);
   if (moved.length) toast('목록이 방금 다시 그려져서 ' + moved.join(', ') + '행 체크는 되돌렸어요. 메시지를 다시 확인하고 체크해 주세요', 12);
   else if (gone.length) toast(gone.join(', ') + '행 메시지는 이미 지워진 거예요 (곧 목록에서 빠져요)', 10);
 }
@@ -6327,6 +6331,47 @@ function rvSetSent_(sid, on, when) {
   const t0 = dayStart_(today_()); let n = 0;
   mine.forEach(function (x) { const v = x['업체 전송']; if (v instanceof Date && dayStart_(v) === t0) { setRun_(x.row, '업체 전송', ''); n++; } });
   return n;
+}
+// 리뷰비·페이백 요청 / 취완 글을 보냄 체크 → 그 진행(방) 진행목록 '리뷰 취합'에 그날 날짜 (11/8 사용자: 10.26 마켓담온 귤 리뷰비 요청·취완을 11/5에 했는데 리뷰 취합이 비어 있음)
+//  리뷰비 요청 글 = '날짜<탭>방제<탭>건수<탭>링크', 페이백 = '[전원 리뷰완료] 방제 페이백 요청드립니다!', 취완 = 카톡방(또는 예전 '캠페인 (전체 N개 방)')
+function rvCollRunsOf_(y, runs) {
+  const kind = String(y[2]), msg = String(y[4]), room = String(y[3]), cut = today_().getTime() - 45 * 86400000;
+  let t = '';
+  if (kind === '리뷰비 요청') t = String(msg.split('\t')[1] || '').trim();
+  else if (kind === '페이백 요청') t = String((msg.match(/\]\s*(.+?)\s*페이백 요청/) || [])[1] || '').trim();
+  if (t) return runs.filter(function (r) { return bareTitle_(r['명단 제목']) === t; });
+  if (kind !== '취완') return [];
+  const m = room.match(/^(.+?)\s*\(전체 \d+개 방\)$/);
+  if (m) return runs.filter(function (r) { return campOf_(r['명단 제목']) === m[1].trim() && Number(r['인원']) > 0 && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut; });
+  return runs.filter(function (r) { return String(r['카톡방'] || bareTitle_(r['명단 제목'])) === room; });
+}
+// 체크 → 비어 있는 '리뷰 취합'만 채움, 풀기 → 오늘 적힌 것만 지움
+function rvSetColl_(y, on, when, runs) {
+  const mine = rvCollRunsOf_(y, runs || readRuns_()), t0 = dayStart_(today_());
+  let n = 0;
+  mine.forEach(function (r) {
+    const v = r['리뷰 취합'], has = v instanceof Date || String(v == null ? '' : v).trim() !== '';
+    if (on && !has) { const d = when || today_(); setRun_(r.row, '리뷰 취합', d); r['리뷰 취합'] = d; n++; }
+    else if (!on && v instanceof Date && dayStart_(v) === t0) { setRun_(r.row, '리뷰 취합', ''); r['리뷰 취합'] = ''; n++; }
+  });
+  return n;
+}
+// (11/8 한 번) 보낸 리뷰비·페이백 요청·취완 → 리뷰 취합 날짜 (보낸 날 = 체크한 시각, 없으면 보낼 날짜). 10.26 마켓담온 귤은 사용자가 말한 11/5
+function rvCollBackfill1_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('RVCOLLLINK1')) return;
+  const runs = readRuns_(), at = msgvSentAt_(), ob = outboxSheet_(), ol = ob.getLastRow();
+  rvSetColl_(['', '', '리뷰비 요청', '', '\t#택10.26 마켓담온 귤 7'], true, new Date(2026, 10, 5), runs);
+  let n = 0;
+  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (y) {
+    if (y[5] !== '보냄' || !/^(리뷰비 요청|페이백 요청|취완)$/.test(String(y[2]))) return;
+    let d = at[String(y[0])] ? new Date(Number(at[String(y[0])])) : y[1] instanceof Date ? new Date(y[1]) : null;
+    if (!d) return;
+    d.setHours(0, 0, 0, 0);
+    n += rvSetColl_(y, true, d, runs);
+  });
+  if (n) note_('✓ 보낸 리뷰비·페이백 요청·취완 → 진행목록 리뷰 취합 날짜 ' + n + '줄');
+  props.setProperty('RVCOLLLINK1', '1');
 }
 // 한눈에 '리뷰 취합할 것'을 체크 → 그 의뢰 안 보낸 리뷰 보고 글도 보냄 (둘 중 어디서 체크해도 같게)
 function rvMarkReportMsgs_(sid) {

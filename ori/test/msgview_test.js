@@ -133,6 +133,18 @@ G('pruneOutbox_()');
 ok(!env.__ss.sheets['보낼메시지'].rows.find(r => r[0] === 'm4'), '체크 기록 없는 오래된 메시지가 안 지워짐');
 const rm2 = G('rvReportMsg_')('L', [{ '명단 제목': '#10.21 실 속눈썹영양제 3 (뽀짝오리)', '인원': 3, '총건수': 20, '실배송': 'Y' }, { '명단 제목': '#10.29 실 속눈썹영양제 2 (뽀짝오리)', '인원': 2, '총건수': 20, '실배송': 'Y' }], '');
 ok(rm2.split('\n')[2] === '10.21~10.29 #실 속눈썹영양제', '실 겹침: ' + JSON.stringify(rm2.split('\n')[2]));
+// 취완·리뷰비 요청 보냄 체크 → 그 진행 진행목록 '리뷰 취합' = 오늘 (11/8)
+env.__props.set('RVCOLLLINK1', '1');
+env.__ss.sheets['보낼메시지'].rows.splice(1, 0, ['m13', day(-1), '취완', '#10.27 실링팬 2', '취완', '대기'], ['m14', day(-1), '리뷰비 요청', '리뷰비시트', '10/28\t#10.28 실링팬 2\t2건\thttps://x', '대기']);
+G('msgViewBuild_(false)');
+BASES.forEach((b, i) => env.__props.set('MSGV_AT_' + G('MSGV_GROUPS[' + i + '].key'), String(Date.now() - 60000)));
+const coll = t => env.__ss.sheets['진행목록'].rows.find(r => String(r[LH.indexOf('명단 제목')]).indexOf(t) === 0)[LH.indexOf('리뷰 취합')];
+edit(T['✅취완'], rowOf('m13'), true);
+edit(T['💰리뷰비'], rowOf('m14'), true);
+ok(coll('#10.27 실링팬') instanceof Date && coll('#10.27 실링팬').getTime() === t0.getTime(), '취완 → 리뷰 취합 ' + coll('#10.27 실링팬'));
+ok(coll('#10.28 실링팬') instanceof Date, '리뷰비 요청 → 리뷰 취합 ' + coll('#10.28 실링팬'));
+edit(T['✅취완'], rowOf('m13'), false);
+ok(coll('#10.27 실링팬') === '', '취완 체크 풀었는데 리뷰 취합 남음');
 // 탭 이름에 없는 사용자 탭은 종류 탭으로 안 봄
 ok(G('msgvGroupOfName_("🐥방공지 메모")') === -1 && G('msgvGroupOfName_("한눈에")') === -1, '탭 이름 구분');
 console.log(fails.length ? 'XX 메시지 종류별 탭 시험 실패:\n- ' + fails.join('\n- ') : '✓ 메시지 종류별 탭 시험 통과 (탭 ' + BASES.length + '개)');
