@@ -47,7 +47,7 @@ const expect = { m1: '🐥방공지', m2: '🐥방공지', m3: '🐥방공지', 
 Object.keys(expect).forEach(id => ok(where(id)[0] === expect[id], id + ' → ' + where(id)[0] + ' (기대 ' + expect[id] + ')'));
 ['m3b', 'm4', 'm9'].forEach(id => ok(rowOf(id) === 0, id + ' 보이면 안 됨'));
 ok(T['🐥방공지'].name === '🐥방공지 2', '탭 이름 개수 ' + T['🐥방공지'].name);
-ok(T['✅취완'].name === '✅취완' && /보낼 것 없어요/.test(T['✅취완'].rows[2][3]), '빈 탭');
+ok(T['✅취완'].name === '✅취완' && /보낼 것 없어요/.test(T['✅취완'].rows[1][3]), '빈 탭');
 ok(T['📝할일'].name === '📝할일 33', '할일 탭 이름 ' + T['📝할일'].name);
 const pr = ids(T['📝할일']).indexOf('p0,p1,p2') + 1;
 ok(pr > 0, '결제금액 확인 3개가 한 줄이 아님: ' + ids(T['📝할일']).filter(x => /^p/.test(x)).join(' / '));
@@ -60,7 +60,7 @@ ok(String(cellOf('m5', 2)) === '사진 오면', '포토 날짜 ' + cellOf('m5', 
 ok(/〔페이백〕/.test(cellOf('m7', 3)), '페이백 표시 ' + cellOf('m7', 3));
 ok(/〔새 종류〕/.test(cellOf('m8', 3)), '모르는 종류 표시 ' + cellOf('m8', 3));
 ok(cellOf('m1', 4) === '★★★자정 구매★★★\n거치대 공지', '메시지 전체 글');
-ok(/안 보낸 것 2개/.test(T['🐥방공지'].rows[0][1]), '제목 ' + T['🐥방공지'].rows[0][1]);
+ok(JSON.stringify(T['🐥방공지'].rows[0].slice(1, 5)) === JSON.stringify(['보냄', '날짜', '카톡방', '메시지']), '1행 머리글 ' + JSON.stringify(T['🐥방공지'].rows[0]));
 ok(env.__props.get('MSGV_HIDE1') === '1', '보낼메시지 숨김 표시');
 // 바뀐 게 없으면 다시 안 그림
 ok(G('msgViewBuild_(false)') === false, '바뀐 게 없는데 다시 그림');
@@ -144,7 +144,11 @@ const fr = T['💰리뷰비'].rows[rowOf('m14') - 1];
 const wd = ['일', '월', '화', '수', '목', '금', '토'][new Date(t0.getFullYear(), 9, 28).getDay()];
 const rf = rowOf('m14');
 ok(JSON.stringify(fr.slice(4, 11)) === JSON.stringify([t0.getFullYear() + '.10.28.' + wd, '실링팬', '뽀짝오리', '', 2, '=(H' + rf + '*500)+(I' + rf + '*1000)', 'https://x']), '리뷰비 칸 ' + JSON.stringify(fr.slice(4, 11)));
-ok(T['🐥방공지'].rows[0][4] === '' && T['💰리뷰비'].rows[0][4] === '', '1행 안내 ' + JSON.stringify([T['🐥방공지'].rows[0][4], T['💰리뷰비'].rows[0][4]]));
+ok(T['💰리뷰비'].rows[0][4] === '주문 날짜' && T['⏰리뷰독촉'].rows[0][4] === '리뷰 확인이 안 된 분', '머리글 ' + JSON.stringify([T['💰리뷰비'].rows[0][4], T['⏰리뷰독촉'].rows[0][4]]));
+// 리뷰 독촉 탭은 이름만 (11/8)
+env.__ss.sheets['보낼메시지'].rows.splice(1, 0, ['m15', day(-1), '리뷰 독촉', '#10.27 실링팬 2', '⏰ 리뷰 작성 기한이 3일 지났어요\n아직 리뷰 확인이 안 된 분: 주현지, 이슬비\n이미 쓰셨으면 리뷰 캡처를 올려 주시고, 아직이면 오늘 중으로 작성 부탁드려요!', '대기']);
+G('msgViewBuild_(false)');
+ok(T['⏰리뷰독촉'].rows[rowOf('m15') - 1][4] === '주현지, 이슬비', '독촉 이름만 ' + JSON.stringify(T['⏰리뷰독촉'].rows[rowOf('m15') - 1][4]));
 // 취완 탭: 리뷰이미지(F)·명단(G) 링크 (11/8)
 env.__ss.sheets['진행목록'].rows[1][LH.indexOf('시트 링크')] = 'https://docs.google.com/spreadsheets/d/S9/edit';
 env.__props.set('RVIMG_S9', 'FOLDER12345abc');
@@ -157,6 +161,11 @@ ok(coll('#10.27 실링팬') instanceof Date && coll('#10.27 실링팬').getTime(
 ok(coll('#10.28 실링팬') instanceof Date, '리뷰비 요청 → 리뷰 취합 ' + coll('#10.28 실링팬'));
 edit(T['✅취완'], rowOf('m13'), false);
 ok(coll('#10.27 실링팬') === '', '취완 체크 풀었는데 리뷰 취합 남음');
+// 리뷰 보고 글에 종류별 개수 (11/8)
+const rm3 = G('rvReportMsg_')('L', [{ '명단 제목': '#택10.23 과일쏙 대봉감 5 (뽀짝오리)', '인원': 5, '총건수': 15 }, { '명단 제목': '#택10.27 과일쏙 대봉감 5 (뽀짝오리)', '인원': 5, '총건수': 15 }], '', { 포토: 0, 텍스트: 15, 별점: 0 });
+ok(rm3.split('\n')[3] === '총 15건 리뷰 취합본(텍스트리뷰 15개) 전달드립니다!', '종류별 개수 ' + JSON.stringify(rm3.split('\n')[3]));
+const rm4 = G('rvReportMsg_')('L', [{ '명단 제목': '#10.22 실링팬 2 (뽀짝오리)', '인원': 2, '총건수': 10 }], '', { 포토: 2, 텍스트: 3, 별점: 5 });
+ok(rm4.split('\n')[3] === '총 10건 리뷰 취합본(포토리뷰 2개, 텍스트리뷰 3개, 별점리뷰 5개) 전달드립니다!', '종류별 개수2 ' + JSON.stringify(rm4.split('\n')[3]));
 // 탭 이름에 없는 사용자 탭은 종류 탭으로 안 봄
 ok(G('msgvGroupOfName_("🐥방공지 메모")') === -1 && G('msgvGroupOfName_("한눈에")') === -1, '탭 이름 구분');
 console.log(fails.length ? 'XX 메시지 종류별 탭 시험 실패:\n- ' + fails.join('\n- ') : '✓ 메시지 종류별 탭 시험 통과 (탭 ' + BASES.length + '개)');

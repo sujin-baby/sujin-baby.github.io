@@ -28,5 +28,13 @@ try { G('reviewDone_(readRuns_())'); } catch (e) { err = String(e.stack || e); }
 ok(!err, '오류2 ' + err);
 ok(JSON.stringify(msgs().slice().sort()) === JSON.stringify(['#택1.1 밴드 2', '#택1.2 밴드 2']), '2일차 방 취완: ' + JSON.stringify(msgs()));
 ok(!msgs().some(m => /전체/.test(m)), '의뢰 전체 취완 글이 들어감');
+// 5분 확인: 명단 시트 수정 시각이 바뀐 의뢰만 리뷰 확인 (11/8 리뷰비 요청이 너무 늦게 뜸)
+let mod = 1000; env.__props.delete('RVDONE_S1');   // 아직 진행 중인 의뢰로 (다 끝난 의뢰는 5분 확인에서 안 봄)
+G("DriveApp.getFileById = function (id) { return { getLastUpdated: function () { return new Date(globalThis.__MOD); }, getName: function () { return '밴드 명단'; } }; }"); env.__MOD = mod;
+G("(function () { const o = reviewDone_; reviewDone_ = function (r, only) { globalThis.__CALLS = (globalThis.__CALLS || 0) + 1; globalThis.__ONLY = only; return o(r, only); }; })()");
+ok(G('rvQuickCheck_()') === 1 && JSON.stringify(G('__ONLY')) === '["S1"]', '처음엔 바뀐 걸로 봄');
+ok(G('rvQuickCheck_()') === 0, '안 바뀌었는데 또 봄');
+env.__MOD = 2000; env.__props.delete('RVDONE_S1');
+ok(G('rvQuickCheck_()') === 1, '바뀌었는데 안 봄');
 console.log(fails.length ? 'XX 방별 취완 시험 실패:\n- ' + fails.join('\n- ') : '✓ 방별 취완 시험 통과');
 process.exit(fails.length ? 1 : 0);

@@ -3654,9 +3654,24 @@ function rvInboxTick_() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;   // 15분 확인이 도는 중이면 그쪽에서 함
   try { globalThis.__ORI_T0 = Date.now(); rvInboxSort_(null); } catch (e) { try { note_('리뷰 사진 받는 곳(5분) 실패: ' + e); } catch (e2) {} }
+  // 명단 시트 리뷰 확인 체크 → 5분 안에 취완·리뷰비·페이백 요청 (11/8 사용자: 시온스 발마사지기 다 체크했는데 리뷰비 요청이 너무 늦게 뜸)
+  try { if (!late_(150)) rvQuickCheck_(); } catch (e) { try { if (!(e && e.yieldLock)) note_('리뷰 확인(5분) 실패: ' + e); } catch (e2) {} }
   // AI 분류 대기열도 이어서 (1분 연쇄 트리거도 이 길로 들어옴, 11/7)
   try { if (PropertiesService.getScriptProperties().getProperty('RVAI_Q') && !late_(200)) rvAiQueue_(); } catch (e) { try { note_('리뷰 사진 AI(연쇄) 실패: ' + e); } catch (e2) {} }
   finally { lock.releaseLock(); }
+}
+// 5분 확인: 명단 시트 수정 시각이 지난번과 다른 의뢰만 리뷰 확인(reviewDone_). 명단 시트끼리 관리 시트로 바로 알려 주는 방법이 없어서
+//  (명단 시트마다 수정 트리거를 걸면 계정당 트리거 20개 한도를 넘음) 5분마다 드라이브 수정 시각만 봄. 다른 일은 안 기다리게 15분 확인이 돌면 건너뜀
+function rvQuickCheck_() {
+  const props = PropertiesService.getScriptProperties(), all = props.getProperties(), runs = readRuns_(), cut = today_().getTime() - 40 * 86400000, sids = {};
+  runs.forEach(function (r) { const sid = String(r['시트ID'] || ''); if (sid && !isExpect_(r) && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut && r['마감 시각'] instanceof Date && !all['RVDONE_' + sid]) sids[sid] = 1; });
+  const modOf = function (sid) { try { return String(DriveApp.getFileById(sid).getLastUpdated().getTime()); } catch (e) { return ''; } };
+  const changed = Object.keys(sids).filter(function (sid) { const m = modOf(sid); if (!m || m === String(all['RVQMOD_' + sid] || '')) return false; props.setProperty('RVQMOD_' + sid, m); return true; });
+  if (!changed.length) return 0;
+  reviewDone_(runs, changed);
+  // 리뷰 확인 단계가 명단 시트에 쓴 게 있으면 수정 시각이 또 바뀜 → 다음 5분에 또 보지 않게 지금 시각으로
+  changed.forEach(function (sid) { const m = modOf(sid); if (m) props.setProperty('RVQMOD_' + sid, m); });
+  return changed.length;
 }
 // 키가 있으면 5분마다 받는 곳 확인 트리거 (트리거는 계정당 20개 한도라 19개 넘으면 안 만듦 → 15분 확인에서만)
 function ensureInboxTrigger_() {
@@ -4297,7 +4312,7 @@ function msgvLinks_(x, ctx) {
  *  - B칸 체크 = 보낼메시지 그 줄 '보냄' (번호로 찾아서), 체크 풀면 '대기'. 체크한 줄은 그 자리에서 회색만 (줄이 안 움직여 옆 줄을 잘못 누르지 않게)
  *  - 보낼메시지가 바뀌면 실행이 끝날 때 바뀐 탭만 다시 그림. 다시 그린 지 20초 안에 누른 칸이 다른 메시지로 밀렸으면 체크를 되돌리고 알림
  */
-const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '5', MSGV_COLS = 5;   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
+const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '6', MSGV_COLS = 5;   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
 const MSGV_GROUPS = [
   { key: 'notice', base: '🐥방공지', t: '🐥 방 공지', k: ['방 공지'], bg: '#eee6f7', tab: '#b48fd9' },
   { key: 'list', base: '📋명단전달', t: '📋 명단 전달 (오리명단방)', k: ['명단 전달', '업체 명단'], bg: '#d9ead2', tab: '#7fbf6a' },
@@ -4393,6 +4408,8 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf) {
         room: head ? head + '\n' + room : room, boldTo: head ? head.length : 0, msg: msgvCombine_(xs), bg: msgvRoomBg_(camp || x[3], colors),
         reqF: rq ? String(rq.f || '') : null, reqNote: rq ? String(rq.note || '') : '', reqUrl: rq ? String(rq.url || '') : '',
         fee: grp.fee && String(x[2]) === '리뷰비 요청' ? msgvFeeCells_(x) : null, kind: String(x[2]),
+        // 리뷰 독촉 탭은 이름만 (11/8 사용자: 기한 문구·부탁 문구 빼고 이름만 복사해서 씀)
+        names: grp.key === 'nag' && String(x[2]) === '리뷰 독촉' ? String((String(x[4]).match(/아직 리뷰 확인이 안 된 분\s*:\s*([^\n]*)/) || [])[1] || x[4]).trim() : null,
         links: grp.links && linkOf ? (linkOf(x) || {}) : null };
     });
     const sig = JSON.stringify(lines.map(function (l) { return [l.id, l.sent ? 1 : 0, l.day, l.over ? 1 : 0, l.room, l.msg.length, l.msg.slice(0, 80), l.bg, l.reqF, l.reqNote.length, l.reqUrl, l.fee, l.links]; }));
@@ -4466,27 +4483,29 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
     try { const mc = Number(sh.getMaxColumns()) || 0; if (mc > keepC) sh.deleteColumns(keepC + 1, mc - keepC); else if (mc && mc < keepC) sh.insertColumnsAfter(mc, keepC - mc); } catch (e) {}
     try {
       sh.setColumnWidth(1, 20); sh.setColumnWidth(2, 46); sh.setColumnWidth(3, 82); sh.setColumnWidth(4, grp.fee ? 130 : 230); sh.setColumnWidth(5, grp.fee ? 120 : grp.req ? 520 : 600); sh.setColumnWidth(6, grp.req ? 420 : grp.fee ? 150 : 20);
-      if (grp.links) { if (grp.key === 'done') { sh.setColumnWidth(5, 200); sh.setColumnWidth(6, 90); } sh.setColumnWidth(7, 60); sh.setColumnWidth(8, 20); sh.getRange(1, 6, sh.getMaxRows(), 2).setHorizontalAlignment('center'); }
+      if (grp.links) { if (grp.key === 'done') { sh.setColumnWidth(5, 200); sh.setColumnWidth(6, 90); } sh.setColumnWidth(7, 60); sh.setColumnWidth(8, 20); sh.getRange(1, grp.key === 'done' ? 6 : 7, sh.getMaxRows(), grp.key === 'done' ? 2 : 1).setHorizontalAlignment('center').setVerticalAlignment('middle'); }
       if (grp.fee) { sh.setColumnWidth(7, 80); sh.setColumnWidth(8, 70); sh.setColumnWidth(9, 90); sh.setColumnWidth(10, 90); sh.setColumnWidth(11, 420); sh.setColumnWidth(12, 20); sh.getRange(1, 5, sh.getMaxRows(), 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.OVERFLOW); sh.getRange(1, 6, sh.getMaxRows(), 6).setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP); }
       if (grp.req) sh.getRange(1, 6, sh.getMaxRows(), 1).setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
       sh.getRange('C:C').setNumberFormat('@');
       sh.getRange(1, 1, sh.getMaxRows(), MSGV_COLS).setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
       sh.hideColumns(1);
-      sh.setFrozenRows(2);
+      sh.setFrozenRows(1);
+      if (grp.fee) sh.hideColumns(3, 2);   // 리뷰비 탭: 날짜(C)는 주문 날짜(E)와 같고 카톡방(D)은 다 리뷰비시트라 숨김 (11/8 사용자 요청)
       sh.setTabColor(grp.tab);
     } catch (e) {}
   }
   const title = grp.t + ' · ' + (g.pend ? '안 보낸 것 ' + g.pend + '개' + (g.over ? ' (날짜 지난 것 ' + g.over + '개)' : '') : '다 보냈어요 ✓');
-  const lines = [{ type: 'title' }, { type: 'hdr' }].concat(g.lines.length ? g.lines : [{ type: 'empty' }]), n = Math.max(lines.length, prevN);
+  // 1행 = 머리글 (예전 제목 줄 '… · 안 보낸 것 N개'는 없앰, 11/8 사용자 요청: 개수는 탭 이름에 있음)
+  const lines = [{ type: 'hdr' }].concat(g.lines.length ? g.lines : [{ type: 'empty' }]), n = Math.max(lines.length, prevN);
   if (sh.getMaxRows() < n + 2) { try { sh.insertRowsAfter(sh.getMaxRows(), n + 2 - sh.getMaxRows()); } catch (e) {} }
   const vals = [], bgs = [], fcs = [], fws = [], als = [], dvs = [], cb = SpreadsheetApp.newDataValidation().requireCheckbox().build();
   for (let i = 0; i < n; i++) {
     const l = lines[i] || { type: 'none' };
     let v = ['', '', '', '', ''], st = msgvStyle_(l), dv = null;
     if (l.type === 'title') { v = ['', title, '', '', '']; st = { bg: [null, grp.bg, grp.bg, grp.bg, grp.bg], fc: [null, '#3b2a4d', '#3b2a4d', '#3b2a4d', '#6b5a7a'], fw: ['normal', 'bold', 'bold', 'bold', 'normal'] }; }
-    else if (l.type === 'hdr') { v = ['', '보냄', '날짜', '카톡방', grp.fee ? '주문 날짜 (페이백은 메시지)' : '메시지 (칸 글을 복사해서 카톡에 붙여넣기)']; st = { bg: [null, '#fbe9f2', '#fbe9f2', '#fbe9f2', '#fbe9f2'], fc: [null, '#7a2e57', '#7a2e57', '#7a2e57', '#7a2e57'], fw: ['normal', 'bold', 'bold', 'bold', 'bold'] }; }
+    else if (l.type === 'hdr') { v = ['', '보냄', '날짜', '카톡방', grp.fee ? '주문 날짜' : grp.key === 'nag' ? '리뷰 확인이 안 된 분' : '메시지']; st = { bg: [null, '#fbe9f2', '#fbe9f2', '#fbe9f2', '#fbe9f2'], fc: [null, '#7a2e57', '#7a2e57', '#7a2e57', '#7a2e57'], fw: ['normal', 'bold', 'bold', 'bold', 'bold'] }; }
     else if (l.type === 'empty') { v = ['', '', '', '보낼 것 없어요 ✓', '']; st = { bg: [null, null, null, null, null], fc: [null, null, null, '#9e9e9e', null], fw: ['normal', 'normal', 'normal', 'normal', 'normal'] }; }
-    else if (l.type === 'msg') { v = [l.id, !!l.sent, l.day, l.room, l.fee ? l.fee[0] : l.msg]; dv = cb; }
+    else if (l.type === 'msg') { v = [l.id, !!l.sent, l.day, l.room, l.fee ? l.fee[0] : l.names != null ? l.names : l.msg]; dv = cb; }
     vals.push(v); bgs.push(st.bg); fcs.push(st.fc); fws.push(st.fw); als.push(msgvAlign_(l)); dvs.push([dv]);
   }
   const rg = sh.getRange(1, 1, n, MSGV_COLS);
@@ -4510,7 +4529,7 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
     const fv = [], fn = [], fb = [], fc = [];
     for (let i = 0; i < n; i++) {
       const l = lines[i] || { type: 'none' };
-      if (l.type === 'hdr') { fv.push(['의뢰서 (리뷰 부분 · 칸에 마우스 올리면 전체)']); fn.push(['']); fb.push(['#fbe9f2']); fc.push(['#7a2e57']); }
+      if (l.type === 'hdr') { fv.push(['의뢰서 (누르면 전체)']); fn.push(['']); fb.push(['#fbe9f2']); fc.push(['#7a2e57']); }
       else if (l.type === 'title') { fv.push(['']); fn.push(['']); fb.push([grp.bg]); fc.push([null]); }
       else if (l.type === 'msg') { fv.push([l.reqF || '']); fn.push([l.reqNote || '']); fb.push([l.sent ? '#f3f3f3' : '#fafafa']); fc.push([l.sent ? '#9e9e9e' : '#555555']); }
       else { fv.push(['']); fn.push(['']); fb.push([null]); fc.push([null]); }
@@ -4554,18 +4573,7 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
       try { sh.getRange(2, col).setFontWeight('bold').setFontColor('#7a2e57'); } catch (e) {}
     });
   }
-  if (grp.key === 'nag') {
-    // 리뷰 독촉: '아직 리뷰 확인이 안 된 분: 이름들' 줄을 굵게 (11/8 사용자: 이름이 잘 안 보임). 카톡에 붙일 글은 그대로
-    try {
-      sh.getRange(1, 5, n, 1).setRichTextValues(vals.map(function (v, i) {
-        const t = String(v[4]), l = lines[i] || {}, b = SpreadsheetApp.newRichTextValue().setText(t);
-        const at = l.type === 'msg' && l.kind === '리뷰 독촉' ? t.indexOf('아직 리뷰 확인이 안 된 분') : -1;
-        if (at >= 0) { const end = t.indexOf('\n', at); b.setTextStyle(at, end < 0 ? t.length : end, SpreadsheetApp.newTextStyle().setBold(true).build()); }
-        return [b.build()];
-      }));
-    } catch (e) {}
-  }
-  try { sh.setRowHeights(1, n, 22); sh.setRowHeight(1, 30); } catch (e) {}
+  try { sh.setRowHeights(1, n, 22); } catch (e) {}
   props.setProperty('MSGV_N_' + key, String(lines.length));
   props.setProperty('MSGV_SIG_' + key, g.sig);
   props.setProperty('MSGV_AT_' + key, String(Date.now()));
@@ -4704,7 +4712,7 @@ function msgViewEdit_(e, gi) {
   const sh = e.range.getSheet(), r0 = e.range.getRow(), n = e.range.getNumRows(), c0 = e.range.getColumn(), c1 = c0 + e.range.getNumColumns() - 1;
   const props = PropertiesService.getScriptProperties(), key = MSGV_GROUPS[gi].key;
   const toast = function (t, s) { try { e.source.toast(t, '메시지 모아보기', s || 8); } catch (err) {} };
-  if (c0 !== 2 || c1 !== 2 || r0 < 3) {
+  if (c0 !== 2 || c1 !== 2 || r0 < 2) {
     toast('이 탭은 보기용이라 글을 고쳐도 저장 안 돼요. 원래대로 돌려 놨어요. 보낸 뒤 왼쪽 보냄 칸만 체크해 주세요', 10);
     try { msgViewBuild_(true, gi); } catch (err) {}
     return;
@@ -6278,7 +6286,7 @@ function rvCol_(sh, lc) {
   return pc > 0 ? pc : -1;
 }
 const PAYBACK_ROOM = '오리명단방(뽀짝)', REVFEE_ROOM = '리뷰비시트';
-function reviewDone_(runs) {
+function reviewDone_(runs, only) {
   const props = PropertiesService.getScriptProperties(), cut = today_().getTime() - 40 * 86400000;
   // 처음 한 번은 이미 다 체크된 예전 의뢰를 '보낸 걸로' 기억만 (예전에 직접 보낸 취완·보고가 다시 안 들어가게)
   const init = !props.getProperty('RVDONE_INIT');
@@ -6287,6 +6295,7 @@ function reviewDone_(runs) {
   let pend = {};
   try { const ps = planSheet_(), pl = ps.getLastRow(); if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x) { if (x[8] === '대기') pend[campKey_(x[1])] = 1; }); } catch (e) {}
   Object.keys(bySheet).forEach(function (sid) {
+    if (only && only.indexOf(sid) < 0) return;   // 5분 확인: 명단 시트가 바뀐 의뢰만
     yieldIfWanted_();   // 새 진행 만들기 같은 직접 하는 일이 기다리면 의뢰 하나 끝날 때마다 바로 넘김 (11/2: 리뷰 확인 76초 동안 새 진행이 기다림)
     const mine = bySheet[sid].sort(function (a, b) { return a['진행일'] - b['진행일']; });
     if (!mine.some(function (r) { return r['마감 시각'] instanceof Date; })) return;   // 아직 명단이 하나도 안 끝난 의뢰
@@ -6453,7 +6462,7 @@ function rvFolder_(mine, props, sid) {
 }
 const RV_TYPES = ['포토', '텍스트', '별점'];
 // 사장님 리뷰 완료 보고 문구 (사용자 요청: 구글드라이브 폴더 링크 + 날짜 캠페인명 + 총 N건 리뷰 취합본 전달드립니다!)
-function rvReportMsg_(link, mine, name) {
+function rvReportMsg_(link, mine, name, cnt) {
   // 날짜 범위는 실제로 산 사람이 있는 진행만 (11/8 실링팬: 1명 추가 모집이 0명으로 끝난 10.30~11.4까지 들어가 10.22~11.4로 나왔음)
   const bought = (mine || []).filter(function (r) { return (Number(r['인원']) || 0) > 0; });
   const dList = (bought.length ? bought : (mine || [])).map(function (r) {
@@ -6482,7 +6491,9 @@ function rvReportMsg_(link, mine, name) {
 
   const lines = [];
   if (link) lines.push(String(link).trim(), '');
-  lines.push(campTitle.trim(), '총 ' + total + '건 리뷰 취합본 전달드립니다!');
+  // 종류별 개수: '총 15건 리뷰 취합본(포토리뷰 5개, 텍스트리뷰 10개) 전달드립니다!' (11/8 사용자 요청)
+  const kinds = cnt ? RV_TYPES.filter(function (t) { return Number(cnt[t]) > 0; }).map(function (t) { return t + '리뷰 ' + cnt[t] + '개'; }).join(', ') : '';
+  lines.push(campTitle.trim(), '총 ' + total + '건 리뷰 취합본' + (kinds ? '(' + kinds + ')' : '') + ' 전달드립니다!');
   return lines.join('\n');
 }
 function rvReportLine_(name) { return '안녕하세요 ' + String(name).replace(/\s*\(응답\)\s*$/, '').trim() + ' 리뷰완료되어 보고드립니다 !'; }
@@ -6740,7 +6751,7 @@ function rvZip_(f, name, props, sid, mine) {
   const cntTxt = cnt ? rvCntText_(cnt) : '개수 모름';
   // 사장님께 보낼 글 하나: 리뷰 완료 보고 + 폴더/압축 파일 링크 (사용자 요청: 폴더 링크 + 날짜 캠페인명 + 총 N건 리뷰 취합본 전달드립니다!)
   const link = f.img.getUrl();
-  const msg = rvReportMsg_(link, mine, name);
+  const msg = rvReportMsg_(link, mine, name, cnt);
   // 같은 의뢰 보고 글만 고침 (10/31 버그: 다른 의뢰 보고 글을 덮어써서 오즈네즈 보고가 사라졌음). 이미 보냈으면 새로 안 넣음
   const tl = msg.split('\n').filter(function (l) { return l && !/^https?:/.test(l) && !/전달드립니다/.test(l); })[0] || '';
   const ob = outboxSheet_(), ol = ob.getLastRow();
