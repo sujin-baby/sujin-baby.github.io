@@ -8198,6 +8198,25 @@ function payRate_() {
       });
       props.setProperty(hk3, '1');
     }
+    // 표 아래 빈 줄에 체크칸만 덩그러니 있는 것(완료보고 칸) 지움 (11/8 사용자: 46~50행에 체크칸만 있음). 캠페인명·수식·다른 값이 있는 줄은 안 건드림. 탭마다 한 번
+    const hk4 = 'PAYSTRAY1_' + sh.getSheetId();
+    if (!props.getProperty(hk4) && L.report && L.name) {
+      try {
+        const lr = sh.getLastRow(), nR = lr - L.head;
+        if (nR > 0) {
+          const rg = sh.getRange(L.head + 1, 1, nR, lastCol), rv = rg.getValues(), rf = rg.getFormulas();
+          let cleared = 0;
+          rv.forEach(function (row, i) {
+            if (String(row[L.name - 1]).trim() || rf[i].some(function (f) { return !!f; })) return;
+            if (row.some(function (x, j) { return j !== L.report - 1 && x !== '' && x !== null; })) return;
+            const c = sh.getRange(L.head + 1 + i, L.report);
+            if (c.getDataValidation()) { c.clearDataValidations().clearContent(); cleared++; }
+          });
+          if (cleared) note_('✓ 월급시트 ' + sh.getName() + ': 표 아래 빈 줄 체크칸 ' + cleared + '개 지움');
+        }
+      } catch (e) { note_('월급시트 빈 줄 체크칸 정리 실패: ' + e.message); }
+      props.setProperty(hk4, '1');
+    }
     if (changed) note_('✓ 월급시트 ' + sh.getName() + ': 진행비 1건 ' + PAY_RATE + '원(그날그날), 리뷰비 비움 (' + changed + '곳)');
     if (odd && props.getProperty('PAYODD_' + sh.getSheetId()) !== odd) { note_('월급시트 ' + sh.getName() + ' 진행비 칸에 모르는 수식이 있어 안 바꿈: ' + odd); props.setProperty('PAYODD_' + sh.getSheetId(), odd); }
   });
@@ -8315,13 +8334,24 @@ function payRowSpec_(r, all) {
   // 같은 캠페인 묶기: 캠페인 칸, 없으면 방제에서 #, 택, 날짜, 건수, 띄어쓰기를 뺀 이름이 앞부분까지 같으면 같은 캠페인
   const keyOf = function (r) { return String(r['캠페인'] || nameOf(r)).replace(/^[#업택\s]*\d{1,2}\.\d{1,2}/, '').replace(/\d+\s*$/, '').replace(/\s+/g, ''); };
   const same = function (a, b) { return a && b && (a.indexOf(b) === 0 || b.indexOf(a) === 0); };
-  // 같은 상품이 다시 의뢰돼도 섞이지 않게: 이 진행 직전의 '1일차'부터를 한 의뢰로 봄
-  const k = keyOf(r);
-  const group = all.filter(function (x) { return same(keyOf(x), k) && x['진행일'] <= r['진행일']; })
-    .sort(function (a, b) { return a['진행일'] - b['진행일']; });
-  let start = 0;
-  group.forEach(function (x, i) { if (Number(x['일차']) === 1 || !Number(x['일차'])) start = i; });
-  const mine = group.slice(start);
+  // 0명으로 끝난 취소 진행(종료 + 인원 0)은 빼기 (11/8: 10/26 백발백중 기대평 취소 줄 2개가 '1일차'로 잡혀 첫날 42건이 전월에서 빠졌음)
+  const dead = function (x) { return x !== r && x['진행 상태'] === '종료' && !(Number(x['인원']) > 0); };
+  const sid = String(r['시트ID'] || '');
+  let mine;
+  if (sid) {
+    // 같은 의뢰 = 같은 명단 시트 (11/8: 이름 앞부분으로 묶어서 '오늘과일 황금향 토스'가 '오늘과일 황금향외'와 섞여 총액 120,
+    //  업체명을 바꾼 의뢰((업체명)황금향외 → 오늘과일 황금향외)는 둘로 갈라져 남은이 안 맞았음). 다시 의뢰하면 명단 시트가 새로 생겨서 안 섞임
+    mine = all.filter(function (x) { return String(x['시트ID'] || '') === sid && x['진행일'] <= r['진행일'] && !dead(x); })
+      .sort(function (a, b) { return a['진행일'] - b['진행일']; });
+  } else {
+    // 시트ID가 없는 예전 줄: 이름으로 묶고, 같은 상품이 다시 의뢰돼도 섞이지 않게 이 진행 직전의 '1일차'부터를 한 의뢰로 봄
+    const k = keyOf(r);
+    const group = all.filter(function (x) { return same(keyOf(x), k) && x['진행일'] <= r['진행일'] && !dead(x); })
+      .sort(function (a, b) { return a['진행일'] - b['진행일']; });
+    let start = 0;
+    group.forEach(function (x, i) { if (Number(x['일차']) === 1 || !Number(x['일차'])) start = i; });
+    mine = group.slice(start);
+  }
   const total = mine.reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0) || Number(r['목표인원']) || 0;
   // 앞 일차는 실제로 받은 인원으로 셈 (모자라서 다음 날 추가 모집하면 남은 건수가 맞게)
   const got = function (x) { return x['인원'] === '' || x['인원'] === null ? (Number(x['목표인원']) || 0) : Number(x['인원']) || 0; };
@@ -8375,11 +8405,13 @@ function writePayRow_(r, name, remain, prevMonth, shared, ex) {
     if (row !== -1) { sh.getRange(L.head + 1 + row, L.name).setValue(name); sh.getRange(L.head + 1 + row, L.note).setValue(''); }
   }
   if (renamed && row === byName && !sh.getRange(L.head + 1 + row, L.name).getFormula()) sh.getRange(L.head + 1 + row, L.name).setValue(name);
-  if (row === -1) row = names.indexOf('');
+  let blankRow = false;
+  if (row === -1) { row = names.indexOf(''); blankRow = row !== -1; }
   row = row === -1 ? last + 1 : L.head + 1 + row;
   // 표 맨 아래에 새 줄을 만들 때: 위 진행 줄의 서식·체크칸과 수식만 복사 (11/5 피클 인계: 값만 써서 테두리와 총액·남은·상태 등 수식이 빠져 상태가 빈칸이었음)
   //  값(캠페인명·수량·날짜 칸 등)은 절대 안 가져옴. 남은 칸 앞 날 수량(-N)·상태 칸 마지막 날 참조는 아래에서 이 진행 것으로 다시 맞춤
-  if (row === last + 1 && last > L.head) { try { payNewRowFromAbove_(sh, row, L); } catch (e) { note_('월급시트 새 줄 서식·수식 복사 실패 (' + name + '): ' + e.message); } }
+  //  표 아래 빈 줄(수식 없이 체크칸만 있던 46~50행 같은 줄)을 쓸 때도 같게 (11/8)
+  if ((row === last + 1 || (blankRow && L.left && !sh.getRange(row, L.left).getFormula())) && row - 1 > L.head) { try { payNewRowFromAbove_(sh, row, L); } catch (e) { note_('월급시트 새 줄 서식·수식 복사 실패 (' + name + '): ' + e.message); } }
   const put = function (col, val) {
     if (!col) return;
     const c = sh.getRange(row, col);

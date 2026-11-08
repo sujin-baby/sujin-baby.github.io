@@ -47,5 +47,12 @@ ok(v(7) === '유앤아이', '스토어 (위 줄 아텍스가 들어오면 안 �
 ok(v(6) === false, '완료보고 체크칸 ' + v(6));
 ok(copies.some(x => x[1] === 4 && x[2] === 5), '서식 복사');
 ok(F[key(4, 4)] === '=B4-H4-J4-7' && sh.rows[3][0] === '#11.6 실 밴드 10', '위 줄이 바뀜');
+// 표 아래 빈 줄(체크칸만 있고 수식 없음)을 쓸 때도 위 줄 수식이 들어감 (11/8 46~50행)
+sh.rows.push(['', '', '', '', '', false, '', '', '', '']);
+let res2 = null;
+try { res2 = G('writePayRow_')({ '진행일': new Date(2026, 10, 6), '시트ID': 'SY', '인원': 3, '택대': 'Y', '실배송': '', '일차': 1 }, '#택11.6 차량용 거치대 3', 21, 0, false, { store: '더호컴퍼니', time: '', photo: '', earlier: 0, mult: 1 }); } catch (e) { fails.push('오류2 ' + e); }
+ok(res2 && res2.row === 6, '빈 줄 번호 ' + (res2 && res2.row));
+ok(F[key(6, 4)] === '=B6-H6-J6' && F[key(6, 5)] === '=IF(D6=0,"완료","진행중")' && F[key(6, 10)] === '=SUM(H6:I6)', '빈 줄 수식 ' + [F[key(6, 4)], F[key(6, 5)], F[key(6, 10)]].join(' '));
+ok(sh.rows[5][0] === '#택11.6 차량용 거치대 3' && sh.rows[5][8] === 3 && sh.rows[5][6] === '더호컴퍼니', '빈 줄 값 ' + JSON.stringify(sh.rows[5]));
 console.log(fails.length ? 'XX 월급시트 새 줄 시험 실패:\n- ' + fails.join('\n- ') : '✓ 월급시트 새 줄 시험 통과 (서식·수식만 복사, 값 안 섞임)');
 process.exit(fails.length ? 1 : 0);
