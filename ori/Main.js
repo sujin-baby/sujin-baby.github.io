@@ -1265,8 +1265,8 @@ function listFormEditLinks_(sh) {
   if (last < 2) return;
   const cL = lc_('폼 링크'), cI = lc_('폼ID'), rg = sh.getRange(2, cL, last - 1, 1), rt = rg.getRichTextValues(), ids = sh.getRange(2, cI, last - 1, 1).getValues();
   let n = 0;
-  const out = rt.map(function (x, i) {
-    const t = x ? x.getText() : '', id = String(ids[i][0] || '').trim(), want = id ? 'https://docs.google.com/forms/d/' + id + '/edit' : '';
+  const out = rt.map(function (row, i) {
+    const x = row[0], t = x ? x.getText() : '', id = String(ids[i][0] || '').trim(), want = id ? 'https://docs.google.com/forms/d/' + id + '/edit' : '';
     let cur = ''; try { cur = x ? (x.getLinkUrl() || '') : ''; } catch (e) {}
     if (!t || !want || cur === want) return [x || SpreadsheetApp.newRichTextValue().setText('').build()];
     n++;
@@ -6741,7 +6741,7 @@ function rvZip_(f, name, props, sid, mine) {
   const typed = byType['포토'].concat(byType['텍스트'], byType['별점']), files = typed.concat(loose);
   if (!files.length) return;
   const newest = files.reduce(function (m, x) { return Math.max(m, x.getLastUpdated().getTime(), x.getDateCreated().getTime()); }, 0);
-  const sig = 'v2:' + RV_TYPES.map(function (t) { return byType[t].length; }).join(',') + ':' + loose.length + ':' + newest;
+  const sig = 'v3:' + RV_TYPES.map(function (t) { return byType[t].length; }).join(',') + ':' + loose.length + ':' + newest;   // v3 (11/8): 장바구니건·종류별 개수·할 일 하나만 → 한 번 다시
   if (props.getProperty('RVZIP_' + sid) === sig) return;
   if (Date.now() - newest < 10 * 60000) return;   // 아직 올리는 중일 수 있음 → 다음 확인에서
   const base = rvBase_(name), zipName = base.replace(/\//g, '／').replace(/[\\:*?"<>|]/g, '') + '.zip', warn = [];   // 파일 이름에 못 쓰는 글자 (# 실/빈 → 실／빈)
