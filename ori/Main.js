@@ -1722,6 +1722,8 @@ function diag_(p) {
     out.chainDry = chainsOf_(all).filter(function (c) { return c.runs.some(function (r) { return String(r['명단 제목']).indexOf(String(p.chain)) >= 0; }); })
       .map(function (c) { return payStatusLink_(payChainRows_(c, tabs2), true); });
   } catch (e) { out.chainErr = String(e); }
+  // &msgroom=방 글자: 그 방 보낼메시지 글 전체 (종류·상태·글, 읽기만, 11/10 토스만 남긴 공지 확인)
+  if (p.msgroom) try { const ob = outboxSheet_(), ol = ob.getLastRow(); out.msgs = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues().filter(function (v) { return String(v[3]).indexOf(String(p.msgroom)) >= 0; }).slice(-8).map(function (v) { return [String(v[0]), String(v[2]), String(v[5]), String(v[3]), String(v[4]).slice(0, 6000)]; }) : []; } catch (e) { out.msgsErr = String(e); }
   // &payhead=1: 월급시트(이달) 위쪽 머리 줄과 맨 아래 합계 줄의 값·수식, 완료보고(H)를 쓰는 수식 (진행비 총액이 어떻게 나오는지 보기, 읽기만)
   if (p.payhead) try {
     const sh = payTab_(today_().getMonth() + 1), L = payLayout_(sh), lc = Math.min(sh.getLastColumn(), 30), last = sh.getLastRow();
@@ -1753,7 +1755,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3221,6 +3223,8 @@ function checkFullInner_() {
   try { carrySeol1_(); } catch (e) {}
   try { seolRename1_(); } catch (e) {}
   try { singRename1_(); } catch (e) {}
+  try { yangReport1_(); } catch (e) {}
+  try { seolToss1_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
   try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
@@ -4580,7 +4584,7 @@ function msgvLinks_(x, ctx) {
  *  - B칸 체크 = 보낼메시지 그 줄 '보냄' (번호로 찾아서), 체크 풀면 '대기'. 체크한 줄은 그 자리에서 회색만 (줄이 안 움직여 옆 줄을 잘못 누르지 않게)
  *  - 보낼메시지가 바뀌면 실행이 끝날 때 바뀐 탭만 다시 그림. 다시 그린 지 20초 안에 누른 칸이 다른 메시지로 밀렸으면 체크를 되돌리고 알림
  */
-const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '6', MSGV_COLS = 5;   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
+const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '7', MSGV_COLS = 5;   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
 const MSGV_GROUPS = [
   { key: 'notice', base: '🐥방공지', t: '🐥 방 공지', k: ['방 공지'], bg: '#eee6f7', tab: '#b48fd9' },
   { key: 'list', base: '📋명단전달', t: '📋 명단 전달 (오리명단방)', k: ['명단 전달', '업체 명단'], bg: '#d9ead2', tab: '#7fbf6a' },
@@ -4628,7 +4632,7 @@ function msgvGroupOfSheet_(sh) {
   return -1;
 }
 // 보낼메시지 줄 → 종류 탭마다 줄 (그리기 전 모양만, 시트는 안 건드림)
-function msgViewModel_(rows, sentAt, reqOf, linkOf) {
+function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
   sentAt = sentAt || {};
   const t0 = dayStart_(today_()), tm = function (x) { return x[1] instanceof Date ? x[1].getTime() : 0; };
   const dk = function (x) { const t = dateTok_(x[3]) || dateTok_(String(x[4]).slice(0, 300)); if (!t) return 9999; const p = t.split('.'); return Number(p[0]) * 100 + Number(p[1]); };
@@ -4676,11 +4680,12 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf) {
         room: head ? head + '\n' + room : room, boldTo: head ? head.length : 0, msg: msgvCombine_(xs), bg: msgvRoomBg_(camp || x[3], colors),
         reqF: rq ? String(rq.f || '') : null, reqNote: rq ? String(rq.note || '') : '', reqUrl: rq ? String(rq.url || '') : '',
         fee: grp.fee && String(x[2]) === '리뷰비 요청' ? msgvFeeCells_(x) : null, kind: String(x[2]),
+        chwan: grp.fee && chwanOf ? chwanOf(x) : null,   // 리뷰비 탭 L칸: 그 방 취완 체크 (11/10 사용자: 한 탭에서 두 개 체크)
         // 리뷰 독촉 탭은 이름만 (11/8 사용자: 기한 문구·부탁 문구 빼고 이름만 복사해서 씀)
         names: grp.key === 'nag' && String(x[2]) === '리뷰 독촉' ? String((String(x[4]).match(/아직 리뷰 확인이 안 된 분\s*:\s*([^\n]*)/) || [])[1] || x[4]).trim() : null,
         links: grp.links && linkOf ? (linkOf(x) || {}) : null };
     });
-    const sig = JSON.stringify(lines.map(function (l) { return [l.id, l.sent ? 1 : 0, l.day, l.over ? 1 : 0, l.room, l.msg.length, l.msg.slice(0, 80), l.bg, l.reqF, l.reqNote.length, l.reqUrl, l.fee, l.links]; }));
+    const sig = JSON.stringify(lines.map(function (l) { return [l.id, l.sent ? 1 : 0, l.day, l.over ? 1 : 0, l.room, l.msg.length, l.msg.slice(0, 80), l.bg, l.reqF, l.reqNote.length, l.reqUrl, l.fee, l.links, l.chwan]; }));
     return { lines: lines, pend: pend.length, over: over, sig: sig, name: grp.base + (pend.length ? ' ' + pend.length : '') };
   });
   return { groups: groups, colors: colors };
@@ -4747,7 +4752,7 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
     try { const f = sh.getFilter(); if (f) f.remove(); } catch (e) {}
     try { sh.getBandings().forEach(function (b) { b.remove(); }); } catch (e) {}
     try { sh.setFrozenColumns(0); } catch (e) {}
-    const keepC = grp.fee ? 12 : grp.links ? 8 : MSGV_COLS + 1;   // 리뷰비 탭은 E~K, 링크 있는 탭은 G까지
+    const keepC = grp.fee ? 13 : grp.links ? 8 : MSGV_COLS + 1;   // 리뷰비 탭은 E~K + L 취완 체크 + M 취완 번호(숨김), 링크 있는 탭은 G까지
     try { const mc = Number(sh.getMaxColumns()) || 0; if (mc > keepC) sh.deleteColumns(keepC + 1, mc - keepC); else if (mc && mc < keepC) sh.insertColumnsAfter(mc, keepC - mc); } catch (e) {}
     try {
       sh.setColumnWidth(1, 20); sh.setColumnWidth(2, 46); sh.setColumnWidth(3, 82); sh.setColumnWidth(4, grp.fee ? 130 : 230); sh.setColumnWidth(5, grp.fee ? 120 : grp.req ? 520 : 600); sh.setColumnWidth(6, grp.req ? 420 : grp.fee ? 150 : 20);
@@ -4758,7 +4763,7 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
       sh.getRange(1, 1, sh.getMaxRows(), MSGV_COLS).setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
       sh.hideColumns(1);
       sh.setFrozenRows(1);
-      if (grp.fee) sh.hideColumns(3, 2);   // 리뷰비 탭: 날짜(C)는 주문 날짜(E)와 같고 카톡방(D)은 다 리뷰비시트라 숨김 (11/8 사용자 요청)
+      if (grp.fee) { sh.hideColumns(3, 2); sh.setColumnWidth(12, 46); sh.hideColumns(13); }   // 리뷰비 탭: 날짜(C)는 주문 날짜(E)와 같고 카톡방(D)은 다 리뷰비시트라 숨김 (11/8 사용자 요청). L 취완 체크, M 취완 번호
       sh.setTabColor(grp.tab);
     } catch (e) {}
   }
@@ -4826,6 +4831,20 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
     const gr = sh.getRange(1, 6, n, 6);
     gr.setValues(gv); gr.setBackgrounds(gb);
     try { sh.getRange(2, 6, 1, 6).setFontWeight('bold').setFontColor('#7a2e57'); } catch (e) {}
+    // L칸 '취완': 그 방 취완도 이 탭에서 체크 (B칸 리뷰비 요청과 따로, 11/10 사용자: 하나만 했는데 둘 다 한 걸로 되면 안 됨). M칸(숨김) = 취완 메시지 번호
+    try {
+      const lv = [], lb = [], ld = [], mv = [], cb2 = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+      for (let i = 0; i < n; i++) {
+        const l = lines[i] || { type: 'none' };
+        if (l.type === 'hdr') { lv.push(['취완']); lb.push(['#fbe9f2']); ld.push([null]); mv.push(['']); }
+        else if (l.type === 'msg' && l.chwan) { lv.push([!!l.chwan.sent]); lb.push([l.chwan.sent ? '#f3f3f3' : '#e3e3e3']); ld.push([cb2]); mv.push([l.chwan.id]); }
+        else { lv.push(['']); lb.push([l.type === 'title' ? grp.bg : null]); ld.push([null]); mv.push(['']); }
+      }
+      const lr = sh.getRange(1, 12, n, 1);
+      lr.clearDataValidations(); lr.setValues(lv); lr.setDataValidations(ld); lr.setBackgrounds(lb).setHorizontalAlignment('center');
+      sh.getRange(1, 13, n, 1).setValues(mv);
+      sh.getRange(1, 12).setFontWeight('bold').setFontColor('#7a2e57');
+    } catch (e) {}
   }
   if (grp.links) {
     // 명단·리뷰이미지 링크 칸 (휴대폰에서도 누르면 열림)
@@ -4882,7 +4901,16 @@ function msgViewBuild_(force, only) {
     try { if (info.list || info.img) c.put(ck, JSON.stringify(info), 21600); } catch (e) {}
     return info;
   };
-  const m = msgViewModel_(rows, sentAt, reqOf, linkOf), fresh = props.getProperty('MSGV_VER') !== MSGV_VER;
+  // 리뷰비·페이백 요청 → 같은 카톡방 취완 메시지 (리뷰비 탭 L칸 체크칸)
+  const chwanOf = function (x) {
+    if (!/^(리뷰비 요청|페이백 요청)$/.test(String(x[2]))) return null;
+    if (!rctx) rctx = { runs: readRuns_(), all: allP };
+    const rooms = rvCollRunsOf_(x, rctx.runs).map(function (r) { return String(r['카톡방'] || bareTitle_(r['명단 제목'])); });
+    const cs = rows.filter(function (y) { return String(y[2]) === '취완' && rooms.indexOf(String(y[3]).replace(/\s*\(전체 \d+개 방\)$/, '')) >= 0; });
+    const c = cs.filter(function (y) { return y[5] !== '보냄'; })[0] || cs[cs.length - 1];
+    return c ? { id: String(c[0]), sent: c[5] === '보냄' } : null;
+  };
+  const m = msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf), fresh = props.getProperty('MSGV_VER') !== MSGV_VER;
   // 새 탭 넣을 자리: 예전 모아보기 탭 자리(없으면 보낼메시지 뒤)부터 차례로
   let at = 1; try { at = old ? old.getIndex() - 1 : ob.getIndex(); } catch (e) {}
   let wrote = false;
@@ -5020,6 +5048,65 @@ function singRename1_() {
     if (ok) { try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); } }
   } catch (e) { props.setProperty('SINGREN1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
+// (11/10 한 번, 사용자: 리뷰취합에 #10.22 실 시온스 양모볼외 15 왜 안 떠) 보고 글이 '📦 의뢰 끝' 체크로 바로 '보냄'이 되어 탭에서 사라짐
+//  → 보고 글을 지금 사진 수로 고쳐 다시 '대기'로 (진행목록 업체 전송 날짜는 그대로)
+function yangReport1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('YANGRPT1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const runs = readRuns_(), r = runs.filter(function (x) { return bareTitle_(x['명단 제목']).replace(/\s+/g, '') === '#10.22실시온스양모볼외15'; })[0];
+    if (!r || !r['시트ID']) { props.setProperty('YANGRPT1', st + ' 실패(진행 못 찾음)'); return; }
+    const sid = String(r['시트ID']), mine = runs.filter(function (x) { return String(x['시트ID']) === sid; }), all = props.getProperties(), ob = outboxSheet_(), ol = ob.getLastRow();
+    let n = 0;
+    if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (v[2] === '리뷰 보고' && rvSidOfReport_(v[4], all) === sid && v[5] === '보냄') { obSet_(ob, v[0], 6, '대기'); props.deleteProperty('MSGV_S_' + v[0]); n++; } });
+    props.deleteProperty('RVZIP_' + sid);
+    let fname = ''; try { fname = DriveApp.getFileById(sid).getName(); } catch (e) {}
+    const f = rvFolder_(mine, props, sid);
+    if (f) rvZip_(f, fname, props, sid, mine);
+    props.setProperty('YANGRPT1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 보고 글 ' + n + '개 다시 대기, 글 고침 ' + (props.getProperty('RVZIP_' + sid) ? 'O' : 'X'));
+  } catch (e) { props.setProperty('YANGRPT1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// 공지에서 토스 상품만 남김 (쿠팡 상품 빼고 번호 다시). 머리 글·마지막 꼬리 글은 그대로. 바뀐 게 없거나 토스가 없으면 ''
+function tossOnlyNotice_(t) {
+  const L = String(t || '').split('\n'), SEPL = /^\s*[-—–─━_=]{5,}\s*$/, starts = [];
+  L.forEach(function (l, i) { if (/^\s*\d+\)\s*\d+\s*명/.test(l)) starts.push(i); });
+  if (starts.length < 2) return '';
+  const head = L.slice(0, starts[0]);
+  let segs = starts.map(function (s0, j) { return L.slice(s0, j + 1 < starts.length ? starts[j + 1] : L.length); });
+  // 마지막 상품 뒤 꼬리 글: 마지막 '🐥' 줄 다음부터
+  const lastSeg = segs[segs.length - 1], li = lastSeg.map(function (l) { return /^\s*🐥/.test(l); }).lastIndexOf(true);
+  let foot = [];
+  if (li >= 0) { foot = lastSeg.slice(li + 1); segs[segs.length - 1] = lastSeg.slice(0, li + 1); }
+  const clean = function (a) { a = a.slice(); while (a.length && (!a[a.length - 1].trim() || SEPL.test(a[a.length - 1]))) a.pop(); return a; };
+  segs = segs.map(clean);
+  const keep = segs.filter(function (a) { return /토스/.test(a[0]); });
+  if (!keep.length || keep.length === segs.length) return '';
+  const sep = L.filter(function (l) { return SEPL.test(l); })[0] || '————————————————————————';
+  const body = keep.map(function (a, i) { const b = a.slice(); b[0] = b[0].replace(/^(\s*)\d+\)/, '$1' + (i + 1) + ')'); return b.join('\n'); }).join('\n\n' + sep.trim() + '\n\n');
+  while (foot.length && !foot[0].trim()) foot.shift();
+  return head.join('\n') + body + (foot.length ? '\n\n' + foot.join('\n') : '');
+}
+// (11/10 한 번, 사용자: #택11.10 오늘과일 설향딸기외 31 쿠팡 취소 → 토스만 각 5명 총 10명) 방제 … 10(목표 10)·월급시트, 토스만 남긴 새 방 공지
+function seolToss1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SEOLTOSS1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const runs = readRuns_(), r = runs.filter(function (x) { return /^#택11\.10오늘과일설향딸기외(31|10)$/.test(bareTitle_(x['명단 제목']).replace(/\s+/g, '')); })[0];
+    if (!r) { props.setProperty('SEOLTOSS1', st + ' 실패(진행 못 찾음)'); return; }
+    const oldRoom = String(r['카톡방'] || bareTitle_(r['명단 제목'])), ob = outboxSheet_(), ol = ob.getLastRow();
+    const ns = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues().filter(function (v) { return String(v[3]) === oldRoom && v[2] === '방 공지' && /양식 작성 폼/.test(String(v[4])); }) : [];
+    const src = ns.length ? String(ns[ns.length - 1][4]) : '', nt = tossOnlyNotice_(src);
+    if (!nt) { props.setProperty('SEOLTOSS1', st + ' 실패(공지에서 토스만 못 남김: 공지 ' + ns.length + '개)'); return; }
+    const title = '#택11.10 오늘과일 설향딸기외 10';
+    if (bareTitle_(r['명단 제목']) !== title && !renameRun_(r, title, '쿠팡 취소, 토스만 10명 (사용자 11/10)')) { props.setProperty('SEOLTOSS1', st + ' 실패(방제 안 바뀜)'); return; }
+    // 안 보낸 예전 공지(쿠팡 들어간 것)는 지우고 새 공지 하나
+    const room = String(r['카톡방'] || title), ol2 = ob.getLastRow();
+    if (ol2 >= 2) { const v2 = ob.getRange(2, 1, ol2 - 1, 6).getValues(); for (let i = v2.length - 1; i >= 0; i--) if (String(v2[i][3]) === room && v2[i][2] === '방 공지' && v2[i][5] !== '보냄' && /양식 작성 폼/.test(String(v2[i][4]))) ob.deleteRow(i + 2); }
+    queueMsg_(room, nt, '방 공지');
+    props.setProperty('SEOLTOSS1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + title + ' (목표 ' + r['목표인원'] + '), 새 공지 ' + nt.length + '자');
+    try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); }
+  } catch (e) { props.setProperty('SEOLTOSS1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
 // 실행이 끝날 때 (로더 이름 함수 감쌈): 보낼메시지가 바뀌었으면 바뀐 탭만 다시 그림. 모아보기 체크 직후엔 안 그림 (줄이 안 움직이게)
 function msgViewSync_() {
   if (globalThis.__MSGV_SKIP) { globalThis.__MSGV_SKIP = false; return; }
@@ -5040,6 +5127,7 @@ function msgViewEdit_(e, gi) {
   const sh = e.range.getSheet(), r0 = e.range.getRow(), n = e.range.getNumRows(), c0 = e.range.getColumn(), c1 = c0 + e.range.getNumColumns() - 1;
   const props = PropertiesService.getScriptProperties(), key = MSGV_GROUPS[gi].key;
   const toast = function (t, s) { try { e.source.toast(t, '메시지 모아보기', s || 8); } catch (err) {} };
+  if (MSGV_GROUPS[gi].fee && c0 === 12 && c1 === 12 && r0 >= 2) return msgvChwanEdit_(e, sh, r0, n, toast);
   if (c0 !== 2 || c1 !== 2 || r0 < 2) {
     toast('이 탭은 보기용이라 글을 고쳐도 저장 안 돼요. 원래대로 돌려 놨어요. 보낸 뒤 왼쪽 보냄 칸만 체크해 주세요', 10);
     try { msgViewBuild_(true, gi); } catch (err) {}
@@ -5077,51 +5165,31 @@ function msgViewEdit_(e, gi) {
     sh.getRange(row, 1, 1, MSGV_COLS).setBackgrounds([st.bg]).setFontColors([st.fc]).setFontWeights([st.fw]);
     if (MSGV_GROUPS[gi].req) { try { sh.getRange(row, 6).setBackground(on ? '#f3f3f3' : '#fafafa').setFontColor(on ? '#9e9e9e' : '#555555'); } catch (err) {} }
   }
-  // 리뷰비(페이백) 요청 ↔ 취완 같이 체크 (11/10 사용자: 카톡방에 '리뷰비 요청완+취완'을 한 번에 올리는데 탭 두 개에서 따로 체크해야 했음)
-  try { const pn = msgvPairSync_(ob, orows, ids, vals, n, gi); if (pn) sentNote.push(pn); } catch (err) {}
   if (sentNote.length && !moved.length) toast(sentNote.filter(function (x, i, a) { return a.indexOf(x) === i; }).join(' · '), 10);
   if (moved.length) toast('목록이 방금 다시 그려져서 ' + moved.join(', ') + '행 체크는 되돌렸어요. 메시지를 다시 확인하고 체크해 주세요', 12);
   else if (gone.length) toast(gone.join(', ') + '행 메시지는 이미 지워진 거예요 (곧 목록에서 빠져요)', 10);
 }
 
-// 체크한 메시지가 취완·리뷰비 요청·페이백 요청이면 같은 카톡방 짝도 같은 상태로: 그 방 취완 + 그 방 진행들의 리뷰비/페이백 요청
-//  짝 탭은 바로 다시 그림. 바꾼 게 있으면 알림 글
-const MSGV_PAIR_KINDS = ['취완', '리뷰비 요청', '페이백 요청'];
-function msgvPairSync_(ob, orows, ids, vals, n, cur) {
-  const at = {}; orows.forEach(function (x, i) { at[String(x[0])] = i; });
-  const runs = readRuns_(), roomOf = function (r) { return String(r['카톡방'] || bareTitle_(r['명단 제목'])); };
-  const roomsOfMsg = function (y) {
-    if (String(y[2]) === '취완') return [String(y[3]).replace(/\s*\(전체 \d+개 방\)$/, '')];
-    return rvCollRunsOf_(y, runs).map(roomOf);
-  };
-  const want = {}, done = {};   // 방 → 켬/끔
+// 리뷰비 탭 L칸 '취완' 체크 → 그 줄 M칸 번호의 취완 메시지만 보냄/대기 (리뷰비 요청 B칸과 따로). 취완 탭은 바로 다시 그림
+function msgvChwanEdit_(e, sh, r0, n, toast) {
+  const ids = sh.getRange(r0, 13, n, 1).getValues(), vals = sh.getRange(r0, 12, n, 1).getValues(), ob = outboxSheet_(), ol = ob.getLastRow();
+  const orows = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues() : [], at = {}, props = PropertiesService.getScriptProperties();
+  orows.forEach(function (x, i) { at[String(x[0])] = i; });
+  let k = 0, any = false, runs = null;
   for (let i = 0; i < n; i++) {
-    const v = vals[i][0], on = v === true || String(v).toUpperCase() === 'TRUE';
-    String(ids[i][0]).split(',').forEach(function (id) {
-      const y = at[id] != null ? orows[at[id]] : null;
-      if (!y || MSGV_PAIR_KINDS.indexOf(String(y[2])) < 0) return;
-      done[id] = 1;
-      roomsOfMsg(y).forEach(function (rm) { if (rm) want[rm] = on; });
-    });
+    const id = String(ids[i][0] || ''), v = vals[i][0], on = v === true || String(v).toUpperCase() === 'TRUE';
+    if (!id || at[id] == null) { if (v !== '' && v != null) sh.getRange(r0 + i, 12).setValue(''); continue; }
+    const y = orows[at[id]];
+    any = true;
+    if (on !== (y[5] === '보냄')) { obSet_(ob, id, 6, on ? '보냄' : '대기'); k++; }
+    try { if (on) props.setProperty('MSGV_S_' + id, String(Date.now())); else props.deleteProperty('MSGV_S_' + id); } catch (err) {}
+    try { if (!runs) runs = readRuns_(); rvSetColl_(y, on, null, runs); } catch (err) {}
+    try { sh.getRange(r0 + i, 12).setBackground(on ? '#f3f3f3' : '#e3e3e3'); } catch (err) {}
   }
-  if (!Object.keys(want).length) return '';
-  let k = 0, kinds = {};
-  orows.forEach(function (y) {
-    const id = String(y[0]);
-    if (done[id] || MSGV_PAIR_KINDS.indexOf(String(y[2])) < 0) return;
-    const rms = roomsOfMsg(y), hit = rms.filter(function (rm) { return rm in want; })[0];
-    if (hit === undefined) return;
-    const on = want[hit];
-    if (on === (y[5] === '보냄')) return;
-    obSet_(ob, id, 6, on ? '보냄' : '대기');
-    try { if (on) PropertiesService.getScriptProperties().setProperty('MSGV_S_' + id, String(Date.now())); else PropertiesService.getScriptProperties().deleteProperty('MSGV_S_' + id); } catch (e) {}
-    try { if (/^(리뷰비 요청|페이백 요청|취완)$/.test(String(y[2]))) rvSetColl_(y, on, null, runs); } catch (e) {}
-    k++; kinds[String(y[2])] = 1;
-  });
-  if (!k) return '';
-  ['pay', 'done'].forEach(function (key) { const gi = MSGV_GROUPS.map(function (g) { return g.key; }).indexOf(key); if (gi >= 0 && gi !== cur) { try { msgViewBuild_(true, gi); } catch (e) {} } });   // 지금 체크한 탭은 줄이 안 움직이게 그대로
-  const on1 = want[Object.keys(want)[0]];
-  return Object.keys(kinds).join('·') + ' ' + k + '개도 같이 ' + (on1 ? '보냄 체크했어요' : '체크를 풀었어요');
+  if (!any) { toast('이 줄은 취완 메시지가 아직 없어요 (그 방 사람 리뷰가 다 확인되면 생겨요)', 8); return; }
+  const gd = MSGV_GROUPS.map(function (g) { return g.key; }).indexOf('done');
+  if (k && gd >= 0) { try { msgViewBuild_(true, gd); } catch (err) {} }
+  toast(k ? '취완 ' + k + '개 ' + (vals.some(function (v) { return v[0] === true; }) ? '보냄 체크했어요 (✅취완 탭도 같이)' : '체크를 풀었어요') : '취완 체크 그대로예요', 8);
 }
 
 /* ---------------- 진행 도우미 (휴대폰 페이지): 공지 붙여넣기, 중복 지우기, 내일 추가 모집을 한 화면에서 ---------------- */
@@ -7142,7 +7210,7 @@ function rvMarkReportMsgs_(sid) {
   if (!sid) return 0;
   const all = PropertiesService.getScriptProperties().getProperties(), ob = outboxSheet_(), ol = ob.getLastRow();
   let n = 0;
-  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (v[2] === '리뷰 보고' && (v[5] === '대기' || v[5] === '방 못 찾음') && rvSidOfReport_(v[4], all) === String(sid)) { obSet_(ob, v[0], 6, '보냄'); n++; } });
+  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) { if (v[2] === '리뷰 보고' && (v[5] === '대기' || v[5] === '방 못 찾음') && rvSidOfReport_(v[4], all) === String(sid)) { obSet_(ob, v[0], 6, '보냄'); try { PropertiesService.getScriptProperties().setProperty('MSGV_S_' + v[0], String(Date.now())); } catch (e) {} n++; } });   // 한눈에 '📦 의뢰 끝' 체크로 보낸 것도 리뷰취합 탭에 이틀 회색 (11/10 양모볼외가 바로 사라짐)
   return n;
 }
 // (11/8 한 번, 사용자: 실링팬 리뷰 보고를 리뷰취합 탭에서 체크했는데 업체 전송이 비고, 체크 기록이 다른 체크에 덮어써져 줄이 바로 사라짐)
