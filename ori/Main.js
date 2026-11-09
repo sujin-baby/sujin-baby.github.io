@@ -367,6 +367,13 @@ function renameRun_(r, title, why) {
   const oldRoom = String(r['카톡방'] || bareTitle_(r['명단 제목']));
   const oldTitle = String(r['명단 제목']);
   setRun_(r.row, '명단 제목', title + nick); r['명단 제목'] = title + nick;
+  // 방제로 저장해 둔 값도 새 방제로 (택배시트 마감 시각·다음 택배시트 할 일 표시, 11/9 설향딸기외 30→29)
+  try {
+    const pr = PropertiesService.getScriptProperties(), ns = function (t) { return String(t).replace(/\s+/g, ''); };
+    [['TAKCUT_' + ns(bareTitle_(oldTitle)), 'TAKCUT_' + ns(title)], ['TAKLATE_' + ns(oldTitle), 'TAKLATE_' + ns(title + nick)], ['TAKLATE_P_' + ns(oldTitle), 'TAKLATE_P_' + ns(title + nick)]].forEach(function (k) {
+      const v = pr.getProperty(k[0]); if (v != null && k[0] !== k[1]) { pr.setProperty(k[1], v); pr.deleteProperty(k[0]); }
+    });
+  } catch (e) {}
   // 월급시트 캠페인명도 바로 같이 (안 하면 새 이름 줄이 하나 더 생겨 같은 진행이 두 줄이 됨, 10/21 써니마켓)
   try { payRename_(bareTitle_(oldTitle), title); } catch (e) { note_('월급시트 이름 바꾸기 실패: ' + e); }
   // 배정 탭의 명단 제목도 새 이름으로
@@ -1707,7 +1714,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3172,6 +3179,7 @@ function checkFullInner_() {
   try { subTime_('알림: 2시 이후 구매', function () { takLateCheck_(runs); }); } catch (e) { note_('2시 이후 구매 알림 실패: ' + e); }
   try { payChkRecheck1_(runs); } catch (e) { note_('결제금액 확인 다시 보기 실패: ' + e); }
   try { carrySeol1_(); } catch (e) {}
+  try { seolRename1_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
   try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
@@ -4931,6 +4939,27 @@ function carrySeol1_() {
     props.setProperty('CARRYSEOL1', msg);
     note_('✓ 설향딸기외 1명 하루 미룸 (쿠팡 설향딸기 11.10에 11건): ' + msg);
   } catch (e) { props.setProperty('CARRYSEOL1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/9 한 번, 사용자: 방제도 #택11.9 … 29, 내일 것은 31) 하루 미룸 뒤 방제 끝 숫자 → renameRun_ (진행목록·카톡방·보낼메시지·배정·월급시트 캠페인명·목표인원 같이)
+function seolRename1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SEOLREN1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const runs = readRuns_(), nk = function (t) { return bareTitle_(t).replace(/\s+/g, ''); };
+    const a = runs.filter(function (r) { return /^#택11\.9오늘과일설향딸기외(30|29)$/.test(nk(r['명단 제목'])); })[0];
+    if (!a) { props.setProperty('SEOLREN1', st + ' 실패(11.9 진행 못 찾음)'); return; }
+    const d10 = Utilities.formatDate(new Date(a['진행일'].getTime() + 86400000), CONFIG.TIMEZONE, 'yyyyMMdd');
+    const b = runs.filter(function (r) { return String(r['시트ID']) === String(a['시트ID']) && r['진행일'] instanceof Date && Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd') === d10; })[0];
+    if (!b) { props.setProperty('SEOLREN1', st + ' 실패(11.10 진행 못 찾음)'); return; }
+    const out = [];
+    [[a, '#택11.9 오늘과일 설향딸기외 29'], [b, '#택11.10 오늘과일 설향딸기외 31']].forEach(function (x) {
+      if (bareTitle_(x[0]['명단 제목']) === x[1]) { out.push(x[1] + ' (이미)'); return; }
+      out.push(renameRun_(x[0], x[1], '하루 미룸 (사용자 11/9)') ? bareTitle_(x[0]['명단 제목']) : x[1] + ' 안 바뀜');
+    });
+    const ok = out.every(function (x) { return !/안 바뀜/.test(x); });
+    props.setProperty('SEOLREN1', (ok ? '✓ ' : st + ' 실패(') + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + out.join(', ') + (ok ? '' : ')'));
+    if (ok) { try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); } }
+  } catch (e) { props.setProperty('SEOLREN1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 // 실행이 끝날 때 (로더 이름 함수 감쌈): 보낼메시지가 바뀌었으면 바뀐 탭만 다시 그림. 모아보기 체크 직후엔 안 그림 (줄이 안 움직이게)
 function msgViewSync_() {
@@ -9310,13 +9339,17 @@ function payStatusLink_(rows) {
       });
     }
   } catch (e) { note_('완료보고 체크 실패: ' + e); }
+  // 마지막 날이 다음 달 탭에 있으면 그 탭 칸으로 이음 ('11월'!O30). 예전엔 같은 탭만 이어서 10월 탭 백발백중 10.26~10.30 줄이 11/6에 끝나도 '진행중' (11/9)
+  const lastTab = "'" + String(last.sh.getName()).replace(/'/g, "''") + "'!";
   rows.forEach(function (x) {
-    if (!x.L.status || x.sh.getSheetId() !== last.sh.getSheetId()) return;
+    if (!x.L.status) return;
+    const same = x.sh.getName() === last.sh.getName();
     const c = x.sh.getRange(x.row, x.L.status), f = c.getFormula();
-    const re = /IF\(\s*(?:OR\(\s*)?([A-Z]+)(\d+)\s*=\s*0\s*(?:,\s*[A-Z]+\d+\s*=\s*0\s*\))?\s*,\s*"완료"/;
+    const re = /IF\(\s*(?:OR\(\s*)?([A-Z]+)(\d+)\s*=\s*0\s*(?:,\s*(?:'(?:[^']|'')+'!|[^\s,()'!]+!)?[A-Z]+\d+\s*=\s*0\s*\))?\s*,\s*"완료"/;
     const m = f.match(re);
     if (!m || Number(m[2]) !== x.row) return;
-    const want = x.row === last.row ? 'IF(' + m[1] + m[2] + '=0,"완료"' : 'IF(OR(' + m[1] + m[2] + '=0,' + m[1] + last.row + '=0),"완료"';
+    const lastRef = (same ? '' : lastTab) + m[1] + last.row;
+    const want = same && x.row === last.row ? 'IF(' + m[1] + m[2] + '=0,"완료"' : 'IF(OR(' + m[1] + m[2] + '=0,' + lastRef + '=0),"완료"';
     const nf = f.replace(re, want);
     if (nf !== f) c.setFormula(nf);
   });
