@@ -14,7 +14,9 @@ const t = () => G('readRuns_()').map(r => String(r['명단 제목']).slice(0, 12
 const by = n => G('readRuns_()').filter(r => String(r['명단 제목']).indexOf(n) === 0)[0];
 ok(Number(by('#택11.9 ')['목표인원']) === 29 && Number(by('#택11.10 오늘')['목표인원']) === 31, '11.9→29, 11.10→31 ' + t());
 ok(Number(by('#택11.11')['목표인원']) === 20 && Number(by('#택11.10 다른')['목표인원']) === 30, '다른 진행은 그대로 ' + t());
+ok(/^✓/.test(env.__props.get('CARRYSEOL1')), '결과 기록 ' + env.__props.get('CARRYSEOL1'));
 G("PropertiesService.getScriptProperties().deleteProperty('CARRYSEOL1')"); G('carrySeol1_()');
+ok(/이미 29·31/.test(env.__props.get('CARRYSEOL1')), '두 번째는 이미 바뀜 ' + env.__props.get('CARRYSEOL1'));
 ok(Number(by('#택11.9 ')['목표인원']) === 29 && Number(by('#택11.10 오늘')['목표인원']) === 31, '두 번 돌아도 그대로 ' + t());
 console.log(fails.length ? 'XX 하루 미룸 시험 실패:\n- ' + fails.join('\n- ') : '✓ 설향딸기외 1명 하루 미룸 시험 통과');
 process.exit(fails.length ? 1 : 0);

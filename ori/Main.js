@@ -1707,7 +1707,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3171,6 +3171,7 @@ function checkFullInner_() {
   try { subTime_('알림: 포토 요청', function () { photoAskCheck_(runs); }); } catch (e) { note_('포토 요청 알림 실패: ' + e); }
   try { subTime_('알림: 2시 이후 구매', function () { takLateCheck_(runs); }); } catch (e) { note_('2시 이후 구매 알림 실패: ' + e); }
   try { payChkRecheck1_(runs); } catch (e) { note_('결제금액 확인 다시 보기 실패: ' + e); }
+  try { carrySeol1_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
   try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
@@ -4914,17 +4915,22 @@ function jumpRopeFix1_() {
 // (11/9 한 번, 사용자: #택11.9 오늘과일 설향딸기외 30에서 1명이 쿠팡 설향딸기(25,600원)를 못 사서 11.10에 삼, 그날 그 상품 11건)
 //  → 11.9 목표 29 (29명으로 마감·명단 전달), 11.10 목표 31 (새 30명 + 미룬 1명, 그 사람 폼은 11.10에 들어와 11.10 인원·택배시트·월급시트 11/10에 잡힘). 총건수 120 그대로
 function carrySeol1_() {
-  const props = PropertiesService.getScriptProperties();
-  if (props.getProperty('CARRYSEOL1')) return;
-  props.setProperty('CARRYSEOL1', '1');
-  const runs = readRuns_(), nk = function (t) { return bareTitle_(t).replace(/\s+/g, ''); };
-  const a = runs.filter(function (r) { return nk(r['명단 제목']) === '#택11.9오늘과일설향딸기외30'; })[0];
-  if (!a) { note_('⚠ 설향딸기외 하루 미룸: 11.9 진행을 못 찾음'); return; }
-  const b = runs.filter(function (r) { return String(r['시트ID']) === String(a['시트ID']) && r['진행일'] instanceof Date && dayStart_(r['진행일']) === dayStart_(new Date(2026, 10, 10)); })[0];
-  const out = [];
-  if (Number(a['목표인원']) === 30) { setRun_(a.row, '목표인원', 29); out.push('11.9 목표 30→29'); }
-  if (b && Number(b['목표인원']) === 30) { setRun_(b.row, '목표인원', 31); out.push('11.10 목표 30→31'); }
-  note_('✓ 설향딸기외 1명 하루 미룸 (쿠팡 설향딸기 11.10에 11건): ' + (out.join(', ') || '이미 바뀌어 있음'));
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('CARRYSEOL1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;   // 끝났거나 5번 실패하면 그만 (결과는 진단 props에 보임)
+  try {
+    const runs = readRuns_(), nk = function (t) { return bareTitle_(t).replace(/\s+/g, ''); };
+    const a = runs.filter(function (r) { return nk(r['명단 제목']) === '#택11.9오늘과일설향딸기외30'; })[0];
+    if (!a) { props.setProperty('CARRYSEOL1', st + ' 실패(11.9 진행 못 찾음)'); return; }
+    const d10 = new Date(a['진행일'].getTime() + 86400000);
+    const b = runs.filter(function (r) { return String(r['시트ID']) === String(a['시트ID']) && r['진행일'] instanceof Date && Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyyMMdd') === Utilities.formatDate(d10, CONFIG.TIMEZONE, 'yyyyMMdd'); })[0];
+    if (!b) { props.setProperty('CARRYSEOL1', st + ' 실패(11.10 진행 못 찾음)'); return; }
+    const out = [];
+    if (Number(a['목표인원']) === 30) { setRun_(a.row, '목표인원', 29); out.push('11.9 목표 30→29 (' + a.row + '행)'); }
+    if (Number(b['목표인원']) === 30) { setRun_(b.row, '목표인원', 31); out.push('11.10 목표 30→31 (' + b.row + '행)'); }
+    const msg = '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '이미 29·' + b['목표인원']);
+    props.setProperty('CARRYSEOL1', msg);
+    note_('✓ 설향딸기외 1명 하루 미룸 (쿠팡 설향딸기 11.10에 11건): ' + msg);
+  } catch (e) { props.setProperty('CARRYSEOL1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 // 실행이 끝날 때 (로더 이름 함수 감쌈): 보낼메시지가 바뀌었으면 바뀐 탭만 다시 그림. 모아보기 체크 직후엔 안 그림 (줄이 안 움직이게)
 function msgViewSync_() {
