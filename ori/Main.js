@@ -4911,6 +4911,21 @@ function jumpRopeFix1_() {
     if (bareTitle_(r['명단 제목']) === '#택10.26 줄넘기 2' && !(v instanceof Date) && !String(v == null ? '' : v).trim()) { setRun_(r.row, '리뷰 취합', new Date(2026, 10, 4)); note_('✓ #택10.26 줄넘기 2 리뷰 취합 11/4'); }
   });
 }
+// (11/9 한 번, 사용자: #택11.9 오늘과일 설향딸기외 30에서 1명이 쿠팡 설향딸기(25,600원)를 못 사서 11.10에 삼, 그날 그 상품 11건)
+//  → 11.9 목표 29 (29명으로 마감·명단 전달), 11.10 목표 31 (새 30명 + 미룬 1명, 그 사람 폼은 11.10에 들어와 11.10 인원·택배시트·월급시트 11/10에 잡힘). 총건수 120 그대로
+function carrySeol1_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('CARRYSEOL1')) return;
+  props.setProperty('CARRYSEOL1', '1');
+  const runs = readRuns_(), nk = function (t) { return bareTitle_(t).replace(/\s+/g, ''); };
+  const a = runs.filter(function (r) { return nk(r['명단 제목']) === '#택11.9오늘과일설향딸기외30'; })[0];
+  if (!a) { note_('⚠ 설향딸기외 하루 미룸: 11.9 진행을 못 찾음'); return; }
+  const b = runs.filter(function (r) { return String(r['시트ID']) === String(a['시트ID']) && r['진행일'] instanceof Date && dayStart_(r['진행일']) === dayStart_(new Date(2026, 10, 10)); })[0];
+  const out = [];
+  if (Number(a['목표인원']) === 30) { setRun_(a.row, '목표인원', 29); out.push('11.9 목표 30→29'); }
+  if (b && Number(b['목표인원']) === 30) { setRun_(b.row, '목표인원', 31); out.push('11.10 목표 30→31'); }
+  note_('✓ 설향딸기외 1명 하루 미룸 (쿠팡 설향딸기 11.10에 11건): ' + (out.join(', ') || '이미 바뀌어 있음'));
+}
 // 실행이 끝날 때 (로더 이름 함수 감쌈): 보낼메시지가 바뀌었으면 바뀐 탭만 다시 그림. 모아보기 체크 직후엔 안 그림 (줄이 안 움직이게)
 function msgViewSync_() {
   if (globalThis.__MSGV_SKIP) { globalThis.__MSGV_SKIP = false; return; }
@@ -4921,6 +4936,7 @@ function msgViewSync_() {
   try { rvCollBackfill1_(); } catch (e) { Logger.log('리뷰 취합 날짜 맞추기 실패: ' + e); }   // 보낸 지 오래된 메시지 정리 전에 한 번
   try { chwanSplit1_(); } catch (e) { Logger.log('취완 나누기 실패: ' + e); }
   try { jumpRopeFix1_(); } catch (e) { Logger.log('줄넘기 리뷰 취합 실패: ' + e); }
+  try { carrySeol1_(); } catch (e) { Logger.log('설향딸기외 하루 미룸 실패: ' + e); }
   try { msgViewBuild_(false); } catch (e) { Logger.log('모아보기 다시 그리기 실패: ' + e); }
   finally { try { if (l) l.releaseLock(); } catch (e) {} }
 }
