@@ -573,6 +573,10 @@ console.log('-- Test 11/9: 털깔창 NxM 옵션·날짜별 한 옵션·머리 �
   if (h2.guides[0].optBase.length !== 1) throw new Error('NxM sum != total should not split');
   console.log('✓ 털깔창·십자가 의뢰서 통과');
 }
+// 11/9: 로켓배송 아닌 쿠팡 상품은 공지에 강조 줄
+{ const html = fs.readFileSync(htmlPath, 'utf8');
+  if (!/g\.cpFetched && !g\.cpRocket \? "⚠️★로켓배송 아니에요! 판매자변경 후 일반배송으로 구매해주세요★⚠️"/.test(html)) throw new Error('non-rocket notice line missing');
+  console.log('✓ 로켓배송 아님 강조 줄'); }
 console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (17개 샘플 전원 일치)');
 process.exit(0);
 
