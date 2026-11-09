@@ -1605,6 +1605,31 @@ function diag_(p) {
         o.unchecked = live.filter(function (i) { return cc < 0 || v[i][cc] !== true; }).map(function (i) { return (cName >= 0 ? v[i][cName] : '?') + ' ' + Utilities.formatDate(v[i][cT], CONFIG.TIMEZONE, 'MM-dd HH:mm') + (inW(i) ? '' : ' (진행 시간 밖)'); });
         o.outside = live.filter(function (i) { return !inW(i); }).map(function (i) { return (cName >= 0 ? v[i][cName] : '?') + ' ' + Utilities.formatDate(v[i][cT], CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 체크 ' + (cc >= 0 ? v[i][cc] : '?'); });
       } catch (e) { o.sheetErr = String(e); }
+      // 보고 글(rvZip_) 앞 조건: 폴더 링크·리뷰이미지 폴더·종류별/안 나눈 사진 수·가장 늦게 바뀐 사진 시각
+      try {
+        const zp = {}, fl = mine.filter(function (x) { return x['폴더 링크']; })[0];
+        zp.folderLink = fl ? String(fl['폴더 링크']).slice(0, 80) : '없음';
+        ['RVZIP_', 'RVZIPURL_', 'RVRPTFIX_', 'RVIMG_', 'CART_'].forEach(function (k) { const x = pr.getProperty(k + sid); zp[k] = x == null ? null : String(x).slice(0, 120); });
+        zp.aiQ = String(pr.getProperty('RVAI_Q') || '').split(',').indexOf(sid) >= 0; zp.geminiWait = Number(pr.getProperty('GEMINI_WAIT') || 0) > Date.now();
+        if (fl) {
+          const id = (String(fl['폴더 링크']).match(/[-\w]{25,}/) || [])[0], parent = DriveApp.getFolderById(id), it = parent.getFoldersByName(RV_IMG_FOLDER), imgs = [];
+          while (it.hasNext()) imgs.push(it.next());
+          zp.imgFolders = imgs.map(function (x) { return x.getId() === pr.getProperty('RVIMG_' + sid) ? '같음' : '다름 ' + x.getId().slice(0, 6); });
+          if (imgs.length) {
+            const by = {}, loose = [], newest = [];
+            const walk = function (fo, depth, type) {
+              if (depth > 0 && RV_SKIP_RE.test(fo.getName())) return;
+              const t = rvTypeOf_(fo.getName()) || type, fi = fo.getFiles();
+              while (fi.hasNext()) { const x = fi.next(); if (!/^image\//.test(x.getMimeType())) continue; if (t) by[t] = (by[t] || 0) + 1; else loose.push(x.getName()); newest.push([Math.max(x.getLastUpdated().getTime(), x.getDateCreated().getTime()), x.getName()]); }
+              if (depth < 4) { const di = fo.getFolders(); while (di.hasNext()) walk(di.next(), depth + 1, t); }
+            };
+            walk(imgs[0], 0, '');
+            newest.sort(function (a, b) { return b[0] - a[0]; });
+            zp.byType = by; zp.loose = loose.slice(0, 10); zp.newest = newest.slice(0, 3).map(function (x) { return Utilities.formatDate(new Date(x[0]), CONFIG.TIMEZONE, 'MM-dd HH:mm:ss') + ' ' + x[1]; });
+          }
+        }
+        o.zip = zp;
+      } catch (e) { o.zipErr = String(e); }
       out.rvst.push(o);
     });
   } catch (e) { out.rvstErr = String(e); }
