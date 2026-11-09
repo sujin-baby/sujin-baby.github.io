@@ -1684,6 +1684,19 @@ function diag_(p) {
       out.rvst.push(o);
     });
   } catch (e) { out.rvstErr = String(e); }
+  // &chain=글자: 그 글자가 든 진행의 의뢰 묶음(chainsOf_)과 월급시트에서 찾은 줄 (읽기만, 11/9 백발백중 10.26 줄만 상태가 안 이어짐)
+  if (p.chain) try {
+    const all = readRuns_().filter(function (r) { return r['시트ID'] && r['진행일'] instanceof Date; }), tabs = {};
+    out.chains = chainsOf_(all).filter(function (c) { return c.runs.some(function (r) { return String(r['명단 제목']).indexOf(String(p.chain)) >= 0; }); }).map(function (c) {
+      return { total: c.total, done: c.done, runs: c.runs.map(function (r) {
+        const m = r['진행일'].getMonth() + 1;
+        if (!(m in tabs)) { try { const sh = payTab_(m, true), L = sh && payLayout_(sh); tabs[m] = L ? { n: sh.getName(), head: L.head, names: sh.getRange(L.head + 1, L.name, Math.max(sh.getLastRow() - L.head, 1), 1).getValues().map(function (x) { return String(x[0]).replace(/\s+/g, ''); }) } : null; } catch (e) { tabs[m] = null; } }
+        const t = tabs[m], nm = String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, '').replace(/\s+/g, '');
+        const i = t ? t.names.indexOf(nm) : -1;
+        return bareTitle_(r['명단 제목']) + ' | ' + Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'MM-dd') + ' ' + r['진행 상태'] + ' 일차' + r['일차'] + ' ' + r['요청ID'] + ' sid…' + String(r['시트ID']).slice(-6) + ' 행' + r.row + ' → ' + (t ? (i >= 0 ? t.n + '!' + (t.head + 1 + i) : t.n + ' 없음') : '탭 없음');
+      }) };
+    });
+  } catch (e) { out.chainErr = String(e); }
   // &payhead=1: 월급시트(이달) 위쪽 머리 줄과 맨 아래 합계 줄의 값·수식, 완료보고(H)를 쓰는 수식 (진행비 총액이 어떻게 나오는지 보기, 읽기만)
   if (p.payhead) try {
     const sh = payTab_(today_().getMonth() + 1), L = payLayout_(sh), lc = Math.min(sh.getLastColumn(), 30), last = sh.getLastRow();
