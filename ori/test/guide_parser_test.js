@@ -579,7 +579,88 @@ console.log('-- Test 11/9: 털깔창 NxM 옵션·날짜별 한 옵션·머리 �
   if (/MEMO_F = \[[^\]]*"page"/.test(html)) throw new Error('page must not be recalled from memory');
   if (/blocked \? "1p"/.test(html)) throw new Error('blocked must not become 1p');
   console.log('✓ 로켓 아님 가격 줄·위치 기억 안 함·막힘≠1p'); }
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (17개 샘플 전원 일치)');
+
+// ==========================================
+// 11/9 설향딸기·황금향·콜라비: 구매옵션 줄 '/ 가격' 분리, '첫페이지' 필터 안내 보존, 토스 위치 기본 1p
+// ==========================================
+console.log('-- Test 11/9: 설향딸기·황금향·콜라비 구매옵션/가격 분리·첫페이지·토스 1p');
+{
+  const req = `#입금대행 택대 
+
+쿠팡
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 설향딸기
+2. 키워드 검색 시 현재 순위 : 필터 비건 누른 후 첫페이지 (꼭 비건 검색후 비건 누른후 주문)
+3. 총 구매 건수 : 50건
+4. 일 진행 건수 : 10건/5일
+5. 상품주소(URL) :https://www.coupang.com/vp/products/9809724828?vendorItemId=96289446902
+6. 구매옵션 : 350g(특품)x1박스 / 25.600
+7. 포토제공 유 무  : 유 (텍스트35/포토15)
+8. 리뷰내용 가이드 :  자율
+9. 입금하실 입금자명 : 조장근
+10.택배대행 Y/N: y
+
+
+*리뷰어 결제수단은 자율입니다 
+
+
+
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 황금향
+2. 키워드 검색 시 현재 순위 : 필터 비건 누른 후 첫페이지 (꼭 비건 검색후 비건 누른후 주문)
+3. 총 구매 건수 : 50건
+4. 일 진행 건수 : 10건/5일
+5. 상품주소(URL) : https://www.coupang.com/vp/products/9799819790?vendorItemId=96257574766
+6. 구매옵션 : 3kg(로얄과) x 1박스 / 13,800
+7. 포토제공 유 무  : 유 (텍스트35/포토15)
+8. 리뷰내용 가이드 :  자율
+9. 입금하실 입금자명 : 조장근
+10.택배대행 Y/N: y
+=============
+
+밑에는 토스
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 콜라비
+2. 키워드 검색 시 현재 순위 : 
+3. 총 구매 건수 : 10건
+4. 일 진행 건수 : 5건/2일
+5. 상품주소(URL) : https://service.toss.im/shopping-discovery/c/2719238869
+6. 구매옵션 : 1박스, 3kg /  12.400
+7. 포토제공 유 무  : 유 (텍스트7/포토3)
+8. 리뷰내용 가이드 :  자율
+9. 입금하실 입금자명 : 조장근
+10.택배대행 Y/N: y
+
+
+*리뷰어 결제수단은 자율입니다
+
+
+ 
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 설향딸기
+2. 키워드 검색 시 현재 순위 : 
+3. 총 구매 건수 : 10건
+4. 일 진행 건수 : 5건/2일
+5. 상품주소(URL) : https://service.toss.im/shopping-discovery/c/2719252781
+6. 구매옵션 : 350g /  25.600
+7. 포토제공 유 무  : 유 (텍스트7/포토3)
+8. 리뷰내용 가이드 :  자율
+9. 입금하실 입금자명 : 조장근
+10.택배대행 Y/N: y`;
+
+  const h = P.parseAll(req);
+  if (h.guides.length !== 4) throw new Error('guides length should be 4, got ' + h.guides.length);
+  const [g0, g1, g2, g3] = h.guides;
+  if (g0.option !== '350g(특품)x1박스' || g0.price !== '25,600') throw new Error('g0 option/price wrong: ' + g0.option + ' / ' + g0.price);
+  if (!P.posText(g0).includes('1p') || !P.posText(g0).includes('비건')) throw new Error('g0 posText wrong: ' + P.posText(g0));
+  if (g1.option !== '3kg(로얄과) x 1박스' || g1.price !== '13,800') throw new Error('g1 option/price wrong: ' + g1.option + ' / ' + g1.price);
+  if (!P.posText(g1).includes('1p') || !P.posText(g1).includes('비건')) throw new Error('g1 posText wrong: ' + P.posText(g1));
+  if (g2.option !== '1박스, 3kg' || g2.price !== '12,400') throw new Error('g2 option/price wrong: ' + g2.option + ' / ' + g2.price);
+  if (P.posText(g2) !== '1p' || g2.platform !== '토스') throw new Error('g2 posText/platform wrong: ' + P.posText(g2) + ' / ' + g2.platform);
+  if (g3.option !== '350g' || g3.price !== '25,600') throw new Error('g3 option/price wrong: ' + g3.option + ' / ' + g3.price);
+  if (P.posText(g3) !== '1p' || g3.platform !== '토스') throw new Error('g3 posText/platform wrong: ' + P.posText(g3) + ' / ' + g3.platform);
+  console.log('✓ 설향딸기·황금향·콜라비 의뢰서 옵션/가격 분리·첫페이지·토스 1p 시험 통과');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (18개 샘플 전원 일치)');
 process.exit(0);
 
 
