@@ -3125,6 +3125,7 @@ function checkFullInner_() {
   try { subTime_('알림: 택배시트', function () { takbaeCheck_(runs); }); } catch (e) { note_('택배시트 알림 실패: ' + e); }
   try { subTime_('알림: 포토대기', function () { photoWaitCheck_(runs); }); } catch (e) { note_('포토대기 알림 실패: ' + e); }
   try { subTime_('알림: 포토 요청', function () { photoAskCheck_(runs); }); } catch (e) { note_('포토 요청 알림 실패: ' + e); }
+  try { subTime_('알림: 2시 이후 구매', function () { takLateCheck_(runs); }); } catch (e) { note_('2시 이후 구매 알림 실패: ' + e); }
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
   try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
@@ -8029,6 +8030,45 @@ function photoLate_(r, props) {
   const days = Math.round((today_().getTime() - dayStart_(r['진행일'])) / 86400000);
   return days >= 2 && days <= 9 && !props.getProperty('RVSENT_' + campKey_(r['명단 제목']) + '_' + dateTok_(r['명단 제목']));
 }
+// 택배시트 마감 (2시). 택대 진행에서 이 시각 뒤 구매(폼 낸 시각)는 다음 택배시트로 (11/9 사용자: 시간 지정건이 많아짐, 11시~3시 30분 구매)
+const TAK_CUT_H = 14, TAK_CUT_TXT = '2시';
+// 한눈에 명단 덩어리용 마감 시각 수식 (택대 + 첫 칸이 타임스탬프일 때만, 아니면 '')
+function takCutFormula_(r, layout) {
+  if (!r || r['택대'] !== 'Y' || !(r['진행일'] instanceof Date) || !layout || !layout[0] || layout[0][0] !== '타임스탬프') return '';
+  return '(DATE(' + Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyy,M,d') + ')+TIME(' + TAK_CUT_H + ',0,0))';
+}
+// 진행 다음 날부터 한 번: 그 진행에서 2시 이후 구매한 사람 → 할 일 '오늘 2시 전에 택배시트에' + 한눈에 덩어리 계속 보이게 (TAKLATE_P_)
+function takLateCheck_(runs) {
+  const props = PropertiesService.getScriptProperties(), t0 = today_().getTime();
+  runs.forEach(function (r) {
+    if (r['택대'] !== 'Y' || !(r['진행일'] instanceof Date) || !r['시트ID'] || isExpect_(r) || !(Number(r['인원']) > 0)) return;
+    const age = Math.round((t0 - dayStart_(r['진행일'])) / 86400000);
+    if (age < 1 || age > 4) return;
+    const key = String(r['명단 제목']).replace(/\s+/g, ''), k = 'TAKLATE_' + key;
+    if (props.getProperty(k)) return;
+    let names;
+    try { names = takLateNames_(runs, r); } catch (e) { note_('2시 이후 구매 확인 실패 ' + bareTitle_(r['명단 제목']) + ': ' + e.message); return; }
+    props.setProperty(k, '1');
+    if (!names.length) return;
+    props.setProperty('TAKLATE_P_' + key, String(names.length));
+    const when = age === 1 ? '어제' : Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'M/d');
+    queueMsg_('내 할 일', '[' + bareTitle_(r['명단 제목']) + '] ' + when + ' ' + TAK_CUT_TXT + ' 이후 구매 ' + names.length + '명 → 오늘 ' + TAK_CUT_TXT + ' 전에 택배시트에 넣어 주세요 (한눈에 탭 그 명단 파란 줄)\n' + names.join(', '), '할 일');
+    note_('✓ ' + TAK_CUT_TXT + ' 이후 구매 → 다음 택배시트 할 일: ' + bareTitle_(r['명단 제목']) + ' ' + names.length + '명');
+  });
+}
+// 그 진행 날 2시 이후에 폼을 낸 사람 이름 (명단 탭, 메모로 뺀 줄 제외)
+function takLateNames_(runs, r) {
+  const sh = SpreadsheetApp.openById(r['시트ID']).getSheetByName(LIST_TAB);
+  if (!sh || sh.getLastRow() < 3) return [];
+  const lc = Math.max(sh.getLastColumn(), 1), hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_), cT = hdr.indexOf('타임스탬프');
+  if (cT < 0) return [];
+  let cN = hdr.findIndex(function (h) { return /수령인|계정명/.test(h); });
+  if (cN < 0) cN = hdr.findIndex(function (h) { return /이름|성함/.test(h) && !MATCH.nick.test(h); });
+  const v = sh.getRange(3, 1, sh.getLastRow() - 2, lc).getValues(), nt = sh.getRange(3, cT + 1, sh.getLastRow() - 2, 1).getNotes();
+  const w = windowOf_(runs, r), cut = Math.max(dayStart_(r['진행일']) + TAK_CUT_H * 3600000, Number(w.from) || 0);
+  return v.filter(function (x, i) { const t = x[cT] instanceof Date ? x[cT].getTime() : NaN; return !nt[i][0] && t >= cut && t < w.to; })
+    .map(function (x) { return cN >= 0 ? String(x[cN]).trim() : '?'; });
+}
 // 포토 요청 할 일은 캠페인(의뢰 = 명단 시트)마다 한 번 (11/9 사용자: 날짜 방마다 따로 뜸 → 캠페인별로)
 //  '[#택 봉상회 감홍사과외] 진행 2일 지났는데 …' (늦은 날짜들은 괄호로). 예전 방식(날짜마다)으로 이미 넣은 의뢰는 다시 안 넣음
 function campLabel_(t) { return bareTitle_(t).replace(/^#\s*(택|업)?\s*\d{1,2}\.\d{1,2}\s*/, function (m, a) { return '#' + (a || '') + ' '; }).replace(/\s*\d+\s*$/, '').trim(); }
@@ -9197,7 +9237,7 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '36';
+const DASH_VER = '37';
 // 한눈에 '리뷰 취합할 것' 칸에 보일 것: 의뢰 전체 리뷰가 끝난(RVRPT_) 의뢰 중 업체 전송 체크 안 했거나 체크한 지 3일 안 된 것. 최근 40일 진행만, 기대평 빼고
 //  날마다 취합하던 줄은 없앰 (사용자 요청 10/26: 날짜별로 말고 한 캠페인이 다 끝나면 그때 한 번에)
 function rvItems_(allRuns, props) {
@@ -9344,7 +9384,8 @@ function buildDashboard_(force) {
   const recentCut = today_().getTime() - DASH_LIST_DAYS * 86400000;
   const show = order.filter(function (id) {
     const r = sheets[id].runs[0];
-    return !(r['진행일'] instanceof Date) || r['진행일'].getTime() >= recentCut || (r['택대'] === 'Y' && r['택배 옮김'] !== true);
+    return !(r['진행일'] instanceof Date) || r['진행일'].getTime() >= recentCut || (r['택대'] === 'Y' && r['택배 옮김'] !== true) ||
+      (r['택대'] === 'Y' && !!props.getProperty('TAKLATE_P_' + String(r['명단 제목']).replace(/\s+/g, '')) && r['진행일'].getTime() >= today_().getTime() - 5 * 86400000);   // 2시 이후 구매 → 다음 택배시트 (주말 끼면 월요일까지)
   });
   // 덩어리 줄 수는 지금 인원 + 여유 5줄 (넘칠 것 같으면 다시 만듦). 빈칸이 너무 길지 않게
   order.forEach(function (id) {
@@ -9560,7 +9601,10 @@ function buildDashboard_(force) {
     // 제목 + 안 산 사람 (관리 시트 배정 탭에서 '아직'인 사람, 응답이 들어오면 바로 바뀜)
     const label = '■ ' + titles[0] + '   (명단 시트: ' + sheetName_(titles[0]) + ')';
     const rt = String(x.runs[0]['명단 제목']).replace(/"/g, '""');
-    sh.getRange(top, 1).setFormula('=' + q(label) + '&IFERROR("   ▶ 안 산 사람: "&TEXTJOIN(" ",TRUE,FILTER(' + A + 'B2:B&IF(' + A + 'F2:F="아직 1",IF(N(' + A + 'D2:D)>1,"(1건 남음)",""),"("&MID(' + A + 'F2:F,4,9)&"건 남음)"),' + A + 'A2:A="' + rt + '",LEFT(' + A + 'F2:F,2)="아직")),"")')
+    // 택대: 2시(택배시트 마감) 이후 구매(폼 낸 시각)는 다음 택배시트로 → 파란 줄 + 제목에 인원 (11/9 사용자: 11시~3시 30분 구매 시간 지정건)
+    const cutF = takCutFormula_(x.runs[0], x.layout), rA = top + 2, rB = top + 1 + n;
+    const lateTxt = cutF ? '&IFERROR(LET(k,COUNTIF(A' + rA + ':A' + rB + ',">="&' + cutF + '),IF(k>0,"   ▶ ' + TAK_CUT_TXT + ' 이후 구매 "&k&"명(파란 줄) → "&IF(TODAY()>INT(' + cutF + '),"오늘","다음")&" 택배시트에",""))' + ',"")' : '';
+    sh.getRange(top, 1).setFormula('=' + q(label) + '&IFERROR("   ▶ 안 산 사람: "&TEXTJOIN(" ",TRUE,FILTER(' + A + 'B2:B&IF(' + A + 'F2:F="아직 1",IF(N(' + A + 'D2:D)>1,"(1건 남음)",""),"("&MID(' + A + 'F2:F,4,9)&"건 남음)"),' + A + 'A2:A="' + rt + '",LEFT(' + A + 'F2:F,2)="아직")),"")' + lateTxt)
       .setFontWeight('bold');
     const width2 = x.layout.length + (x.chk ? 1 : 0);
     const c = function (k) { return 'CHOOSECOLS(e,' + k + ')'; };
@@ -9629,6 +9673,8 @@ function buildDashboard_(force) {
         .whenFormulaSatisfied('=AND(G' + r0 + '<>"",' + byOpt + ')')
         .setBackground('#f9cb9c').setFontColor('#7a3a00').setRanges([colRange(7)]).build());
     }
+    if (cutF) rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER($A' + r0 + '),$A' + r0 + '>=' + cutF + ')')
+      .setBackground('#cfe2f3').setRanges([sh.getRange(r0, 1, n, Math.max(width2, 6))]).build());
   });
   // 상태·숫자 칸은 좁게 (아래 명단 덩어리 C·D·F·G 칸은 글자가 잘리면 칸을 늘려 보세요, 사용자 요청 10/21)
   [[1, 95], [2, 240], [3, 80], [4, 70], [5, 220], [6, 55], [7, 55]].forEach(function (w) { sh.setColumnWidth(w[0], w[1]); });
