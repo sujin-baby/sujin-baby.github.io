@@ -930,6 +930,43 @@ function repaintRealRows_(ss, rules) {
   });
   return n;
 }
+// 옵션 글에 이름이 든 공지 상품 (가격 있는 것만)
+function payProdHit_(r, opt) {
+  const ot = String(opt == null ? '' : opt).replace(/\s+/g, '');
+  if (!ot || !r || !r['폼ID']) return [];
+  return (cachedNoticeProducts_(r['폼ID']) || []).filter(function (p) { const nm = String(p.name || '').replace(/\s+/g, ''); return nm && p.prices && p.prices.length && ot.indexOf(nm) >= 0; });
+}
+// (11/9 한 번) 안 보낸 '[결제금액 확인]' 할 일 중 '공지 가격을 못 찾음' 줄을 공지 상품 가격으로 다시 봄: 맞으면 그 줄 뺌, 다 빠지면 할 일 지움
+function payChkRecheck1_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('PAYCHKFIX1')) return;
+  props.setProperty('PAYCHKFIX1', '1');
+  const byT = {}; runs.forEach(function (r) { byT[bareTitle_(r['명단 제목'])] = r; });
+  const num = function (x) { return Number(String(x || '').replace(/[^0-9]/g, '')) || 0; };
+  let fixed = 0;
+  withObWrite_(function () {
+    const ob = outboxSheet_(), ol = ob.getLastRow();
+    if (ol < 2) return;
+    const v = ob.getRange(2, 1, ol - 1, 6).getValues();
+    for (let i = v.length - 1; i >= 0; i--) {
+      const t = String(v[i][4]), m = t.match(/^\[결제금액 확인\] ([^\n]+)\n/);
+      if (v[i][2] !== '할 일' || v[i][5] === '보냄' || !m || t.indexOf('공지 가격을 못 찾음') < 0) continue;
+      const r = byT[m[1].trim()];
+      if (!r) continue;
+      const ls = t.split('\n'), keep = ls.filter(function (l) {
+        const q = l.match(/^.+?: ([\d,]+)원 결제 \(공지 가격을 못 찾음, 옵션 (.+)\) → 확인 필요$/);
+        if (!q) return true;
+        const paid = num(q[1]);
+        return !payProdHit_(r, q[2]).some(function (p) { return p.prices.some(function (pv) { for (let k = 1; k <= 5; k++) if (paid === pv * k) return true; return false; }); });
+      });
+      if (keep.length === ls.length) continue;
+      fixed++;
+      if (keep.filter(function (l) { return /원 결제/.test(l); }).length) ob.getRange(i + 2, 5).setValue(keep.join('\n'));
+      else ob.deleteRow(i + 2);
+    }
+  });
+  if (fixed) note_('✓ 결제금액 확인 할 일 다시 봄 (공지 상품 가격과 맞는 줄 뺌): ' + fixed + '개');
+}
 // 결제금액 확인 (사용자 요청 10/20): 새 응답의 결제금액이 공지 가격(배송비 포함)과 다르면 보낼메시지 '내 할 일'에. 명단 시트에는 아무것도 안 씀
 //  공지 가격: 고른 옵션 글의 '(17,200원)', 없으면 진행목록 가격(하나거나 다 같을 때만). 2~5개 산 금액(가격 × 개수)은 맞는 걸로
 function payCheck_(ss, add) {
@@ -967,6 +1004,12 @@ function payCheck_(ss, add) {
     // 폼 보기에 가격이 없으면(여러 상품 의뢰) 배정 탭의 그 보기 가격 (10/27 양배추채칼외 변기솔 8,300인데 8,500 결제를 못 잡음)
     if (!exp && cartN_(r) > 1) { const cp = runPrices_(r['가격']); if (cp.length === cartN_(r)) exp = cp.reduce(function (a, b) { return a + b; }, 0); }   // 장바구니건: 상품 합계
     if (!exp && kOpt) exp = pm[String(x.o[kOpt]).trim()] || 0;
+    // 옵션 글에 공지 상품 이름(키워드)이 있으면 그 상품 가격 (11/9 설향딸기외: 옵션 '황금향 13,800'·'콜라비 12.400', 배정 가격 없음 → 10명 다 '공지 가격을 못 찾음')
+    if (!exp && kOpt) {
+      const hit = payProdHit_(r, x.o[kOpt]);
+      if (hit.some(function (p) { return p.prices.some(function (v) { for (let k = 1; k <= 5; k++) if (paid === v * k) return true; return false; }); })) return;
+      if (hit.length) exp = hit[0].prices[0];
+    }
     if (!exp && kOpt) exp = majOf(x.o[kOpt]);
     if (!exp) { const ps = runPrices_(r['가격']); if (ps.length && ps.every(function (p) { return p === ps[0]; })) exp = ps[0]; }
     const kName = keys.filter(function (k) { return /수령인|계정명/.test(k); })[0] || keys.filter(function (k) { return /이름|성함/.test(k) && !MATCH.nick.test(k); })[0];
@@ -2661,7 +2704,8 @@ function shortProduct_(t) {
 
 // 공지(폼 설명)에서 가이드마다 상품 짧은 이름, 판매처, 가격들
 function noticeProducts_(text) {
-  return String(text || '').split(/\n-{5,}\s*\n?/).map(function (b) {
+  // 구분선: ----- 뿐 아니라 ————(긴 줄표)·─── 도 (11/9 설향딸기외: 상품 4개가 ———— 로 나뉘어 하나로 읽혀서 택배 상품이 다 '설향딸기'). 구분선 없으면 상품명 줄로
+  return [].concat.apply([], String(text || '').split(/\n\s*[-—–─━_=]{5,}\s*\n?/).map(splitByProduct_)).map(function (b) {
     const line = function (re) { const m = b.match(re); return m ? m[1].trim() : ''; };
     const name = shortProduct_(line(/(?:🐥\s*)?★?\s*키워드\s*[:：]\s*(.+)/) || line(/(?:🐥\s*)?상품명\s*[:：]\s*(.+)/));
     const prices = [];
@@ -3126,6 +3170,7 @@ function checkFullInner_() {
   try { subTime_('알림: 포토대기', function () { photoWaitCheck_(runs); }); } catch (e) { note_('포토대기 알림 실패: ' + e); }
   try { subTime_('알림: 포토 요청', function () { photoAskCheck_(runs); }); } catch (e) { note_('포토 요청 알림 실패: ' + e); }
   try { subTime_('알림: 2시 이후 구매', function () { takLateCheck_(runs); }); } catch (e) { note_('2시 이후 구매 알림 실패: ' + e); }
+  try { payChkRecheck1_(runs); } catch (e) { note_('결제금액 확인 다시 보기 실패: ' + e); }
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
   try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
@@ -9237,7 +9282,7 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '37';
+const DASH_VER = '38';
 // 한눈에 '리뷰 취합할 것' 칸에 보일 것: 의뢰 전체 리뷰가 끝난(RVRPT_) 의뢰 중 업체 전송 체크 안 했거나 체크한 지 3일 안 된 것. 최근 40일 진행만, 기대평 빼고
 //  날마다 취합하던 줄은 없앰 (사용자 요청 10/26: 날짜별로 말고 한 캠페인이 다 끝나면 그때 한 번에)
 function rvItems_(allRuns, props) {
@@ -9317,7 +9362,7 @@ function grantImport_(destId, srcId) {
 function cachedNoticeProducts_(fid) {
   if (!fid) return [];
   // 6시간만 기억 (스크립트 속성에 영구로 두면 공지 가격이 바뀌어도(귤 9100 → 9200) 옛 가격으로 주황색 칠함, 10/30)
-  const key = 'NPROD_' + fid, cache = CacheService.getScriptCache();
+  const key = 'NPROD2_' + fid, cache = CacheService.getScriptCache();   // 2: 긴 줄표 구분선 (11/9)
   const c = cache.get(key);
   if (c) { try { return JSON.parse(c); } catch (e) {} }
   let p = [];
