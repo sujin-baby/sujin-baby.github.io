@@ -660,7 +660,37 @@ console.log('-- Test 11/9: 설향딸기·황금향·콜라비 구매옵션/가�
   console.log('✓ 설향딸기·황금향·콜라비 의뢰서 옵션/가격 분리·첫페이지·토스 1p 시험 통과');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (18개 샘플 전원 일치)');
+// ==========================================
+// 11/10 시나노골드사과: 머리 가격 2개와 쉼표 옵션(3kg, 5kg) 분리, 일건수 옵션 균등 분할(5명씩), 가격 매칭
+// ==========================================
+console.log('-- Test 19: 시나노골드사과 쉼표 옵션/머리 가격 분리 및 일건수 균등 분할 (11/10 v166)');
+{
+  const req = `#입금대행 택대 14400 22000 
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 시나노골드사과
+2. 키워드 검색 시 현재 순위 :모르시면 비워두세요:
+3. 총 결제하신 건수 : 20건
+4. 하루 구매하는건수 (어뷰징 피하기위해 조금씩 변동될수 있습니다) : 10
+5. 상품주소(URL) :  https://link.coupang.com/a/iwTEJY0Fj2
+6.구매옵션 : 3kg, 5kg
+7.포토제공 (몇명)  /포토없음  선택: 포토제공5명
+8.리뷰 가이드 : 참고용 /원고제공 / 자율 택 : 자율
+9.입금하실 입금자명 : 박희배`;
+
+  const h = P.parseAll(req);
+  if (h.guides.length !== 1) throw new Error('시나노골드: guides length should be 1');
+  const g = h.guides[0];
+  if (g.optBase.length !== 2) throw new Error('시나노골드: optBase length should be 2, got ' + g.optBase.length);
+  if (g.optBase[0].label !== '3kg' || g.optBase[1].label !== '5kg') throw new Error('시나노골드: optBase labels wrong: ' + JSON.stringify(g.optBase));
+  if (g.price !== '14400\n22000') throw new Error('시나노골드: price wrong: ' + g.price);
+  const day1Opt = P.optionText(g, 1);
+  if (day1Opt !== '3kg (5명)\n5kg (5명)') throw new Error('시나노골드: day1 options wrong: ' + day1Opt);
+  const day2Opt = P.optionText(g, 2);
+  if (day2Opt !== '3kg (5명)\n5kg (5명)') throw new Error('시나노골드: day2 options wrong: ' + day2Opt);
+  console.log('✓ 시나노골드사과 쉼표 옵션·가격 분리·일건수 5명씩 균등 분할 시험 통과');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (19개 샘플 전원 일치)');
 process.exit(0);
 
 
