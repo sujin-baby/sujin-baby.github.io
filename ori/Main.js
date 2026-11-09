@@ -167,8 +167,14 @@ function campKey_(s) { return campOf_(s).replace(/(^|\s)실(\/빈)?(?=\s|$)/g, '
 // 같은 캠페인 진행들을 날짜순으로 묶어서 '한 의뢰'씩 나눔: 총건수를 다 채우면 다음 진행은 새 의뢰
 function chainsOf_(runs) {
   const by = {};
+  // 같은 명단 시트(= 같은 의뢰서)는 캠페인 이름이 중간에 바뀌어도 한 묶음, 이름은 가장 늦은 진행 것으로
+  //  (11/9: 1·2일차 캠페인이 '(업체명)황금향외', 3일차부터 '오늘과일 황금향외'라 두 의뢰로 나뉨 → 120건 다 했는데 11.10 진행이 또 생김)
+  const sidKey = {};
+  runs.filter(function (r) { return r['진행일'] instanceof Date && r['시트ID']; })
+    .sort(function (a, b) { return (a['진행일'] - b['진행일']) || (a.row - b.row); })
+    .forEach(function (r) { sidKey[String(r['시트ID'])] = campKey_(r['캠페인'] || r['명단 제목']); });
   runs.filter(function (r) { return r['진행일'] instanceof Date; }).forEach(function (r) {
-    const k = campKey_(r['캠페인'] || r['명단 제목']);
+    const k = (r['시트ID'] && sidKey[String(r['시트ID'])]) || campKey_(r['캠페인'] || r['명단 제목']);
     (by[k] = by[k] || []).push(r);
   });
   const chains = [];
@@ -3161,6 +3167,7 @@ function checkFullInner_() {
   // (10/24) 밀린 월급시트·정리를 맨 앞에서 하던 것 없앰: 월급시트가 6분 안에 안 끝나서 확인이 매번 맨 앞에서 끊겼고,
   //  그 뒤 일(다음 일차 만들기, 방 공지, 폼 트리거, 보낼 날짜)이 몇 시간 동안 하나도 안 됨. 이제 급한 일 먼저, 월급시트는 끝에서 나눠서 이어 함
   // 단계를 잘게 나눠서 폼수정 탭 삭제 같은 직접 하는 일이 덜 기다리게 (10/26 '진행목록' 단계가 126초 걸려 삭제가 2분 늦음)
+  try { fixGold1110Once_(); } catch (e) { note_('황금향외 11.10 정리 실패: ' + e); }
   step_('다음 일차');
   try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
   step_('다음 날 진행');
@@ -5583,6 +5590,39 @@ function assignSummary_(rows) {
 
 
 
+// (11/9 한 번) 이미 120건 다 한 '오늘과일 황금향외'(명단 잔여 0)에 잘못 생긴 11.10 진행(0명) 지우기 + 남은 계획(11.11·11.12) 건너뜀
+//  원인: 캠페인 이름이 중간에 바뀌어 묶음이 둘로 나뉨 (chainsOf_ 고침). 사용자 확인 11/9
+function fixGold1110Once_() {
+  try { fixPayHole1110Once_(); } catch (e) { note_('월급시트 빈 줄 정리 실패: ' + e); }
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FIX_GOLD1110')) return;
+  const r = runByRequest_('ytyiwjb3-6');
+  if (r && Number(r['인원']) === 0) note_('✓ ' + deleteRun_(r));
+  else if (r) note_('⚠ 황금향외 11.10 진행에 응답이 있어 안 지웠어요');
+  const ps = planSheet_(), pl = ps.getLastRow();
+  if (pl >= 2) ps.getRange(2, 1, pl - 1, 9).getValues().forEach(function (v, i) {
+    if (/^ytyiwjb3-\d+$/.test(String(v[0])) && String(v[8]) === '대기') ps.getRange(i + 2, 9).setValue('건너뜀 (이미 다 진행)');
+  });
+  props.setProperty('FIX_GOLD1110', String(new Date()));
+}
+
+// (11/9 한 번) 위에서 지운 진행의 월급시트 줄이 칸만 비고 남은 것(11월 46행: 수식·완료보고 체크·남은 -120) 지우기
+//  캠페인명·스토어가 비었고 아래에 캠페인명 있는 줄이 있는 '중간 빈 줄'만. 상태 칸 이음은 다음 상태 단계가 고침
+function fixPayHole1110Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FIX_PAYHOLE1110') || !CONFIG.PAY_SHEET_ID) return;
+  const sh = payTab_(11), L = payLayout_(sh);
+  if (!L || !L.name) return;
+  const last = sh.getLastRow(); if (last <= L.head) return;
+  const names = sh.getRange(L.head + 1, L.name, last - L.head, 1).getValues().map(function (x) { return String(x[0]).trim(); });
+  const store = L.store ? sh.getRange(L.head + 1, L.store, last - L.head, 1).getValues().map(function (x) { return String(x[0]).trim(); }) : names.map(function () { return ''; });
+  const lastNamed = names.map(function (x) { return !!x; }).lastIndexOf(true);
+  let n = 0;
+  for (let i = lastNamed - 1; i >= 0; i--) if (!names[i] && !store[i]) { sh.deleteRow(L.head + 1 + i); n++; }
+  if (n) { note_('✓ 월급시트 11월: 지운 진행이 남긴 중간 빈 줄 ' + n + '개 지움'); props.setProperty('PAY_SIG', ''); }
+  props.setProperty('FIX_PAYHOLE1110', String(new Date()));
+}
+
 // 잘못 만든 진행 지우기 (응답이 0명일 때만): 진행목록 줄, 보낼메시지의 대기 중 공지, 배정 줄, 월급시트 그 줄의 스크립트가 넣은 칸
 function deleteRun_(r) {
   if (Number(r['인원']) > 0) return '응답이 있는 진행은 못 지워요.';
@@ -5602,9 +5642,9 @@ function deleteRun_(r) {
         const last = sh.getLastRow(), names = sh.getRange(L.head + 1, L.name, Math.max(last - L.head, 1), 1).getValues();
         const i = names.findIndex(function (x) { return String(x[0]).replace(/\s+/g, '') === bareTitle_(title).replace(/\s+/g, ''); });
         if (i >= 0) {
-          const row = L.head + 1 + i, day = r['진행일'];
-          const dcol = L.days[(day.getMonth() + 1) + '-' + day.getDate()] || L.days[String(day.getDate())];
-          [L.name, L.qty, L.sum, L.store, L.time, L.note, L.prev, dcol].forEach(function (c) { if (c && !sh.getRange(row, c).getFormula()) sh.getRange(row, c).clearContent(); });
+          // 줄을 통째로 지움 (11/9: 칸만 비워서 11월 46행에 수식·체크만 남은 빈 줄, 남은 -120). 같은 의뢰 다른 줄 상태 칸이 이 줄을 보던 건 #REF!가 되고 상태 단계가 마지막 날 줄로 다시 이음
+          sh.deleteRow(L.head + 1 + i);
+          try { PropertiesService.getScriptProperties().setProperty('PAY_SIG', ''); } catch (e) {}
         }
       }
     }
@@ -9075,6 +9115,9 @@ function payStatusAll_(all) {
     if (!c.runs.length) return;
     const rows = [];
     c.runs.forEach(function (r) {
+      // 0명으로 끝낸 취소 진행은 빼기: 방제가 같은 날 진짜 줄(10.26 백발백중 기대평 42)에 이름 비교로 붙어서
+      //  그 줄 상태를 '자기 줄만 보기'로 되돌려 의뢰가 끝나도 '진행중'이었음 (11/9 사용자)
+      if (r['진행 상태'] === '종료' && !(Number(r['인원']) > 0)) return;
       const t = tabOf(r['진행일']);
       if (!t) return;
       const nm = String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, '').replace(/\s+/g, '');
@@ -9359,7 +9402,7 @@ function payStatusLink_(rows) {
     if (!x.L.status) return;
     const same = x.sh.getName() === last.sh.getName();
     const c = x.sh.getRange(x.row, x.L.status), f = c.getFormula();
-    const re = /IF\(\s*(?:OR\(\s*)?([A-Z]+)(\d+)\s*=\s*0\s*(?:,\s*(?:'(?:[^']|'')+'!|[^\s,()'!]+!)?[A-Z]+\d+\s*=\s*0\s*\))?\s*,\s*"완료"/;
+    const re = /IF\(\s*(?:OR\(\s*)?([A-Z]+)(\d+)\s*=\s*0\s*(?:,\s*(?:'(?:[^']|'')+'!|[^\s,()'!]+!)?(?:[A-Z]+\d+|#REF!)\s*=\s*0\s*\))?\s*,\s*"완료"/;
     const m = f.match(re);
     if (!m || Number(m[2]) !== x.row) return;
     const lastRef = (same ? '' : lastTab) + m[1] + last.row;
