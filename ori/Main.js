@@ -3802,9 +3802,35 @@ function rvInboxTick_() {
   try { globalThis.__ORI_T0 = Date.now(); rvInboxSort_(null); } catch (e) { try { note_('리뷰 사진 받는 곳(5분) 실패: ' + e); } catch (e2) {} }
   // 명단 시트 리뷰 확인 체크 → 5분 안에 취완·리뷰비·페이백 요청 (11/8 사용자: 시온스 발마사지기 다 체크했는데 리뷰비 요청이 너무 늦게 뜸)
   try { if (!late_(150)) rvQuickCheck_(); } catch (e) { try { if (!(e && e.yieldLock)) note_('리뷰 확인(5분) 실패: ' + e); } catch (e2) {} }
+  try { if (!late_(170)) rvZipSoon_(); } catch (e) { try { if (!(e && e.yieldLock)) note_('리뷰 보고 글(5분) 실패: ' + e); } catch (e2) {} }
   // AI 분류 대기열도 이어서 (1분 연쇄 트리거도 이 길로 들어옴, 11/7)
   try { if (PropertiesService.getScriptProperties().getProperty('RVAI_Q') && !late_(200)) rvAiQueue_(); } catch (e) { try { note_('리뷰 사진 AI(연쇄) 실패: ' + e); } catch (e2) {} }
   finally { lock.releaseLock(); }
+}
+// 받는 곳에서 사진이 들어간 의뢰(RVZIPSOON_) → 5분마다 보고 글 확인 (11/9 나주배: 리뷰가 다 끝난 의뢰인데 사진을 올리고 보고 글이 30분 넘게 늦게 뜸, 30분 정리에서만 봐서)
+//  rvZip_가 사진이 10분 동안 안 바뀌면 보고 글을 넣음 → 마지막 사진 뒤 10~15분. 보고 글이 생기거나, 업체에 보냈거나, 3시간 지나면 표시 지움
+function rvZipSoon_() {
+  const props = PropertiesService.getScriptProperties(), all = props.getProperties(), ks = Object.keys(all).filter(function (k) { return k.indexOf('RVZIPSOON_') === 0; });
+  if (!ks.length) return 0;
+  const runs = readRuns_();
+  let n = 0;
+  ks.forEach(function (k) {
+    if (late_(200)) return;
+    const sid = k.slice(10), mine = runs.filter(function (r) { return String(r['시트ID']) === sid; });
+    if (Date.now() - (Number(all[k]) || 0) > 3 * 3600000 || !mine.length || rvSentAny_(mine)) { props.deleteProperty(k); return; }
+    if (!all['RVRPT_' + sid]) return;   // 아직 리뷰가 다 안 끝남 → 다 끝나면 reviewDone_가 보고 글
+    let rk = ''; try { rk = (JSON.parse(all['RV_' + sid] || '{}') || {}).kind || ''; } catch (e) {}
+    if (rk === 'confirm') { props.deleteProperty(k); return; }
+    let fname = ''; try { fname = DriveApp.getFileById(sid).getName(); } catch (e) {}
+    try {
+      const f = rvFolder_(mine, props, sid);
+      if (!f) { props.deleteProperty(k); return; }
+      rvZip_(f, fname, props, sid, mine);
+    } catch (e) { if (e && e.yieldLock) throw e; props.deleteProperty(k); note_('리뷰 보고 글(5분) 실패 ' + fname + ': ' + (e && e.message || e) + ' → 30분 정리에서 다시'); return; }
+    const z = props.getProperty('RVZIP_' + sid) || '';
+    if (z && z !== String(all['RVZIP_' + sid] || '')) { props.deleteProperty(k); n++; }
+  });
+  return n;
 }
 // 5분 확인: 명단 시트 수정 시각이 지난번과 다른 의뢰만 리뷰 확인(reviewDone_). 명단 시트끼리 관리 시트로 바로 알려 주는 방법이 없어서
 //  (명단 시트마다 수정 트리거를 걸면 계정당 트리거 20개 한도를 넘음) 5분마다 드라이브 수정 시각만 봄. 다른 일은 안 기다리게 15분 확인이 돌면 건너뜀
@@ -7337,7 +7363,7 @@ function rvInboxSort_(runs) {
     }
     if (i < files.length - 1) Utilities.sleep(2000);
   }
-  camps.forEach(function (c) { if (c.moved) { try { rvCountDirs_(c.img, rvCartOf_(c.sid)); } catch (e) {} } });
+  camps.forEach(function (c) { if (c.moved) { try { rvCountDirs_(c.img, rvCartOf_(c.sid)); } catch (e) {} if (c.sid) props.setProperty('RVZIPSOON_' + c.sid, String(Date.now())); } });   // 5분 확인에서 보고 글 (rvZipSoon_)
   const done = Object.keys(got);
   if (done.length) note_('✓ 리뷰 사진 받는 곳 → ' + done.map(function (k) { return k + ' ' + got[k] + '장'; }).join(', '));
   if (unknown) {
