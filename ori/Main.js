@@ -1510,6 +1510,12 @@ function diag_(p) {
     const r0 = Math.max(1, Number(p.r0) || 1), n = Math.min(30, Math.max(1, Number(p.n) || 15)), lc = Math.min(tsh.getLastColumn(), 45), rg = tsh.getRange(r0, 1, n, lc);
     const fm = rg.getFormulas(), dv = rg.getDisplayValues(), bg = rg.getBackgrounds();
     out.tabInfo = { name: tsh.getName(), lastRow: tsh.getLastRow(), lastCol: tsh.getLastColumn(), hidden: tsh.isSheetHidden() };
+    // &cols=1: 칸마다 숨김·줄바꿈, 조건부 서식(읽기만, 11/9 진행목록 회색·노랑·숨김 확인)
+    if (p.cols) try {
+      const ws = tsh.getRange(2, 1, 1, lc).getWrapStrategies()[0];
+      out.tabCols = []; for (let c = 1; c <= lc; c++) { let h = false; try { h = tsh.isColumnHiddenByUser(c); } catch (e) {} out.tabCols.push(colLetter_(c) + (h ? ' 숨김' : '') + ' ' + String(ws[c - 1])); }
+      out.tabCf = (tsh.getConditionalFormatRules() || []).map(function (r) { const b = r.getBooleanCondition(); return r.getRanges().map(function (x) { return x.getA1Notation(); }).join(',') + ' ' + (b ? String((b.getCriteriaValues() || [])[0]).slice(0, 200) + ' → ' + b.getBackground() : '(기타)'); });
+    } catch (e) { out.tabColsErr = String(e); }
     out.tabRows = fm.map(function (row, i) { return (r0 + i) + ': ' + row.map(function (f, j) { const v = String(dv[i][j]); return (v || f) ? colLetter_(j + 1) + '=' + v.slice(0, 40).replace(/\n/g, '⏎') + (bg[i][j] && bg[i][j] !== '#ffffff' ? '[' + bg[i][j] + ']' : '') + (f ? ' {' + f.slice(0, 300) + '}' : '') : ''; }).filter(Boolean).join(' | '); });
   } catch (e) { out.tabErr = String(e); }
   // &dashrow=N: 한눈에 탭 N행부터 4줄 수식·보이는 값 (읽기만, 10/28 #REF! 원인 보기)
