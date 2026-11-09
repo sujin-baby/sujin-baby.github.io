@@ -6093,7 +6093,8 @@ function onAdminEdit(e) {
   //  (예전엔 30초만 기다리고 조용히 안 해서 공지 붙여넣기가 배정에 안 들어갔음, 10/20)
   const sh0 = e.range.getSheet(), nm0 = sh0.getName(), a10 = e.range.getA1Notation();
   const action = (nm0 === EDIT_TAB && /^(B1|E1|E2|G2|I2)$/.test(a10)) || (nm0 === CONFIG.LIST_SHEET && (e.range.getColumn() === lc_('진행일') || e.range.getColumn() === lc_('목표인원'))) ||
-    (nm0 === DASH_TAB && (e.range.getColumn() === 2 || e.range.getColumn() === 13)) || (nm0 === DASH_TAB && e.range.getColumn() === 1 && isRvRow_(e.range.getRow()));
+    (nm0 === DASH_TAB && (e.range.getColumn() === 2 || e.range.getColumn() === 13)) || (nm0 === DASH_TAB && e.range.getColumn() === 1 && isRvRow_(e.range.getRow())) ||
+    (nm0 === DASH_TAB && e.range.getColumn() === TAK_CUT_COL && isTakCutRow_(e.range.getRow()));
   if (!action) return;
   const props = PropertiesService.getScriptProperties();
   if (nm0 === EDIT_TAB && a10 !== 'B1') { try { sh0.getRange('G1').setValue('⏳ 처리 중… (자동 확인이 돌고 있으면 1~2분 걸려요)'); } catch (err) {} }
@@ -6109,6 +6110,9 @@ function onAdminEdit(e) {
 }
 
 // 한눈에 '리뷰 취합할 것' 체크칸 줄인지 (10/25: 이 칸이 위 목록에 없어서 체크해도 진행목록에 저장이 안 됐음)
+function isTakCutRow_(row) {   // 한눈에 '택배시트 마감' 시각 칸 줄
+  try { return !!JSON.parse(PropertiesService.getScriptProperties().getProperty('DASH_TAKCUT') || '{}')[String(row)]; } catch (e) { return false; }
+}
 function isRvRow_(row) {
   try { return !!JSON.parse(PropertiesService.getScriptProperties().getProperty('DASH_RV') || '{}')[String(row)]; } catch (e) { return false; }
 }
@@ -6215,6 +6219,28 @@ function onAdminEditInner_(e) {
       }
       try { sh.getRange(e.range.getRow(), 3).setValue(val).setNumberFormat('M/d'); } catch (err) {}
       try { e.source.toast(on ? '체크한 날 저장했어요 (다음 날 이 줄은 사라져요)' : '체크 풀었어요', '리뷰 취합', 8); } catch (err) {}
+      return;
+    }
+  }
+  if (sh.getName() === DASH_TAB && e.range.getColumn() === TAK_CUT_COL && e.range.getNumRows() === 1 && e.range.getNumColumns() === 1) {
+    // 한눈에 명단 덩어리 '택배시트 마감' 시각 → 그 진행에 저장, 파란 줄·다음 날 할 일이 그 시각 기준으로 (11/9)
+    let m = {}; try { m = JSON.parse(PropertiesService.getScriptProperties().getProperty('DASH_TAKCUT') || '{}'); } catch (err) {}
+    const t = m[String(e.range.getRow())];
+    if (t && String(sh.getRange(e.range.getRow(), TAK_CUT_COL - 1).getValue()) === TAK_CUT_LABEL) {
+      const r = readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']) === t; }).pop();
+      if (!r) return;
+      const raw = e.range.getValue(), props = PropertiesService.getScriptProperties();
+      let msg;
+      if (raw === '' || raw == null) { props.deleteProperty(takCutKey_(r)); e.range.setValue(takCutTxt_(TAK_CUT_DEF)).setNumberFormat('H:mm'); msg = '기본(' + takCutTxt_(TAK_CUT_DEF) + ')으로 돌렸어요'; }
+      else {
+        const mm = takCutParse_(raw);
+        if (mm == null) { e.range.setValue(takCutTxt_(takCutMin_(r))).setNumberFormat('H:mm'); try { e.source.toast('시각을 못 읽었어요. 14:35 또는 2:35 처럼 적어 주세요', '택배시트 마감', 10); } catch (err) {} return; }
+        props.setProperty(takCutKey_(r), String(mm)); e.range.setValue(takCutTxt_(mm)).setNumberFormat('H:mm');
+        msg = takCutTxt_(mm) + '로 바꿨어요';
+      }
+      let more = ''; try { more = takLateRefresh_(r); } catch (err) { more = ' (할 일 고치기 실패: ' + err.message + ')'; }
+      try { e.source.toast(t + ' 택배시트 마감을 ' + msg + '. 그 전 폼 = 오늘 택배시트, 뒤 = 파란 줄' + more, '택배시트 마감', 12); } catch (err) {}
+      note_('택배시트 마감 시각: ' + t + ' → ' + msg + more);
       return;
     }
   }
@@ -7476,7 +7502,7 @@ const USAGE_ROWS = [
   ['1. 새 의뢰', '생성기에 의뢰서 붙여넣기 → 공지에 살 사람 이름 적기 → [이 내용으로 새 진행 만들기] (폼·명단 시트·방 공지·배정·다음 일차 계획까지 자동)'],
   ['2. 카톡 보내기', '메시지 탭(🐥방공지·📋명단전달 등)에서 안 보낸 것을 위에서부터 복사 → 카톡방에 붙여넣고 보내기 → 보냄 체크'],
   ['3. 폼', '진행일 0시에 자동으로 열리고, 인원이 차면 자동으로 닫힘 → 명단 전달·리뷰내용 가이드 메시지가 📋명단전달·🐥방공지 탭에 들어감'],
-  ['4. 택배대행', '한눈에 탭 그날 명단에서 A~K 복사 → 택배시트에 붙여넣기 → "택배 옮김" 체크 (2시 전)'],
+  ['4. 택배대행', '한눈에 탭 그날 명단에서 A~K 복사 → 택배시트에 붙여넣기 → "택배 옮김" 체크 (2시 전). 파란 줄 = 택배시트 마감 뒤 구매 → 다음 택배시트 (택배시트가 실제로 닫힌 시각은 명단 제목 줄 노란 칸에 적으면 파란 줄이 바뀜, 기본 2:20)'],
   ['', ''],
   ['■ 이럴 땐', ''],
   ['방제·업체명 바꾸기', '한눈에 탭 B칸(방제)에서 이름만 고쳐 쓰고 엔터. 예) #택11.03 (업체명)황금향외 40 → #택11.03 오늘과일 황금향외 40. 몇 초~1분 안에 진행목록 명단 제목·카톡방, 명단 시트·폼·폴더 이름, 메시지 탭, 배정 탭, 월급시트 캠페인명이 같이 바뀜(오른쪽 아래 알림). 날짜 숫자는 여기서 말고 진행목록 "진행일"에서. 이미 보낸 카톡 공지·방 이름은 직접'],
@@ -8075,14 +8101,35 @@ function photoLate_(r, props) {
   const days = Math.round((today_().getTime() - dayStart_(r['진행일'])) / 86400000);
   return days >= 2 && days <= 9 && !props.getProperty('RVSENT_' + campKey_(r['명단 제목']) + '_' + dateTok_(r['명단 제목']));
 }
-// 택배시트 마감 (2시). 택대 진행에서 이 시각 뒤 구매(폼 낸 시각)는 다음 택배시트로 (11/9 사용자: 시간 지정건이 많아짐, 11시~3시 30분 구매)
-const TAK_CUT_H = 14, TAK_CUT_TXT = '2시';
-// 한눈에 명단 덩어리용 마감 시각 수식 (택대 + 첫 칸이 타임스탬프일 때만, 아니면 '')
-function takCutFormula_(r, layout) {
-  if (!r || r['택대'] !== 'Y' || !(r['진행일'] instanceof Date) || !layout || !layout[0] || layout[0][0] !== '타임스탬프') return '';
-  return '(DATE(' + Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyy,M,d') + ')+TIME(' + TAK_CUT_H + ',0,0))';
+// 택배시트 마감. 택대 진행에서 이 시각 뒤 구매(폼 낸 시각)는 다음 택배시트로 (11/9 사용자: 시간 지정건이 많아짐, 11시~3시 30분 구매)
+//  실제로는 2시 20분~40분 사이에 닫힘 → 기본 2시 20분, 한눈에 탭 명단 덩어리 제목 줄 L칸에서 진행마다 바꿈 (TAKCUT_<방제> = 분)
+const TAK_CUT_DEF = 14 * 60 + 20, TAK_CUT_LABEL = '택배시트 마감 ▶', TAK_CUT_COL = 12;
+function takCutKey_(r) { return 'TAKCUT_' + bareTitle_(r['명단 제목']).replace(/\s+/g, ''); }
+function takCutMin_(r) { const v = Number(PropertiesService.getScriptProperties().getProperty(takCutKey_(r))); return v > 0 ? v : TAK_CUT_DEF; }
+function takCutTxt_(m) { return Math.floor(m / 60) + ':' + ('0' + (m % 60)).slice(-2); }
+// 칸에 적은 마감 시각 → 분 (14:35 · 2:35 · 2시35분 · 2시 반 · 시각 값). 오후로 봄 (12:00~23:59). 못 읽으면 null
+function takCutParse_(v) {
+  let h = NaN, m = 0;
+  if (v instanceof Date) { h = v.getHours(); m = v.getMinutes(); }
+  else if (typeof v === 'number' && isFinite(v)) { const t = Math.round((v % 1) * 1440); h = Math.floor(t / 60); m = t % 60; }
+  else { const x = String(v == null ? '' : v).trim().match(/^(?:오후\s*)?(\d{1,2})\s*(?:[:시.]\s*(반|\d{1,2})?\s*분?)?$/); if (x) { h = Number(x[1]); m = x[2] === '반' ? 30 : Number(x[2] || 0); } }
+  if (!isFinite(h) || h > 23 || m > 59) return null;
+  if (h < 12) h += 12;
+  return h * 60 + m;
 }
-// 진행 다음 날부터 한 번: 그 진행에서 2시 이후 구매한 사람 → 할 일 '오늘 2시 전에 택배시트에' + 한눈에 덩어리 계속 보이게 (TAKLATE_P_)
+// 한눈에 명단 덩어리용 마감 시각 수식 (택대 + 첫 칸이 타임스탬프일 때만, 아니면 ''). cell = 그 덩어리 마감 칸 ($L$31). 칸이 비거나 글이면 기본 2:20, 오전 시각(2:35)은 오후로
+function takCutFormula_(r, layout, cell) {
+  if (!r || r['택대'] !== 'Y' || !(r['진행일'] instanceof Date) || !layout || !layout[0] || layout[0][0] !== '타임스탬프') return '';
+  const d = 'DATE(' + Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'yyyy,M,d') + ')', def = 'TIME(' + Math.floor(TAK_CUT_DEF / 60) + ',' + (TAK_CUT_DEF % 60) + ',0)';
+  if (!cell) return '(' + d + '+' + def + ')';
+  const t = 'MOD(N(' + cell + '),1)';
+  return '(' + d + '+IF(N(' + cell + ')=0,' + def + ',' + t + '+IF(' + t + '<0.5,0.5,0)))';
+}
+// 진행 다음 날부터 한 번: 그 진행에서 마감 뒤 구매한 사람 → 할 일 '오늘 택배시트에' + 한눈에 덩어리 계속 보이게 (TAKLATE_P_)
+function takLateMsg_(r, names, age) {
+  const when = age === 1 ? '어제' : Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'M/d');
+  return '[' + bareTitle_(r['명단 제목']) + '] ' + when + ' 택배시트 마감(' + takCutTxt_(takCutMin_(r)) + ') 뒤 구매 ' + names.length + '명 → 오늘 택배시트에 넣어 주세요 (한눈에 탭 그 명단 파란 줄)\n' + names.join(', ');
+}
 function takLateCheck_(runs) {
   const props = PropertiesService.getScriptProperties(), t0 = today_().getTime();
   runs.forEach(function (r) {
@@ -8092,16 +8139,36 @@ function takLateCheck_(runs) {
     const key = String(r['명단 제목']).replace(/\s+/g, ''), k = 'TAKLATE_' + key;
     if (props.getProperty(k)) return;
     let names;
-    try { names = takLateNames_(runs, r); } catch (e) { note_('2시 이후 구매 확인 실패 ' + bareTitle_(r['명단 제목']) + ': ' + e.message); return; }
+    try { names = takLateNames_(runs, r); } catch (e) { note_('택배시트 마감 뒤 구매 확인 실패 ' + bareTitle_(r['명단 제목']) + ': ' + e.message); return; }
     props.setProperty(k, '1');
     if (!names.length) return;
     props.setProperty('TAKLATE_P_' + key, String(names.length));
-    const when = age === 1 ? '어제' : Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'M/d');
-    queueMsg_('내 할 일', '[' + bareTitle_(r['명단 제목']) + '] ' + when + ' ' + TAK_CUT_TXT + ' 이후 구매 ' + names.length + '명 → 오늘 ' + TAK_CUT_TXT + ' 전에 택배시트에 넣어 주세요 (한눈에 탭 그 명단 파란 줄)\n' + names.join(', '), '할 일');
-    note_('✓ ' + TAK_CUT_TXT + ' 이후 구매 → 다음 택배시트 할 일: ' + bareTitle_(r['명단 제목']) + ' ' + names.length + '명');
+    queueMsg_('내 할 일', takLateMsg_(r, names, age), '할 일');
+    note_('✓ 택배시트 마감 뒤 구매 → 다음 택배시트 할 일: ' + bareTitle_(r['명단 제목']) + ' ' + names.length + '명');
   });
 }
-// 그 진행 날 2시 이후에 폼을 낸 사람 이름 (명단 탭, 메모로 뺀 줄 제외)
+// 한눈에에서 마감 시각을 바꾸면: 이미 넣은 안 보낸 할 일도 지금 시각대로 (이름 다시, 없으면 지움)
+function takLateRefresh_(r) {
+  const props = PropertiesService.getScriptProperties(), key = String(r['명단 제목']).replace(/\s+/g, '');
+  if (!props.getProperty('TAKLATE_' + key)) return '';
+  const runs = readRuns_(), names = takLateNames_(runs, r), age = Math.max(1, Math.round((today_().getTime() - dayStart_(r['진행일'])) / 86400000)), pre = '[' + bareTitle_(r['명단 제목']) + '] ';
+  if (names.length) props.setProperty('TAKLATE_P_' + key, String(names.length)); else props.deleteProperty('TAKLATE_P_' + key);
+  let had = false;
+  withObWrite_(function () {
+    const ob = outboxSheet_(), ol = ob.getLastRow();
+    if (ol < 2) return;
+    const v = ob.getRange(2, 1, ol - 1, 6).getValues();
+    for (let i = v.length - 1; i >= 0; i--) {
+      const t = String(v[i][4]);
+      if (v[i][2] !== '할 일' || v[i][5] === '보냄' || t.indexOf(pre) !== 0 || !/택배시트 마감\(|이후 구매/.test(t)) continue;
+      had = true;
+      if (names.length) ob.getRange(i + 2, 5).setValue(takLateMsg_(r, names, age)); else ob.deleteRow(i + 2);
+    }
+  });
+  if (!had && names.length) queueMsg_('내 할 일', takLateMsg_(r, names, age), '할 일');
+  return names.length ? ' (다음 택배시트 할 일: ' + names.length + '명)' : ' (다음 택배시트로 넘어간 사람 없음)';
+}
+// 그 진행 날 택배시트 마감 뒤에 폼을 낸 사람 이름 (명단 탭, 메모로 뺀 줄 제외)
 function takLateNames_(runs, r) {
   const sh = SpreadsheetApp.openById(r['시트ID']).getSheetByName(LIST_TAB);
   if (!sh || sh.getLastRow() < 3) return [];
@@ -8110,7 +8177,7 @@ function takLateNames_(runs, r) {
   let cN = hdr.findIndex(function (h) { return /수령인|계정명/.test(h); });
   if (cN < 0) cN = hdr.findIndex(function (h) { return /이름|성함/.test(h) && !MATCH.nick.test(h); });
   const v = sh.getRange(3, 1, sh.getLastRow() - 2, lc).getValues(), nt = sh.getRange(3, cT + 1, sh.getLastRow() - 2, 1).getNotes();
-  const w = windowOf_(runs, r), cut = Math.max(dayStart_(r['진행일']) + TAK_CUT_H * 3600000, Number(w.from) || 0);
+  const w = windowOf_(runs, r), cut = Math.max(dayStart_(r['진행일']) + takCutMin_(r) * 60000, Number(w.from) || 0);
   return v.filter(function (x, i) { const t = x[cT] instanceof Date ? x[cT].getTime() : NaN; return !nt[i][0] && t >= cut && t < w.to; })
     .map(function (x) { return cN >= 0 ? String(x[cN]).trim() : '?'; });
 }
@@ -9282,7 +9349,7 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '38';
+const DASH_VER = '39';
 // 한눈에 '리뷰 취합할 것' 칸에 보일 것: 의뢰 전체 리뷰가 끝난(RVRPT_) 의뢰 중 업체 전송 체크 안 했거나 체크한 지 3일 안 된 것. 최근 40일 진행만, 기대평 빼고
 //  날마다 취합하던 줄은 없앰 (사용자 요청 10/26: 날짜별로 말고 한 캠페인이 다 끝나면 그때 한 번에)
 function rvItems_(allRuns, props) {
@@ -9634,7 +9701,7 @@ function buildDashboard_(force) {
     try { sh.setColumnWidth(15, 180); } catch (e) {}
   }
   // 아래: 명단 내용 (중복, 금액, 옵션 확인 표시는 여기서만. 명단 시트는 업체도 봐서 깨끗하게 둠)
-  const rules = [];
+  const rules = [], takCutRows = {};
   const A = "'" + ASSIGN_TAB + "'!";
   show.forEach(function (id) {
     const x = sheets[id], top = x.top, n = x.n, width = Math.max(x.layout.length + (x.chk ? 1 : 0), 6);
@@ -9647,8 +9714,15 @@ function buildDashboard_(force) {
     const label = '■ ' + titles[0] + '   (명단 시트: ' + sheetName_(titles[0]) + ')';
     const rt = String(x.runs[0]['명단 제목']).replace(/"/g, '""');
     // 택대: 2시(택배시트 마감) 이후 구매(폼 낸 시각)는 다음 택배시트로 → 파란 줄 + 제목에 인원 (11/9 사용자: 11시~3시 30분 구매 시간 지정건)
-    const cutF = takCutFormula_(x.runs[0], x.layout), rA = top + 2, rB = top + 1 + n;
-    const lateTxt = cutF ? '&IFERROR(LET(k,COUNTIF(A' + rA + ':A' + rB + ',">="&' + cutF + '),IF(k>0,"   ▶ ' + TAK_CUT_TXT + ' 이후 구매 "&k&"명(파란 줄) → "&IF(TODAY()>INT(' + cutF + '),"오늘","다음")&" 택배시트에",""))' + ',"")' : '';
+    //  마감 시각은 제목 줄 L칸 (실제로 2시 20~40분에 닫혀서 사용자가 진행마다 바꿈, 11/9). 값은 TAKCUT_ 속성에 두고 다시 그릴 때 채움
+    const cutCell = '$' + colLetter_(TAK_CUT_COL) + '$' + top, cutF = takCutFormula_(x.runs[0], x.layout, cutCell), rA = top + 2, rB = top + 1 + n;
+    if (cutF) {
+      sh.getRange(top, TAK_CUT_COL - 1).setValue(TAK_CUT_LABEL).setHorizontalAlignment('right').setFontWeight('bold').setFontColor('#1c4587');
+      sh.getRange(top, TAK_CUT_COL).setValue(takCutTxt_(takCutMin_(x.runs[0]))).setNumberFormat('H:mm').setBackground('#fff2cc').setFontWeight('bold').setHorizontalAlignment('center')
+        .setNote('택배시트가 실제로 닫힌 시각을 적어 주세요 (예: 14:35 또는 2:35).\n이 시각 전에 폼 낸 사람 = 오늘 택배시트 (흰 줄)\n이 시각 뒤 = 다음 택배시트 (파란 줄, 다음 날 할 일에 이름)');
+      takCutRows[String(top)] = bareTitle_(x.runs[0]['명단 제목']);
+    }
+    const lateTxt = cutF ? '&IFERROR(LET(c,' + cutF + ',k,COUNTIF(A' + rA + ':A' + rB + ',">="&c),IF(k>0,"   ▶ 택배시트 마감 "&TEXT(c,"h:mm")&" 뒤 구매 "&k&"명(파란 줄) → "&IF(TODAY()>INT(c),"오늘","다음")&" 택배시트에",""))' + ',"")' : '';
     sh.getRange(top, 1).setFormula('=' + q(label) + '&IFERROR("   ▶ 안 산 사람: "&TEXTJOIN(" ",TRUE,FILTER(' + A + 'B2:B&IF(' + A + 'F2:F="아직 1",IF(N(' + A + 'D2:D)>1,"(1건 남음)",""),"("&MID(' + A + 'F2:F,4,9)&"건 남음)"),' + A + 'A2:A="' + rt + '",LEFT(' + A + 'F2:F,2)="아직")),"")' + lateTxt)
       .setFontWeight('bold');
     const width2 = x.layout.length + (x.chk ? 1 : 0);
@@ -9767,6 +9841,7 @@ function buildDashboard_(force) {
   if (block0Top > gapStart) {
     try { sh.getRange(gapStart, 1, block0Top - gapStart, sh.getMaxColumns()).clear().clearDataValidations().clearNote(); } catch (e) {}
   }
+  props.setProperty('DASH_TAKCUT', JSON.stringify(takCutRows));   // 한눈에 마감 시각 칸 줄 → 방제 (고치면 onAdminEdit에서 저장)
   props.setProperty('DASH_SIG', sig);
   props.setProperty('DASH_TITLES', JSON.stringify(runs.map(function (r) { return bareTitle_(r['명단 제목']); })));
 }
