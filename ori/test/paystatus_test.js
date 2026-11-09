@@ -27,6 +27,16 @@ G('payStatusLink_')([{ sh: nv2, L, row: 10 }, { sh: nv2, L, row: 41 }]);
 ok(nv2.f[10] === st(10, 'OR(O10=0,O41=0)'), '#REF! → 마지막 줄 ' + nv2.f[10]);
 // 0명 취소 진행(같은 날 같은 방제)은 묶음에서 빼서 진짜 줄 이음을 되돌리지 않음
 const src = require('fs').readFileSync(process.argv[2], 'utf8');
-ok(/function payStatusAll_[\s\S]{0,1600}'종료' && !\(Number\(r\['인원'\]\) > 0\)\) return;/.test(src), 'payStatusAll_가 0명 취소 진행을 뺌');
+ok(/function payChainRows_[\s\S]{0,1600}'종료' && !\(Number\(r\['인원'\]\) > 0\)\) return;/.test(src) && /payStatusLink_\(payChainRows_\(/.test(src), 'payStatusAll_(payChainRows_)가 0명 취소 진행을 뺌');   // 11/9 줄 찾기를 payChainRows_로 뺌
+// 미리보기(dry): 시트는 안 바꾸고 할 일만 알려 줌
+const oct2 = tab('10월', 101, { 48: '=IF(G48=0, "시작전", IF(O48=0,"완료", IF(O48<0,"초과진행","진행중")))' });
+const rep = G('payStatusLink_')([{ sh: oct2, L, row: 48 }, { sh: nov, L, row: 30 }], true);
+ok(oct2.f[48].indexOf('OR(') < 0 && rep.some(x => /10월!48 바꿈/.test(x)), '미리보기 ' + JSON.stringify(rep));
+G('payStatusLink_')([{ sh: oct2, L, row: 48 }, { sh: nov, L, row: 30 }]);
+ok(oct2.f[48] === "=IF(G48=0, \"시작전\", IF(OR(O48=0,'11월'!O30=0),\"완료\", IF(O48<0,\"초과진행\",\"진행중\")))", '10.26 꼴(G48) 줄도 이음 ' + oct2.f[48]);
+// 새 달 탭·새 줄: 다른 탭 참조도 원래 모양으로 (12월 탭 줄이 11월 칸을 보고 '완료'가 되면 안 됨)
+const src2 = G('newMonthTab_.toString()') + G('payNewRowFromAbove_.toString()');
+const reNew = /IF\\\(\\s\*OR\\\(\\s\*\(\[A-Z\]\+\\d\+\)\\s\*=\\s\*0\\s\*,\\s\*\(\?:'\(\?:\[\^'\]\|''\)\+'!\|\[\^\\s,\(\)'!\]\+!\)\?/;
+ok(reNew.test(src2), '새 달 탭 정규식에 다른 탭 참조');
 console.log(fails.length ? 'XX 월급시트 상태 잇기 시험 실패:\n- ' + fails.join('\n- ') : '✓ 월급시트 상태: 다음 달 탭 마지막 줄로 이음 시험 통과');
 process.exit(fails.length ? 1 : 0);

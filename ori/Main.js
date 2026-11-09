@@ -1702,6 +1702,10 @@ function diag_(p) {
         return bareTitle_(r['명단 제목']) + ' | ' + Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'MM-dd') + ' ' + r['진행 상태'] + ' 일차' + r['일차'] + ' ' + r['요청ID'] + ' sid…' + String(r['시트ID']).slice(-6) + ' 행' + r.row + ' → ' + (t ? (i >= 0 ? t.n + '!' + (t.head + 1 + i) : t.n + ' 없음') : '탭 없음');
       }) };
     });
+    // 실제 월급시트 갱신과 같은 길로 줄을 찾고, 상태 칸에 무엇을 할지 (쓰지 않음)
+    const tabs2 = {};
+    out.chainDry = chainsOf_(all).filter(function (c) { return c.runs.some(function (r) { return String(r['명단 제목']).indexOf(String(p.chain)) >= 0; }); })
+      .map(function (c) { return payStatusLink_(payChainRows_(c, tabs2), true); });
   } catch (e) { out.chainErr = String(e); }
   // &payhead=1: 월급시트(이달) 위쪽 머리 줄과 맨 아래 합계 줄의 값·수식, 완료보고(H)를 쓰는 수식 (진행비 총액이 어떻게 나오는지 보기, 읽기만)
   if (p.payhead) try {
@@ -8673,7 +8677,7 @@ function newMonthTab_(ss, month) {
       return row.map(function (f, c) {
         if (!f) return typeof vs[i][c] === 'boolean' ? false : '';
         if (c + 1 === L.left) return f.replace(/^(=[A-Z]+\d+-[A-Z]+\d+-[A-Z]+\d+)-\d+$/, '$1');
-        if (c + 1 === L.status) return f.replace(/IF\(\s*OR\(\s*([A-Z]+\d+)\s*=\s*0\s*,\s*[A-Z]+\d+\s*=\s*0\s*\)/, 'IF($1=0');
+        if (c + 1 === L.status) return f.replace(/IF\(\s*OR\(\s*([A-Z]+\d+)\s*=\s*0\s*,\s*(?:'(?:[^']|'')+'!|[^\s,()'!]+!)?[A-Z]+\d+\s*=\s*0\s*\)/, 'IF($1=0');   // '11월'!O30 꼴도 (11/9)
         return f;
       });
     }));
@@ -9099,35 +9103,35 @@ function payRate_() {
 }
 
 // 의뢰(같은 명단 시트 묶음)마다 월급시트 줄을 찾아 상태 칸을 마지막 날 줄에 잇기 (끝난 진행 줄도)
-function payStatusAll_(all) {
-  const tabs = {};
+function payChainRows_(c, tabs) {
   const tabOf = function (d) {
     const k = d.getFullYear() + '-' + (d.getMonth() + 1);
-    if (!tabs[k]) {
+    if (!(k in tabs)) {
       const sh = payTab_(d.getMonth() + 1), L = payLayout_(sh);
       const last = L ? Math.max(sh.getLastRow(), L.head) : 0;
       tabs[k] = L ? { sh: sh, L: L, names: sh.getRange(L.head + 1, L.name, Math.max(last - L.head, 1), 1).getValues().map(function (x) { return String(x[0]).replace(/\s+/g, ''); }) } : null;
     }
     return tabs[k];
   };
-  chainsOf_(all).forEach(function (c) {
-    // 하루짜리 의뢰도 (끝나면 완료보고 체크). 예전엔 2일 이상만 봐서 신발패드 문어괄사·노티아 대봉감·양모볼외가 빠졌음 (10/26)
-    if (!c.runs.length) return;
-    const rows = [];
-    c.runs.forEach(function (r) {
-      // 0명으로 끝낸 취소 진행은 빼기: 방제가 같은 날 진짜 줄(10.26 백발백중 기대평 42)에 이름 비교로 붙어서
-      //  그 줄 상태를 '자기 줄만 보기'로 되돌려 의뢰가 끝나도 '진행중'이었음 (11/9 사용자)
-      if (r['진행 상태'] === '종료' && !(Number(r['인원']) > 0)) return;
-      const t = tabOf(r['진행일']);
-      if (!t) return;
-      const nm = String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, '').replace(/\s+/g, '');
-      let i = t.names.indexOf(nm);
-      if (i === -1) i = t.names.findIndex(function (x) { return x && sameRunTitle_(x, nm); });
-      if (i !== -1) rows.push({ sh: t.sh, L: t.L, row: t.L.head + 1 + i, d: r['진행일'] });
-    });
-    rows.sort(function (a, b) { return a.d - b.d || a.row - b.row; });
-    payStatusLink_(rows);
+  const rows = [];
+  c.runs.forEach(function (r) {
+    // 0명으로 끝낸 취소 진행은 빼기: 방제가 같은 날 진짜 줄(10.26 백발백중 기대평 42)에 이름 비교로 붙어서
+    //  그 줄 상태를 '자기 줄만 보기'로 되돌려 의뢰가 끝나도 '진행중'이었음 (11/9 사용자, 피클 58f1a68)
+    if (r['진행 상태'] === '종료' && !(Number(r['인원']) > 0)) return;
+    const t = tabOf(r['진행일']);
+    if (!t) return;
+    const nm = String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, '').replace(/\s+/g, '');
+    let i = t.names.indexOf(nm);
+    if (i === -1) i = t.names.findIndex(function (x) { return x && sameRunTitle_(x, nm); });
+    if (i !== -1) rows.push({ sh: t.sh, L: t.L, row: t.L.head + 1 + i, d: r['진행일'] });
   });
+  rows.sort(function (a, b) { return a.d - b.d || a.row - b.row; });
+  return rows;
+}
+function payStatusAll_(all) {
+  const tabs = {};
+  // 하루짜리 의뢰도 (끝나면 완료보고 체크). 예전엔 2일 이상만 봐서 신발패드 문어괄사·노티아 대봉감·양모볼외가 빠졌음 (10/26)
+  chainsOf_(all).forEach(function (c) { if (c.runs.length) payStatusLink_(payChainRows_(c, tabs)); });
 }
 
 // 월급시트 진행시간: 바로구매 → 긴급건, 별과 '구매' 글자는 뺌 (자정 ~ 오전 8시 20분)
@@ -9362,7 +9366,7 @@ function payNewRowFromAbove_(sh, row, L) {
     sh.getRange(tpl, j + 1).copyTo(sh.getRange(row, j + 1));
   });
   if (L.status) {
-    const c = sh.getRange(row, L.status), f = c.getFormula(), re = new RegExp('OR\\(\\s*([A-Z]+)' + row + '\\s*=\\s*0\\s*,\\s*[A-Z]+\\d+\\s*=\\s*0\\s*\\)');
+    const c = sh.getRange(row, L.status), f = c.getFormula(), re = new RegExp('OR\\(\\s*([A-Z]+)' + row + "\\s*=\\s*0\\s*,\\s*(?:'(?:[^']|'')+'!|[^\\s,()'!]+!)?[A-Z]+\\d+\\s*=\\s*0\\s*\\)");   // 다른 탭 참조('12월'!O3)도 (11/9)
     if (re.test(f)) c.setFormula(f.replace(re, function (m, col) { return col + row + '=0'; }));
   }
   if (L.report) { try { const rc = sh.getRange(row, L.report); if (!rc.getFormula()) rc.setValue(false); } catch (e) {} }
@@ -9377,13 +9381,13 @@ function payNewRowFromAbove_(sh, row, L) {
 
 // 상태 칸: 의뢰가 다 끝나면(마지막 날 줄의 남은 = 0) 앞 날 줄도 '완료' (사용자 요청 10/18)
 //  사용자 수식 =IF(H5=0,"시작전",IF(N5=0,"완료",…))의 완료 조건만 IF(OR(N5=0,N마지막=0),"완료",…)로 바꿈. 마지막 날 줄은 원래 모양
-function payStatusLink_(rows) {
-  if (!rows.length) return;
-  const last = rows[rows.length - 1];
+function payStatusLink_(rows, dry) {
+  if (!rows.length) return [];
+  const last = rows[rows.length - 1], rep = [];
   // 의뢰가 다 끝나면(마지막 날 남은 = 0) 그 의뢰 모든 날 '완료보고' 체크 (표시만. 진행비는 10/18부터 그날 수량 × 500원이라 완료보고와 상관없음)
   //  줄마다 한 번만 체크 (사람이 체크를 풀면 다시 안 건드림)
   try {
-    if (last.L.left && last.L.report && last.sh.getRange(last.row, last.L.left).getValue() === 0) {
+    if (!dry && last.L.left && last.L.report && last.sh.getRange(last.row, last.L.left).getValue() === 0) {
       const props = PropertiesService.getScriptProperties();
       rows.forEach(function (x) {
         if (!x.L.report || x.sh.getSheetId() !== last.sh.getSheetId()) return;
@@ -9404,12 +9408,14 @@ function payStatusLink_(rows) {
     const c = x.sh.getRange(x.row, x.L.status), f = c.getFormula();
     const re = /IF\(\s*(?:OR\(\s*)?([A-Z]+)(\d+)\s*=\s*0\s*(?:,\s*(?:'(?:[^']|'')+'!|[^\s,()'!]+!)?(?:[A-Z]+\d+|#REF!)\s*=\s*0\s*\))?\s*,\s*"완료"/;
     const m = f.match(re);
-    if (!m || Number(m[2]) !== x.row) return;
+    if (!m || Number(m[2]) !== x.row) { rep.push(x.sh.getName() + '!' + x.row + ' 안 맞음 ' + (m ? m[0] : '') + ' | ' + f.slice(0, 120)); return; }
     const lastRef = (same ? '' : lastTab) + m[1] + last.row;
     const want = same && x.row === last.row ? 'IF(' + m[1] + m[2] + '=0,"완료"' : 'IF(OR(' + m[1] + m[2] + '=0,' + lastRef + '=0),"완료"';
     const nf = f.replace(re, want);
-    if (nf !== f) c.setFormula(nf);
+    rep.push(x.sh.getName() + '!' + x.row + (nf !== f ? ' 바꿈 → ' + want : ' 그대로'));
+    if (nf !== f && !dry) c.setFormula(nf);
   });
+  return rep;
 }
 
 function putFileChip_(sh, row, col, url) {
