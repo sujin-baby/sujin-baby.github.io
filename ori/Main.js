@@ -167,8 +167,14 @@ function campKey_(s) { return campOf_(s).replace(/(^|\s)실(\/빈)?(?=\s|$)/g, '
 // 같은 캠페인 진행들을 날짜순으로 묶어서 '한 의뢰'씩 나눔: 총건수를 다 채우면 다음 진행은 새 의뢰
 function chainsOf_(runs) {
   const by = {};
+  // 같은 명단 시트(= 같은 의뢰서)는 캠페인 이름이 중간에 바뀌어도 한 묶음, 이름은 가장 늦은 진행 것으로
+  //  (11/9: 1·2일차 캠페인이 '(업체명)황금향외', 3일차부터 '오늘과일 황금향외'라 두 의뢰로 나뉨 → 120건 다 했는데 11.10 진행이 또 생김)
+  const sidKey = {};
+  runs.filter(function (r) { return r['진행일'] instanceof Date && r['시트ID']; })
+    .sort(function (a, b) { return (a['진행일'] - b['진행일']) || (a.row - b.row); })
+    .forEach(function (r) { sidKey[String(r['시트ID'])] = campKey_(r['캠페인'] || r['명단 제목']); });
   runs.filter(function (r) { return r['진행일'] instanceof Date; }).forEach(function (r) {
-    const k = campKey_(r['캠페인'] || r['명단 제목']);
+    const k = (r['시트ID'] && sidKey[String(r['시트ID'])]) || campKey_(r['캠페인'] || r['명단 제목']);
     (by[k] = by[k] || []).push(r);
   });
   const chains = [];
@@ -3148,6 +3154,7 @@ function checkFullInner_() {
   // (10/24) 밀린 월급시트·정리를 맨 앞에서 하던 것 없앰: 월급시트가 6분 안에 안 끝나서 확인이 매번 맨 앞에서 끊겼고,
   //  그 뒤 일(다음 일차 만들기, 방 공지, 폼 트리거, 보낼 날짜)이 몇 시간 동안 하나도 안 됨. 이제 급한 일 먼저, 월급시트는 끝에서 나눠서 이어 함
   // 단계를 잘게 나눠서 폼수정 탭 삭제 같은 직접 하는 일이 덜 기다리게 (10/26 '진행목록' 단계가 126초 걸려 삭제가 2분 늦음)
+  try { fixGold1110Once_(); } catch (e) { note_('황금향외 11.10 정리 실패: ' + e); }
   step_('다음 일차');
   try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
   step_('다음 날 진행');
@@ -5569,6 +5576,21 @@ function assignSummary_(rows) {
 
 
 
+
+// (11/9 한 번) 이미 120건 다 한 '오늘과일 황금향외'(명단 잔여 0)에 잘못 생긴 11.10 진행(0명) 지우기 + 남은 계획(11.11·11.12) 건너뜀
+//  원인: 캠페인 이름이 중간에 바뀌어 묶음이 둘로 나뉨 (chainsOf_ 고침). 사용자 확인 11/9
+function fixGold1110Once_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FIX_GOLD1110')) return;
+  const r = runByRequest_('ytyiwjb3-6');
+  if (r && Number(r['인원']) === 0) note_('✓ ' + deleteRun_(r));
+  else if (r) note_('⚠ 황금향외 11.10 진행에 응답이 있어 안 지웠어요');
+  const ps = planSheet_(), pl = ps.getLastRow();
+  if (pl >= 2) ps.getRange(2, 1, pl - 1, 9).getValues().forEach(function (v, i) {
+    if (/^ytyiwjb3-\d+$/.test(String(v[0])) && String(v[8]) === '대기') ps.getRange(i + 2, 9).setValue('건너뜀 (이미 다 진행)');
+  });
+  props.setProperty('FIX_GOLD1110', String(new Date()));
+}
 
 // 잘못 만든 진행 지우기 (응답이 0명일 때만): 진행목록 줄, 보낼메시지의 대기 중 공지, 배정 줄, 월급시트 그 줄의 스크립트가 넣은 칸
 function deleteRun_(r) {
