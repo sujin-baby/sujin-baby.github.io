@@ -9610,8 +9610,9 @@ function buildDashboard_(force) {
     const setCol = mixDay ? (x.hd || []).findIndex(function (h) { return String(h).indexOf(EXP_SET_Q) >= 0; }) + 1 : 0, mxD = mixDay ? EXP_MIX[dateTok_(r['명단 제목'])] : null;
     if (mixDay && setCol > 0 && x.ref && x.start) {
       const v = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A' + x.start + ':' + colLetter_(setCol)) + ')';
+      // LET 안 배열 계산은 ARRAYFORMULA로 감싸야 함: 안 감싸면 w가 첫 줄 하나만 보고 0 → 기대평 신청 0·남은 40 (11/3 원인 확인, 11/9 고침)
       const fallbackVal = expCount_(r, Number(r['인원']) || 0, allRuns);
-      sh.getRange(rr, 6).setFormula('=IFERROR(LET(v,' + v + ',ts,INDEX(v,,1),s,INDEX(v,,' + setCol + '),w,ISNUMBER(ts)*(ts>=' + (w.from ? fmt(w.from) : 0) + ')*(ts<' + (isFinite(w.to) ? fmt(w.to) : 99999) + '),' +
+      sh.getRange(rr, 6).setFormula('=IFERROR(LET(v,' + v + ',ts,INDEX(v,,1),s,INDEX(v,,' + setCol + '),w,ARRAYFORMULA(ISNUMBER(ts)*(ts>=' + (w.from ? fmt(w.from) : 0) + ')*(ts<' + (isFinite(w.to) ? fmt(w.to) : 99999) + ')),' +
         'tot,SUMPRODUCT(w),na,SUMPRODUCT(w*(LEFT(s,1)="A")),nb,SUMPRODUCT(w*(LEFT(s,1)="B")),rest,MAX(0,tot-na-nb),adda,MIN(rest,MAX(0,' + mxD[0] + '-na)),calc,(na+adda)*' + EXP_SETS.A.length + '+(nb+rest-adda)*' + EXP_SETS.B.length + ',IF(tot=0,' + fallbackVal + ',calc)),' + fallbackVal + ')');
     }
     else if (mixDay) sh.getRange(rr, 6).setValue(expCount_(r, Number(r['인원']) || 0, allRuns));

@@ -651,7 +651,7 @@
     }
     const rk = (L.search.match(/[?&](?:searchRank|rank)=(\d+)/i) || [])[1] ? (Math.max(1, Math.ceil(Number(L.search.match(/[?&](?:searchRank|rank)=(\d+)/i)[1]) / 36)) + "p") : "";
     if (!pageLine) {
-      pageLine = rk ? rk : (blocked ? "1p" : MAX + "페이지 안에 없음 (쿠팡 화면에서 다른 필터로 직접 찾아 주세요)");
+      pageLine = rk ? rk : (blocked ? "못 찾음 (쇼핑몰이 막음)" : MAX + "페이지 안에 없음 (쿠팡 화면에서 다른 필터로 직접 찾아 주세요)");
     }
   }
   const out = [

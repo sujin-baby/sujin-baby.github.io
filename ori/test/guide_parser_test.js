@@ -532,6 +532,53 @@ const gPad = headPad.guides[0];
 if (gPad.keyword !== '코코스무 신발 뒤꿈치 패드') throw new Error('gPad keyword should be 코코스무 신발 뒤꿈치 패드, got: ' + gPad.keyword);
 if (gPad.option !== '블랙 (옵션단일)') throw new Error('gPad option should be 블랙 (옵션단일), got: ' + gPad.option);
 
+
+// ==========================================
+// 11/9 털깔창·십자가: 한 줄에 '2. 키워드 검색 시 현재 순위 :'가 붙어 옴, '230mmx2, 235mmx2, 240mmx2,' = 옵션마다 2건 날마다 하나씩, 머리 줄 가격 4개 = 옵션 수 합
+// ==========================================
+console.log('-- Test 11/9: 털깔창 NxM 옵션·날짜별 한 옵션·머리 가격 나누기');
+{
+  const req = `#입금대행 택대 9500 9700 9700 12700
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 털깔창 2. 키워드 검색 시 현재 순위 : 
+3. 총 구매 건수 : 6
+4. 일 진행 건수 : 2
+5. 상품주소(URL) : https://www.coupang.com/vp/products/9802134183?vendorItemId=96265158903
+6. 구매옵션 : 230mmx2, 235mmx2, 240mmx2, 
+7. 포토제공 유 무  : 무
+8. 리뷰내용 가이드 : 별점5개 + 자율작성
+9. 입금하실 입금자명 : 더호컴퍼니
+10.택배대행 Y/N: Y
+=============
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 십자가                                                                       2. 키워드 검색 시 현재 순위 : 
+3. 총 구매 건수 : 6
+4. 일 진행 건수 : 2
+5. 상품주소(URL) : https://www.coupang.com/vp/products/9516300672?vendorItemId=96292635976
+6. 구매옵션 : 브라운  
+7. 포토제공 유 무  : 무
+8. 리뷰내용 가이드 : 별점5개 + 자율작성
+9. 입금하실 입금자명 : 더호컴퍼니
+10.택배대행 Y/N: Y`;
+  const h = P.parseAll(req), g0 = h.guides[0], g1 = h.guides[1];
+  if (h.guides.length !== 2) throw new Error('털깔창: guides should be 2, got ' + h.guides.length);
+  if (g0.keyword !== '털깔창' || g1.keyword !== '십자가') throw new Error('털깔창: keywords wrong: ' + g0.keyword + ' / ' + g1.keyword);
+  if (g0.optBase.map(o => o.label + ':' + o.qty).join(',') !== '230mm:2,235mm:2,240mm:2') throw new Error('털깔창: options wrong: ' + JSON.stringify(g0.optBase));
+  const days = [1, 2, 3].map(d => P.optionText(g0, d)).join(' | ');
+  if (days !== '230mm (2명) | 235mm (2명) | 240mm (2명)') throw new Error('털깔창: per-day options wrong: ' + days);
+  if (g0.price !== '9500\n9700\n9700' || g1.price !== '12700') throw new Error('털깔창: prices wrong: ' + JSON.stringify([g0.price, g1.price]));
+  if (g1.option !== '브라운' || !h.takdae) throw new Error('십자가: option/takdae wrong');
+  // 합이 총 건수가 아니면(상품 개수 묶음일 수 있음) 안 나눔
+  const h2 = P.parseAll(req.replace('3. 총 구매 건수 : 6', '3. 총 구매 건수 : 10'));
+  if (h2.guides[0].optBase.length !== 1) throw new Error('NxM sum != total should not split');
+  console.log('✓ 털깔창·십자가 의뢰서 통과');
+}
+// 11/9: 로켓배송 아닌 쿠팡 상품은 공지에 강조 줄
+{ const html = fs.readFileSync(htmlPath, 'utf8');
+  if (!/" \(로켓아니에요!!!! 판매자변경 후 일반배송으로 구매해주세요\)"/.test(html)) throw new Error('non-rocket price note missing');
+  if (/MEMO_F = \[[^\]]*"page"/.test(html)) throw new Error('page must not be recalled from memory');
+  if (/blocked \? "1p"/.test(html)) throw new Error('blocked must not become 1p');
+  console.log('✓ 로켓 아님 가격 줄·위치 기억 안 함·막힘≠1p'); }
 console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (17개 샘플 전원 일치)');
 process.exit(0);
 
