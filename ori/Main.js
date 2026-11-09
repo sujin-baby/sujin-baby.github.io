@@ -1577,7 +1577,7 @@ function diag_(p) {
   // &pay=글자: 월급시트에서 캠페인명에 그 글자가 든 줄 (읽기만, 같은 진행이 두 줄인지 보기)
   if (p.pay) try {
     out.payRows = [];
-    payTabsNow_().forEach(function (sh) { const L = payLayout_(sh); if (!L) return; const last = sh.getLastRow(); if (last <= L.head) return; sh.getRange(L.head + 1, L.name, last - L.head, 1).getValues().forEach(function (x, i) {
+    (p.paym ? [payTab_(Number(p.paym), true)].filter(Boolean) : payTabsNow_()).forEach(function (sh) {   // &paym=10: 그 달 탭 (읽기만) const L = payLayout_(sh); if (!L) return; const last = sh.getLastRow(); if (last <= L.head) return; sh.getRange(L.head + 1, L.name, last - L.head, 1).getValues().forEach(function (x, i) {
       if (String(x[0]).indexOf(String(p.pay)) < 0) return;
       const row = L.head + 1 + i, lc = Math.min(sh.getLastColumn(), 60), hd = sh.getRange(L.head, 1, 1, lc).getDisplayValues()[0], dv = sh.getRange(row, 1, 1, lc).getDisplayValues()[0], fm = sh.getRange(row, 1, 1, lc).getFormulas()[0];
       out.payRows.push(sh.getName() + '!' + row + ' ' + x[0]);
