@@ -1569,6 +1569,7 @@ function diag_(p) {
         const lsh = SpreadsheetApp.openById(sid).getSheetByName(LIST_TAB); if (!lsh) return;
         const lc = Math.min(lsh.getLastColumn() + 2, 30), hd = lsh.getRange(2, 1, 1, lc).getValues()[0], cols = [];
         for (let c = 1; c <= lc; c++) { let d = 0, hid = false, col = ''; try { d = lsh.getColumnGroupDepth(c); } catch (e) {} try { hid = lsh.isColumnHiddenByUser(c); } catch (e) {} if (d > 0) { try { col = lsh.getColumnGroup(c, d).isCollapsed() ? '접힘' : '펼침'; } catch (e) { col = '?'; } } if (hid || d) cols.push(colLetter_(c) + '[' + String(hd[c - 1]).slice(0, 8) + ']' + (hid ? ' 숨김' : '') + (d ? ' 묶음' + d + col : '')); }
+        if (!cols.length) cols.push('(숨김·묶음 없음) 머리글: ' + hd.map(function (h, i) { return colLetter_(i + 1) + '=' + String(h).slice(0, 8); }).filter(function (x) { return !/=$/.test(x); }).join(' '));
         out.colgrp[bareTitle_(r['명단 제목'])] = cols.join(' | ') + ' · LISTHIDE=' + PropertiesService.getScriptProperties().getProperty('LISTHIDE_' + sid) + ' FIX1=' + PropertiesService.getScriptProperties().getProperty('LISTFIX1_' + sid);
       } catch (e) { out.colgrp[bareTitle_(r['명단 제목'])] = '오류 ' + e.message; }
     });
@@ -2822,16 +2823,18 @@ function listRegroup_(lss, real) {
   const hd = sh.getRange(2, 1, 1, sh.getLastColumn()).getValues()[0].map(hk_), cols = [];
   hd.forEach(function (h, i) { if (MATCH.account.test(h) || (real && MATCH.reviewFee.test(h))) cols.push(i + 1); });
   if (!cols.length || cols.some(function (c) { return sh.getColumnGroupDepth(c) > 0; })) return false;
-  if (!cols.some(function (c) { return sh.isColumnHiddenByUser(c); })) return false;
+  // 누가 ◀▶ 로 다시 펼쳐 둔 시트(11/9 구두주걱)는 묶기만 하고 펼친 채(−) 둠: 보이던 계좌 칸을 함부로 숨기지 않음
+  const open = !cols.some(function (c) { return sh.isColumnHiddenByUser(c); });
   cols.forEach(function (c) { sh.showColumns(c); });
   groupColumns_(sh, cols);
+  if (open) cols.forEach(function (c) { try { const g = sh.getColumnGroup(c, 1); if (g) g.expand(); } catch (e) {} });
   return cols.every(function (c) { return sh.getColumnGroupDepth(c) > 0; });
 }
 // (11/9 한 번) 최근 2주 명단 시트 계좌 칸 묶음 되살림
 function listRegroupAll1_(rr) {
   const props = PropertiesService.getScriptProperties();
-  if (props.getProperty('LISTGRP2')) return;   // 2: getEntireColumn 고친 뒤 다시 (1은 같은 이유로 실패)
-  props.setProperty('LISTGRP2', '1');
+  if (props.getProperty('LISTGRP3')) return;   // 2: getEntireColumn 고친 뒤 다시 (1은 같은 이유로 실패), 3: 펼쳐 둔 시트도 묶음(−)
+  props.setProperty('LISTGRP3', '1');
   const cut = today_().getTime() - 16 * 86400000, seen = {};
   let ok = 0, bad = 0;
   (rr || readRuns_()).forEach(function (r) {
