@@ -203,7 +203,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v162 (로켓 아님은 가격 줄 끝에, 가격은 그날 옵션 것만, 위치 기억·막힘 1p 없앰)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v163 (방제 20자 넘을 때 건수만 붙이고 업체명·상품 이름은 띄어 씀)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -2579,6 +2579,9 @@ details.help-box summary {
       return [head, sil, (names[0] || "") + "외", cnt].filter(Boolean).join(" ");
     }
     for (let n = toks.length; n >= 1; n--) if (spaced(n).length <= 20) return spaced(n);
+    // 20자가 넘으면 한꺼번에 다 붙이지 말고 건수만 먼저 붙임: '#11.10 엘비나프레시 설향딸기20' (11/9 사용자: 업체명과 상품 이름은 띄어 써야지)
+    const semi = n => [head, sil, shop, pick(n).join(" ") + multi + cnt].filter(Boolean).join(" ");
+    for (let n = toks.length; n >= 1; n--) if (semi(n).length <= 20) return semi(n);
     for (let n = toks.length; n >= 1; n--) if (tight(n).length <= 20) return tight(n);
     return tight(1);
   }
