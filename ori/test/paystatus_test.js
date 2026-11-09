@@ -21,5 +21,12 @@ ok(JSON.stringify([oct.f, nov.f]) === snap, '두 번 돌려도 그대로');
 const dec = tab('12월', 303, { 3: st(3, 'O3=0') });
 G('payStatusLink_')(rows.concat([{ sh: dec, L, row: 3 }]));
 ok(oct.f[5] === st(5, "OR(O5=0,'12월'!O3=0)") && nov.f[30] === st(30, "OR(O30=0,'12월'!O3=0)"), '12월로 이어짐 ' + oct.f[5] + ' / ' + nov.f[30]);
+// 지운 줄을 보던 상태 칸(#REF!)도 마지막 날 줄로 다시 이음 (11/9 황금향외 11.10 줄 삭제)
+const nv2 = tab('11월', 404, { 10: st(10, 'OR(O10=0,#REF!=0)'), 41: st(41, 'O41=0') });
+G('payStatusLink_')([{ sh: nv2, L, row: 10 }, { sh: nv2, L, row: 41 }]);
+ok(nv2.f[10] === st(10, 'OR(O10=0,O41=0)'), '#REF! → 마지막 줄 ' + nv2.f[10]);
+// 0명 취소 진행(같은 날 같은 방제)은 묶음에서 빼서 진짜 줄 이음을 되돌리지 않음
+const src = require('fs').readFileSync(process.argv[2], 'utf8');
+ok(/function payStatusAll_[\s\S]{0,1600}'종료' && !\(Number\(r\['인원'\]\) > 0\)\) return;/.test(src), 'payStatusAll_가 0명 취소 진행을 뺌');
 console.log(fails.length ? 'XX 월급시트 상태 잇기 시험 실패:\n- ' + fails.join('\n- ') : '✓ 월급시트 상태: 다음 달 탭 마지막 줄로 이음 시험 통과');
 process.exit(fails.length ? 1 : 0);
