@@ -203,7 +203,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v161 (로켓배송 아닌 쿠팡 상품은 공지에 판매자변경·일반배송 강조)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v162 (로켓 아님은 가격 줄 끝에, 가격은 그날 옵션 것만, 위치 기억·막힘 1p 없앰)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -1092,7 +1092,7 @@ details.help-box summary {
     }
     const rk = (L.search.match(/[?&](?:searchRank|rank)=(\d+)/i) || [])[1] ? (Math.max(1, Math.ceil(Number(L.search.match(/[?&](?:searchRank|rank)=(\d+)/i)[1]) / 36)) + "p") : "";
     if (!pageLine) {
-      pageLine = rk ? rk : (blocked ? "1p" : MAX + "페이지 안에 없음 (쿠팡 화면에서 다른 필터로 직접 찾아 주세요)");
+      pageLine = rk ? rk : (blocked ? "못 찾음 (쇼핑몰이 막음)" : MAX + "페이지 안에 없음 (쿠팡 화면에서 다른 필터로 직접 찾아 주세요)");
     }
   }
   const out = [
@@ -1961,7 +1961,8 @@ details.help-box summary {
     return true;
   };
   const MEMO_KEY = "guide-gen-products";
-  const MEMO_F = ["seller", "sellerEdited", "pname", "pno", "page", "pageM", "similar", "price", "thumb", "guide"];
+  // 위치(page·pageM)는 기억에서 안 가져옴: 날마다 바뀌어서 예전 진행의 '1p'가 그대로 공지에 들어감 (11/9 십자가 사용자 지적)
+  const MEMO_F = ["seller", "sellerEdited", "pname", "pno", "similar", "price", "thumb", "guide"];
   const memoKey = g => (g.keyword || "").replace(/\s+/g, "");
   const filled = (k, val) => k === "pno" ? /\d{6,}/.test(val || "") : !!String(val || "").trim();
   // 기억한 가격은 이번 의뢰서 옵션(상품) 자리가 다 찬 것만 불러옴. 예전에 가격 하나만 기억한 건 어느 옵션 가격인지 몰라서 다시 가져옴 (10/24)
@@ -2846,16 +2847,22 @@ details.help-box summary {
     const product = guides.map((g, i) => {
       // 배송비가 붙으면 가격 = 상품 가격 + 배송비 (사용자 요청 10/20)
       const shipN = Number(String(g.ship || "").replace(/[^0-9]/g, "")) || 0;
-      const opts = lines(g.option), need = priceNeed(g), lab = priceLabels(g, need).map(bareOpt);
-      const prices = Array.from({ length: need.n }, (_, k) => priceAt(g)[k] || "").map(p => shipN && hasNum(p) ? String(Number(p.replace(/[^0-9]/g, "")) + shipN) : p);
+      const opts = lines(g.option), need = priceNeed(g);
+      let lab = priceLabels(g, need).map(bareOpt);
+      let prices = Array.from({ length: need.n }, (_, k) => priceAt(g)[k] || "").map(p => shipN && hasNum(p) ? String(Number(p.replace(/[^0-9]/g, "")) + shipN) : p);
+      // 그날 0명인 옵션은 옵션 칸에서 빠지니 가격도 그날 옵션 것만 (11/9 털깔창 1일차: 옵션 230mm (2명) → 가격 9,500만)
+      { const br = (g.optBase || []).length > 1 ? allocDay(g, Number($("day").value) || 1) : null;
+        if (br && br.length === prices.length && lab.length === prices.length && br.some(x => x === 0)) { const keep = br.map(x => x > 0); prices = prices.filter((_, k) => keep[k]); lab = lab.filter((_, k) => keep[k]); } }
+      // 쿠팡 상품 페이지를 읽어 보니 로켓배송이 아니면 가격 줄 끝에 (사용자 요청·형식 11/9)
+      const rocketTxt = (g.platform === "쿠팡" || !g.platform) && g.cpFetched && !g.cpRocket ? " (로켓아니에요!!!! 판매자변경 후 일반배송으로 구매해주세요)" : "";
       const shipTxt = shipN ? " (배송비 " + shipN.toLocaleString("ko-KR") + "원 포함)" : "";
       // 한 상품에 옵션이 여럿이면 옵션 한 칸, 가격 한 칸에 줄을 나눠 씀 (사장님 형식)
       // 옵션마다 가격이 다 같으면 '🐥가격 : 12,900' 한 번만. 옵션(상품)마다 가격이 다르거나 아직 없는 가격이 있으면 옵션마다 한 줄 (가격 하나만 보이는 일 없게, 10/24)
       const pTxt = p => hasNum(p) ? money(p) : "❗가격 넣기";
       const samePrice = prices.length <= 1 || prices.every(p => hasNum(p) && money(p) === money(prices[0]));
       const optLines = samePrice
-        ? ["🐥옵션 : " + (opts.length <= 1 ? (opts[0] || "") : opts.join("\n")), "🐥가격 : " + pTxt(prices[0]) + (hasNum(prices[0]) ? shipTxt : "")]
-        : ["🐥옵션 : " + (opts.length ? opts.join("\n") : ""), "🐥가격 : " + prices.map((p, k) => (lab[k] || "") + " " + pTxt(p)).join("\n") + shipTxt];
+        ? ["🐥옵션 : " + (opts.length <= 1 ? (opts[0] || "") : opts.join("\n")), "🐥가격 : " + pTxt(prices[0]) + (hasNum(prices[0]) ? shipTxt : "") + rocketTxt]
+        : ["🐥옵션 : " + (opts.length ? opts.join("\n") : ""), "🐥가격 : " + prices.map((p, k) => (lab[k] || "") + " " + pTxt(p)).join("\n") + shipTxt + rocketTxt];
       const mix = reviewMix(g);
       const dm = dayMix(g, Number($("day").value) || 1);
       const mixLine = dm && dm.length ? mixText(dm) : mixText(mix);
@@ -2877,8 +2884,6 @@ details.help-box summary {
         g.short ? "링크타고 검색▼( 상번이 네이버일때 무시)" : null,
         g.short || null,
         "🐥판매처 : " + (isBlockedText(g.seller) || !okSeller(g.seller) ? "" : (g.seller || "")) + ((g.platform === "쿠팡" || !g.platform) && g.cpFetched && !g.cpRocket && (g.seller || "").trim() && !isBlockedText(g.seller) && okSeller(g.seller) ? " (판매자변경 로켓xxxxxx)" : ""),
-        // 상품 페이지를 읽어 보니 로켓배송이 아니면 크게 알림 (사용자 요청 11/9)
-        (g.platform === "쿠팡" || !g.platform) && g.cpFetched && !g.cpRocket ? "⚠️★로켓배송 아니에요! 판매자변경 후 일반배송으로 구매해주세요★⚠️" : null,
         "🐥상품명 : " + (isBlockedText(g.pname) ? (g.keyword || "") : baseName(g.pname || "", null, g)),
         // 쿠팡 상품번호는 10자리 안팎. 11자리 넘게 붙으면(11/2 황금향 99799819790: 앞에 9가 하나 더) 공지에 ❗를 붙여 보내기 전에 보이게
         "🐥상품번호 : " + lines(g.pno).map(l => ((g.platform === "쿠팡" || !g.platform) && /^\s*\d{11,}/.test(l) ? "❗자리수 확인 " : "") + l).join("\n"),
