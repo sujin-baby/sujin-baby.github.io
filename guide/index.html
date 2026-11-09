@@ -203,7 +203,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v165 (옵션 뒤 가격 분리·첫페이지 필터 보존·토스 위치 1p)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v166 (방제 20자 넘으면 상품 이름 줄임)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -2534,7 +2534,24 @@ details.help-box summary {
     if (best.length < 2) pn.split(/[\s\[\],/]+/).forEach(w => { const x = suf(kw, w); if (x.length >= 2 && x.length > best.length) best = x; });
     return best.length >= 2 ? best : shortName(g.keyword || "");
   }
-  function makeRoom(date, cnt) {
+  // 카톡 방제는 20자까지 (11/10 사용자: 21자부터 안 됨). 어떤 길로 만들어도 마지막에 한 번 더 맞춤:
+  //  끝 건수 앞 띄어쓰기 → 끝 낱말(상품 이름)을 뒤에서부터 줄임('외'는 남김) → 그래도 넘으면 글자 수대로 자름
+  function fitRoom20(s) {
+    s = String(s || "");
+    if (s.length <= 20) return s;
+    const m = s.match(/^(\S+)\s+(.*?)\s*(\d+)$/);
+    if (!m) return s.slice(0, 20);
+    const head = m[1], c = m[3], mid = m[2];
+    if ((head + " " + mid + c).length <= 20) return head + " " + mid + c;
+    const ws = mid.split(" "), last0 = ws.pop(), pre = ws.join(" "), wae = /외$/.test(last0) ? "외" : "", last = wae ? last0.slice(0, -1) : last0;
+    for (let k = last.length - 1; k >= 2; k--) { const t = head + " " + (pre ? pre + " " : "") + last.slice(0, k) + wae + c; if (t.length <= 20) return t; }
+    // 상품 이름을 2자 아래로는 못 줄이면 앞 낱말(업체명 등)을 뺌, '실'은 남김: '#10.27 실 유앤아이푸드 효자손외 20' → '#10.27 실 효자손외 20'
+    const sil = ws[0] === "실" ? "실" : "", rest = sil ? ws.slice(1) : ws.slice();
+    while (rest.length) { rest.shift(); const md = [sil].concat(rest, [last0]).filter(Boolean).join(" "); for (const t of [head + " " + md + " " + c, head + " " + md + c]) if (t.length <= 20) return t; }
+    return (head + " " + mid).slice(0, 20 - c.length) + c;
+  }
+  function makeRoom(date, cnt) { return fitRoom20(makeRoom0(date, cnt)); }
+  function makeRoom0(date, cnt) {
     const t = type(), tk = $("takdae").checked;
     const g1 = guides[0] || {};
     const head = (t === "입대" ? "#" : "업") + (tk ? "택" : "") + date;
@@ -2607,6 +2624,9 @@ details.help-box summary {
     const semi = n => [head, sil, shop, pick(n).join(" ") + multi + cnt].filter(Boolean).join(" ");
     for (let n = toks.length; n >= 1; n--) if (semi(n).length <= 20) return semi(n);
     for (let n = toks.length; n >= 1; n--) if (tight(n).length <= 20) return tight(n);
+    // 그래도 20자가 넘으면 상품 이름을 뒤에서부터 줄이고 업체명과는 띄어 씀 (11/10 사용자: '#택11.10 싱싱곳간시나노골드사과10' 21자 → '#택11.10 싱싱곳간 시나노골드10')
+    const w1 = pick(1).join("");
+    for (let k = w1.length - 1; k >= 2; k--) { const s1 = [head, sil, shop, w1.slice(0, k) + multi + cnt].filter(Boolean).join(" "); if (s1.length <= 20) return s1; }
     return tight(1);
   }
 
@@ -2788,7 +2808,7 @@ details.help-box summary {
     { const g1 = guides[0] || {}, had = g1.seller; if (!String(had || "").trim()) g1.seller = "{판매처}"; try { roomTpl = makeRoom(date, sumDaily(guides)); } catch (e) { roomTpl = room; } finally { g1.seller = had; } }
     $("o-room").textContent = room;
     $("o-list").textContent = room + " (" + NICK + ")";
-    $("room-len").textContent = room.length + "자" + (room.length > 20 ? " (20자 넘음, 짧은 상품명을 줄여 주세요)" : "");
+    $("room-len").textContent = room.length + "자" + (room.length > 20 ? " (20자 넘음, 짧은 상품명을 줄여 주세요)" : room.length === 20 ? " (최대)" : "");
     try { updateProductLink(); } catch (e) {}   // 썸네일 파일 이름(폼 제목)이 방제를 따라가게
 
     const g0 = guides[cur] || {};

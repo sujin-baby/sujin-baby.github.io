@@ -468,7 +468,22 @@ function workdayOnOrAfter_(d) {
   return x;
 }
 // 방제·명단 제목의 날짜(10.17)를 바꿈
-function retitleDate_(t, d) { return String(t || '').replace(/\d{1,2}\.\d{1,2}/, (d.getMonth() + 1) + '.' + d.getDate()); }
+function retitleDate_(t, d) { return fitRoom20_(String(t || '').replace(/\d{1,2}\.\d{1,2}/, (d.getMonth() + 1) + '.' + d.getDate())); }
+// 카톡 방제는 20자까지 (11/10 사용자: 21자부터 안 됨). 날짜가 한 자리 늘어(11.9 → 11.10) 넘을 때: 끝 건수 앞 띄어쓰기 → 끝 낱말을 뒤에서부터 줄임('외'는 남김)
+//  끝의 ' (뽀짝오리)'는 그대로. 생성기 fitRoom20과 같은 규칙
+function fitRoom20_(t) {
+  const s = String(t || ''), nick = (s.match(/\s*\([^)]*\)\s*$/) || [''])[0], b = s.slice(0, s.length - nick.length).trim();
+  if (b.length <= 20) return s;
+  const m = b.match(/^(\S+)\s+(.*?)\s*(\d+)$/);
+  if (!m) return s;
+  const head = m[1], c = m[3], mid = m[2];
+  if ((head + ' ' + mid + c).length <= 20) return head + ' ' + mid + c + nick;
+  const ws = mid.split(' '), last0 = ws.pop(), pre = ws.join(' '), wae = /외$/.test(last0) ? '외' : '', last = wae ? last0.slice(0, -1) : last0;
+  for (let k = last.length - 1; k >= 2; k--) { const x = head + ' ' + (pre ? pre + ' ' : '') + last.slice(0, k) + wae + c; if (x.length <= 20) return x + nick; }
+  const sil = ws[0] === '실' ? '실' : '', rest = sil ? ws.slice(1) : ws.slice();   // 그래도 넘으면 앞 낱말(업체명 등)을 뺌, '실'은 남김
+  while (rest.length) { rest.shift(); const md = [sil].concat(rest, [last0]).filter(Boolean).join(' '), xs = [head + ' ' + md + ' ' + c, head + ' ' + md + c]; for (let i = 0; i < xs.length; i++) if (xs[i].length <= 20) return xs[i] + nick; }
+  return (head + ' ' + mid).slice(0, 20 - c.length) + c + nick;
+}
 
 function dayStart_(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x.getTime(); }
 
@@ -1738,7 +1753,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3205,6 +3220,7 @@ function checkFullInner_() {
   try { payChkRecheck1_(runs); } catch (e) { note_('결제금액 확인 다시 보기 실패: ' + e); }
   try { carrySeol1_(); } catch (e) {}
   try { seolRename1_(); } catch (e) {}
+  try { singRename1_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
   try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
@@ -4986,6 +5002,24 @@ function seolRename1_() {
     if (ok) { try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); } }
   } catch (e) { props.setProperty('SEOLREN1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
+// (11/10 한 번, 사용자: 카톡 방제 20자까지. 방금 만든 건 '#택11.10 싱싱곳간 시나노골드10'으로 방제 바꿨으니 맞춰 둬)
+//  21자 '#택11.10 싱싱곳간시나노골드사과10' / 다음 날 '#택11.11 …' → renameRun_ (진행목록·카톡방·보낼메시지·배정·월급시트·명단 시트 이름). 상품 이름이 줄어 월급시트는 이름 비교를 건너뜀
+function singRename1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SINGREN1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const runs = readRuns_(), nk = function (t) { return bareTitle_(t).replace(/\s+/g, ''); }, out = [];
+    [['#택11.10싱싱곳간시나노골드사과10', '#택11.10 싱싱곳간 시나노골드10'], ['#택11.11싱싱곳간시나노골드사과10', '#택11.11 싱싱곳간 시나노골드10']].forEach(function (x) {
+      const r = runs.filter(function (q) { return nk(q['명단 제목']) === x[0]; })[0];
+      if (!r) { out.push(x[1] + (runs.some(function (q) { return bareTitle_(q['명단 제목']) === x[1]; }) ? ' (이미)' : ' 진행 못 찾음')); return; }
+      globalThis.__PAY_RENAME_ANY = true;
+      try { out.push(renameRun_(r, x[1], '방제 20자 (사용자 11/10)') ? x[1] : x[1] + ' 안 바뀜'); } finally { globalThis.__PAY_RENAME_ANY = false; }
+    });
+    const ok = out.every(function (x) { return !/못 찾음|안 바뀜/.test(x); });
+    props.setProperty('SINGREN1', (ok ? '✓ ' : st + ' 실패(') + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + out.join(', ') + (ok ? '' : ')'));
+    if (ok) { try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); } }
+  } catch (e) { props.setProperty('SINGREN1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
 // 실행이 끝날 때 (로더 이름 함수 감쌈): 보낼메시지가 바뀌었으면 바뀐 탭만 다시 그림. 모아보기 체크 직후엔 안 그림 (줄이 안 움직이게)
 function msgViewSync_() {
   if (globalThis.__MSGV_SKIP) { globalThis.__MSGV_SKIP = false; return; }
@@ -5043,9 +5077,51 @@ function msgViewEdit_(e, gi) {
     sh.getRange(row, 1, 1, MSGV_COLS).setBackgrounds([st.bg]).setFontColors([st.fc]).setFontWeights([st.fw]);
     if (MSGV_GROUPS[gi].req) { try { sh.getRange(row, 6).setBackground(on ? '#f3f3f3' : '#fafafa').setFontColor(on ? '#9e9e9e' : '#555555'); } catch (err) {} }
   }
+  // 리뷰비(페이백) 요청 ↔ 취완 같이 체크 (11/10 사용자: 카톡방에 '리뷰비 요청완+취완'을 한 번에 올리는데 탭 두 개에서 따로 체크해야 했음)
+  try { const pn = msgvPairSync_(ob, orows, ids, vals, n, gi); if (pn) sentNote.push(pn); } catch (err) {}
   if (sentNote.length && !moved.length) toast(sentNote.filter(function (x, i, a) { return a.indexOf(x) === i; }).join(' · '), 10);
   if (moved.length) toast('목록이 방금 다시 그려져서 ' + moved.join(', ') + '행 체크는 되돌렸어요. 메시지를 다시 확인하고 체크해 주세요', 12);
   else if (gone.length) toast(gone.join(', ') + '행 메시지는 이미 지워진 거예요 (곧 목록에서 빠져요)', 10);
+}
+
+// 체크한 메시지가 취완·리뷰비 요청·페이백 요청이면 같은 카톡방 짝도 같은 상태로: 그 방 취완 + 그 방 진행들의 리뷰비/페이백 요청
+//  짝 탭은 바로 다시 그림. 바꾼 게 있으면 알림 글
+const MSGV_PAIR_KINDS = ['취완', '리뷰비 요청', '페이백 요청'];
+function msgvPairSync_(ob, orows, ids, vals, n, cur) {
+  const at = {}; orows.forEach(function (x, i) { at[String(x[0])] = i; });
+  const runs = readRuns_(), roomOf = function (r) { return String(r['카톡방'] || bareTitle_(r['명단 제목'])); };
+  const roomsOfMsg = function (y) {
+    if (String(y[2]) === '취완') return [String(y[3]).replace(/\s*\(전체 \d+개 방\)$/, '')];
+    return rvCollRunsOf_(y, runs).map(roomOf);
+  };
+  const want = {}, done = {};   // 방 → 켬/끔
+  for (let i = 0; i < n; i++) {
+    const v = vals[i][0], on = v === true || String(v).toUpperCase() === 'TRUE';
+    String(ids[i][0]).split(',').forEach(function (id) {
+      const y = at[id] != null ? orows[at[id]] : null;
+      if (!y || MSGV_PAIR_KINDS.indexOf(String(y[2])) < 0) return;
+      done[id] = 1;
+      roomsOfMsg(y).forEach(function (rm) { if (rm) want[rm] = on; });
+    });
+  }
+  if (!Object.keys(want).length) return '';
+  let k = 0, kinds = {};
+  orows.forEach(function (y) {
+    const id = String(y[0]);
+    if (done[id] || MSGV_PAIR_KINDS.indexOf(String(y[2])) < 0) return;
+    const rms = roomsOfMsg(y), hit = rms.filter(function (rm) { return rm in want; })[0];
+    if (hit === undefined) return;
+    const on = want[hit];
+    if (on === (y[5] === '보냄')) return;
+    obSet_(ob, id, 6, on ? '보냄' : '대기');
+    try { if (on) PropertiesService.getScriptProperties().setProperty('MSGV_S_' + id, String(Date.now())); else PropertiesService.getScriptProperties().deleteProperty('MSGV_S_' + id); } catch (e) {}
+    try { if (/^(리뷰비 요청|페이백 요청|취완)$/.test(String(y[2]))) rvSetColl_(y, on, null, runs); } catch (e) {}
+    k++; kinds[String(y[2])] = 1;
+  });
+  if (!k) return '';
+  ['pay', 'done'].forEach(function (key) { const gi = MSGV_GROUPS.map(function (g) { return g.key; }).indexOf(key); if (gi >= 0 && gi !== cur) { try { msgViewBuild_(true, gi); } catch (e) {} } });   // 지금 체크한 탭은 줄이 안 움직이게 그대로
+  const on1 = want[Object.keys(want)[0]];
+  return Object.keys(kinds).join('·') + ' ' + k + '개도 같이 ' + (on1 ? '보냄 체크했어요' : '체크를 풀었어요');
 }
 
 /* ---------------- 진행 도우미 (휴대폰 페이지): 공지 붙여넣기, 중복 지우기, 내일 추가 모집을 한 화면에서 ---------------- */
@@ -8961,6 +9037,15 @@ function updatePay_(resumable) {
   try { fixPaySunnyOnce_(); } catch (e) { note_('월급시트 써니마켓 정리 실패: ' + e); }
   try { payTabsNow_().forEach(payDateCol_); } catch (e) { note_('월급시트 진행일 칸 만들기 실패: ' + e); }
   const nameOf = payNameOf_;
+  // 캠페인명은 있는데 남은 칸 수식이 없는 줄(테두리·총액·남은·완료·상태가 빠진 줄) → 위 줄 모양·수식 복사, 그 줄은 이번에 다시 씀 (11/10 사용자)
+  if (!prog || !prog.done.length) {
+    try {
+      const fixed = {};
+      const known = {}; runs.forEach(function (r) { known[nameOf(r).replace(/\s+/g, '')] = 1; });   // 진행목록에 있는 진행 줄만 (손으로 넣은 줄·이월 줄은 안 건드림)
+      payTabsNow_().forEach(function (sh) { payRepairRows_(sh, known).forEach(function (nm) { fixed[nm] = 1; }); });
+      if (Object.keys(fixed).length) Object.keys(rowSig).forEach(function (k) { if (fixed[String(k.split('|').slice(1).join('|')).replace(/\s+/g, '')]) delete rowSig[k]; });
+    } catch (e) { note_('월급시트 줄 모양 고치기 실패: ' + e); }
+  }
   runs.forEach(function (r) {
     const rid = r.row + '|' + nameOf(r);
     if (prog && prog.done.indexOf(rid) >= 0) return;
@@ -8977,9 +9062,10 @@ function updatePay_(resumable) {
     function () { payTabsNow_().forEach(payOrder_); },
     function () { payTabsNow_().forEach(payColors_); },
     function () { payRate_(); },
-    function () { const m0 = new Date().getMonth() + 1; payTab_(m0); payCarry_(all, m0); payCarry_(all, m0 % 12 + 1); }
+    function () { const m0 = new Date().getMonth() + 1; payTab_(m0); payCarry_(all, m0); payCarry_(all, m0 % 12 + 1); },
+    function () { payTabsNow_().forEach(paySpareRows_); }
   ];
-  const postName = ['캠페인 색', '중복 줄', '상태', '날짜순 정렬', '캠페인 색', '진행비', '이월'];
+  const postName = ['캠페인 색', '중복 줄', '상태', '날짜순 정렬', '캠페인 색', '진행비', '이월', '여분 줄'];
   for (let i = prog ? prog.post : 0; i < post.length; i++) {
     if (tooLate()) stop(postName[i] + ' 단계');
     try { subTime_('월급시트: ' + postName[i], post[i]); } catch (e) { note_('월급시트 ' + postName[i] + ' 실패: ' + e); }
@@ -9346,6 +9432,56 @@ function writePayRow_(r, name, remain, prevMonth, shared, ex) {
 // 월급시트 새 줄(row)을 바로 위 진행 줄 모양으로: 서식·체크칸 복사 + 수식이 있는 칸만 하나씩 복사(상대 참조는 새 줄로 바뀜). 값은 안 가져옴
 //  위 줄 = 남은 칸 수식이 '=X줄-Y줄-Z줄' 모양인 가장 가까운 진행 줄 (합계 줄 같은 건 건너뜀). 상태 칸 OR(…마지막 날…)은 이 줄만 보게 되돌림
 //  자동 칸 보호 범위가 위 줄까지만이면 새 줄까지 늘림 (11/5 피클 인계: 보호가 17행까지라 18행부터 안 막혔음)
+// 줄 모양 고치기 (11/10 사용자: 일수가 추가될 때마다 테두리가 없어지고 진행중·완료 칸도 없어짐)
+//  캠페인명이 있는데 남은 칸 수식이 없는 줄 → payNewRowFromAbove_ (위 15줄 안 제대로 된 줄의 서식·체크칸·수식, 값 칸은 그대로)
+//  남은 칸의 '-앞 날 수량'은 본보기 줄 것이라 떼고, 그 줄은 updatePay_가 바로 다시 써서 맞춤. 고친 줄 캠페인명(띄어쓰기 뺌) 목록
+function payRepairRows_(sh, known) {
+  const L = payLayout_(sh);
+  if (!L || !L.left || !L.name) return [];
+  const last = sh.getLastRow();
+  if (last <= L.head + 1) return [];
+  const n = last - L.head, names = sh.getRange(L.head + 1, L.name, n, 1).getValues(), lf = sh.getRange(L.head + 1, L.left, n, 1).getFormulas(), out = [];
+  const notes = L.note ? sh.getRange(L.head + 1, L.note, n, 1).getValues() : null;
+  for (let i = 0; i < n; i++) {
+    const nm = String(names[i][0]).trim(), row = L.head + 1 + i;
+    if (!nm || lf[i][0] || row - 1 <= L.head) continue;
+    if (known && !known[nm.replace(/\s+/g, '')]) continue;
+    if (notes && /이월/.test(String(notes[i][0]))) continue;
+    if (!payNewRowFromAbove_(sh, row, L)) continue;
+    const c = sh.getRange(row, L.left), f = c.getFormula(), m = f.match(/^(=[A-Z]+\d+-[A-Z]+\d+-[A-Z]+\d+)-\d+$/);
+    if (m) c.setFormula(m[1]);
+    out.push(nm.replace(/\s+/g, ''));
+  }
+  if (out.length) note_('✓ 월급시트 ' + sh.getName() + ': 테두리·수식이 빠진 줄 ' + out.length + '개 고침 (' + out.slice(0, 4).join(', ') + (out.length > 4 ? ' …' : '') + ')');
+  return out;
+}
+// 표 아래 여분 줄 (11/10 사용자: 밑에 여분 줄이 없음): 마지막 캠페인 줄 아래 5줄을 그 줄 모양(테두리·색·체크칸)으로. 값·수식은 안 넣음
+//  아무것도 안 적힌 줄만 모양을 입힘 (적어 둔 게 있으면 그대로), 시트 끝이 모자라면 줄을 늘림
+const PAY_SPARE = 5;
+function paySpareRows_(sh) {
+  const L = payLayout_(sh);
+  if (!L || !L.name || !L.left) return;
+  const last = sh.getLastRow();
+  if (last <= L.head) return;
+  const names = sh.getRange(L.head + 1, L.name, last - L.head, 1).getValues().map(function (x) { return !!String(x[0]).trim(); });
+  const li = names.lastIndexOf(true);
+  if (li < 0) return;
+  const tpl = L.head + 1 + li, lf = sh.getRange(tpl, L.left).getFormula();
+  if (!/^=[A-Z]+\d+-[A-Z]+\d+-[A-Z]+\d+(-\d+)?$/.test(lf)) return;   // 본보기 줄이 제대로일 때만
+  const max = sh.getMaxRows();
+  if (max - tpl < PAY_SPARE) sh.insertRowsAfter(max, PAY_SPARE - (max - tpl));
+  const ncol = sh.getLastColumn(), rg = sh.getRange(tpl + 1, 1, PAY_SPARE, ncol), vs = rg.getValues(), fs = rg.getFormulas(), src = sh.getRange(tpl, 1, 1, ncol);
+  let k = 0;
+  vs.forEach(function (row, i) {
+    if (row.some(function (v, j) { return (v !== '' && v !== false) || fs[i][j]; })) return;   // 뭐라도 적힌 줄은 그대로
+    const dst = sh.getRange(tpl + 1 + i, 1, 1, ncol);
+    src.copyTo(dst, SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+    try { src.copyTo(dst, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false); } catch (e) {}
+    if (L.name) sh.getRange(tpl + 1 + i, L.name).setBackground(null);   // 캠페인 색은 캠페인 줄에만
+    k++;
+  });
+  return k;
+}
 function payNewRowFromAbove_(sh, row, L) {
   const ncol = sh.getLastColumn(), pat = function (f, r) { const m = String(f || '').match(/^=([A-Z]+)(\d+)-([A-Z]+)(\d+)-([A-Z]+)(\d+)(?:-\d+)?$/); return !!m && Number(m[2]) === r && Number(m[4]) === r && Number(m[6]) === r; };
   let tpl = 0;
@@ -9369,7 +9505,7 @@ function payNewRowFromAbove_(sh, row, L) {
     const c = sh.getRange(row, L.status), f = c.getFormula(), re = new RegExp('OR\\(\\s*([A-Z]+)' + row + "\\s*=\\s*0\\s*,\\s*(?:'(?:[^']|'')+'!|[^\\s,()'!]+!)?[A-Z]+\\d+\\s*=\\s*0\\s*\\)");   // 다른 탭 참조('12월'!O3)도 (11/9)
     if (re.test(f)) c.setFormula(f.replace(re, function (m, col) { return col + row + '=0'; }));
   }
-  if (L.report) { try { const rc = sh.getRange(row, L.report); if (!rc.getFormula()) rc.setValue(false); } catch (e) {} }
+  if (L.report) { try { const rc = sh.getRange(row, L.report), rv = rc.getValue(); if (!rc.getFormula() && rv !== true && rv !== false) rc.setValue(false); } catch (e) {} }   // 이미 체크한 줄(고치기)은 그대로
   try {
     sh.getProtections(SpreadsheetApp.ProtectionType.RANGE).forEach(function (p) {
       const g = p.getRange(), end = g.getRow() + g.getNumRows() - 1;
