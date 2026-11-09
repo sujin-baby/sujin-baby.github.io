@@ -203,7 +203,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v162 (로켓 아님은 가격 줄 끝에, 가격은 그날 옵션 것만, 위치 기억·막힘 1p 없앰)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v164 (상품 기억을 키워드 말고 상품번호로: 다른 업체 판매처가 안 들어가게)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -1963,7 +1963,9 @@ details.help-box summary {
   const MEMO_KEY = "guide-gen-products";
   // 위치(page·pageM)는 기억에서 안 가져옴: 날마다 바뀌어서 예전 진행의 '1p'가 그대로 공지에 들어감 (11/9 십자가 사용자 지적)
   const MEMO_F = ["seller", "sellerEdited", "pname", "pno", "similar", "price", "thumb", "guide"];
-  const memoKey = g => (g.keyword || "").replace(/\s+/g, "");
+  // 상품 기억 열쇠: 상품 주소의 상품번호(쿠팡 products/숫자, 토스 숫자). 키워드로만 기억하면 다른 업체의 같은 키워드 상품 판매처·상품번호·가격이 들어감
+  //  (11/9 엘비나프레시 설향딸기에 예전 '오늘과일' 설향딸기 판매처가 들어가 방제·썸네일 이름이 '오늘과일'). 주소가 없을 때만 키워드
+  const memoKey = g => { const u = lines(g.url || "").join(" "), m = u.match(/products\/(\d{6,})/) || u.match(/toss\.im\S*?\/(\d{6,})/) || u.match(/shopping-discovery\/c\/(\d{6,})/); const su = (u.match(/https?:\/\/\S+/) || [])[0]; return m ? "p" + m[1] : su ? "u" + su.split("#")[0] : (g.keyword || "").replace(/\s+/g, ""); };   // 단축 링크면 그 링크로
   const filled = (k, val) => k === "pno" ? /\d{6,}/.test(val || "") : !!String(val || "").trim();
   // 기억한 가격은 이번 의뢰서 옵션(상품) 자리가 다 찬 것만 불러옴. 예전에 가격 하나만 기억한 건 어느 옵션 가격인지 몰라서 다시 가져옴 (10/24)
   const memoOk = (k, o, g) => k !== "price" || !priceMissing(Object.assign({}, g, { price: o.price })).length;
@@ -2579,6 +2581,9 @@ details.help-box summary {
       return [head, sil, (names[0] || "") + "외", cnt].filter(Boolean).join(" ");
     }
     for (let n = toks.length; n >= 1; n--) if (spaced(n).length <= 20) return spaced(n);
+    // 20자가 넘으면 한꺼번에 다 붙이지 말고 건수만 먼저 붙임: '#11.10 엘비나프레시 설향딸기20' (11/9 사용자: 업체명과 상품 이름은 띄어 써야지)
+    const semi = n => [head, sil, shop, pick(n).join(" ") + multi + cnt].filter(Boolean).join(" ");
+    for (let n = toks.length; n >= 1; n--) if (semi(n).length <= 20) return semi(n);
     for (let n = toks.length; n >= 1; n--) if (tight(n).length <= 20) return tight(n);
     return tight(1);
   }
