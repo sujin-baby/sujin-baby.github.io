@@ -1582,6 +1582,32 @@ function diag_(p) {
   } catch (e) { out.colgrpErr = String(e); }
   // &rvj=글자: 진행 제목에 그 글자가 든 의뢰의 리뷰 정보(RV_: 종류·개수·가이드) (읽기만)
   if (p.rvj) try { const pr = PropertiesService.getScriptProperties(), seen = {}; out.rvj = []; readRuns_().forEach(function (r) { const sid = String(r['시트ID'] || ''); if (!sid || seen[sid] || String(r['명단 제목']).indexOf(String(p.rvj)) < 0) return; seen[sid] = 1; out.rvj.push(bareTitle_(r['명단 제목']) + ' | ' + String(pr.getProperty('RV_' + sid) || '').slice(0, 600)); }); } catch (e) { out.rvjErr = String(e); }
+  // &rvst=글자: 그 의뢰 리뷰 확인 상태 (진행·체크 칸·체크 안 된 사람·진행 시간 밖 사람·관련 속성) (읽기만, 11/9 나주배 보고 글이 안 뜸)
+  if (p.rvst) try {
+    const pr = PropertiesService.getScriptProperties(), runs = readRuns_(), seen = {}; out.rvst = [];
+    runs.forEach(function (r) {
+      const sid = String(r['시트ID'] || '');
+      if (!sid || seen[sid] || String(r['명단 제목']).indexOf(String(p.rvst)) < 0 || out.rvst.length >= 3) return;
+      seen[sid] = 1;
+      const mine = runs.filter(function (x) { return String(x['시트ID']) === sid; }), o = { props: {} };
+      ['RVDONE_', 'RVRPT_', 'RVZIP_', 'RVZIPURL_', 'RVSEEN_', 'RVQMOD_', 'RVUP_', 'RVROOMDONE_INIT_', 'RVDAYREQ_INIT_', 'LISTV_', 'PHOTOASK_S_'].forEach(function (k) { const x = pr.getProperty(k + sid); if (x != null) o.props[k] = String(x).slice(0, 160); });
+      o.runs = mine.map(function (x) { return bareTitle_(x['명단 제목']) + ' | 인원 ' + x['인원'] + ' 총 ' + x['총건수'] + ' 마감 ' + (x['마감 시각'] instanceof Date ? 'O' : 'X') + ' ' + x['진행 상태'] + ' | 취합 ' + x['리뷰 취합'] + ' 전송 ' + x['업체 전송']; });
+      try {
+        const sh = SpreadsheetApp.openById(sid).getSheetByName(LIST_TAB), lc = Math.max(sh.getLastColumn(), 1), hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_), cT = hdr.indexOf('타임스탬프');
+        const v = sh.getRange(3, 1, sh.getLastRow() - 2, lc).getValues(), nt = sh.getRange(3, cT + 1, sh.getLastRow() - 2, 1).getNotes();
+        const live = v.map(function (x, i) { return x[cT] instanceof Date && !nt[i][0] ? i : -1; }).filter(function (i) { return i >= 0; });
+        const isChk = function (c) { return live.every(function (i) { return typeof v[i][c] === 'boolean'; }); }, rc = rvCol_(sh, lc);
+        let cc = rc > 0 && isChk(rc - 1) ? rc - 1 : -1;
+        for (let c = lc - 1; cc < 0 && c >= 0; c--) if (isChk(c)) cc = c;
+        let cName = hdr.findIndex(function (h) { return /수령인|계정명/.test(h); }); if (cName < 0) cName = hdr.findIndex(function (h) { return /이름|성함/.test(h) && !MATCH.nick.test(h); });
+        const ws = mine.map(function (x) { return windowOf_(runs, x); }), inW = function (i) { const t = v[i][cT].getTime(); return ws.some(function (w) { return t >= w.from && t < w.to; }); };
+        o.sheet = { rows: v.length, live: live.length, noted: v.length - live.length, chkCol: cc >= 0 ? colLetter_(cc + 1) + '[' + hdr[cc] + ']' : '없음', nameCol: cName >= 0 ? hdr[cName] : '없음' };
+        o.unchecked = live.filter(function (i) { return cc < 0 || v[i][cc] !== true; }).map(function (i) { return (cName >= 0 ? v[i][cName] : '?') + ' ' + Utilities.formatDate(v[i][cT], CONFIG.TIMEZONE, 'MM-dd HH:mm') + (inW(i) ? '' : ' (진행 시간 밖)'); });
+        o.outside = live.filter(function (i) { return !inW(i); }).map(function (i) { return (cName >= 0 ? v[i][cName] : '?') + ' ' + Utilities.formatDate(v[i][cT], CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 체크 ' + (cc >= 0 ? v[i][cc] : '?'); });
+      } catch (e) { o.sheetErr = String(e); }
+      out.rvst.push(o);
+    });
+  } catch (e) { out.rvstErr = String(e); }
   // &payhead=1: 월급시트(이달) 위쪽 머리 줄과 맨 아래 합계 줄의 값·수식, 완료보고(H)를 쓰는 수식 (진행비 총액이 어떻게 나오는지 보기, 읽기만)
   if (p.payhead) try {
     const sh = payTab_(today_().getMonth() + 1), L = payLayout_(sh), lc = Math.min(sh.getLastColumn(), 30), last = sh.getLastRow();
@@ -6389,6 +6415,12 @@ function reviewDone_(runs, only) {
   runs.forEach(function (r) { if (r['시트ID'] && !isExpect_(r) && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut) (bySheet[r['시트ID']] = bySheet[r['시트ID']] || []).push(r); });
   let pend = {};
   try { const ps = planSheet_(), pl = ps.getLastRow(); if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x) { if (x[8] === '대기') pend[campKey_(x[1])] = 1; }); } catch (e) {}
+  // (11/9 한 번) 안 보낸 '리뷰 독촉'이 있는 의뢰는 명단 시트를 다시 읽음 (빠른 길 건너뜀) → 독촉 이름을 지금 체크대로
+  if (!props.getProperty('NAGSYNC1')) try {
+    props.setProperty('NAGSYNC1', '1');
+    const nr = rvNagRooms_();
+    Object.keys(bySheet).forEach(function (sid) { if (bySheet[sid].some(function (r) { return nr[String(r['카톡방'] || bareTitle_(r['명단 제목']))]; })) props.deleteProperty('RVSEEN_' + sid); });
+  } catch (e) {}
   Object.keys(bySheet).forEach(function (sid) {
     if (only && only.indexOf(sid) < 0) return;   // 5분 확인: 명단 시트가 바뀐 의뢰만
     yieldIfWanted_();   // 새 진행 만들기 같은 직접 하는 일이 기다리면 의뢰 하나 끝날 때마다 바로 넘김 (11/2: 리뷰 확인 76초 동안 새 진행이 기다림)
@@ -6510,6 +6542,17 @@ function reviewDone_(runs, only) {
         ].join('\n'), '리뷰 독촉');
         note_('✓ 리뷰 독촉 넣음: ' + bareTitle_(r['명단 제목']) + ' ' + names.length + '명');
       });
+      // C-2. 안 보낸 '리뷰 독촉'은 방마다 한 줄, 이름은 지금 체크 안 된 사람으로 (11/9 사용자: 시온스 양모볼 공은진만 남았는데 이름이 그대로, 첫 독촉·3일 뒤 독촉이 두 줄)
+      if (cName >= 0) try {
+        const nagNames = {};
+        Object.keys(byRoom).forEach(function (rm) {
+          const pi = {};
+          byRoom[rm].forEach(function (r) { const w = windowOf_(runs, r); live.forEach(function (i) { const t = v[i][cT].getTime(); if (t >= w.from && t < w.to) pi[i] = 1; }); });
+          nagNames[rm] = Object.keys(pi).map(Number).sort(function (a, b) { return a - b; }).filter(function (i) { return v[i][cc] !== true; }).map(function (i) { return String(v[i][cName]).trim(); }).filter(Boolean);
+        });
+        const nn = rvNagSync_(nagNames);
+        if (nn) note_('✓ 리뷰 독촉 이름 맞춤: ' + name + ' (' + nn + '줄)');
+      } catch (e) { note_('리뷰 독촉 이름 맞추기 실패: ' + e.message); }
       // A-1. 의뢰 전체 끝 + 전부 체크 → 다 끝남 표시(RVDONE_) 및 사장님 보고. 취완 글은 방마다(위 A, 11/8 사용자 요청. 10/30엔 의뢰당 1회였음)
       const total = mine.reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0);
       const got = mine.reduce(function (a, x) { return a + (Number(x['인원']) || 0); }, 0);
@@ -6610,6 +6653,33 @@ function rvCartCounts_(P, T, S, cart, people) {
 }
 // 장바구니건 폴더 이름: '포토 포함 (8명)', '텍스트만 (12명)', '별점만 (0명)'
 function rvCartDirName_(t, n) { return (t === '포토' ? '포토 포함' : t + '만') + ' (' + n + '명)'; }
+// 안 보낸 '리뷰 독촉'이 있는 카톡방 { 방: 1 }
+function rvNagRooms_() {
+  const ob = outboxSheet_(), ol = ob.getLastRow(), out = {};
+  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (x) { if (x[2] === '리뷰 독촉' && x[5] !== '보냄') out[String(x[3])] = 1; });
+  return out;
+}
+// 안 보낸 '리뷰 독촉': 방마다 한 줄만 남기고(3일 뒤 독촉 글 먼저) 이름은 지금 체크 안 된 사람으로, 다 체크됐으면 지움 (11/9)
+//  names = { 카톡방: [이름…] } (이 의뢰의 방만). 고치거나 지운 줄 수
+function rvNagSync_(names) {
+  return withObWrite_(function () {
+    const ob = outboxSheet_(), ol = ob.getLastRow();
+    if (ol < 2) return 0;
+    const v = ob.getRange(2, 1, ol - 1, 6).getValues(), at = {}, del = [];
+    let n = 0;
+    v.forEach(function (x, i) { const rm = String(x[3]); if (x[2] === '리뷰 독촉' && x[5] !== '보냄' && Object.prototype.hasOwnProperty.call(names, rm)) (at[rm] = at[rm] || []).push(i); });
+    Object.keys(at).forEach(function (rm) {
+      const is = at[rm], nm = names[rm] || [];
+      if (!nm.length) { is.forEach(function (i) { del.push(i); }); return; }
+      const later = is.filter(function (i) { return /3일 지났어요/.test(String(v[i][4])); }), k = later.length ? later[0] : is[0];
+      is.forEach(function (i) { if (i !== k) del.push(i); });
+      const t = String(v[k][4]), nt = t.replace(/(아직 리뷰 확인이 안 된 분\s*:\s*)[^\n]*/, function (m, a) { return a + nm.join(', '); });
+      if (nt !== t) { ob.getRange(k + 2, 5).setValue(nt); n++; }
+    });
+    del.sort(function (a, b) { return b - a; }).forEach(function (i) { ob.deleteRow(i + 2); n++; });
+    return n;
+  });
+}
 // 같은 의뢰의 안 보낸 '리뷰 사진 확인' 할 일: 지금 경고가 없으면(msg 빈칸) 지우고, 있으면 하나만 남겨 지금 글로 (11/8: 사진 10장일 때 경고가 15장 다 올린 뒤에도 남아 있었음)
 function rvCheckMsgSync_(base, msg) {
   const kept = withObWrite_(function () {
@@ -7907,16 +7977,56 @@ function photoLate_(r, props) {
   const days = Math.round((today_().getTime() - dayStart_(r['진행일'])) / 86400000);
   return days >= 2 && days <= 9 && !props.getProperty('RVSENT_' + campKey_(r['명단 제목']) + '_' + dateTok_(r['명단 제목']));
 }
+// 포토 요청 할 일은 캠페인(의뢰 = 명단 시트)마다 한 번 (11/9 사용자: 날짜 방마다 따로 뜸 → 캠페인별로)
+//  '[#택 봉상회 감홍사과외] 진행 2일 지났는데 …' (늦은 날짜들은 괄호로). 예전 방식(날짜마다)으로 이미 넣은 의뢰는 다시 안 넣음
+function campLabel_(t) { return bareTitle_(t).replace(/^#\s*(택|업)?\s*\d{1,2}\.\d{1,2}\s*/, function (m, a) { return '#' + (a || '') + ' '; }).replace(/\s*\d+\s*$/, '').trim(); }
+function photoAskMsg_(rs) {
+  const ds = rs.map(function (r) { return dateTok_(r['명단 제목']); }).filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+  return '[' + campLabel_(rs[0]['명단 제목']) + '] 진행 2일 지났는데 업체 포토를 아직 못 받았어요' + (ds.length ? ' (' + ds.join('·') + ' 진행)' : '') + '. 업체에 포토 요청 부탁드립니다!';
+}
 function photoAskCheck_(runs) {
-  const props = PropertiesService.getScriptProperties();
-  runs.forEach(function (r) {
-    if (!photoLate_(r, props)) return;
-    const k = 'PHOTOASK_' + String(r['명단 제목']).replace(/\s+/g, '');
-    if (props.getProperty(k)) return;
-    props.setProperty(k, '1');
-    queueMsg_('사장님', '[' + bareTitle_(r['명단 제목']) + '] 진행 2일 지났는데 업체 포토를 아직 못 받았어요. 업체에 포토 요청 부탁드립니다!', '할 일');
-    note_('포토 요청 메시지 넣음: ' + bareTitle_(r['명단 제목']));
+  const props = PropertiesService.getScriptProperties(), by = {};
+  try { photoAskMerge1_(runs); } catch (e) { note_('포토 요청 할 일 합치기 실패: ' + e); }
+  runs.forEach(function (r) { if (photoLate_(r, props)) { const k = String(r['시트ID'] || campKey_(r['명단 제목'])); (by[k] = by[k] || []).push(r); } });
+  Object.keys(by).forEach(function (sid) {
+    const rs = by[sid], ck = 'PHOTOASK_S_' + sid;
+    if (props.getProperty(ck)) return;
+    props.setProperty(ck, '1');
+    const old = rs.some(function (r) { return props.getProperty('PHOTOASK_' + String(r['명단 제목']).replace(/\s+/g, '')); });
+    if (old) return;
+    queueMsg_('사장님', photoAskMsg_(rs), '할 일');
+    note_('포토 요청 메시지 넣음: ' + campLabel_(rs[0]['명단 제목']));
   });
+}
+// (11/9 한 번) 날짜마다 따로 들어간 안 보낸 포토 요청 할 일 → 의뢰마다 한 줄로
+function photoAskMerge1_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('PHOTOASKMERGE1')) return;
+  props.setProperty('PHOTOASKMERGE1', '1');
+  const byT = {};
+  runs.forEach(function (r) { byT[bareTitle_(r['명단 제목'])] = r; });
+  const n = withObWrite_(function () {
+    const ob = outboxSheet_(), ol = ob.getLastRow();
+    if (ol < 2) return 0;
+    const v = ob.getRange(2, 1, ol - 1, 6).getValues(), g = {}, del = [];
+    v.forEach(function (x, i) {
+      const m = String(x[4]).match(/^\[([^\]]+)\] 진행 2일 지났는데 업체 포토를 아직 못 받았어요/);
+      if (!m || x[2] !== '할 일' || x[5] === '보냄') return;
+      const r = byT[m[1].trim()];
+      if (!r || !r['시트ID']) return;
+      const sid = String(r['시트ID']);
+      (g[sid] = g[sid] || []).push({ i: i, r: r });
+    });
+    Object.keys(g).forEach(function (sid) {
+      const xs = g[sid].sort(function (a, b) { return a.r['진행일'] - b.r['진행일']; }), msg = photoAskMsg_(xs.map(function (x) { return x.r; }));
+      props.setProperty('PHOTOASK_S_' + sid, '1');
+      if (String(v[xs[0].i][4]) !== msg) ob.getRange(xs[0].i + 2, 5).setValue(msg);
+      xs.slice(1).forEach(function (x) { del.push(x.i); });
+    });
+    del.sort(function (a, b) { return b - a; }).forEach(function (i) { ob.deleteRow(i + 2); });
+    return Object.keys(g).length;
+  });
+  if (n) note_('✓ 포토 요청 할 일을 캠페인마다 한 줄로 합침: ' + n + '개');
 }
 function photoWaitCheck_(runs) {
   const hm = Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'HHmm'));
