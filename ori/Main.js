@@ -915,6 +915,7 @@ function syncListBody_(ss, sh, props, id, tabs, sigK, sigNow) {
     }));
     done = done.concat(add.map(function (x) { return String(x.t); }));
     try { payCheck_(ss, add); } catch (e) { note_('결제금액 확인 실패: ' + e); }
+    try { storeDupCheck_(ss, add); } catch (e) { note_('스중불가 중복 확인 실패: ' + e); }
   }
   if (cT && sh.getLastRow() >= 3) {
     const live = {}; rows.forEach(function (x) { live[x.t] = 1; });
@@ -994,6 +995,92 @@ function payChkRecheck1_(runs) {
     }
   });
   if (fixed) note_('✓ 결제금액 확인 할 일 다시 봄 (공지 상품 가격과 맞는 줄 뺌): ' + fixed + '개');
+}
+// 스토어 중복 구매 불가(스중불가) 업체 묶음: 같은 묶음 안에서는 한 사람(계정주)이 두 번 사면 안 됨 (11/10 사용자: 더호컴퍼니 = 앨비나프레시, 업체마다 다름)
+//  같은 사람 = 전화 뒤 8자리·주소·아이디 중 하나라도 같음 (여러 계정으로 사도 계정주가 같으면 안 됨). 이름은 동명이인이 많아 안 봄
+const STORE_NODUP = [['더호컴퍼니', '앨비나프레시']];
+function storeGroupOf_(shop) {
+  const s0 = String(shop || '').replace(/\s+/g, '');
+  if (!s0) return -1;
+  for (let i = 0; i < STORE_NODUP.length; i++) if (STORE_NODUP[i].some(function (x) { return String(x).replace(/\s+/g, '') === s0; })) return i;
+  return -1;
+}
+function personKeys_(o) {
+  const ks = Object.keys(o || {}), get = function (re) { return ks.filter(function (k) { return re.test(k); }).map(function (k) { return String(o[k] == null ? '' : o[k]).trim(); }).filter(Boolean); };
+  return {
+    ph: get(/전화|연락처|휴대폰|핸드폰/).map(function (v) { return v.replace(/[^0-9]/g, ''); }).filter(function (v) { return v.length >= 9; }).map(function (v) { return v.slice(-8); }),
+    ad: get(/주소/).map(function (v) { return v.replace(/[\s,.\-()#~]/g, '').toLowerCase(); }).filter(function (v) { return v.length >= 8; }),
+    id: get(/아이디|계정(?!명)|이메일/).map(function (v) { return v.toLowerCase().replace(/\s+/g, ''); }).filter(function (v) { return v.length >= 3; }),
+    nm: get(/수령인|계정명|이름|성함/).filter(function (k) { return true; })[0] || ''
+  };
+}
+function samePerson_(a, b) {
+  const hit = function (x, y) { return x.some(function (v) { return y.indexOf(v) >= 0; }); };
+  return hit(a.ph, b.ph) ? '전화 같음' : hit(a.id, b.id) ? '아이디 같음' : hit(a.ad, b.ad) ? '주소 같음' : '';
+}
+// 명단 시트 명단 탭 사람들 (메모로 뺀 줄 제외) [{t, k, sid}]
+function listPeople_(sid) {
+  const sh = SpreadsheetApp.openById(sid).getSheetByName(LIST_TAB);
+  if (!sh || sh.getLastRow() < 3) return [];
+  const lc = Math.max(sh.getLastColumn(), 1), hdr = sh.getRange(2, 1, 1, lc).getValues()[0].map(hk_), cT = hdr.indexOf('타임스탬프');
+  if (cT < 0) return [];
+  const v = sh.getRange(3, 1, sh.getLastRow() - 2, lc).getValues(), nt = sh.getRange(3, cT + 1, sh.getLastRow() - 2, 1).getNotes();
+  return v.map(function (x, i) {
+    if (!(x[cT] instanceof Date) || nt[i][0]) return null;
+    const o = {}; hdr.forEach(function (h, j) { if (h) o[h] = x[j]; });
+    return { t: x[cT].getTime(), k: personKeys_(o), sid: sid };
+  }).filter(Boolean);
+}
+// 같은 스중불가 묶음 진행들의 명단 시트 { 시트ID: 캠페인 이름 } (최근 120일)
+function storeGroupSheets_(runs, gi) {
+  const cut = today_().getTime() - 120 * 86400000, out = {};
+  runs.forEach(function (r) { if (r['시트ID'] && storeGroupOf_(r['업체']) === gi && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut && !out[r['시트ID']]) out[r['시트ID']] = campOf_(r['명단 제목']); });
+  return out;
+}
+function storeDupMsg_(gi, lines) {
+  return '[스중불가 중복] ' + STORE_NODUP[gi].join('·') + ' (같은 업체)\n' + lines.join('\n') + '\n→ 이미 같은 업체 상품을 산 분이에요 (계정이 달라도 계정주가 같으면 안 됨). 확인해 주세요';
+}
+// 새 응답이 스중불가 업체 진행이면: 같은 업체 다른 진행·같은 진행 앞 날 명단과 비교 → 할 일
+function storeDupCheck_(ss, add) {
+  const sid = ss.getId(), runs = readRuns_(), mine = runs.filter(function (r) { return String(r['시트ID']) === sid; });
+  if (!mine.length || !add || !add.length) return;
+  const gi = storeGroupOf_(mine[0]['업체'] || mine[mine.length - 1]['업체']);
+  if (gi < 0) return;
+  const sheets = storeGroupSheets_(runs, gi), newT = {};
+  add.forEach(function (x) { newT[x.t] = 1; });
+  let old = [];
+  Object.keys(sheets).forEach(function (s2) { try { old = old.concat(listPeople_(s2).filter(function (p) { return !(s2 === sid && newT[p.t]); })); } catch (e) {} });
+  const md = function (t) { return Utilities.formatDate(new Date(t), CONFIG.TIMEZONE, 'M/d'); }, lines = [];
+  add.forEach(function (x) {
+    const k = personKeys_(x.o);
+    const hit = old.filter(function (p) { return p.t < x.t; }).map(function (p) { return { p: p, why: samePerson_(k, p.k) }; }).filter(function (h) { return h.why; })[0];
+    if (hit) lines.push((k.nm || '?') + ' (' + md(x.t) + ') ↔ ' + sheets[hit.p.sid] + ' ' + md(hit.p.t) + ' ' + (hit.p.k.nm || '') + ' · ' + hit.why);
+  });
+  if (!lines.length) return;
+  queueMsg_('내 할 일', storeDupMsg_(gi, lines), '할 일');
+  note_('⚠ 스중불가 중복 ' + lines.length + '명: ' + lines.join(' / '));
+}
+// (11/10 한 번) 최근 14일 스중불가 묶음 명단을 한 번 훑어 이미 들어온 중복을 할 일로
+function storeDupScan1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SDUPSCAN1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
+  try {
+    const runs = readRuns_(), since = today_().getTime() - 14 * 86400000, md = function (t) { return Utilities.formatDate(new Date(t), CONFIG.TIMEZONE, 'M/d'); }, res = [];
+    STORE_NODUP.forEach(function (g, gi) {
+      const sheets = storeGroupSheets_(runs, gi);
+      let all = [];
+      Object.keys(sheets).forEach(function (s2) { try { all = all.concat(listPeople_(s2)); } catch (e) {} });
+      all.sort(function (a, b) { return a.t - b.t; });
+      const lines = [];
+      all.forEach(function (x, i) {
+        if (x.t < since) return;
+        for (let j = 0; j < i; j++) { const why = samePerson_(x.k, all[j].k); if (why) { lines.push((x.k.nm || '?') + ' (' + sheets[x.sid] + ' ' + md(x.t) + ') ↔ ' + sheets[all[j].sid] + ' ' + md(all[j].t) + ' ' + (all[j].k.nm || '') + ' · ' + why); break; } }
+      });
+      if (lines.length) queueMsg_('내 할 일', storeDupMsg_(gi, lines), '할 일');
+      res.push(g.join('·') + ' ' + Object.keys(sheets).length + '개 명단 ' + all.length + '명 중 중복 ' + lines.length);
+    });
+    props.setProperty('SDUPSCAN1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + res.join(', '));
+  } catch (e) { props.setProperty('SDUPSCAN1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 // 결제금액 확인 (사용자 요청 10/20): 새 응답의 결제금액이 공지 가격(배송비 포함)과 다르면 보낼메시지 '내 할 일'에. 명단 시트에는 아무것도 안 씀
 //  공지 가격: 고른 옵션 글의 '(17,200원)', 없으면 진행목록 가격(하나거나 다 같을 때만). 2~5개 산 금액(가격 × 개수)은 맞는 걸로
@@ -1755,7 +1842,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'SDUPSCAN1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3225,6 +3312,9 @@ function checkFullInner_() {
   try { singRename1_(); } catch (e) {}
   try { yangReport1_(); } catch (e) {}
   try { seolToss1_(); } catch (e) {}
+  try { seolCoupangOff1_(); } catch (e) {}
+  try { lunchReclass1_(); } catch (e) {}
+  try { storeDupScan1_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
   try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
@@ -5106,6 +5196,98 @@ function seolToss1_() {
     props.setProperty('SEOLTOSS1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + title + ' (목표 ' + r['목표인원'] + '), 새 공지 ' + nt.length + '자');
     try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); }
   } catch (e) { props.setProperty('SEOLTOSS1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// 공지 틀/공지에서 쿠팡 상품 블록 번호 (머리 줄 'N) …쿠팡…', 0부터)
+function coupangIdx_(text) {
+  const parts = String(text || '').split(/\n\s*[-—─_]{10,}\s*\n/), out = [];
+  parts.forEach(function (b, i) { const h = (b.match(/^\s*\d+\)[^\n]*$/m) || [''])[0]; if (/쿠팡/.test(h)) out.push(i); });
+  return out;
+}
+// (11/10 한 번, 사용자: 어제 만든 오늘과일 설향딸기외 캠페인 쿠팡 부분은 오늘부터 앞으로의 일정 다 취소)
+//  일정 탭 대기 줄: 쿠팡 상품 인원 0 → 건수·방제 끝 숫자 (0명이면 그 일정 취소). 이미 만든 11.11 진행: 안 보낸 공지 토스만·방제·목표·폼 설명·쿠팡 옵션 빼기
+function seolCoupangOff1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SEOLCOU1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const runs = readRuns_(), a = runs.filter(function (x) { return /^#택11\.10오늘과일설향딸기외(10|31)$/.test(bareTitle_(x['명단 제목']).replace(/\s+/g, '')); })[0];
+    if (!a) { props.setProperty('SEOLCOU1', st + ' 실패(11.10 진행 못 찾음)'); return; }
+    const sid = String(a['시트ID']), ck = campKey_(a['캠페인'] || a['명단 제목']), out = [];
+    const cnt = function (t, c) { return String(t).replace(/\d+(\s*(\([^)]*\))?\s*)$/, c + '$1'); };
+    // 1) 일정 대기 줄
+    const ps = planSheet_(), pl = ps.getLastRow(), prow = pl >= 2 ? ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues() : [];
+    prow.forEach(function (x, i) {
+      if (x[8] !== '대기' || campKey_(x[1]) !== ck) return;
+      let cfg = {}, cc = []; try { cfg = JSON.parse(x[9]); cc = JSON.parse(x[7]); } catch (e) { return; }
+      const cou = coupangIdx_(cfg.desc);
+      if (!cou.length) return;
+      cou.forEach(function (j) { if (cc[j]) { cc[j] = cc[j].slice(); cc[j][0] = 0; if (cc[j][1]) cc[j][1] = cc[j][1].map(function () { return 0; }); } });
+      const n = cc.reduce(function (s0, g) { return s0 + (Number(g && g[0]) || 0); }, 0);
+      if (n <= 0) { ps.getRange(i + 2, 9).setValue('취소 (쿠팡 취소)'); out.push('(일정) ' + bareTitle_(x[5]) + ' 취소'); return; }
+      const t4 = fitRoom20_(cnt(x[4], n)), t5 = fitRoom20_(cnt(x[5], n));
+      ps.getRange(i + 2, 5, 1, 4).setValues([[t4, t5, n, JSON.stringify(cc)]]);
+      out.push('(일정) ' + bareTitle_(x[5]) + ' → ' + bareTitle_(t5));
+    });
+    // 2) 이미 만든 다음 진행 (진행예정)
+    runs.filter(function (r) { return String(r['시트ID']) === sid && r['진행일'] instanceof Date && dayStart_(r['진행일']) > dayStart_(a['진행일']) && r['진행 상태'] !== '종료'; }).forEach(function (r) {
+      const room = String(r['카톡방'] || bareTitle_(r['명단 제목'])), ob = outboxSheet_(), ol = ob.getLastRow();
+      const pend = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues().filter(function (v) { return String(v[3]) === room && v[2] === '방 공지' && v[5] !== '보냄' && /양식 작성 폼/.test(String(v[4])); }) : [];
+      const src = pend.length ? String(pend[pend.length - 1][4]) : '';
+      const nt = tossOnlyNotice_(src);
+      if (!nt) { out.push(bareTitle_(r['명단 제목']) + ' 공지 못 고침'); return; }
+      const n = (nt.match(/^\s*\d+\)\s*(\d+)\s*명/mg) || []).reduce(function (s0, l) { return s0 + Number(l.match(/\)\s*(\d+)/)[1]); }, 0);
+      obSet_(ob, pend[pend.length - 1][0], 5, nt);
+      // 폼 설명: 지금 이 진행 공지를 보여 주고 있을 때만
+      try {
+        if (r['폼ID']) {
+          const f = FormApp.openById(r['폼ID']), cur = String(f.getDescription() || '');
+          if (cur.replace(/\s+/g, '') === formDesc_(src).replace(/\s+/g, '')) { f.setDescription(formDesc_(nt)); formDescForget_(r['폼ID']); out.push('폼 설명'); }
+          // 쿠팡에만 있는 상품 이름으로 시작하는 보기, 쿠팡 상품 '이름 옵션'과 같은 보기는 뺌
+          const lab = function (b) { const kw = ((b.match(/키워드\s*[:：]\s*(.+)/) || [])[1] || '').trim(), op = ((b.match(/옵션\s*[:：]\s*(.+)/) || [])[1] || '').replace(/\(\s*\d+\s*명\)/g, '').trim(); return { kw: kw.replace(/\s+/g, ''), lab: (kw + op).replace(/\s+/g, '') }; };
+          const parts = src.split(/\n\s*[-—─_]{10,}\s*\n/), cou = coupangIdx_(src).map(function (j) { return lab(parts[j]); }), tos = parts.filter(function (b, j) { return coupangIdx_(src).indexOf(j) < 0 && /^\s*\d+\)/m.test(b); }).map(lab);
+          const tosKw = tos.map(function (x) { return x.kw; }), only = cou.filter(function (x) { return x.kw && tosKw.indexOf(x.kw) < 0; }).map(function (x) { return x.kw; });
+          const ch = formChoices_(f), keep = ch.filter(function (c) { const k = String(c).replace(/\s+/g, ''); return !cou.some(function (x) { return x.lab && x.lab === k; }) && !only.some(function (kw) { return k.indexOf(kw) === 0; }); });
+          if (keep.length && keep.length < ch.length) { setOptionChoices_(f, keep.join('\n')); out.push('폼 보기 ' + ch.length + '→' + keep.length); }
+        }
+      } catch (e) { out.push('폼 못 고침: ' + e.message); }
+      const t = fitRoom20_(cnt(bareTitle_(r['명단 제목']), n));
+      if (n > 0 && t !== bareTitle_(r['명단 제목'])) renameRun_(r, t, '쿠팡 취소 (사용자 11/10)');
+      out.push(t + ' (목표 ' + n + ')');
+    });
+    // 3) 총건수 = 지난 날 실제 인원 + 오늘·앞으로 진행 목표 + 남은 일정 건수 (쿠팡이 빠져 120이 아님 → 월급시트 남은·상태가 맞게)
+    const runs2 = readRuns_().filter(function (r) { return String(r['시트ID']) === sid && r['진행 상태'] !== '종료' && r['진행일'] instanceof Date; }), t0 = today_().getTime();
+    let tot = runs2.reduce(function (s0, r) { return s0 + (dayStart_(r['진행일']) < t0 ? (Number(r['인원']) || 0) : (Number(r['목표인원']) || 0)); }, 0);
+    const pl2 = ps.getLastRow(), pr2 = pl2 >= 2 ? ps.getRange(2, 1, pl2 - 1, PLAN_HEAD.length).getValues() : [];
+    pr2.forEach(function (x) { if (x[8] === '대기' && campKey_(x[1]) === ck) tot += Number(x[6]) || 0; });
+    if (tot > 0) {
+      runs2.forEach(function (r) { if (Number(r['총건수']) !== tot) setRun_(r.row, '총건수', tot); });
+      pr2.forEach(function (x, i) { if (x[8] !== '대기' || campKey_(x[1]) !== ck) return; try { const c2 = JSON.parse(x[9]); if (Number(c2.total) !== tot) { c2.total = tot; ps.getRange(i + 2, 10).setValue(JSON.stringify(c2)); } } catch (e) {} });
+      out.push('총건수 ' + tot);
+    }
+    props.setProperty('SEOLCOU1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + out.join(', '));
+    try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); }
+  } catch (e) { props.setProperty('SEOLCOU1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/10 한 번, 사용자: 런치버스 텀블러 별점 리뷰가 포토 폴더에 가 있음) 포토 폴더 사진을 리뷰이미지 바로 아래로 꺼내고 AI 설명을 지움 → 다음 확인에서 고친 AI 프롬프트로 다시 나눔
+function lunchReclass1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('LUNCHRE1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const runs = readRuns_(), r = runs.filter(function (x) { return /런치버스텀블러/.test(bareTitle_(x['명단 제목']).replace(/\s+/g, '')) && dateTok_(x['명단 제목']) === '10.27'; })[0];
+    if (!r || !r['시트ID']) { props.setProperty('LUNCHRE1', st + ' 실패(진행 못 찾음)'); return; }
+    const sid = String(r['시트ID']), mine = runs.filter(function (x) { return String(x['시트ID']) === sid; }), f = rvFolder_(mine, props, sid);
+    if (!f) { props.setProperty('LUNCHRE1', st + ' 실패(폴더 없음)'); return; }
+    let n = 0;
+    const it = f.img.getFolders();
+    while (it.hasNext()) {
+      const d = it.next();
+      if (rvTypeOf_(d.getName()) !== '포토') continue;
+      const fi = d.getFiles();
+      while (fi.hasNext()) { const x = fi.next(); if (!/^image\//.test(x.getMimeType())) continue; try { x.setDescription(''); } catch (e) {} x.moveTo(f.img); n++; }
+    }
+    props.deleteProperty('RVZIP_' + sid);
+    props.setProperty('RVZIPSOON_' + sid, String(Date.now()));
+    props.setProperty('LUNCHRE1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 포토 폴더 ' + n + '장 다시 나누기');
+  } catch (e) { props.setProperty('LUNCHRE1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 // 실행이 끝날 때 (로더 이름 함수 감쌈): 보낼메시지가 바뀌었으면 바뀐 탭만 다시 그림. 모아보기 체크 직후엔 안 그림 (줄이 안 움직이게)
 function msgViewSync_() {
@@ -7324,6 +7506,10 @@ function rvZip_(f, name, props, sid, mine) {
       warn.push('⚠ ' + (g.odd ? '리뷰 가이드가 여러 번 나간 방(' + g.odd.join(', ') + ')이 있어서' : '리뷰 가이드를 못 찾은 방(' + g.miss.join(', ') + ')이 있어서') + ' 개수를 의뢰서대로 적었어요 → 맞는지 확인');
     } else warn.push('⚠ 리뷰 종류별 개수를 몰라서 압축 파일에 못 적었어요 (사진 ' + files.length + '장)');
   }
+  // 사진이 리뷰 건수(산 사람 수)보다 적으면 보고 글을 안 만들고, 안 보낸 보고 글은 지움 → 할 일에 ⛔ (11/10 사용자: 런치버스 텀블러 20건인데 15장만 있는데 리뷰취합이 뜸)
+  const people = mine.reduce(function (a, r) { return a + (Number(r['인원']) || 0); }, 0);
+  const missN = cart <= 1 && !isExpect_(mine[0] || {}) && people > 0 && files.length < people ? people - files.length : 0;
+  if (missN) warn.unshift('⛔ 리뷰 ' + people + '건인데 사진이 ' + files.length + '장이에요 → ' + missN + '장 빠짐. 빠진 캡처를 올리면 리뷰취합 탭에 보고 글이 생겨요 (그 전엔 보고 글 안 만듦)');
   const total = cnt ? cnt['포토'] + cnt['텍스트'] + cnt['별점'] : 0;
   if (from !== '폴더' && cart <= 1 && total && files.length < total) warn.push('⚠ 리뷰 ' + total + '건인데 사진이 ' + files.length + '장이에요 → 빠진 캡처가 없는지 확인 (더 올리면 다시 압축돼요)');
   // 압축 파일은 안 만듦 (10/31: 사장님께 리뷰이미지 폴더 링크로 보내서 압축은 안 씀). 개수 확인·보고 글만
@@ -7340,10 +7526,11 @@ function rvZip_(f, name, props, sid, mine) {
   if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
     // 같은 의뢰 보고 글 = 첫 줄(리뷰이미지 폴더 링크)이 같거나 제목 줄이 같은 것 (날짜 범위가 바뀌어도 새 글을 또 만들지 않게, 11/8)
     if (done || v[2] !== '리뷰 보고' || !((tl && String(v[4]).indexOf(tl) >= 0) || String(v[4]).split('\n')[0].trim() === String(link).trim())) return;
+    if (missN) { if (v[5] !== '보냄') { try { withObWrite_(function () { const o2 = outboxSheet_(), l2 = o2.getLastRow(), ids = l2 >= 2 ? o2.getRange(2, 1, l2 - 1, 1).getValues() : []; for (let i = ids.length - 1; i >= 0; i--) if (String(ids[i][0]) === String(v[0])) o2.deleteRow(i + 2); }); note_('⛔ 사진이 모자라 안 보낸 리뷰 보고 글 지움: ' + base); } catch (e) {} } return; }
     if (v[5] !== '보냄' && String(v[4]) !== msg) obSet_(ob, v[0], 5, msg);
     done = true;
   });
-  if (!done) queueMsg_('사장님', msg, '리뷰 보고');
+  if (!done && !missN) queueMsg_('사장님', msg, '리뷰 보고');
   const skTxt = Object.keys(skipped).map(function (k) { return k.replace(/\s*\(?압축\s*제외\)?\s*/, '') + ' ' + skipped[k] + '장'; }).join(', ');
   if (skTxt) warn.push('ℹ 리뷰가 아니라고 뺀 사진: ' + skTxt + ' (의뢰 폴더 안 \'(압축 제외)\' 폴더. 리뷰인데 빠졌으면 리뷰이미지 안 포토·텍스트·별점 폴더로 옮기면 다시 세요)');
   try { rvCheckFile_(f, base, sid, mine, cnt, files.length, warn); } catch (e) { note_('리뷰 확인표 실패: ' + e.message); }
@@ -8657,13 +8844,26 @@ function savePlan_(d) {
   });
 }
 
+// 그날 폼 옵션: 상품마다 옵션이 하나씩이면(옵션 줄 수 = 상품 수) 그날 0명인 상품 옵션은 뺌 (11/10 쿠팡 취소). 모르면 그대로
+function planDayOpts_(opts, counts) {
+  const L = String(opts || '').split('\n');
+  if (!counts || !counts.length || L.length !== counts.length || !counts.some(function (c) { return c && Number(c[0]) > 0; })) return opts;
+  return L.filter(function (l, i) { return !(counts[i] && Number(counts[i][0]) === 0); }).join('\n');
+}
 // 1일차 공지(폼 링크 넣기 전)에서 맨 윗줄, 가이드 머리 인원 "1) 5명", 옵션 인원 "(3명)"만 그 일차 값으로 바꿈
 function adjustNotice_(tpl, counts, slot2) {
   // 상품 구분선(---- 또는 ———)으로 나눔. 구분선 글자가 조금 달라도 (10/21 오즈네즈 2일차가 1일차 인원 그대로 나온 것)
   const parts = String(tpl).split(/(\n\s*[-—─_]{10,}\s*\n)/);
   const blocks = parts.filter(function (x, i) { return i % 2 === 0; }), seps = parts.filter(function (x, i) { return i % 2 === 1; });
   const multi = blocks.length > 1;
-  const out = blocks.map(function (b, i) {
+  // 첫 블록 앞의 머리 글(구매 시간·폼 링크 등)은 첫 상품과 따로 (첫 상품을 빼도 머리 글은 남게)
+  let head0 = '';
+  if (multi) { const m0 = blocks[0].search(/^\s*1\)/m); if (m0 > 0) { head0 = blocks[0].slice(0, m0); blocks[0] = blocks[0].slice(m0); } }
+  // 그날 0명인 상품은 공지에서 뺌 (11/10 사용자: 오늘과일 설향딸기외 쿠팡 취소 → 쿠팡 상품 0명. 예전엔 '1) 0명쿠팡' 블록이 그대로 남았음)
+  const keep = blocks.map(function (b, i) { return !(multi && counts[i] && Number(counts[i][0]) === 0 && blocks.some(function (bb, j) { return j !== i && !(counts[j] && Number(counts[j][0]) === 0); })); });
+  const pos = []; let pn = 0; keep.forEach(function (k, i) { pos[i] = k ? ++pn : 0; });
+  let out = blocks.map(function (b, i) {
+    if (!keep[i]) return null;
     const c = counts[i];
     if (!c) return b;
     // 옵션 이름 목록이 있으면 옵션 줄을 그날 인원으로 다시 씀 (0명 옵션은 빼고, 앞 일차에 0명이라 빠진 옵션도 다시 넣음)
@@ -8673,13 +8873,14 @@ function adjustNotice_(tpl, counts, slot2) {
       const ol = c[3].map(function (l, j) { return Number(c[1][j]) > 0 ? l + ' (' + c[1][j] + '명)' : null; }).filter(Boolean).join('\n');
       b = b.replace(/(🐥옵션 *: *)[\s\S]*?(?=\n\s*🐥가격)/, function (m0, h) { return h + ol; });
     }
-    if (multi) b = b.replace(new RegExp('^' + (i + 1) + '\\) *\\d*명?', 'm'), (i + 1) + ') ' + c[0] + '명');
+    if (multi) b = b.replace(new RegExp('^' + (i + 1) + '\\) *\\d*명?', 'm'), pos[i] + ') ' + c[0] + '명');
     let k = 0;
     if (!rebuilt) b = b.replace(/\(\s*\d*\s*명\)/g, function () { const v = (c[1] || [])[k++]; return '(' + (v === undefined || v === null ? '  ' : v) + '명)'; });
     // 리뷰 종류를 날마다 고르게 나눈 줄 (생성기가 일차마다 계산해서 넘김)
     if (c[2]) b = b.replace(/^(🐥)?리뷰 배정 *:.*$/m, function (m0, d) { return (d || '') + '리뷰 배정 : ' + c[2]; });
     return b;
-  }).map(function (b, i) { return b + (i < seps.length ? seps[i] : ''); }).join('').split('\n');
+  }).map(function (b, i) { return b === null ? null : b + (i < seps.length ? seps[i] : ''); }).filter(function (b) { return b !== null; }).join('').replace(/\n\s*[-—─_]{10,}\s*\n?\s*$/, '\n');
+  out = (head0 + out).split('\n');
   out[0] = slot2;
   return out.join('\n');
 }
@@ -8727,7 +8928,7 @@ function makeDueDays_() {
       const res = createRunInner_({
         k: CONFIG.KEY, n: x[0], title: x[5], room: x[4], fname: x[4], camp: cfg.camp, day: k, total: cfg.total,
         daily: String(x[6]), date: dateIso, desc: desc, type: cfg.type, takdae: cfg.takdae, realship: cfg.realship,
-        platform: cfg.platform, prices: cfg.prices, croom: cfg.croom, opts: cfg.opts, shop: cfg.shop, photo: cfg.photo, slot: exp ? (/백발백중/.test(String(cfg.camp)) ? '자정 ~ 오전 8시 20분' : '') : cfg.slot2,   // 백발백중 기대평 진행시간 (사용자 요청 10/27)
+        platform: cfg.platform, prices: cfg.prices, croom: cfg.croom, opts: planDayOpts_(cfg.opts, JSON.parse(x[7])), shop: cfg.shop, photo: cfg.photo, slot: exp ? (/백발백중/.test(String(cfg.camp)) ? '자정 ~ 오전 8시 20분' : '') : cfg.slot2,   // 백발백중 기대평 진행시간 (사용자 요청 10/27)
         reuse: baseRun && baseRun['폼ID'] ? baseRun : undefined, sheetId: baseRun ? baseRun['시트ID'] : undefined
       });
       sh.getRange(i + 2, 9).setValue('생성됨');
@@ -9448,6 +9649,8 @@ function writePayRow_(r, name, remain, prevMonth, shared, ex) {
   // 표 맨 아래에 새 줄을 만들 때: 위 진행 줄의 서식·체크칸과 수식만 복사 (11/5 피클 인계: 값만 써서 테두리와 총액·남은·상태 등 수식이 빠져 상태가 빈칸이었음)
   //  값(캠페인명·수량·날짜 칸 등)은 절대 안 가져옴. 남은 칸 앞 날 수량(-N)·상태 칸 마지막 날 참조는 아래에서 이 진행 것으로 다시 맞춤
   //  표 아래 빈 줄(수식 없이 체크칸만 있던 46~50행 같은 줄)을 쓸 때도 같게 (11/8)
+  // 시트 끝(맨 아래 줄)보다 아래에 쓰면 서식·수식 복사가 소리 없이 안 돼서 값만 들어갔음 (11/10 사용자: 일수 추가될 때마다 테두리·상태 칸 없음, 여분 줄도 없음) → 먼저 줄을 늘림
+  try { const mx = sh.getMaxRows(); if (row + 1 > mx) sh.insertRowsAfter(mx, row + PAY_SPARE - mx); } catch (e) { note_('월급시트 줄 늘리기 실패: ' + e); }
   if ((row === last + 1 || (blankRow && L.left && !sh.getRange(row, L.left).getFormula())) && row - 1 > L.head) { try { payNewRowFromAbove_(sh, row, L); } catch (e) { note_('월급시트 새 줄 서식·수식 복사 실패 (' + name + '): ' + e.message); } }
   const put = function (col, val) {
     if (!col) return;
