@@ -1401,7 +1401,7 @@ details.help-box summary {
         }
         if (subCounts.every(Boolean)) {
           const dailyTotal = Number((g.daily || "").match(/\d+/)?.[0] || 0);
-          const dailyRange = (g.daily || "").match(/(\d+)\s*[-~]\s*(\d+)/);
+          const dailyRange = (g.dailyRaw || g.daily || "").match(/(\d+)\s*[-~]\s*(\d+)/);
           urls.forEach((u, idx) => {
             const sub = Object.assign({}, g);
             const opt = (g.optBase || [])[idx] || { label: u.label.replace(/\s*\d+\s*(?:건|명|개).*$/, "").trim(), qty: subCounts[idx] };
@@ -1635,6 +1635,7 @@ details.help-box summary {
     if (!r.days.length && /^\s*\d+\s*\/\s*\d+/.test(dv)) dv.split("/").map(x => (x.match(/\d+/) || [""])[0]).filter(Boolean).forEach(n => r.days.push({ n: n, br: [] }));
     // 날짜별 건수 합이 총건수보다 크면 마지막 날을 줄임 (예: 총 20, 19일 10 + 20일 20 → 20일 10)
     if (r.total && r.days.length) { let acc = 0; r.days = r.days.map(d => { const n = Math.max(0, Math.min(Number(d.n), Number(r.total) - acc)); acc += n; return Object.assign({}, d, { n: String(n) }); }).filter(d => Number(d.n) > 0); }
+    r.dailyRaw = dv;
     r.daily = r.days.length ? r.days[0].n : ((dv.match(/\d+/) || [""])[0]);
     // '1일간 진행', '2일 진행'처럼 일수만 적었으면 총건수를 그 일수로 나눔 (10/21 토스 부유단감 5건 = 하루에 5)
     { const dm = dv.trim().match(/^(\d+)\s*일\s*(간|동안)\s*(진행)?|^(\d+)\s*일\s*진행/); if (dm) dm[1] = dm[1] || dm[4]; const tot = Number(((f.total || "").match(/\d+/) || [0])[0]); if (dm && !r.days.length && tot) r.daily = String(Math.ceil(tot / Number(dm[1]))); }
