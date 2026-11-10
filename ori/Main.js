@@ -4712,6 +4712,11 @@ function msgvRoomBg_(room, map) {
   if (!map[k]) map[k] = MSGV_ROOM_BG[Object.keys(map).length % MSGV_ROOM_BG.length];
   return map[k];
 }
+// 방 공지 글 중 구매 가이드(양식 작성 폼 / 구매 시간 / 상품 안내)인지 리뷰내용 가이드인지 구분 (11/10 사용자 요청)
+function isNoticeBuy_(msg) {
+  const s = String(msg || '');
+  return (/forms\.gle\/|docs\.google\.com\/forms\/|양식\s*작성\s*폼|★★★|자정\s*~|오전\s*\d+시/.test(s)) && !/리뷰내용\s*가이드/.test(s.slice(0, 80));
+}
 // 탭 이름 → 몇 번째 종류 탭인지 (이름 = 종류 또는 '종류 숫자'). 아니면 -1
 function msgvGroupOfName_(name) {
   const n = String(name || '');
@@ -4760,10 +4765,12 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
     // 할일: 같은 방(의뢰) 것은 한 줄로 (11/8 사용자: 결제금액 확인이 사람마다 한 줄씩 12줄이라 체크할 게 너무 많음)
     if (grp.key === 'todo') { pend = msgvGroup_(pend); sent = msgvGroup_(sent); }
     let over = 0;
-    const lines = pend.concat(sent).map(function (xs) {
+    const toLine = function (xs) {
       const x = xs[0], isSent = !msgvPending_(x[5]), od = !isSent && xs.some(function (y) { return y[1] instanceof Date && y[1].getTime() < t0; });
       if (od) over++;
-      const kind = String(x[2]), tag = grp.k.indexOf(kind) < 0 ? '〔' + kind + '〕 ' : grp.k.length > 1 && kind !== grp.k[0] ? '〔' + kind.replace(/ 요청$/, '') + '〕 ' : '';
+      const kind = String(x[2]);
+      let tag = grp.k.indexOf(kind) < 0 ? '〔' + kind + '〕 ' : grp.k.length > 1 && kind !== grp.k[0] ? '〔' + kind.replace(/ 요청$/, '') + '〕 ' : '';
+      if (grp.key === 'notice') tag = (isNoticeBuy_(x[4]) ? '〔구매〕 ' : '〔리뷰〕 ') + tag;
       const camp = xs.length > 1 || grp.key === 'todo' ? msgvCampOf_(x) : '';
       // 할일: 카톡방 칸 첫 줄에 캠페인 이름(굵게), 둘째 줄에 보낼 곳·건수 (11/8 사용자: 캠페인명이 잘 안 보임)
       const room = tag + String(x[3] || '') + (xs.length > 1 ? ' · ' + xs.length + '건' : '') + (x[5] === '방 못 찾음' ? ' ⚠방 못 찾음' : '');
@@ -4778,7 +4785,28 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
         // 리뷰 독촉 탭은 이름만 (11/8 사용자: 기한 문구·부탁 문구 빼고 이름만 복사해서 씀)
         names: grp.key === 'nag' && String(x[2]) === '리뷰 독촉' ? String((String(x[4]).match(/아직 리뷰 확인이 안 된 분\s*:\s*([^\n]*)/) || [])[1] || x[4]).trim() : null,
         links: grp.links && linkOf ? (linkOf(x) || {}) : null };
-    });
+    };
+    let lines = [];
+    if (grp.key === 'notice') {
+      const buyP = pend.filter(function (xs) { return isNoticeBuy_(xs[0][4]); });
+      const revP = pend.filter(function (xs) { return !isNoticeBuy_(xs[0][4]); });
+      const buyS = sent.filter(function (xs) { return isNoticeBuy_(xs[0][4]); });
+      const revS = sent.filter(function (xs) { return !isNoticeBuy_(xs[0][4]); });
+      const buyLines = buyP.concat(buyS).map(toLine);
+      const revLines = revP.concat(revS).map(toLine);
+      if (buyLines.length && revLines.length) {
+        lines = buyLines.concat([{
+          type: 'sec', id: '', sent: false, day: '', over: false, today: false,
+          room: '🐥 리뷰내용 가이드' + (revP.length ? ' (' + revP.length + '건)' : ''),
+          msg: '━━━ 위: 🛒 구매 가이드 / 아래: 🐥 리뷰내용 가이드 ━━━',
+          bg: '#eee6f7'
+        }]).concat(revLines);
+      } else {
+        lines = buyLines.concat(revLines);
+      }
+    } else {
+      lines = pend.concat(sent).map(toLine);
+    }
     const sig = JSON.stringify(lines.map(function (l) { return [l.id, l.sent ? 1 : 0, l.day, l.over ? 1 : 0, l.room, l.msg.length, l.msg.slice(0, 80), l.bg, l.reqF, l.reqNote.length, l.reqUrl, l.fee, l.links, l.chwan]; }));
     return { lines: lines, pend: pend.length, over: over, sig: sig, name: grp.base + (pend.length ? ' ' + pend.length : '') };
   });
@@ -4829,6 +4857,7 @@ function msgvCombine_(xs) {
 }
 function msgvAlign_(l) { return l.type === 'msg' || l.type === 'hdr' ? ['left', 'center', 'center', 'left', 'left'] : ['left', 'left', 'left', 'left', 'left']; }
 function msgvStyle_(l) {
+  if (l.type === 'sec') return { bg: [null, l.bg || '#eee6f7', l.bg || '#eee6f7', l.bg || '#eee6f7', l.bg || '#eee6f7'], fc: [null, '#5a3d7a', '#5a3d7a', '#5a3d7a', '#5a3d7a'], fw: ['normal', 'bold', 'bold', 'bold', 'bold'] };
   if (l.type !== 'msg') return { bg: [null, null, null, null, null], fc: [null, null, null, null, null], fw: ['normal', 'normal', 'normal', 'normal', 'normal'] };
   if (l.sent) return { bg: [null, '#f3f3f3', '#f3f3f3', '#f3f3f3', '#f3f3f3'], fc: [null, '#9e9e9e', '#9e9e9e', '#9e9e9e', '#9e9e9e'], fw: ['normal', 'normal', 'normal', 'normal', 'normal'] };
   return { bg: [null, '#ffffff', '#ffffff', l.bg, l.bg], fc: [null, '#333333', l.over ? '#d93025' : '#333333', '#222222', '#333333'], fw: ['normal', 'normal', l.today ? 'bold' : 'normal', 'bold', 'normal'] };
@@ -4871,6 +4900,7 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
     let v = ['', '', '', '', ''], st = msgvStyle_(l), dv = null;
     if (l.type === 'title') { v = ['', title, '', '', '']; st = { bg: [null, grp.bg, grp.bg, grp.bg, grp.bg], fc: [null, '#3b2a4d', '#3b2a4d', '#3b2a4d', '#6b5a7a'], fw: ['normal', 'bold', 'bold', 'bold', 'normal'] }; }
     else if (l.type === 'hdr') { v = ['', '보냄', '날짜', '카톡방', grp.fee ? '주문 날짜' : grp.key === 'nag' ? '리뷰 확인이 안 된 분' : '메시지']; st = { bg: [null, '#fbe9f2', '#fbe9f2', '#fbe9f2', '#fbe9f2'], fc: [null, '#7a2e57', '#7a2e57', '#7a2e57', '#7a2e57'], fw: ['normal', 'bold', 'bold', 'bold', 'bold'] }; }
+    else if (l.type === 'sec') { v = ['', '', '', l.room || '', l.msg || '']; }
     else if (l.type === 'empty') { v = ['', '', '', '보낼 것 없어요 ✓', '']; st = { bg: [null, null, null, null, null], fc: [null, null, null, '#9e9e9e', null], fw: ['normal', 'normal', 'normal', 'normal', 'normal'] }; }
     else if (l.type === 'msg') { v = [l.id, !!l.sent, l.day, l.room, l.fee ? l.fee[0] : l.names != null ? l.names : l.msg]; dv = cb; }
     vals.push(v); bgs.push(st.bg); fcs.push(st.fc); fws.push(st.fw); als.push(msgvAlign_(l)); dvs.push([dv]);
