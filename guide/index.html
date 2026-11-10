@@ -3639,7 +3639,7 @@ details.help-box summary {
 
   if (typeof globalThis !== "undefined") {
     globalThis.__PARSER__ = {
-      parseAll, parseHead, fieldsOf, parseOptions, parse, parseCoupang, optionText, baseName, makeRoom, shortName, suggestKeywords, sugKw, kwList, reviewMix, isBlockedText, posText, okSeller
+      parseAll, parseHead, applyHead, setGuides: gs => { guides = gs; }, fieldsOf, parseOptions, parse, parseCoupang, optionText, baseName, makeRoom, shortName, suggestKeywords, sugKw, kwList, reviewMix, isBlockedText, posText, okSeller
     };
   }
 })();

@@ -745,11 +745,11 @@ console.log('-- Test 20: 털깔창 쿠팡/네이버 다중 플랫폼 분할 및 
 console.log('-- Test 21: 20자 미만 시 업체명 포함 및 쿠팡/네이버 다중 플랫폼 "네쿠" 태그 (11/10 v170)');
 {
   // 1) 단일 가이드 20자 이내: 업체명 포함
-  sandbox.guides = [{
+  P.setGuides([{
     keyword: '흡착장난감',
     seller: '빌랑',
     platform: '쿠팡'
-  }];
+  }]);
   getElem('takdae').checked = false;
   getElem('realship').checked = true;
   getElem('fruit').checked = false;
@@ -760,10 +760,10 @@ console.log('-- Test 21: 20자 미만 시 업체명 포함 및 쿠팡/네이버 
   }
 
   // 2) 쿠팡+네이버 다중 가이드: 실버반석 네쿠 털깔창5
-  sandbox.guides = [
+  P.setGuides([
     { keyword: '털깔창', seller: '실버반석', platform: '쿠팡' },
     { keyword: '털깔창', seller: '실버반석', platform: '네이버' }
-  ];
+  ]);
   getElem('takdae').checked = true;
   getElem('realship').checked = false;
   getElem('fruit').checked = false;
