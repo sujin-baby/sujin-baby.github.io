@@ -1739,7 +1739,7 @@ details.help-box summary {
     // 위치가 비어있고 순위(rank)가 있으면 위치 기본값으로 채움
     // '몇위' 표기는 매일 바뀌어 불안정하므로 '1p' 형식으로 변환 (사용자 요청 10/31)
     if (!r.page && r.rank) {
-      const isUnranked = /뜨지\s*않|안\s*떠|안\s*나와|미노출|순위\s*밖|노출\s*안|안\s*잡|어뷰징/.test(r.rank) || (r.rank.length > 25 && !/\d+\s*(?:p|페이지|위)/.test(r.rank));
+      const isUnranked = /뜨지\s*않|어뷰징|검색유입/.test(r.rank);
       if (isUnranked) {
         const hp = (head && head.headPrices) || [];
         const priceInfo = hp.length >= 2 ? "쿠팡 " + hp[0] + " 네이버 " + hp[1] : (hp[0] ? hp[0] : "");
