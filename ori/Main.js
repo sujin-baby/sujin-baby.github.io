@@ -1760,7 +1760,7 @@ function diag_(p) {
         for (let c = lc - 1; cc < 0 && c >= 0; c--) if (isChk(c)) cc = c;
         let cName = hdr.findIndex(function (h) { return /수령인|계정명/.test(h); }); if (cName < 0) cName = hdr.findIndex(function (h) { return /이름|성함/.test(h) && !MATCH.nick.test(h); });
         const ws = mine.map(function (x) { return windowOf_(runs, x); }), inW = function (i) { const t = v[i][cT].getTime(); return ws.some(function (w) { return t >= w.from && t < w.to; }); };
-        o.sheet = { rows: v.length, live: live.length, noted: v.length - live.length, chkCol: cc >= 0 ? colLetter_(cc + 1) + '[' + hdr[cc] + ']' : '없음', nameCol: cName >= 0 ? hdr[cName] : '없음' };
+        o.sheet = { rows: v.length, live: live.length, noted: v.length - live.length, chkCol: cc >= 0 ? colLetter_(cc + 1) + '[' + hdr[cc] + ']' : '없음', nameCol: cName >= 0 ? hdr[cName] : '없음', row1: sh.getRange(1, 1, 1, 6).getDisplayValues()[0].join(' | ') };
         o.unchecked = live.filter(function (i) { return cc < 0 || v[i][cc] !== true; }).map(function (i) { return (cName >= 0 ? v[i][cName] : '?') + ' ' + Utilities.formatDate(v[i][cT], CONFIG.TIMEZONE, 'MM-dd HH:mm') + (inW(i) ? '' : ' (진행 시간 밖)'); });
         o.outside = live.filter(function (i) { return !inW(i); }).map(function (i) { return (cName >= 0 ? v[i][cName] : '?') + ' ' + Utilities.formatDate(v[i][cT], CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 체크 ' + (cc >= 0 ? v[i][cc] : '?'); });
       } catch (e) { o.sheetErr = String(e); }
