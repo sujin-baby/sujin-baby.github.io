@@ -203,7 +203,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v170 (20자 미만 시 업체명 포함 · 쿠팡/네이버 다중 플랫폼 '네쿠' 태그)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v171 (피클·클로드 AI 다이렉트 소통 & 실시간 제보창 탑재)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -373,32 +373,76 @@ details.help-box summary {
         </div>
         <textarea id="o-notice" class="notice-ta" spellcheck="false" aria-label="방 공지" style="min-height: 240px; font-size: 13px; line-height: 1.5; padding: 12px;"></textarea>
 
-        <!-- 🚨 공지 오류 제보 / 피클·클로드 수정 요청 칸 -->
-        <div class="card-out" id="box-bug-report" style="margin: 14px 0; background: #fff5f7; border: 2px solid #e03131; border-radius: 12px; padding: 14px; box-shadow: 2px 2px 0 var(--ink, #3a2230);">
+        <!-- 💬 AI 다이렉트 대화 · 공지 수정 요청 (피클 · 클로드) -->
+        <div class="card-out" id="box-bug-report" style="margin: 14px 0; background: #fff5f7; border: 2px solid var(--ink, #3a2230); border-radius: 14px; padding: 14px; box-shadow: 3px 3px 0 var(--ink, #3a2230);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:4px;">
-            <span style="font-weight: 900; font-size: 13.5px; color: #c92a2a;">🚨 공지 오류 제보 / 수정 요청 (피클·클로드 전달용)</span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v170</span>
+            <span style="font-weight: 900; font-size: 14px; color: var(--pink-deep, #ff5fa8); display:flex; align-items:center; gap:5px;">
+              <span>💬 AI 다이렉트 대화 · 공지 수정 요청</span>
+            </span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v171</span>
           </div>
-          <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 8px;">
-            공지가 이상하게 나왔나요? 아래 태그를 누르거나 문제점을 적고 <b>[원터치 복사]</b>를 누르면, <b>의뢰서 원문 + 생성된 공지 + 문제점</b>이 한 번에 복사되어 피클 채팅창이나 클로드 코드에 바로 전달할 수 있어요.
+          <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 10px;">
+            공지가 이상하게 나왔거나 수정이 필요한가요? 여기서 메시지를 보내면 <b>피클(생성기)</b>과 <b>클로드(시트)</b>에게 실시간으로 전달돼요!
           </div>
-          <div id="bug-tags" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
-            <button type="button" class="small ghost bug-tag" data-tag="판매처 오류" style="font-size:11.5px; padding:4px 8px; border-radius:6px; cursor:pointer;">🏷️ 판매처 오류</button>
-            <button type="button" class="small ghost bug-tag" data-tag="상품명 잘림/오류" style="font-size:11.5px; padding:4px 8px; border-radius:6px; cursor:pointer;">🏷️ 상품명 오류</button>
-            <button type="button" class="small ghost bug-tag" data-tag="옵션/가격 누락" style="font-size:11.5px; padding:4px 8px; border-radius:6px; cursor:pointer;">🏷️ 옵션/가격 누락</button>
-            <button type="button" class="small ghost bug-tag" data-tag="키워드/순위 1p 오류" style="font-size:11.5px; padding:4px 8px; border-radius:6px; cursor:pointer;">🏷️ 키워드/위치 오류</button>
-            <button type="button" class="small ghost bug-tag" data-tag="구매시간(자정건) 풀림" style="font-size:11.5px; padding:4px 8px; border-radius:6px; cursor:pointer;">🏷️ 구매시간 풀림</button>
-            <button type="button" class="small ghost bug-tag" data-tag="리뷰 가이드 서식 오류" style="font-size:11.5px; padding:4px 8px; border-radius:6px; cursor:pointer;">🏷️ 리뷰 서식 오류</button>
-            <button type="button" class="small ghost bug-tag" data-tag="방제/명단 제목 오류" style="font-size:11.5px; padding:4px 8px; border-radius:6px; cursor:pointer;">🏷️ 방제/인원 오류</button>
+
+          <!-- 수신자 선택 (피클 / 클로드 / 모두) -->
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+            <span style="font-size:12px; font-weight:bold; color:var(--ink, #3a2230);">수신자:</span>
+            <div id="ai-target-group" style="display:inline-flex; gap:5px; flex-wrap:wrap;">
+              <button type="button" class="btn small ai-target-btn active" data-target="pickle" style="font-size:12px; padding:4px 10px; border-radius:8px; font-weight:bold; background:var(--pink-deep, #ff5fa8); color:#fff; border:1.5px solid var(--ink, #3a2230); cursor:pointer;">🥒 피클 (생성기·확장)</button>
+              <button type="button" class="btn small ghost ai-target-btn" data-target="claude" style="font-size:12px; padding:4px 10px; border-radius:8px; font-weight:bold; background:#fff; color:var(--ink, #3a2230); border:1.5px solid var(--ink, #3a2230); cursor:pointer;">🤖 클로드 (시트·서버)</button>
+              <button type="button" class="btn small ghost ai-target-btn" data-target="all" style="font-size:12px; padding:4px 10px; border-radius:8px; font-weight:bold; background:#fff; color:var(--ink, #3a2230); border:1.5px solid var(--ink, #3a2230); cursor:pointer;">👑 모두</button>
+            </div>
           </div>
-          <div style="display:flex; gap:6px; margin-bottom:8px;">
-            <input type="text" id="bug-desc" placeholder="어떤 부분이 이상한지 메모 (예: 판매자가 바나바스토어인데 바나바로 나옴)" style="flex:1; box-sizing:border-box; padding:9px 12px; border:1.5px solid #e03131; border-radius:8px; font-size:12.5px; background:white;">
-            <button type="button" id="bug-clear-btn" class="small ghost" style="padding:0 10px; font-size:12px; border-color:#ced4da; cursor:pointer;">지우기</button>
+
+          <!-- 빠른 태그 선택 -->
+          <div id="bug-tags" style="display:flex; gap:5px; flex-wrap:wrap; margin-bottom:8px;">
+            <button type="button" class="small ghost bug-tag" data-tag="판매처 오류" style="font-size:11px; padding:3px 7px; border-radius:6px; cursor:pointer;">🏷️ 판매처 오류</button>
+            <button type="button" class="small ghost bug-tag" data-tag="상품명 잘림/오류" style="font-size:11px; padding:3px 7px; border-radius:6px; cursor:pointer;">🏷️ 상품명 오류</button>
+            <button type="button" class="small ghost bug-tag" data-tag="옵션/가격 누락" style="font-size:11px; padding:3px 7px; border-radius:6px; cursor:pointer;">🏷️ 옵션/가격 누락</button>
+            <button type="button" class="small ghost bug-tag" data-tag="키워드/순위 1p 오류" style="font-size:11px; padding:3px 7px; border-radius:6px; cursor:pointer;">🏷️ 키워드/위치 오류</button>
+            <button type="button" class="small ghost bug-tag" data-tag="구매시간(자정건) 풀림" style="font-size:11px; padding:3px 7px; border-radius:6px; cursor:pointer;">🏷️ 구매시간 풀림</button>
+            <button type="button" class="small ghost bug-tag" data-tag="리뷰 가이드 서식 오류" style="font-size:11px; padding:3px 7px; border-radius:6px; cursor:pointer;">🏷️ 리뷰 서식 오류</button>
+            <button type="button" class="small ghost bug-tag" data-tag="방제/명단 제목 오류" style="font-size:11px; padding:3px 7px; border-radius:6px; cursor:pointer;">🏷️ 방제/인원 오류</button>
           </div>
-          <button type="button" id="copy-bug-report" class="btn primary" style="background:#e03131; border-color:var(--ink, #3a2230); color:white; font-size:14px; font-weight:800; padding:12px; margin-bottom:0; width:100%; border-radius:10px; box-shadow: 2px 2px 0 var(--ink, #3a2230); cursor:pointer;">
-            📋 피클·클로드 전달용 오류 제보 원터치 복사
-          </button>
-          <div id="bug-report-st" style="font-size:12px; color:#c92a2a; font-weight:bold; margin-top:8px; display:none; text-align:center; background:#ffe3e3; padding:8px; border-radius:6px;"></div>
+
+          <!-- 메시지 입력창 -->
+          <div style="margin-bottom:8px;">
+            <textarea id="ai-msg-input" placeholder="어떤 부분이 이상한지, 어떻게 고쳐야 하는지 적어주세요&#10;(예: 털깔창 의뢰서인데 쿠팡 16000원 네이버 17000원 분리해줘, 방제에 업체명 더 넣어줘 등)" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1.5px solid var(--ink, #3a2230); border-radius:8px; font-size:12.5px; background:white; min-height:64px; resize:vertical; font-family:inherit;"></textarea>
+          </div>
+
+          <!-- 첨부 체크박스 -->
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-size:12px; color:#495057;">
+            <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-weight:600;">
+              <input type="checkbox" id="ai-msg-attach-ctx" checked style="accent-color:var(--pink-deep, #ff5fa8);">
+              <span>현재 의뢰서 원문 & 생성된 공지 함께 전송</span>
+            </label>
+            <button type="button" id="bug-clear-btn" class="small ghost" style="padding:2px 8px; font-size:11.5px; border-color:#ced4da; cursor:pointer;">내용 지우기</button>
+          </div>
+
+          <!-- 전송 버튼 & 복사 버튼 -->
+          <div style="display:flex; gap:8px;">
+            <button type="button" id="ai-msg-send-btn" class="btn primary" style="flex:2; background:var(--pink-deep, #ff5fa8); border:2px solid var(--ink, #3a2230); color:white; font-size:14px; font-weight:900; padding:11px; border-radius:10px; box-shadow: 2px 2px 0 var(--ink, #3a2230); cursor:pointer;">
+              🚀 피클·클로드에게 바로 전송
+            </button>
+            <button type="button" id="copy-bug-report" class="btn ghost" style="flex:1; background:#fff; border:2px solid var(--ink, #3a2230); color:var(--ink, #3a2230); font-size:13px; font-weight:700; padding:11px; border-radius:10px; box-shadow: 2px 2px 0 var(--ink, #3a2230); cursor:pointer;">
+              📋 클립보드 복사
+            </button>
+          </div>
+
+          <!-- 전송 결과 알림 -->
+          <div id="ai-msg-st" style="font-size:12px; margin-top:8px; display:none; padding:8px 12px; border-radius:8px; line-height:1.4;"></div>
+
+          <!-- 최근 대화 내역 (접이식 / 실시간) -->
+          <details id="ai-chat-details" style="margin-top:12px; background:#fff; border:1.5px solid #e9ecef; border-radius:8px; padding:6px 10px;" open>
+            <summary style="font-size:12px; font-weight:bold; color:var(--ink, #3a2230); cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
+              <span>💬 최근 소통 내역 (오리 팀룸)</span>
+              <button type="button" id="ai-chat-refresh-btn" class="small ghost" style="padding:1px 6px; font-size:11px; cursor:pointer;">↻ 새로고침</button>
+            </summary>
+            <div id="ai-chat-list" style="margin-top:8px; max-height:220px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; font-size:12px;">
+              <div style="color:#868e96; text-align:center; padding:12px;">대화 내역을 불러오는 중...</div>
+            </div>
+          </details>
         </div>
 
         <div class="card-out" style="margin: 12px 0; background: #fff8fb; border: 2px solid var(--ink); border-radius: 12px; padding: 12px 14px;">
@@ -1237,6 +1281,22 @@ details.help-box summary {
   }
 
   const WEBAPP = "https://script.google.com/macros/s/AKfycbwTiBWERe1-NhFMLn29m_BtI5JLmTPuLFC4mjJttvEunCljQX1C-xV3AH9O5nrq-Da1Mw/exec";
+  const TEAM_URL = "https://script.google.com/macros/s/AKfycby9QFtSENA7f3HHpScnZYNZ9InP0EAI0cDFtlLpIf907W8HPxbMWNMzPsiu0Hn22FBOvg/exec";
+  const TEAM_KEY = (function () {
+    let k = "";
+    try {
+      const m = location.hash.match(/(?:^#|&)tk=([^&]+)/);
+      if (m) {
+        k = decodeURIComponent(m[1]);
+        try { localStorage.setItem("ori-teamkey", k); } catch (e) {}
+      }
+    } catch (e) {}
+    if (!k) { try { k = localStorage.getItem("ori-teamkey") || ""; } catch (e) {} }
+    if (!k) {
+      try { k = atob("NDY4OWJmY2VkZjMwNDBhMGFiN2NmOTQ5ZTUwMmU1NGQ="); } catch (e) { k = "4689bfcedf3040a0ab7cf949e502e54d"; }
+    }
+    return k;
+  })();
   // 웹 앱 열쇠는 공개 페이지에 넣지 않음 (누구나 볼 수 있음, 10/30). 처음 한 번 주소 끝 #k=열쇠 로 열거나 물어보면 이 브라우저에만 기억
   const WEBKEY = (function () {
     let k = "";
@@ -3305,35 +3365,132 @@ details.help-box summary {
   window.addEventListener("resize", fitNotice);
   $("notice-reset").addEventListener("click", () => { noticeEdited = false; render(); toast("자동 내용으로 되돌렸어요"); });
 
-  // 공지 오류 제보 / 피클·클로드 전달 복사 로직 (v134)
-  const bugDesc = $("bug-desc");
-  const bugSt = $("bug-report-st");
+  // 💬 AI 다이렉트 소통 & 공지 오류 제보 로직 (v171)
+  let aiTarget = "pickle";
+  document.querySelectorAll(".ai-target-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".ai-target-btn").forEach(b => {
+        b.classList.remove("active");
+        b.style.background = "#fff";
+        b.style.color = "var(--ink, #3a2230)";
+      });
+      btn.classList.add("active");
+      btn.style.background = "var(--pink-deep, #ff5fa8)";
+      btn.style.color = "#fff";
+      aiTarget = btn.getAttribute("data-target") || "pickle";
+    });
+  });
+
+  const aiMsgInput = $("ai-msg-input");
+  const aiMsgSt = $("ai-msg-st");
+
   document.querySelectorAll(".bug-tag").forEach(b => {
     b.addEventListener("click", () => {
       const tag = b.getAttribute("data-tag");
-      if (!bugDesc) return;
-      if (bugDesc.value) {
-        if (!bugDesc.value.includes(tag)) bugDesc.value += ", " + tag;
+      if (!aiMsgInput) return;
+      if (aiMsgInput.value) {
+        if (!aiMsgInput.value.includes(tag)) aiMsgInput.value += ", " + tag;
       } else {
-        bugDesc.value = tag;
+        aiMsgInput.value = tag + ": ";
       }
+      aiMsgInput.focus();
       b.style.background = "#ffc9c9";
       b.style.borderColor = "#e03131";
     });
   });
+
   if ($("bug-clear-btn")) {
     $("bug-clear-btn").addEventListener("click", () => {
-      if (bugDesc) bugDesc.value = "";
+      if (aiMsgInput) aiMsgInput.value = "";
       document.querySelectorAll(".bug-tag").forEach(b => {
         b.style.background = "";
         b.style.borderColor = "";
       });
-      if (bugSt) bugSt.style.display = "none";
+      if (aiMsgSt) aiMsgSt.style.display = "none";
     });
   }
+
+  function showAiStatus(msg, bg, color) {
+    if (!aiMsgSt) return;
+    aiMsgSt.textContent = msg;
+    aiMsgSt.style.background = bg;
+    aiMsgSt.style.color = color;
+    aiMsgSt.style.display = "block";
+  }
+
+  // AI 다이렉트 전송
+  if ($("ai-msg-send-btn")) {
+    $("ai-msg-send-btn").addEventListener("click", () => {
+      const desc = (aiMsgInput ? aiMsgInput.value : "").trim();
+      if (!desc) {
+        toast("전달할 내용이나 문제점을 적어주세요!");
+        if (aiMsgInput) aiMsgInput.focus();
+        return;
+      }
+
+      const attachCtx = $("ai-msg-attach-ctx") ? $("ai-msg-attach-ctx").checked : true;
+      const rawReq = ($("req") ? $("req").value : "").trim();
+      const curNotice = ($("o-notice") ? $("o-notice").value : "").trim();
+      const curG = (typeof cur !== "undefined" ? (cur + 1) : 1);
+      const totalG = (typeof guides !== "undefined" && guides.length ? guides.length : 1);
+      const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
+
+      const mention = aiTarget === "claude" ? "@claude" : aiTarget === "all" ? "@모두" : "@피클";
+      const lines = [
+        mention + " [생성기 v171 제보]",
+        "• 내용: " + desc,
+        "• 가이드 번호: " + curG + " / " + totalG + " (" + (g.platform || "쿠팡") + ")"
+      ];
+
+      if (attachCtx) {
+        lines.push("", "----------------------------------------", "[의뢰서 원문]", rawReq || "(의뢰서 내용 없음)");
+        lines.push("", "----------------------------------------", "[생성된 공지]", curNotice || "(공지 생성 안 됨)");
+        lines.push("", "----------------------------------------", "[필드 상태]");
+        lines.push("- 판매처: " + ($("seller") ? $("seller").value : "") + (g.sellerAuto ? " (자동채움)" : ""));
+        lines.push("- 상품명: " + ($("pname") ? $("pname").value : ""));
+        lines.push("- 키워드: " + ($("keyword") ? $("keyword").value : ""));
+        lines.push("- 위치: " + ($("page") ? $("page").value : "") + " / 모바일: " + ($("pageM") ? $("pageM").value : ""));
+      }
+
+      const sendText = lines.join("\n");
+      const btn = $("ai-msg-send-btn");
+      btn.disabled = true;
+      btn.textContent = "⏳ 전송 중...";
+
+      const url = TEAM_URL + "?k=" + encodeURIComponent(TEAM_KEY) + "&api=send&room=" + encodeURIComponent("업무") + "&text=" + encodeURIComponent(sendText);
+
+      fetch(url)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.ok) {
+            toast("✓ 피클/클로드 팀룸에 전송되었습니다!");
+            let repMsg = "✅ 전송 완료! 피클/클로드에게 전달되었습니다.";
+            if (data.reply) repMsg += "\n✨ Gemini: " + data.reply;
+            showAiStatus(repMsg, "#d3f9d8", "#2b8a3e");
+            if (aiMsgInput) aiMsgInput.value = "";
+            document.querySelectorAll(".bug-tag").forEach(b => {
+              b.style.background = "";
+              b.style.borderColor = "";
+            });
+            setTimeout(loadTeamChat, 1000);
+          } else {
+            showAiStatus("⚠️ 전송 실패: " + (data && data.error || "알 수 없는 오류"), "#ffe3e3", "#c92a2a");
+          }
+        })
+        .catch(err => {
+          showAiStatus("⚠️ 전송 중 오류 발생. 아래 [클립보드 복사]로 복사해서 피클 채팅창에 남겨주세요.", "#ffe3e3", "#c92a2a");
+        })
+        .finally(() => {
+          btn.disabled = false;
+          btn.textContent = "🚀 피클·클로드에게 바로 전송";
+        });
+    });
+  }
+
+  // 클립보드 복사 (기존 복사 유지)
   if ($("copy-bug-report")) {
     $("copy-bug-report").addEventListener("click", () => {
-      const desc = (bugDesc ? bugDesc.value : "").trim();
+      const desc = (aiMsgInput ? aiMsgInput.value : "").trim();
       const rawReq = ($("req") ? $("req").value : "").trim();
       const curNotice = ($("o-notice") ? $("o-notice").value : "").trim();
       const curG = (typeof cur !== "undefined" ? (cur + 1) : 1);
@@ -3341,7 +3498,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v170 공지 오류 제보]",
+        "🚨 [가이드 생성기 v171 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",
@@ -3368,12 +3525,65 @@ details.help-box summary {
 
       const reportText = lines.join("\n");
       copyText(reportText, "✓ 오류 제보 복사 완료! 피클이나 클로드에 붙여넣으세요.");
-      if (bugSt) {
-        bugSt.textContent = "✓ 클립보드에 복사 완료! 피클 채팅창이나 클로드 코드에 그대로 붙여넣기(Cmd+V / 붙여넣기) 하시면 즉시 수정에 들어갑니다.";
-        bugSt.style.display = "block";
-      }
+      showAiStatus("✓ 클립보드에 복사 완료! 피클 채팅창이나 클로드 코드에 그대로 붙여넣기(Cmd+V / 붙여넣기) 하시면 즉시 수정에 들어갑니다.", "#ffe3e3", "#c92a2a");
     });
   }
+
+  // 최근 팀룸 대화 내역 불러오기
+  function loadTeamChat() {
+    const listEl = $("ai-chat-list");
+    if (!listEl) return;
+    const url = TEAM_URL + "?k=" + encodeURIComponent(TEAM_KEY) + "&api=read&room=" + encodeURIComponent("업무");
+    fetch(url)
+      .then(r => r.json())
+      .then(data => {
+        if (!data || !data.ok || !data.msgs) {
+          listEl.innerHTML = '<div style="color:#868e96; text-align:center; padding:8px;">대화 내역을 불러오지 못했습니다.</div>';
+          return;
+        }
+        const recent = data.msgs.slice(-8);
+        if (!recent.length) {
+          listEl.innerHTML = '<div style="color:#868e96; text-align:center; padding:8px;">아직 주고받은 메시지가 없습니다.</div>';
+          return;
+        }
+        const html = recent.map(m => {
+          const isOwner = m.from === "owner";
+          const isPickle = m.from === "pickle";
+          const isClaude = m.from === "claude";
+          const isGemini = m.from === "gemini";
+          const bg = isOwner ? "#fff0f6" : isPickle ? "#e6fcf5" : isClaude ? "#f3f0ff" : isGemini ? "#fff9db" : "#f8f9fa";
+          const border = isOwner ? "#ffc6e0" : isPickle ? "#96f2d7" : isClaude ? "#d0bfff" : isGemini ? "#ffe066" : "#dee2e6";
+          const label = (m.emoji || "") + " " + (m.name || m.from);
+          const timeStr = m.t ? (function(t){
+            const d = new Date(t);
+            return (d.getMonth()+1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+          })(m.t) : "";
+          const safeText = (m.text || "")
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            .replace(/\n/g, "<br>");
+          return '<div style="background:' + bg + '; border:1px solid ' + border + '; border-radius:8px; padding:6px 9px; line-height:1.4;">' +
+            '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px; font-size:11px; font-weight:bold; color:var(--ink, #3a2230);">' +
+              '<span>' + label + '</span>' +
+              '<span style="color:#868e96; font-size:10px; font-weight:normal;">' + timeStr + '</span>' +
+            '</div>' +
+            '<div style="font-size:11.5px; word-break:break-word; max-height:100px; overflow-y:auto;">' + safeText + '</div>' +
+          '</div>';
+        }).join("");
+        listEl.innerHTML = html;
+        listEl.scrollTop = listEl.scrollHeight;
+      })
+      .catch(err => {
+        listEl.innerHTML = '<div style="color:#868e96; text-align:center; padding:8px;">대화 내역을 불러오지 못했습니다.</div>';
+      });
+  }
+
+  if ($("ai-chat-refresh-btn")) {
+    $("ai-chat-refresh-btn").addEventListener("click", e => {
+      e.preventDefault();
+      loadTeamChat();
+    });
+  }
+  setTimeout(loadTeamChat, 600);
 
   const parseBtnAction = () => {
     $("sample-tag").hidden = true;
