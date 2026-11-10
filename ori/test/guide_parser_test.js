@@ -690,7 +690,56 @@ console.log('-- Test 19: 시나노골드사과 쉼표 옵션/머리 가격 분�
   console.log('✓ 시나노골드사과 쉼표 옵션·가격 분리·일건수 5명씩 균등 분할 시험 통과');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (19개 샘플 전원 일치)');
+// ==========================================
+// 11/10 털깔창: 쿠팡·네이버 다중 플랫폼 자동 분할, 머리 가격 1:1 매칭, 일일 범위(2-3개) 3명/2명 분할, 자율 옵션, 미노출 1p 가격검색 안내
+// ==========================================
+console.log('-- Test 20: 털깔창 쿠팡/네이버 다중 플랫폼 분할 및 미노출 가격검색·자율 옵션 (11/10 v169)');
+{
+  const req = `#입금대행 택대 16000 17000
+
+ 네이버 5개 쿠팡 5개입니다
+
+1. 검색 키워드: 털깔창 
+2. 키워드 검색 시 현재 순위 : 검색순위에 뜨지않아 최대한 검색유입으로 들어와주셨으면 좋겠습니다. 제가드린 링크는 판매자 링크여서 혹시나 판매링크로 어뷰징될까봐요.
+3. 총 결제하신 건수 : 10
+4. 하루 구매하는건수 (어뷰징 피하기위해 
+조금씩 변동될수 있습니다 : 2-3개
+5. 상품주소(URL) :
+쿠팡: https://www.coupang.com/vp/products/8412539373?vendorItemId=91340804266
+네이버: https://smartstore.naver.com/silverbanseok/products/13853314088?NaPm=ct%3Dmwa300eo%7Cci%3D048de972dc3281d2e8ef746f46ae648cc1cf0e29%7Ctr%3Dslsl%7Csn%3D10420044%7Chk%3Dbdb21dfaf9da61157b54b98d85c58ef3392edd40&nl-au=06e72923caf44370a33f9c22823bd1e7&nl-query=%EC%B8%84%EB%A6%AC%EC%83%A4+%ED%84%B8%EA%B9%94%EC%B0%BD
+
+7. 구매옵션 : 사이즈별로 다양하게 , 1개
+8. 포토제공 (10명)  / 오늘저녁중
+9. 리뷰 가이드 : 원고제공  오늘저녁중
+10. 입금하실 입금자명 : 김샤론
+10.택배대행 Y/N: Y`;
+
+  const h = P.parseAll(req);
+  if (h.guides.length !== 2) throw new Error('털깔창: guides length should be 2, got ' + h.guides.length);
+  const g0 = h.guides[0];
+  const g1 = h.guides[1];
+  if (g0.platform !== '쿠팡' || g0.total !== '5' || g0.daily !== '3' || g0.price !== '16000') {
+    throw new Error('털깔창 g0(쿠팡) wrong: ' + JSON.stringify(g0));
+  }
+  if (g1.platform !== '네이버' || g1.total !== '5' || g1.daily !== '2' || g1.price !== '17000') {
+    throw new Error('털깔창 g1(네이버) wrong: ' + JSON.stringify(g1));
+  }
+  if (g0.option !== '자율' || g1.option !== '자율') {
+    throw new Error('털깔창 option should be 자율, got g0: ' + g0.option + ', g1: ' + g1.option);
+  }
+  if (!g0.keyword.includes('털깔창') || !g0.keyword.includes('가격검색')) {
+    throw new Error('털깔창 keyword should include 가격검색, got: ' + g0.keyword);
+  }
+  if (!P.posText(g0).includes('1p') || !P.posText(g0).includes('가격검색')) {
+    throw new Error('털깔창 posText should include 1p and 가격검색, got: ' + P.posText(g0));
+  }
+  if (g0.review.includes('네이버 5개')) {
+    throw new Error('털깔창 review should not include allocation line, got: ' + g0.review);
+  }
+  console.log('✓ 털깔창 쿠팡/네이버 다중 플랫폼 분할·가격 1:1 매칭·미노출 가격검색·자율 옵션 시험 통과');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (20개 샘플 전원 일치)');
 process.exit(0);
 
 

@@ -203,7 +203,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v168 (입금가 여러 개면 그중 하나와 맞으면 됨 · 방제 20자)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v169 (쿠팡·네이버 다중 플랫폼 자동 분할 · 미노출 가격검색 안내 · 자율 옵션)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -377,7 +377,7 @@ details.help-box summary {
         <div class="card-out" id="box-bug-report" style="margin: 14px 0; background: #fff5f7; border: 2px solid #e03131; border-radius: 12px; padding: 14px; box-shadow: 2px 2px 0 var(--ink, #3a2230);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:4px;">
             <span style="font-weight: 900; font-size: 13.5px; color: #c92a2a;">🚨 공지 오류 제보 / 수정 요청 (피클·클로드 전달용)</span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v168</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v169</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 8px;">
             공지가 이상하게 나왔나요? 아래 태그를 누르거나 문제점을 적고 <b>[원터치 복사]</b>를 누르면, <b>의뢰서 원문 + 생성된 공지 + 문제점</b>이 한 번에 복사되어 피클 채팅창이나 클로드 코드에 바로 전달할 수 있어요.
@@ -1343,7 +1343,14 @@ details.help-box summary {
     const body = all.filter(l => !HEAD_RE.test(l) && !/^\s*@/.test(l) && !DATE_LINE.test(l)).join("\n");
     // 머리 줄과 첫 칸 사이 글(예: 포토리뷰 5개 (1줄리뷰) / 별점만 30개)은 리뷰 안내로
     const pre = [];
-    for (const l of body.split("\n")) { if (labelKey(l)) break; if (l.trim()) pre.push(l.trim()); }
+    for (const l of body.split("\n")) {
+      if (labelKey(l)) break;
+      const t = l.trim();
+      if (!t) continue;
+      // '네이버 5개 쿠팡 5개입니다', '쿠팡 10건' 같은 플랫폼별/수량 배분 글은 리뷰 안내가 아님 (11/10 v169)
+      if (/(쿠팡|네이버|토스|스스|스마트스토어|카카오|지마켓|옥션|11번가)\s*\d+\s*(?:개|건|명)?/i.test(t)) continue;
+      pre.push(t);
+    }
     const head = parseHead(headLine);
     const chunks = splitGuides(body);
     const prices = head.headPrices;
@@ -1370,31 +1377,60 @@ details.help-box summary {
       if (prices.length > 1 && prices.length !== head.guides.length && prices.length === head.guides.reduce((a, g) => a + nOf(g), 0)) {
         let k = 0; head.guides.forEach(g => { const n = nOf(g); g.price = prices.slice(k, k + n).join("\n"); k += n; });
       } }
-    // 장바구니건이 아니고, 한 가이드 내에 건수가 명시된 서로 다른 상품 URL이 여러 개 있는 경우 독립 가이드로 자동 분할 (대봉감 쿠팡/토스 등)
+    // 장바구니건이 아니고, 한 가이드 내에 건수가 명시되거나 서로 다른 플랫폼 상품 URL이 여러 개 있는 경우 독립 가이드로 자동 분할 (대봉감 쿠팡/토스, 털깔창 쿠팡/네이버 등, 11/10 v169)
     const expanded = [];
     head.guides.forEach(g => {
       const urls = lines(g.url).map(l => { const m = l.match(/^(.*?)\s*(https?:\/\/\S+)/); return m ? { label: m[1].trim(), url: m[2] } : null; }).filter(Boolean);
       if (!head.cart && urls.length > 1) {
-        const subCounts = urls.map((u, idx) => {
+        let subCounts = urls.map((u, idx) => {
           const m = u.label.match(/(\d+)\s*(?:건|명|개)/);
           if (m) return m[1];
           const o = (g.optBase || [])[idx];
-          return (o && o.qty) ? o.qty : "";
+          if (o && o.qty) return o.qty;
+          const plt = platformOf(u.url);
+          const pltPattern = plt === "네이버" ? "(?:네이버|스스|스마트스토어)" : plt;
+          const pm = text0.match(new RegExp("(?:^|[\\s,;])" + pltPattern + "[^\\d\\n]{0,10}(\\d+)\\s*(?:건|명|개)?", "i"))
+                  || text0.match(new RegExp("(\\d+)\\s*(?:건|명|개)[^\\d\\n]{0,10}" + pltPattern, "i"));
+          if (pm) return pm[1];
+          return "";
         });
+        if (!subCounts.every(Boolean) && g.total && Number(g.total) > 0) {
+          const each = Math.floor(Number(g.total) / urls.length);
+          const rem = Number(g.total) % urls.length;
+          subCounts = urls.map((_, idx) => String(each + (idx < rem ? 1 : 0)));
+        }
         if (subCounts.every(Boolean)) {
+          const dailyTotal = Number((g.daily || "").match(/\d+/)?.[0] || 0);
+          const dailyRange = (g.daily || "").match(/(\d+)\s*[-~]\s*(\d+)/);
           urls.forEach((u, idx) => {
             const sub = Object.assign({}, g);
             const opt = (g.optBase || [])[idx] || { label: u.label.replace(/\s*\d+\s*(?:건|명|개).*$/, "").trim(), qty: subCounts[idx] };
             const cleanLabel = (opt.label || u.label).replace(/\s*\d+\s*(?:건|명|개).*$/, "").trim();
             sub.url = (u.label ? u.label + " " : "") + u.url;
             sub.pno = urlInfo(u.url);
-            sub.pname = cleanLabel;
-            sub.option = cleanLabel;
-            sub.optBase = [{ label: cleanLabel, qty: subCounts[idx] }];
-            sub.total = subCounts[idx];
-            sub.daily = subCounts[idx];
-            sub.days = [{ n: subCounts[idx], br: [] }];
             sub.platform = platformOf(u.url);
+            if (g.optBase && g.optBase.length === 1 && /자율|다양|자유|선택/.test(g.optBase[0].label)) {
+              sub.option = "자율";
+              sub.optBase = [{ label: "자율", qty: "" }];
+            } else {
+              sub.pname = cleanLabel;
+              sub.option = cleanLabel;
+              sub.optBase = [{ label: cleanLabel, qty: subCounts[idx] }];
+            }
+            sub.total = subCounts[idx];
+            if (dailyRange) {
+              sub.daily = idx === 0 ? dailyRange[2] : dailyRange[1];
+            } else if (dailyTotal > 0 && dailyTotal !== Number(g.total)) {
+              const dEach = Math.floor(dailyTotal / urls.length);
+              const dRem = dailyTotal % urls.length;
+              sub.daily = String(Math.max(1, dEach + (idx < dRem ? 1 : 0)));
+            } else {
+              sub.daily = subCounts[idx];
+            }
+            sub.days = [{ n: sub.daily, br: [] }];
+            if (head.headPrices && head.headPrices.length === urls.length) {
+              sub.price = head.headPrices[idx];
+            }
             if (sub.platform === "토스" && (!sub.page || UNKNOWN.test(sub.page))) sub.page = "1p";
             expanded.push(sub);
           });
@@ -1620,6 +1656,10 @@ details.help-box summary {
         f.option = mOpt[2].trim();
       }
     }
+    // '사이즈별로 다양하게 , 1개', '옵션 자율, 1개', '색상 랜덤 1개' 처럼 자율/다양 + 수량(1개)인 경우 단일 옵션 '자율'로 정규화 (11/10 v169)
+    if (f.option && /(?:다양|자율|자유|랜덤|아무거나|상관없)/.test(f.option)) {
+      f.option = "자율";
+    }
     // '소프트그레이 L 남성용, M 여성용 리뷰어 선택' → 옵션 2개(소프트그레이 L 남성용 / 소프트그레이 M 여성용), '리뷰어 선택'은 빼기 (10/22)
     { const o0 = String(f.option || ""), pick = /(리뷰어|구매자|체험단)\s*(선택|자율|맘대로)|중\s*(택\s*1|선택)/;
       if (pick.test(o0) && o0.indexOf("\n") === -1 && /,/.test(o0)) {
@@ -1654,10 +1694,11 @@ details.help-box summary {
       };
       const isSize = p => /^(XS|S|M|L|XL|XXL|2XL|3XL|FREE|F|\d{2,3}(?:mm)?)$/i.test(p);
       const isColor = p => /^(블랙|화이트|그레이|네이비|핑크|아이보리|베이지|옐로우|그린|블루|레드|검정|흰색|노랑|파랑|초록|빨강)$/.test(p);
+      const isQtyOnly = p => /^\d+\s*(?:개|box|박스|세트|set|ea)?$/i.test(p);
       const sameUnit = cp.length >= 2 && cp.every(p => getUnit(p)) && cp.every(p => getUnit(p) === getUnit(cp[0]));
       const allSizes = cp.length >= 2 && cp.every(isSize);
       const allColors = cp.length >= 2 && cp.every(isColor);
-      if (cp.length >= 2 && (cp.length === hpLen || sameUnit || allSizes || allColors)) {
+      if (!cp.some(isQtyOnly) && cp.length >= 2 && (cp.length === hpLen || sameUnit || allSizes || allColors)) {
         f.option = cp.join("\n");
       }
     }
@@ -1698,7 +1739,16 @@ details.help-box summary {
     // 위치가 비어있고 순위(rank)가 있으면 위치 기본값으로 채움
     // '몇위' 표기는 매일 바뀌어 불안정하므로 '1p' 형식으로 변환 (사용자 요청 10/31)
     if (!r.page && r.rank) {
-      if (/첫\s*(?:페이지|p)/i.test(r.rank)) {
+      const isUnranked = /뜨지\s*않|안\s*떠|안\s*나와|미노출|순위\s*밖|노출\s*안|안\s*잡|어뷰징/.test(r.rank) || (r.rank.length > 25 && !/\d+\s*(?:p|페이지|위)/.test(r.rank));
+      if (isUnranked) {
+        const hp = (head && head.headPrices) || [];
+        const priceInfo = hp.length >= 2 ? "쿠팡 " + hp[0] + " 네이버 " + hp[1] : (hp[0] ? hp[0] : "");
+        const filterNotice = "(안나오면 가격검색 해주세요" + (priceInfo ? ". " + priceInfo : "") + ")";
+        r.page = "1p " + filterNotice;
+        if (r.keyword && r.keyword.indexOf("가격검색") === -1) {
+          r.keyword = r.keyword + " " + filterNotice;
+        }
+      } else if (/첫\s*(?:페이지|p)/i.test(r.rank)) {
         // '필터 비건 누른 후 첫페이지 (꼭 비건...)' -> '1p (필터 비건 누른 후 첫페이지)'
         const hasExtra = r.rank.replace(/첫\s*(?:페이지|p)/gi, "").trim();
         r.page = hasExtra ? "1p (" + r.rank.replace(/^[(\s]+|[)\s]+$/g, "") + ")" : "1p";
@@ -2958,7 +3008,7 @@ details.help-box summary {
         : null;
       const pfx = g.platform ? g.platform + " - " : "";
       return [
-        confirmRun ? (i + 1) + "." : guides.length > 1 ? (cartInfo() ? (i + 1) + ")" : (i + 1) + ") " + pfx + (g.daily ? g.daily + "명" : "") + " : ") : null,
+        confirmRun ? (i + 1) + "." : guides.length > 1 ? (cartInfo() ? (i + 1) + ")" : g.platform ? g.platform + (g.daily ? " (" + g.daily + "명):" : ":") : (i + 1) + ") " + (g.daily ? g.daily + "명 : " : "")) : null,
         g.short ? "링크타고 검색▼( 상번이 네이버일때 무시)" : null,
         g.short || null,
         "🐥판매처 : " + (isBlockedText(g.seller) || !okSeller(g.seller) ? "" : (g.seller || "")) + ((g.platform === "쿠팡" || !g.platform) && g.cpFetched && !g.cpRocket && (g.seller || "").trim() && !isBlockedText(g.seller) && okSeller(g.seller) ? " (판매자변경 로켓xxxxxx)" : ""),
@@ -2973,7 +3023,11 @@ details.help-box summary {
     rememberProducts();
     const ci = cartInfo();
     const cartTxt = ci ? ["🛒🛒 장바구니 진행 🛒🛒", "아래 상품 " + ci.n + "개를 한 번에 장바구니에 담아 같이 결제해 주세요 (한 분이 " + ci.n + "개 모두 구매)", "🛒 총 결제금액 : " + (ci.sum ? money(String(ci.sum)) + "원 (" + ci.n + "개 합계)" : "❗가격 넣기"), "🛒 리뷰는 " + ci.n + "개 상품 모두 작성해 주세요", "", ""].join("\n") : "";
-    const auto = notice + (confirmRun ? "\n" : "\n\n") + cartTxt + product;
+    const allText = String($("req").value || "") + " " + guides.map(g => (g.review || "") + " " + (g.photo || "")).join(" ");
+    const reviewWaitMsg = /원고\s*제공.*오늘\s*저녁|오늘\s*저녁중.*원고|원고\s*및\s*포토\s*제공/i.test(allText)
+      ? "\n\n원고 및 포토제공 ! 리뷰대기해주세요"
+      : "";
+    const auto = notice + (confirmRun ? "\n" : "\n\n") + cartTxt + product + reviewWaitMsg;
     if (!noticeEdited) $("o-notice").value = auto;
     fitNotice();
     renderPriceBox();
@@ -3273,7 +3327,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v168 공지 오류 제보]",
+        "🚨 [가이드 생성기 v169 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",
