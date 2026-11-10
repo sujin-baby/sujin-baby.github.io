@@ -203,7 +203,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v167 (방제 20자 넘으면 상품 이름 줄임 · 쉼표 옵션·머리 가격 분리·일건수 균등 분할)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v168 (입금가 여러 개면 그중 하나와 맞으면 됨 · 방제 20자)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -377,7 +377,7 @@ details.help-box summary {
         <div class="card-out" id="box-bug-report" style="margin: 14px 0; background: #fff5f7; border: 2px solid #e03131; border-radius: 12px; padding: 14px; box-shadow: 2px 2px 0 var(--ink, #3a2230);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:4px;">
             <span style="font-weight: 900; font-size: 13.5px; color: #c92a2a;">🚨 공지 오류 제보 / 수정 요청 (피클·클로드 전달용)</span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v167</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v168</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 8px;">
             공지가 이상하게 나왔나요? 아래 태그를 누르거나 문제점을 적고 <b>[원터치 복사]</b>를 누르면, <b>의뢰서 원문 + 생성된 공지 + 문제점</b>이 한 번에 복사되어 피클 채팅창이나 클로드 코드에 바로 전달할 수 있어요.
@@ -2854,12 +2854,15 @@ details.help-box summary {
       warns.push(miss.length === 1 && miss[0] === "가격" ? gn + "가격이 없어요." : gn + "가격 없음: " + miss.join(", ") + " → 위 '옵션마다 가격' 칸에 넣어 주세요 (옵션마다 가격이 달라요)." + (g.pagePrice ? " 상품 페이지에서 읽은 가격 " + g.pagePrice + "은 어느 옵션 가격인지 몰라서 안 넣었어요." : ""));
     });
     // 가격 및 옵션 불일치 경고 (사용자 요청 10/30)
-    const hp = (lastHead && lastHead.headPrices && lastHead.headPrices[0]) || "";
+    //  머리 줄 가격이 여러 개(옵션마다 입금가: '#입금대행 택대 9000 12500 20500')면 그중 하나와만 맞으면 됨 (11/10 사용자: 옵션 3개인데 첫 가격하고만 비교해서 다르다고 뜸)
+    const hps = ((lastHead && lastHead.headPrices) || []).map(x => String(x).replace(/[^0-9]/g, "")).filter(Boolean);
+    const hp = hps.length === 1 ? hps[0] : "";
     guides.forEach((g, i) => {
       const gn = guides.length > 1 ? "가이드 " + (i + 1) + ": " : "";
-      const gPrices = lines(g.price || "").map(x => x.replace(/,/g, "")).filter(Boolean);
-      if (hp && gPrices.length && gPrices.some(p => p !== hp)) {
-        warns.push("⚠️ " + gn + "입금가(" + Number(hp).toLocaleString() + "원)와 옵션 가격(" + gPrices.map(p => Number(p).toLocaleString() + "원").join(", ") + ")이 다릅니다!");
+      const gPrices = lines(g.price || "").map(x => x.replace(/[^0-9]/g, "")).filter(Boolean);
+      const off = gPrices.filter(p => hps.indexOf(p) < 0);
+      if (hps.length && off.length) {
+        warns.push("⚠️ " + gn + "입금가(" + hps.map(p => Number(p).toLocaleString() + "원").join(", ") + ")에 없는 옵션 가격이 있어요: " + off.map(p => Number(p).toLocaleString() + "원").join(", ") + "!");
       }
       if (hp && /2\s*개/.test(g.option || "") && Number(hp) < 95000) {
         warns.push("⚠️ " + gn + "옵션에 '2개'가 적혀 있지만 의뢰서 입금가는 " + Number(hp).toLocaleString() + "원(1개 가격대)입니다. 업체가 1개 옵션 대신 2개 옵션 링크를 잘못 보냈는지 확인하세요!");
@@ -3270,7 +3273,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v167 공지 오류 제보]",
+        "🚨 [가이드 생성기 v168 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",
