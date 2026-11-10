@@ -4712,10 +4712,10 @@ function msgvRoomBg_(room, map) {
   if (!map[k]) map[k] = MSGV_ROOM_BG[Object.keys(map).length % MSGV_ROOM_BG.length];
   return map[k];
 }
-// 방 공지 글 중 구매 가이드(양식 작성 폼 / 구매 시간 / 상품 안내)인지 리뷰내용 가이드인지 구분 (11/10 사용자 요청)
-function isNoticeBuy_(msg) {
+// 방 공지 글 중 리뷰내용 가이드(또는 포토대기)인지 구매 가이드인지 구분 (11/10 사용자 요청)
+function isNoticeReview_(msg) {
   const s = String(msg || '');
-  return (/forms\.gle\/|docs\.google\.com\/forms\/|양식\s*작성\s*폼|★★★|자정\s*~|오전\s*\d+시/.test(s)) && !/리뷰내용\s*가이드/.test(s.slice(0, 80));
+  return /리뷰내용\s*가이드|포토\s*대기|⭐️포토|원고\s*및\s*사진\s*제공/i.test(s);
 }
 // 탭 이름 → 몇 번째 종류 탭인지 (이름 = 종류 또는 '종류 숫자'). 아니면 -1
 function msgvGroupOfName_(name) {
@@ -4770,7 +4770,7 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
       if (od) over++;
       const kind = String(x[2]);
       let tag = grp.k.indexOf(kind) < 0 ? '〔' + kind + '〕 ' : grp.k.length > 1 && kind !== grp.k[0] ? '〔' + kind.replace(/ 요청$/, '') + '〕 ' : '';
-      if (grp.key === 'notice') tag = (isNoticeBuy_(x[4]) ? '〔구매〕 ' : '〔리뷰〕 ') + tag;
+      if (grp.key === 'notice') tag = (isNoticeReview_(x[4]) ? '〔리뷰〕 ' : '〔구매〕 ') + tag;
       const camp = xs.length > 1 || grp.key === 'todo' ? msgvCampOf_(x) : '';
       // 할일: 카톡방 칸 첫 줄에 캠페인 이름(굵게), 둘째 줄에 보낼 곳·건수 (11/8 사용자: 캠페인명이 잘 안 보임)
       const room = tag + String(x[3] || '') + (xs.length > 1 ? ' · ' + xs.length + '건' : '') + (x[5] === '방 못 찾음' ? ' ⚠방 못 찾음' : '');
@@ -4788,10 +4788,10 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
     };
     let lines = [];
     if (grp.key === 'notice') {
-      const buyP = pend.filter(function (xs) { return isNoticeBuy_(xs[0][4]); });
-      const revP = pend.filter(function (xs) { return !isNoticeBuy_(xs[0][4]); });
-      const buyS = sent.filter(function (xs) { return isNoticeBuy_(xs[0][4]); });
-      const revS = sent.filter(function (xs) { return !isNoticeBuy_(xs[0][4]); });
+      const buyP = pend.filter(function (xs) { return !isNoticeReview_(xs[0][4]); });
+      const revP = pend.filter(function (xs) { return isNoticeReview_(xs[0][4]); });
+      const buyS = sent.filter(function (xs) { return !isNoticeReview_(xs[0][4]); });
+      const revS = sent.filter(function (xs) { return isNoticeReview_(xs[0][4]); });
       const buyLines = buyP.concat(buyS).map(toLine);
       const revLines = revP.concat(revS).map(toLine);
       if (buyLines.length && revLines.length) {
