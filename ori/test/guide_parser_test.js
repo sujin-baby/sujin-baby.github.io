@@ -739,7 +739,43 @@ console.log('-- Test 20: 털깔창 쿠팡/네이버 다중 플랫폼 분할 및 
   console.log('✓ 털깔창 쿠팡/네이버 다중 플랫폼 분할·가격 1:1 매칭·미노출 가격검색·자율 옵션 시험 통과');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (20개 샘플 전원 일치)');
+// ==========================================
+// 11/10 v170: 20자 미만 시 방제에 업체명 포함 및 다중 플랫폼(쿠팡+네이버) '네쿠' 태그
+// ==========================================
+console.log('-- Test 21: 20자 미만 시 업체명 포함 및 쿠팡/네이버 다중 플랫폼 "네쿠" 태그 (11/10 v170)');
+{
+  // 1) 단일 가이드 20자 이내: 업체명 포함
+  sandbox.guides = [{
+    keyword: '흡착장난감',
+    seller: '빌랑',
+    platform: '쿠팡'
+  }];
+  getElem('takdae').checked = false;
+  getElem('realship').checked = true;
+  getElem('fruit').checked = false;
+  getElem('t-up').checked = false;
+  const room1 = P.makeRoom('11.11', '4');
+  if (room1 !== '#11.11 실 빌랑 흡착장난감 4') {
+    throw new Error('Test 21-1 room failed: expected "#11.11 실 빌랑 흡착장난감 4", got "' + room1 + '"');
+  }
+
+  // 2) 쿠팡+네이버 다중 가이드: 실버반석 네쿠 털깔창5
+  sandbox.guides = [
+    { keyword: '털깔창', seller: '실버반석', platform: '쿠팡' },
+    { keyword: '털깔창', seller: '실버반석', platform: '네이버' }
+  ];
+  getElem('takdae').checked = true;
+  getElem('realship').checked = false;
+  getElem('fruit').checked = false;
+  getElem('t-up').checked = false;
+  const room2 = P.makeRoom('11.11', '5');
+  if (room2 !== '#택11.11 실버반석 네쿠 털깔창5') {
+    throw new Error('Test 21-2 room failed: expected "#택11.11 실버반석 네쿠 털깔창5", got "' + room2 + '"');
+  }
+  console.log('✓ 20자 미만 시 업체명 포함 및 쿠팡/네이버 네쿠 태그 시험 통과');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (21개 샘플 전원 일치)');
 process.exit(0);
 
 

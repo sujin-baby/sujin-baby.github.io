@@ -203,7 +203,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v169 (쿠팡·네이버 다중 플랫폼 자동 분할 · 미노출 가격검색 안내 · 자율 옵션)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v170 (20자 미만 시 업체명 포함 · 쿠팡/네이버 다중 플랫폼 '네쿠' 태그)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -377,7 +377,7 @@ details.help-box summary {
         <div class="card-out" id="box-bug-report" style="margin: 14px 0; background: #fff5f7; border: 2px solid #e03131; border-radius: 12px; padding: 14px; box-shadow: 2px 2px 0 var(--ink, #3a2230);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:4px;">
             <span style="font-weight: 900; font-size: 13.5px; color: #c92a2a;">🚨 공지 오류 제보 / 수정 요청 (피클·클로드 전달용)</span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v169</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v170</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 8px;">
             공지가 이상하게 나왔나요? 아래 태그를 누르거나 문제점을 적고 <b>[원터치 복사]</b>를 누르면, <b>의뢰서 원문 + 생성된 공지 + 문제점</b>이 한 번에 복사되어 피클 채팅창이나 클로드 코드에 바로 전달할 수 있어요.
@@ -2633,11 +2633,12 @@ details.help-box summary {
     const t = type(), tk = $("takdae").checked;
     const g1 = guides[0] || {};
     const head = (t === "입대" ? "#" : "업") + (tk ? "택" : "") + date;
-    const shop = $("fruit").checked ? ((g1.seller || "").replace(/\s+/g, "") || "(업체명)") : "";
+    const fruitRoom = $("fruit").checked;
+    const seller0 = (g1.seller || "").replace(/\s+/g, "");
+    const shop = fruitRoom ? (seller0 || "(업체명)") : "";
     // 상품이 여럿이면 '업체명 + 상품마다 짧은 이름' (오즈네즈 양말 담요). 짧은 상품명 칸을 직접 고쳤으면 그걸
     //  상품이 3개 이상이면 '업체명 첫 상품 외' (#10.22 실 시온스 양모볼 외 15, 10/22)
     //  과일 의뢰는 예전 규칙 그대로 '업체명 + 첫 상품 + 외' (#택10.26 모두의농수산옥광밤외12, 10/24: 업체명이 두 번 들어간 것)
-    const fruitRoom = $("fruit").checked;
     // 장바구니건 방제: 첫 상품 키워드 + 외 + 물건 수 (사용자 10/28 '#10.28 유러피안샐러드외 60')
     if (cartInfo()) { const kw0 = String(g1.guide || g1.keyword || "").replace(/\s+/g, ""), sl0 = $("realship").checked ? "실" : ""; const a = [head, sl0, kw0 + "외", cnt].filter(Boolean).join(" "); return a.length <= 20 ? a : [head, sl0, kw0 + "외" + cnt].filter(Boolean).join(" "); }
     // 의뢰서에 검색 키워드가 없으면 '업체명 + 상품 이름' (10/28 '#택10.28 EMS' → '#택10.28 시온스 저주파발마사지기3'). 상품 이름 = 대표 키워드 + 바로 앞 한글 꾸밈말
@@ -2689,22 +2690,32 @@ details.help-box summary {
       // 끝말이 같은 상품(거치대 둘)이면 그 상품들은 더 긴 이름으로 (맥세이프 / 핸들 거치대)
       if (names.some((x, i) => names.indexOf(x) !== i)) names = guides.map((g, i) => names.filter(x => x === names[i]).length > 1 ? (nounOf(g) || names[i]) : names[i]);
       names = names.filter((x, i, a) => x && a.indexOf(x) === i);
-      const tries = many3 ? [[sh0, names[0] + "외"], [names[0] + "외"]] : [[sh0].concat(names), names, [names[0] + "외"]];
+      // 쿠팡+네이버 다중 플랫폼 자동 분할 건이면 '네쿠' 태그 부여 (11/10 v170)
+      const hasN = guides.some(g => /네이버/.test(g.platform || g.type || "")), hasC = guides.some(g => /쿠팡/.test(g.platform || g.type || ""));
+      const platTag = (hasN && hasC) ? "네쿠" : "";
+      const tries = many3 ? (platTag ? [[sh0, platTag, names[0] + "외"], [platTag, names[0] + "외"], [sh0, names[0] + "외"], [names[0] + "외"]] : [[sh0, names[0] + "외"], [names[0] + "외"]])
+        : platTag ? [[sh0, platTag].concat(names), [platTag].concat(names), [sh0].concat(names), names, [names[0] + "외"]]
+        : [[sh0].concat(names), names, [names[0] + "외"]];
       for (const t of tries) {
         const w = t.filter(Boolean), sp = [head, sil].concat(w, [cnt]).filter(Boolean).join(" "), gl = [head, sil].concat(w).filter(Boolean).join(" ") + cnt;
         if (sp.length <= 20) return sp;
         if (gl.length <= 20) return gl;
       }
-      return [head, sil, (names[0] || "") + "외", cnt].filter(Boolean).join(" ");
+      return [head, sil, platTag, (names[0] || "") + "외", cnt].filter(Boolean).join(" ");
     }
-    for (let n = toks.length; n >= 1; n--) if (spaced(n).length <= 20) return spaced(n);
-    // 20자가 넘으면 한꺼번에 다 붙이지 말고 건수만 먼저 붙임: '#11.10 엘비나프레시 설향딸기20' (11/9 사용자: 업체명과 상품 이름은 띄어 써야지)
-    const semi = n => [head, sil, shop, pick(n).join(" ") + multi + cnt].filter(Boolean).join(" ");
-    for (let n = toks.length; n >= 1; n--) if (semi(n).length <= 20) return semi(n);
-    for (let n = toks.length; n >= 1; n--) if (tight(n).length <= 20) return tight(n);
-    // 그래도 20자가 넘으면 상품 이름을 뒤에서부터 줄이고 업체명과는 띄어 씀 (11/10 사용자: '#택11.10 싱싱곳간시나노골드사과10' 21자 → '#택11.10 싱싱곳간 시나노골드10')
-    const w1 = pick(1).join("");
-    for (let k = w1.length - 1; k >= 2; k--) { const s1 = [head, sil, shop, w1.slice(0, k) + multi + cnt].filter(Boolean).join(" "); if (s1.length <= 20) return s1; }
+    // 20자 안 넘으면 앞에 업체명도 넣기 (11/10 v170 사용자: '20자 안 넘으면 앞에 업체명도 넣으라고')
+    const tryShops = (!fruitRoom && seller0) ? [seller0, ""] : [shop];
+    for (const sh of tryShops) {
+      const spaced = n => [head, sil, sh, pick(n).join(" ") + multi, cnt].filter(Boolean).join(" ");
+      for (let n = toks.length; n >= 1; n--) if (spaced(n).length <= 20) return spaced(n);
+      const semi = n => [head, sil, sh, pick(n).join(" ") + multi + cnt].filter(Boolean).join(" ");
+      for (let n = toks.length; n >= 1; n--) if (semi(n).length <= 20) return semi(n);
+      const tight = n => head + " " + (sil ? "실 " : "") + (sh ? sh + " " : "") + pick(n).join("") + multi + cnt;
+      for (let n = toks.length; n >= 1; n--) if (tight(n).length <= 20) return tight(n);
+      // 그래도 20자가 넘으면 상품 이름을 뒤에서부터 줄이고 업체명과는 띄어 씀 (11/10 사용자: '#택11.10 싱싱곳간시나노골드사과10' 21자 → '#택11.10 싱싱곳간 시나노골드10')
+      const w1 = pick(1).join("");
+      for (let k = w1.length - 1; k >= 2; k--) { const s1 = [head, sil, sh, w1.slice(0, k) + multi + cnt].filter(Boolean).join(" "); if (s1.length <= 20) return s1; }
+    }
     return tight(1);
   }
 
@@ -3330,7 +3341,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v169 공지 오류 제보]",
+        "🚨 [가이드 생성기 v170 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",
