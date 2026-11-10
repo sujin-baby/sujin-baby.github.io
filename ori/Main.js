@@ -4799,7 +4799,7 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
           type: 'sec', id: '', sent: false, day: '', over: false, today: false,
           room: '🐥 리뷰내용 가이드' + (revP.length ? ' (' + revP.length + '건)' : ''),
           msg: '━━━ 위: 🛒 구매 가이드 / 아래: 🐥 리뷰내용 가이드 ━━━',
-          bg: '#eee6f7'
+          bg: '#eee6f7', reqF: null, reqNote: '', reqUrl: '', fee: null, links: null, chwan: null
         }]).concat(revLines);
       } else {
         lines = buyLines.concat(revLines);
@@ -4807,7 +4807,7 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
     } else {
       lines = pend.concat(sent).map(toLine);
     }
-    const sig = JSON.stringify(lines.map(function (l) { return [l.id, l.sent ? 1 : 0, l.day, l.over ? 1 : 0, l.room, l.msg.length, l.msg.slice(0, 80), l.bg, l.reqF, l.reqNote.length, l.reqUrl, l.fee, l.links, l.chwan]; }));
+    const sig = JSON.stringify(lines.map(function (l) { return [l.id, l.sent ? 1 : 0, l.day, l.over ? 1 : 0, l.room, (l.msg || '').length, (l.msg || '').slice(0, 80), l.bg, l.reqF, (l.reqNote || '').length, l.reqUrl, l.fee, l.links, l.chwan]; }));
     return { lines: lines, pend: pend.length, over: over, sig: sig, name: grp.base + (pend.length ? ' ' + pend.length : '') };
   });
   return { groups: groups, colors: colors };
