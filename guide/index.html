@@ -2040,6 +2040,7 @@ details.help-box summary {
 
   // 짧은 상품명 추천: 유기농, 햇, 프리미엄, 대과, ~인증, ~산 같은 꾸밈말을 빼고 남은 마지막 단어
   function shortName(kw) {
+    kw = String(kw || "").replace(/\([^)]*\)/g, "").trim();
     const stop = /^(미니|슬림|휴대용|접이식|대용량|소용량|신상|신상품|고급|업그레이드|유기농|무농약|친환경|햇|햇것|프리미엄|국내산|수입산|대과|특대|특|왕|명품|산지직송|정품|\S+인증|\S+산|공주|정안|제주|청송|영주|나주|충주|상주|성주|해남|무안|고창|영동|논산|부여|청도|김천|의성|안동|문경|거창|하동|광양|순천|보성|여수|강원|경북|경남|전남|전북|충남|충북)$/;
     const t = kw.split(/\s+/).filter(Boolean);
     const keep = t.filter(x => !stop.test(x));
@@ -2603,12 +2604,13 @@ details.help-box summary {
   // 방제 만들기 (날짜, 건수만 바꿔서 다음 일차 방제도 만듦)
   // 상품이 나타내는 짧은 이름: 상품명 대괄호 [여성겨울두툼한양말]과 검색 키워드(발목무압박기모양말)의 같은 끝말 → 양말 (사용자 요청 10/21)
   function nounOf(g) {
-    const kw = String(g.keyword || "").replace(/\s+/g, ""), pn = String(g.pname || "");
+    const rawKw = String(g.keyword || "").replace(/\([^)]*\)/g, "").trim();
+    const kw = rawKw.replace(/\s+/g, ""), pn = String(g.pname || "").replace(/\([^)]*\)/g, "").trim();
     const suf = (a, b) => { let i = 0; while (i < a.length && i < b.length && a[a.length - 1 - i] === b[b.length - 1 - i]) i++; return a.slice(a.length - i); };
     const br = ((pn.match(/\[([^\]]+)\]/) || [])[1] || "").replace(/\s+/g, "");
     let best = br ? suf(kw, br) : "";
     if (best.length < 2) pn.split(/[\s\[\],/]+/).forEach(w => { const x = suf(kw, w); if (x.length >= 2 && x.length > best.length) best = x; });
-    return best.length >= 2 ? best : shortName(g.keyword || "");
+    return best.length >= 2 ? best : shortName(rawKw || "");
   }
   // 카톡 방제는 20자까지 (11/10 사용자: 21자부터 안 됨). 어떤 길로 만들어도 마지막에 한 번 더 맞춤:
   //  끝 건수 앞 띄어쓰기 → 끝 낱말(상품 이름)을 뒤에서부터 줄임('외'는 남김) → 그래도 넘으면 글자 수대로 자름
@@ -2654,7 +2656,7 @@ details.help-box summary {
     // 과일이면 짧은 이름은 과일 이름 (키워드가 '타이벡'이어도 상품명에 감귤이 있으면 '귤', 10/23)
     const fw = $("fruit").checked && !many3 && !many && !g1.guideEdited ? (() => { for (const src of [g1.keyword || "", g1.pname || ""]) { const w = src.replace(/[\[\]()]/g, " ").split(/\s+/).find(x => isFruit(x)); if (w) return /귤$/.test(w) ? "귤" : w; } return ""; })() : "";
     const toks = fw ? [fw] : many3 ? [(g1.seller || "").replace(/\s+/g, ""), nounOf(g1)].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i) : many ? [(g1.seller || "").replace(/\s+/g, "")].concat(guides.map(nounOf)).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i)
-      : ((g1.guide || g1.keyword || "(상품)").trim()).split(/\s+/);
+      : (((g1.guide || g1.keyword || "(상품)").replace(/\([^)]*\)/g, "").trim()).split(/\s+/));
     const multi = many3 ? "외" : guides.length > 1 && !many ? "외" : "";
     // 실배송이면 날짜 바로 오른쪽에 '실' (사용자 지정 10/19: #10.19 실 런치버스 텀블러 7)
     const sil = $("realship").checked ? "실" : "";
