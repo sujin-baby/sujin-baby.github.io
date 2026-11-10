@@ -1810,6 +1810,7 @@ function diag_(p) {
       .map(function (c) { return payStatusLink_(payChainRows_(c, tabs2), true); });
   } catch (e) { out.chainErr = String(e); }
   // &msgroom=방 글자: 그 방 보낼메시지 글 전체 (종류·상태·글, 읽기만, 11/10 토스만 남긴 공지 확인)
+  if (p.msgid) try { const ob = outboxSheet_(), ol = ob.getLastRow(); out.msgOne = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues().filter(function (v) { return String(v[0]) === String(p.msgid); }).map(function (v) { return [String(v[2]), String(v[5]), String(v[3]), String(v[4]).slice(0, 8000)]; }) : []; } catch (e) { out.msgOneErr = String(e); }
   if (p.msgroom) try { const ob = outboxSheet_(), ol = ob.getLastRow(); out.msgs = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues().filter(function (v) { return String(v[3]).indexOf(String(p.msgroom)) >= 0; }).slice(-8).map(function (v) { return [String(v[0]), String(v[2]), String(v[5]), String(v[3]), String(v[4]).slice(0, 6000)]; }) : []; } catch (e) { out.msgsErr = String(e); }
   // &payhead=1: 월급시트(이달) 위쪽 머리 줄과 맨 아래 합계 줄의 값·수식, 완료보고(H)를 쓰는 수식 (진행비 총액이 어떻게 나오는지 보기, 읽기만)
   if (p.payhead) try {
@@ -1842,7 +1843,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'SDUPSCAN1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SDUPSCAN1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3315,6 +3316,8 @@ function checkFullInner_() {
   try { seolCoupangOff1_(); } catch (e) {}
   try { lunchReclass1_(); } catch (e) {}
   try { storeDupScan1_(); } catch (e) {}
+  try { lunchReclass2_(); } catch (e) {}
+  try { tossNoticeGap1_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
   try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
@@ -5174,7 +5177,8 @@ function tossOnlyNotice_(t) {
   const sep = L.filter(function (l) { return SEPL.test(l); })[0] || '————————————————————————';
   const body = keep.map(function (a, i) { const b = a.slice(); b[0] = b[0].replace(/^(\s*)\d+\)/, '$1' + (i + 1) + ')'); return b.join('\n'); }).join('\n\n' + sep.trim() + '\n\n');
   while (foot.length && !foot[0].trim()) foot.shift();
-  return head.join('\n') + body + (foot.length ? '\n\n' + foot.join('\n') : '');
+  const h = head.join('\n').replace(/\s+$/, '');
+  return (h ? h + '\n\n' : '') + body + (foot.length ? '\n\n' + foot.join('\n') : '');
 }
 // (11/10 한 번, 사용자: #택11.10 오늘과일 설향딸기외 31 쿠팡 취소 → 토스만 각 5명 총 10명) 방제 … 10(목표 10)·월급시트, 토스만 남긴 새 방 공지
 function seolToss1_() {
@@ -5288,6 +5292,37 @@ function lunchReclass1_() {
     props.setProperty('RVZIPSOON_' + sid, String(Date.now()));
     props.setProperty('LUNCHRE1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 포토 폴더 ' + n + '장 다시 나누기');
   } catch (e) { props.setProperty('LUNCHRE1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/10 한 번) 런치버스 텀블러는 업체 전송이 체크돼 있어서 자동 분류가 안 돎 → 위에서 꺼낸 사진을 바로 AI로 다시 나눔 (다 나눌 때까지 몇 번)
+function lunchReclass2_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('LUNCHRE2') || '');
+  if (/^✓/.test(st) || (st.match(/남음|실패/g) || []).length >= 6) return;
+  try {
+    const runs = readRuns_(), r = runs.filter(function (x) { return /런치버스텀블러/.test(bareTitle_(x['명단 제목']).replace(/\s+/g, '')) && dateTok_(x['명단 제목']) === '10.27'; })[0];
+    if (!r || !r['시트ID']) { props.setProperty('LUNCHRE2', st + ' 실패(진행 못 찾음)'); return; }
+    const sid = String(r['시트ID']), mine = runs.filter(function (x) { return String(x['시트ID']) === sid; }), f = rvFolder_(mine, props, sid);
+    if (!f) { props.setProperty('LUNCHRE2', st + ' 실패(폴더 없음)'); return; }
+    const left = rvAiSort_(f, sid, props);
+    try { rvCountDirs_(f.img, rvCartOf_(sid)); } catch (e) {}
+    const by = {}, it = f.img.getFolders();
+    while (it.hasNext()) { const d = it.next(), t = rvTypeOf_(d.getName()); if (!t) continue; let n = 0; const fi = d.getFiles(); while (fi.hasNext()) if (/^image\//.test(fi.next().getMimeType())) n++; by[t] = (by[t] || 0) + n; }
+    const txt = Object.keys(by).map(function (t) { return t + ' ' + by[t]; }).join(', ');
+    props.setProperty('LUNCHRE2', (left > 0 ? st + ' 남음 ' + left + '장' : '✓') + ' ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + txt);
+  } catch (e) { props.setProperty('LUNCHRE2', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/10 한 번) 토스만 남긴 11.10·11.11 공지: 폼 링크와 '1)' 사이 빈 줄 (안 보낸 것만)
+function tossNoticeGap1_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('TOSSGAP1')) return;
+  props.setProperty('TOSSGAP1', '1');
+  const ob = outboxSheet_(), ol = ob.getLastRow();
+  let n = 0;
+  if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
+    if (v[2] !== '방 공지' || v[5] === '보냄' || !/설향딸기외/.test(String(v[3]))) return;
+    const t = String(v[4]), nt = t.replace(/(forms\.gle\/\S+)\n(1\) )/, '$1\n\n$2');
+    if (nt !== t) { obSet_(ob, v[0], 5, nt); n++; }
+  });
+  props.setProperty('TOSSGAP1', '✓ ' + n);
 }
 // 실행이 끝날 때 (로더 이름 함수 감쌈): 보낼메시지가 바뀌었으면 바뀐 탭만 다시 그림. 모아보기 체크 직후엔 안 그림 (줄이 안 움직이게)
 function msgViewSync_() {

@@ -12,6 +12,7 @@ const t = G('tossOnlyNotice_(__N)');
 ok(t && t.indexOf('쿠팡') < 0 && /^1\) 5명토스 - 5명 :/m.test(t) && /^2\) 5명토스 - 5명 :/m.test(t) && !/^3\)/m.test(t), '토스만, 번호 1·2 ' + t);
 ok(t.indexOf('★★★자정 ~ 오전 7시까지 구매★★★') === 0 && t.indexOf('https://forms.gle/AAA') > 0 && t.indexOf('🐥★키워드 : 콜라비') > 0 && t.split('\n').filter(l => /^[—]{5,}$/.test(l.trim())).length === 1, '머리 글·폼 링크·구분선 하나');
 ok(!/————\s*$/.test(t), '끝에 구분선 없음');
+ok(/forms\.gle\/AAA\n\n1\) 5명토스/.test(t), '폼 링크와 1) 사이 빈 줄');
 ok(G("tossOnlyNotice_('1) 5명토스 - 5명 :\\n🐥x\\n2) 5명토스 - 5명 :\\n🐥y')") === '', '쿠팡 없으면 그대로');
 // 진행 바꾸기
 const LH = G('LIST_HEADER'), mk = o => LH.map(h => o[h] !== undefined ? o[h] : '');
