@@ -1843,7 +1843,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SDUPSCAN1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3318,6 +3318,7 @@ function checkFullInner_() {
   try { storeDupScan1_(); } catch (e) {}
   try { lunchReclass2_(); } catch (e) {}
   try { tossNoticeGap1_(); } catch (e) {}
+  try { seol1111Del1_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
   try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
@@ -5323,6 +5324,27 @@ function tossNoticeGap1_() {
     if (nt !== t) { obSet_(ob, v[0], 5, nt); n++; }
   });
   props.setProperty('TOSSGAP1', '✓ ' + n);
+}
+// (11/10 한 번, 사용자: #택11.11 오늘과일설향딸기외10 이건 왜 있어? 쿠팡 취소로 토스만 남았는데 토스는 오늘 끝) → 11.11 진행 지움(0명일 때만), 총건수 = 11.9 실제 + 11.10 목표
+function seol1111Del1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SEOLDEL1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const runs = readRuns_(), r = runs.filter(function (x) { return bareTitle_(x['명단 제목']).replace(/\s+/g, '') === '#택11.11오늘과일설향딸기외10'; })[0];
+    const a = runs.filter(function (x) { return /^#택11\.10오늘과일설향딸기외10$/.test(bareTitle_(x['명단 제목']).replace(/\s+/g, '')); })[0];
+    if (!a) { props.setProperty('SEOLDEL1', st + ' 실패(11.10 진행 못 찾음)'); return; }
+    let msg = '11.11 진행 없음(이미 지움)';
+    if (r) {
+      if (Number(r['인원']) > 0) { props.setProperty('SEOLDEL1', st + ' 실패(11.11에 응답 ' + r['인원'] + '명이 있어서 안 지움)'); return; }
+      msg = deleteRun_(r);
+    }
+    const sid = String(a['시트ID']), t0 = today_().getTime();
+    const mine = readRuns_().filter(function (x) { return String(x['시트ID']) === sid && x['진행 상태'] !== '종료' && x['진행일'] instanceof Date; });
+    const tot = mine.reduce(function (s0, x) { return s0 + (dayStart_(x['진행일']) < t0 ? (Number(x['인원']) || 0) : (Number(x['목표인원']) || 0)); }, 0);
+    if (tot > 0) mine.forEach(function (x) { if (Number(x['총건수']) !== tot) setRun_(x.row, '총건수', tot); });
+    props.setProperty('SEOLDEL1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + msg + ' 총건수 ' + tot);
+    try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); }
+  } catch (e) { props.setProperty('SEOLDEL1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 // 실행이 끝날 때 (로더 이름 함수 감쌈): 보낼메시지가 바뀌었으면 바뀐 탭만 다시 그림. 모아보기 체크 직후엔 안 그림 (줄이 안 움직이게)
 function msgViewSync_() {
