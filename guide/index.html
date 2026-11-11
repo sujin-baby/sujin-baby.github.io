@@ -205,7 +205,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v172 (방제 직접 수정·편집 지원 · AI 다이렉트 소통)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v173 (URL 콜론누락·6:4비율·일진행범위 완벽 파싱 · 방제 수정)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -381,7 +381,7 @@ details.help-box summary {
             <span style="font-weight: 900; font-size: 14px; color: var(--pink-deep, #ff5fa8); display:flex; align-items:center; gap:5px;">
               <span>💬 AI 다이렉트 대화 · 공지 수정 요청</span>
             </span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v171</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v173</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 10px;">
             공지가 이상하게 나왔거나 수정이 필요한가요? 여기서 메시지를 보내면 <b>피클(생성기)</b>과 <b>클로드(시트)</b>에게 실시간으로 전달돼요!
@@ -1552,22 +1552,40 @@ details.help-box summary {
     ["payer", /입금자|입금하실/], ["takdaeYN", /택배\s*대행/], ["depositYN", /입금\s*대행/]
   ];
   const KW_SENT = /검색하시고|검색해\s*주|찾아\s*주시/;
+  function findLabelColon(l) {
+    const re = /[:：]/g;
+    let m;
+    while ((m = re.exec(l))) {
+      const idx = m.index;
+      const pre = l.slice(0, idx), post = l.slice(idx + 1);
+      if (/https?$/i.test(pre) && post.startsWith("//")) continue;
+      if (/\d\s*$/.test(pre) && /^\s*\d/.test(post)) continue;
+      return idx;
+    }
+    return -1;
+  }
   function labelKey(raw) {
     const l = String(raw).replace(/^\s*(?:\d+\s*[.)]\s*)+/, "").trim();
     if (!l) return "";
-    const ci = l.search(/[:：]/), hi = l.search(/https?:\/\//);
-    // '포토리뷰와 텍스트 리뷰 비율은 6:4정도로' 같은 비율 문장은 라벨이 아님 (11/2: 포토제공 '유'를 '4정도로…'로 덮어써 전체 텍스트리뷰가 됨)
-    const ratio = ci > 0 && /\d\s*$/.test(l.slice(0, ci)) && /^\s*\d/.test(l.slice(ci + 1));
-    if (ci > 0 && !ratio && (hi === -1 || ci < hi)) { const hit = LABELS.find(x => x[1].test(l.slice(0, ci))); if (hit) return hit[0]; }
-    if (KW_SENT.test(l)) return "keyword";   // "데르온 오토바이/ 방한 장갑 등을 검색하시고 찾아주시길 바랍니다"
-    // 번호 붙은 라벨이 두 줄로 나뉘어 ':'가 다음 줄에 있음 (10/28 '4. 하루 구매하는건수 (어뷰징 피하기위해 ⏎ 조금씩 변동될수 있습니다 : 3 / 3 / 4 건씩')
-    if (ci === -1 && /^\s*\d+\s*[.)]/.test(raw)) { const hit = LABELS.find(x => x[1].test(l)); if (hit) return hit[0]; }
+    const ci = findLabelColon(l), hi = l.search(/https?:\/\//);
+    if (hi > 0 && (ci === -1 || ci > hi)) {
+      const pre = l.slice(0, hi).trim();
+      const hit = LABELS.find(x => x[1].test(pre));
+      if (hit) return hit[0];
+    }
+    if (ci > 0) {
+      const hit = LABELS.find(x => x[1].test(l.slice(0, ci)));
+      if (hit) return hit[0];
+    }
+    if (KW_SENT.test(l)) return "keyword";
+    if (ci === -1 && /^\s*\d+\s*[.)]/.test(raw)) {
+      const hit = LABELS.find(x => x[1].test(l));
+      if (hit) return hit[0];
+    }
     return "";
   }
   function fieldsOf(text) {
     const f = {}; let curKey = "", waitColon = false;
-    // 한 줄 뒤에 다음 번호 칸이 붙어 온 것은 나눔: '1. 검색 키워드: 털깔창 2. 키워드 검색 시 현재 순위 :' (11/9 털깔창·십자가 의뢰서)
-    //  띄어쓰기 + 번호 + 점 다음에 칸 이름과 ':'이 올 때만 (1.5kg 같은 건 안 나눔)
     text = String(text).replace(/[ \t]+(\d{1,2}[ \t]*[.)][ \t]*)([^\n:：]{1,30}[:：])/g, (m, num, lab) => LABELS.some(x => x[1].test(lab)) ? "\n" + num + lab : m);
     text.split("\n").forEach(raw => {
       const l = raw.replace(/^\s*(?:\d+\s*[.)]\s*)+/, "").trim();
@@ -1575,19 +1593,30 @@ details.help-box summary {
       const key = labelKey(raw);
       if (key) {
         curKey = key;
-        const ci = l.search(/[:：]/), hi = l.search(/https?:\/\//);
-        if (ci === -1 && !KW_SENT.test(l)) { f[curKey] = ""; waitColon = true; return; }   // 라벨만 있고 값은 다음 줄 ':' 뒤
+        const ci = findLabelColon(l), hi = l.search(/https?:\/\//);
+        if (key === "url" && hi > 0 && (ci === -1 || ci > hi)) {
+          f[curKey] = l.slice(hi).trim();
+          waitColon = false;
+          return;
+        }
+        if (ci === -1 && !KW_SENT.test(l)) { f[curKey] = ""; waitColon = true; return; }
         waitColon = false;
-        f[curKey] = (ci > 0 && (hi === -1 || ci < hi) && !(key === "keyword" && KW_SENT.test(l) && !/키워드/.test(l.slice(0, ci)))) ? l.slice(ci + 1).trim()
+        let val = (ci > 0 && (hi === -1 || ci < hi) && !(key === "keyword" && KW_SENT.test(l) && !/키워드/.test(l.slice(0, ci)))) ? l.slice(ci + 1).trim()
           : l.replace(/\s*등을?\s*(검색|찾아).*$/, "").replace(/[,，]\s*$/, "").trim();
+        // 라벨 줄 끝에 '선택:'만 붙고 선택 내용이 콜론 앞에 적힌 경우 (예: '7. 포토제공 (몇명) 제공 6:4비율 /포토없음  선택:')
+        if (!val && ci > 0 && /선택\s*$/i.test(l.slice(0, ci))) {
+          const pre = l.slice(0, ci).trim();
+          val = pre.replace(/^.*?(?:포토|옵션|리뷰|선택)\s*(?:유\s*무|제공)?\s*(?:\([^)]*\))?\s*[:：]?\s*/i, "").replace(/선택\s*$/, "").trim();
+        }
+        f[curKey] = val;
         return;
       }
       if (curKey && waitColon) {
-        const c2 = l.search(/[:：]/); waitColon = false;
+        const c2 = findLabelColon(l); waitColon = false;
         if (c2 > 0 && !/^https?:\/\//i.test(l)) { f[curKey] = l.slice(c2 + 1).trim(); return; }
-        f[curKey] = l.replace(/^[-–—•·*]\s*/, ""); return;   // '- 유러피안샐러드'처럼 다음 줄에 값만 (10/28)
+        f[curKey] = l.replace(/^[-–—•·*]\s*/, ""); return;
       }
-      if (/^(?:입금|택배)\s*대행/i.test(l)) return;   // 9. 입금대행 줄이 앞선 빈 가이드에 섞여 들어가지 않게 방어
+      if (/^(?:입금|택배)\s*대행/i.test(l)) return;
       if (curKey) f[curKey] = (f[curKey] ? f[curKey] + "\n" : "") + l;
     });
     return f;
@@ -1663,6 +1692,19 @@ details.help-box summary {
       const fullRev = ((f.photo || "") + " " + (f.review || "")).replace(/\n/g, " ");
       let pm = fullRev.match(/(?:하루\s*\S+\s*)?(?:포토\s*(?:제공|리뷰)?|유)?\s*(\d+)\s*(?:명|개|건)?(?:은|는)?\s*(?:제공|포토)?\s*[,/]\s*(?:포토\s*)?(?:없음|미제공|텍스트|글|무|별점)?\s*(\d+)\s*(?:명|개|건)?(?:은|는)?\s*(?:포토\s*없음|텍스트|글|무|미제공|별점)?/);
       if (!pm || !pm[1] || !pm[2]) {
+        // '6:4 비율', '6:4' 비율 표기 지원: 총 건수(또는 일 건수)에 비례 분할 (11/11 v173)
+        const rm = fullRev.match(/(\d+)\s*[:：]\s*(\d+)\s*(?:비율)?/);
+        if (rm && rm[1] && rm[2]) {
+          const r1 = Number(rm[1]), r2 = Number(rm[2]);
+          const tot = Number(r.total) || Number((f.daily || "").match(/\d+/)?.[0]) || 0;
+          if (tot > 0) {
+            const pCnt = Math.round((tot * r1) / (r1 + r2));
+            const tCnt = Math.max(0, tot - pCnt);
+            pm = [null, String(pCnt), String(tCnt)];
+          }
+        }
+      }
+      if (!pm || !pm[1] || !pm[2]) {
         const m2 = fullRev.match(/(\d+)\s*(?:개|명|건)?\s*(?:정도)?(?:만)?\s*(?:사진|포토)[^,\n/]*나머지\s*(?:는)?\s*(?:별점|텍스트|글)/i);
         if (m2) {
           const pCnt = m2[1];
@@ -1695,6 +1737,23 @@ details.help-box summary {
       }
     }
     if (!r.days.length && /^\s*\d+\s*\/\s*\d+/.test(dv)) dv.split("/").map(x => (x.match(/\d+/) || [""])[0]).filter(Boolean).forEach(n => r.days.push({ n: n, br: [] }));
+    // '2~3', '2-3개' 일진행 건수 범위 표기 지원: 총건수를 일차별로 나누어 배분 (11/11 v173)
+    if (!r.days.length && /(\d+)\s*[-~]\s*(\d+)/.test(dv)) {
+      const rng = dv.match(/(\d+)\s*[-~]\s*(\d+)/);
+      const low = Number(rng[1]), high = Number(rng[2]);
+      const tot = Number(r.total) || 0;
+      if (tot > 0 && low + high === tot) {
+        r.days.push({ n: String(high), br: [] });
+        r.days.push({ n: String(low), br: [] });
+      } else if (tot > 0 && high > 0) {
+        let left = tot;
+        while (left > 0) {
+          const take = left >= high ? high : Math.max(1, left);
+          r.days.push({ n: String(take), br: [] });
+          left -= take;
+        }
+      }
+    }
     // 날짜별 건수 합이 총건수보다 크면 마지막 날을 줄임 (예: 총 20, 19일 10 + 20일 20 → 20일 10)
     if (r.total && r.days.length) { let acc = 0; r.days = r.days.map(d => { const n = Math.max(0, Math.min(Number(d.n), Number(r.total) - acc)); acc += n; return Object.assign({}, d, { n: String(n) }); }).filter(d => Number(d.n) > 0); }
     r.dailyRaw = dv;
@@ -3469,7 +3528,7 @@ details.help-box summary {
 
       const mention = aiTarget === "claude" ? "@claude" : aiTarget === "all" ? "@모두" : "@피클";
       const lines = [
-        mention + " [생성기 v171 제보]",
+        mention + " [생성기 v173 제보]",
         "• 내용: " + desc,
         "• 가이드 번호: " + curG + " / " + totalG + " (" + (g.platform || "쿠팡") + ")"
       ];
@@ -3530,7 +3589,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v171 공지 오류 제보]",
+        "🚨 [가이드 생성기 v173 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",

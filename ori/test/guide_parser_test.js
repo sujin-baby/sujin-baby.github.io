@@ -775,7 +775,55 @@ console.log('-- Test 21: 20자 미만 시 업체명 포함 및 쿠팡/네이버 
   console.log('✓ 20자 미만 시 업체명 포함 및 쿠팡/네이버 네쿠 태그 시험 통과');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (21개 샘플 전원 일치)');
+// ==========================================
+// 11/11: 나주배 프라임스토어 (URL 라벨 콜론 누락, 6:4 포토/텍스트 비율, 2~3개 일진행 범위, 콜론 뒤 빈값)
+// ==========================================
+console.log('-- Test 22: 나주배 프라임스토어 (URL 라벨 콜론 누락, 6:4 포토/텍스트 비율, 2~3개 일진행 범위) (11/11 v173)');
+{
+  const req = `#입금대행 택대 11900
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 나주배
+2. 키워드 검색 시 현재 순위 :
+3. 총 결제하신 건수 :5건
+4. 하루 진행 건수 : 2~3
+5. 상품주소(URL) https://www.coupang.com/vp/products/9793507010?vendorItemId=96237112311
+6. 구매옵션 :3kg 11900원
+7. 포토제공 (몇명) 제공 6:4비율 /포토없음  선택:
+8. 리뷰 가이드 : 참고용 /원고제공 / 자율 택 자율
+9. 입금하실 입금자명 :최현주(프라임스토어
+10.택배대행 Y/N: Y`;
+
+  const fields = P.fieldsOf(req);
+  if (fields.url !== 'https://www.coupang.com/vp/products/9793507010?vendorItemId=96237112311') {
+    throw new Error('Test 22 fields.url failed: ' + fields.url);
+  }
+  if (fields.daily !== '2~3') {
+    throw new Error('Test 22 fields.daily failed: ' + fields.daily);
+  }
+  if (fields.option !== '3kg 11900원') {
+    throw new Error('Test 22 fields.option failed: ' + fields.option);
+  }
+  if (!fields.photo.includes('6:4비율')) {
+    throw new Error('Test 22 fields.photo failed: ' + fields.photo);
+  }
+
+  const h = P.parseAll(req);
+  if (h.guides.length !== 1) throw new Error('Test 22 guides length should be 1');
+  const g = h.guides[0];
+  if (g.daily !== '3') throw new Error('Test 22 g.daily should be 3, got: ' + g.daily);
+  if (g.total !== '5') throw new Error('Test 22 g.total should be 5, got: ' + g.total);
+  if (g.days.length !== 2 || g.days[0].n !== '3' || g.days[1].n !== '2') {
+    throw new Error('Test 22 g.days wrong: ' + JSON.stringify(g.days));
+  }
+  if (g.option !== '3kg') throw new Error('Test 22 g.option should be 3kg, got: ' + g.option);
+  if (g.price !== '11900') throw new Error('Test 22 g.price should be 11900, got: ' + g.price);
+  if (!g.review.includes('포토대기 3개 / 텍스트리뷰 2개')) {
+    throw new Error('Test 22 g.review should include 포토대기 3개 / 텍스트리뷰 2개, got: ' + g.review);
+  }
+  console.log('✓ 나주배 프라임스토어 URL 콜론 누락·6:4 포토비율·2~3개 일범위 시험 통과');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (22개 샘플 전원 일치)');
 process.exit(0);
 
 
