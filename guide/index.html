@@ -205,7 +205,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v173 (URL 콜론누락·6:4비율·일진행범위 완벽 파싱 · 방제 수정)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v174 (키워드 괄호필터 분리·위치 연동 · 상품번호 마스킹 정밀화)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -381,7 +381,7 @@ details.help-box summary {
             <span style="font-weight: 900; font-size: 14px; color: var(--pink-deep, #ff5fa8); display:flex; align-items:center; gap:5px;">
               <span>💬 AI 다이렉트 대화 · 공지 수정 요청</span>
             </span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v173</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v174</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 10px;">
             공지가 이상하게 나왔거나 수정이 필요한가요? 여기서 메시지를 보내면 <b>피클(생성기)</b>과 <b>클로드(시트)</b>에게 실시간으로 전달돼요!
@@ -1668,6 +1668,18 @@ details.help-box summary {
     // 검색 키워드: "모릅니다", 빈칸이면 비워 두고 상품명으로 추천. "A/ B, C" 이면 A가 대표, B·C는 서브
     // <<실링팬>>, [실링팬], "실링팬" 같은 꾸밈 기호는 빼고 (사용자 요청 10/21)
     let kwRaw = ((f.keyword || "").split("\n").map(x => x.trim()).filter(Boolean)[0] || "").replace(/[<>«»《》〈〉【】\[\]"'“”‘’]/g, "").trim();
+    // 키워드 내 필터·체크 지시문 괄호(예: '감홍사과(비건필터체크후검색해주세요)') 분리 (11/11 v174)
+    let kwFilterNote = "";
+    const filterMatch = kwRaw.match(/[\(（]\s*([^\)）]*(?:필터|정렬|체크|적용|클릭|순으로|순\s*정렬)[^\)）]*)\s*[\)）]/i);
+    if (filterMatch) {
+      let note = filterMatch[1].trim().replace(/해\s*주세요$/, "").trim();
+      note = note.replace(/([가-힣]+)필터/g, "$1 필터")
+                 .replace(/필터\s*체크\s*후\s*검색/g, "필터 체크 후 검색")
+                 .replace(/필터체크/g, "필터 체크")
+                 .replace(/체크후/g, "체크 후");
+      kwFilterNote = "(" + note + (/(?:검색|정렬|적용)$/.test(note) ? "" : " 후 검색") + ")";
+      kwRaw = kwRaw.replace(filterMatch[0], "").trim();
+    }
     if (UNKNOWN.test(kwRaw) || !kwRaw) {
       // 의뢰서에 검색 키워드가 없으면 쿠팡 URL의 q= 파라미터에서 추출
       const uq = text.match(/[?&]q=([^&\s]+)/i);
@@ -1676,6 +1688,7 @@ details.help-box summary {
     const kwParts = UNKNOWN.test(kwRaw) ? [] : kwRaw.split(/[\/,，]/).map(x => x.trim()).filter(Boolean);
     r.keyword = kwParts[0] || "";
     r.kwAlts = kwParts.slice(1);
+    r.kwFilter = kwFilterNote;
     r.rank = (f.rank || "").replace(/\n/g, " ").trim();
     if (!r.rank || UNKNOWN.test(r.rank) || /비워|모르/.test(r.rank)) {
       const urk = text.match(/[?&](?:searchRank|rank)=(\d+)/i);
@@ -1882,6 +1895,14 @@ details.help-box summary {
         r.page = r.rank.replace(/(\d+)\s*페이지/i, "$1p");
       }
       // '신상품·신규·미노출'은 위치가 아님 → 1p로 채우지 않음 (11/1 사용자: '1페이지 아닌데 왜 1페이지라고 떠', 대봉감 '신규 등록 상품이라 미노출'). 위치는 확장으로
+    }
+    // 키워드에서 추출한 필터 지시문이 있으면 위치에 연동 (11/11 v174)
+    if (r.kwFilter) {
+      if (!r.page || UNKNOWN.test(r.page) || /비워|모르/.test(r.page)) {
+        r.page = "1p " + r.kwFilter;
+      } else if (!r.page.includes(r.kwFilter)) {
+        r.page = r.page + " " + r.kwFilter;
+      }
     }
     r.platform = platformOf(urls.length ? urls[0].url : "");
     r.short = LINKS[r.platform] || "";
@@ -2985,6 +3006,9 @@ details.help-box summary {
     if (pc.p && mo.p && pc.p !== mo.p && !/1p/.test(pc.p) && !/1p/.test(mo.p)) {
       posStr = "모바일 " + mo.p + " / PC " + pc.p;
     }
+    if (g.kwFilter && !posStr.includes(g.kwFilter)) {
+      posStr = posStr + " " + g.kwFilter;
+    }
     return pre + posStr + sim;
   }
   // 공지 gzip 압축 (브라우저 CompressionStream, 관리 시트가 Utilities.ungzip으로 품). 처음엔 null(만드는 중) → 다 되면 다시 그림
@@ -3154,7 +3178,22 @@ details.help-box summary {
         "🐥판매처 : " + (isBlockedText(g.seller) || !okSeller(g.seller) ? "" : (g.seller || "")) + ((g.platform === "쿠팡" || !g.platform) && g.cpFetched && !g.cpRocket && (g.seller || "").trim() && !isBlockedText(g.seller) && okSeller(g.seller) ? " (판매자변경 로켓xxxxxx)" : ""),
         "🐥상품명 : " + (isBlockedText(g.pname) ? (g.keyword || "") : baseName(g.pname || "", null, g)),
         // 쿠팡 상품번호는 10자리 안팎. 11자리 넘게 붙으면(11/2 황금향 99799819790: 앞에 9가 하나 더) 공지에 ❗를 붙여 보내기 전에 보이게
-        "🐥상품번호 : " + lines(g.pno).map(l => ((g.platform === "쿠팡" || !g.platform) && /^\s*\d{11,}/.test(l) ? "❗자리수 확인 " : "") + l).join("\n"),
+        // 뒷자리 마스킹 검사: *** 뒤에 4자리가 아니면 (예: 293838***80 -> 2자리) 경고 및 자동 보정 (11/11 v174)
+        "🐥상품번호 : " + lines(g.pno).map(l => {
+          if (g.platform && g.platform !== "쿠팡") return l;
+          let warn = "";
+          if (/^\s*\d{11,}/.test(l)) warn = "❗자리수 확인 ";
+          const sm = l.match(/-\s*(\d*)\*{2,}(\d+)\s*$/);
+          if (sm && sm[2].length !== 4) {
+            const urlItem = pick(g.url || "", /[?&]itemId=(\d+)/i) || pick((typeof guides !== "undefined" && guides[cur] && guides[cur].url) || "", /[?&]itemId=(\d+)/i);
+            const pid = pick(l, /(\d{8,11})\s*-/);
+            if (urlItem && pid) {
+              return pid + " - " + maskItem(urlItem);
+            }
+            warn = "❗자리수 확인(끝 4자리 필요: 현재 " + sm[2].length + "자리) ";
+          }
+          return warn + l;
+        }).join("\n"),
         "🐥★키워드 : " + (g.keyword || ""),
         "🐥위치 : " + (isBlockedText(posText(g)) ? "" : posText(g))
       ].concat(optLines).concat([photo]).filter(x => x !== null).join("\n");
@@ -3528,7 +3567,7 @@ details.help-box summary {
 
       const mention = aiTarget === "claude" ? "@claude" : aiTarget === "all" ? "@모두" : "@피클";
       const lines = [
-        mention + " [생성기 v173 제보]",
+        mention + " [생성기 v174 제보]",
         "• 내용: " + desc,
         "• 가이드 번호: " + curG + " / " + totalG + " (" + (g.platform || "쿠팡") + ")"
       ];
@@ -3589,7 +3628,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v173 공지 오류 제보]",
+        "🚨 [가이드 생성기 v174 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",
@@ -3940,7 +3979,7 @@ details.help-box summary {
 
   if (typeof globalThis !== "undefined") {
     globalThis.__PARSER__ = {
-      parseAll, parseHead, setGuides: gs => { guides = gs; }, fieldsOf, parseOptions, parse, parseCoupang, optionText, baseName, makeRoom, shortName, suggestKeywords, sugKw, kwList, reviewMix, isBlockedText, posText, okSeller
+      parseAll, parseHead, setGuides: gs => { guides = gs; }, fieldsOf, parseOptions, parse, parseCoupang, optionText, baseName, makeRoom, shortName, suggestKeywords, sugKw, kwList, reviewMix, isBlockedText, posText, okSeller, maskItem
     };
   }
 })();

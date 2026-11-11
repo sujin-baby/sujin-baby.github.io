@@ -823,7 +823,46 @@ console.log('-- Test 22: 나주배 프라임스토어 (URL 라벨 콜론 누락,
   console.log('✓ 나주배 프라임스토어 URL 콜론 누락·6:4 포토비율·2~3개 일범위 시험 통과');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (22개 샘플 전원 일치)');
+// ==========================================
+console.log('-- Test 23: 산지잇다 감홍사과 (키워드 괄호 필터 분리·위치 연동, 상품번호 마스킹) (11/11 v174)');
+{
+  const req = `#입금대행 택대 16000
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다):감홍사과(비건필터체크후검색해주세요)
+2. 키워드 검색 시 현재 순위 :모르시면 비워두세요
+3. 총 결제하신 건수 :20
+4. 하루 구매하는건수 (어뷰징 피하기위해 
+조금씩 변동될수 있습니다 : 20
+5. 상품주소(URL) :https://link.coupang.com/a/ixcSlAmmTk/?style=kakao_existing_ui
+6. 구매옵션 :2kg 20건
+7. 포토제공 (몇명)  /포토없음  선택: 포토있음
+8. 리뷰 가이드 : 참고용 /원고제공 / 자율 택 :짧게 팩트만 써주세요(꼭 키워드검색후 구매부탁드립니다) 
+9. 입금하실 입금자명 :김도연
+10.택배대행 Y/N: Y`;
+
+  const h = P.parseAll(req);
+  if (h.guides.length !== 1) throw new Error('Test 23 guides length should be 1');
+  const g = h.guides[0];
+  if (g.keyword !== '감홍사과') {
+    throw new Error('Test 23 keyword should be 감홍사과 without filter parentheses, got: ' + g.keyword);
+  }
+  if (!g.page.includes('1p') || !g.page.includes('비건 필터 체크 후 검색')) {
+    throw new Error('Test 23 page should include 1p and filter instruction, got: ' + g.page);
+  }
+  if (g.total !== '20') throw new Error('Test 23 total should be 20, got: ' + g.total);
+  if (g.daily !== '20') throw new Error('Test 23 daily should be 20, got: ' + g.daily);
+  if (!g.option.includes('2kg')) throw new Error('Test 23 option should include 2kg, got: ' + g.option);
+
+  // 상품번호 마스킹 검증
+  const fullItemId = '29383892880';
+  const masked = P.maskItem ? P.maskItem(fullItemId) : (fullItemId.slice(0, 4) + '***' + fullItemId.slice(-4));
+  if (masked !== '2938***2880') {
+    throw new Error('Test 23 maskItem failed: ' + masked);
+  }
+  console.log('✓ 산지잇다 감홍사과 키워드 괄호필터 분리·위치 1p 연동·상품번호 마스킹 시험 통과');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (23개 샘플 전원 일치)');
 process.exit(0);
 
 
