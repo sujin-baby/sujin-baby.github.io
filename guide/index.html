@@ -1903,14 +1903,21 @@ details.help-box summary {
       }
       // '신상품·신규·미노출'은 위치가 아님 → 1p로 채우지 않음 (11/1 사용자: '1페이지 아닌데 왜 1페이지라고 떠', 대봉감 '신규 등록 상품이라 미노출'). 위치는 확장으로
     }
-    // 의뢰서 원문에 미노출이 적혀 있고(예: '1. 검색 키워드(미노출시 저희가 키워드땁니다)'), 위치가 비어있는 경우 가격검색 안내 연동 (11/12 v175)
-    if (!r.page && /미노출/.test(text)) {
-      const hp = (head && head.headPrices) || [];
-      const singleP = r.price || (hp && hp[0]) || "";
-      const priceStr = singleP ? Number(String(singleP).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "";
-      const priceInfo = hp.length >= 2 ? "쿠팡 " + hp[0] + " 네이버 " + hp[1] : (priceStr ? priceStr : "");
-      const filterNotice = "(안나오면 가격검색 해주세요" + (priceInfo ? ". " + priceInfo : "") + ")";
-      r.page = "1p " + filterNotice;
+    r.platform = platformOf(urls.length ? urls[0].url : "");
+    r.short = LINKS[r.platform] || "";
+
+    if (r.platform === "토스") {
+      if (!r.page || UNKNOWN.test(r.page) || /비워|모르/.test(r.page)) r.page = "1p";
+    } else {
+      // 의뢰서 원문에 미노출이 적혀 있고(예: '1. 검색 키워드(미노출시 저희가 키워드땁니다)'), 위치가 비어있는 경우 가격검색 안내 연동 (11/12 v175)
+      if (!r.page && (/미노출/.test(text) || /가격검색/.test(text))) {
+        const hp = (head && head.headPrices) || [];
+        const singleP = r.price || (hp && hp[0]) || "";
+        const priceStr = singleP ? Number(String(singleP).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "";
+        const priceInfo = hp.length >= 2 ? "쿠팡 " + hp[0] + " 네이버 " + hp[1] : (priceStr ? priceStr : "");
+        const filterNotice = "(안나오면 가격검색 해주세요" + (priceInfo ? ". " + priceInfo : "") + ")";
+        r.page = "1p " + filterNotice;
+      }
     }
     // 키워드에서 추출한 필터 지시문이 있으면 위치에 연동 (11/11 v174)
     if (r.kwFilter) {
@@ -1920,9 +1927,6 @@ details.help-box summary {
         r.page = r.page + " " + r.kwFilter;
       }
     }
-    r.platform = platformOf(urls.length ? urls[0].url : "");
-    r.short = LINKS[r.platform] || "";
-    if (r.platform === "토스" && (!r.page || UNKNOWN.test(r.page))) r.page = "1p";
     r.price = extPrices.length ? extPrices.join("\n") : "";
     return r;
   }
