@@ -1496,7 +1496,7 @@ details.help-box summary {
             if (head.headPrices && head.headPrices.length === urls.length) {
               sub.price = head.headPrices[idx];
             }
-            if (sub.platform === "토스" && (!sub.page || UNKNOWN.test(sub.page))) sub.page = "1p";
+            if (sub.platform === "토스") sub.page = "1p";
             expanded.push(sub);
           });
           return;
@@ -1879,18 +1879,7 @@ details.help-box summary {
     // 위치가 비어있고 순위(rank)가 있으면 위치 기본값으로 채움
     // '몇위' 표기는 매일 바뀌어 불안정하므로 '1p' 형식으로 변환 (사용자 요청 10/31)
     if (!r.page && r.rank) {
-      const isUnranked = /뜨지\s*않|어뷰징|검색유입|미노출|안\s*나오/.test(r.rank);
-      if (isUnranked) {
-        const hp = (head && head.headPrices) || [];
-        const singleP = r.price || (hp && hp[0]) || "";
-        const priceStr = singleP ? Number(String(singleP).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "";
-        const priceInfo = hp.length >= 2 ? "쿠팡 " + hp[0] + " 네이버 " + hp[1] : (priceStr ? priceStr : "");
-        const filterNotice = "(안나오면 가격검색 해주세요" + (priceInfo ? ". " + priceInfo : "") + ")";
-        r.page = "1p " + filterNotice;
-        if (r.keyword && r.keyword.indexOf("가격검색") === -1) {
-          r.keyword = r.keyword + " " + filterNotice;
-        }
-      } else if (/첫\s*(?:페이지|p)/i.test(r.rank)) {
+      if (/첫\s*(?:페이지|p)/i.test(r.rank)) {
         // '필터 비건 누른 후 첫페이지 (꼭 비건...)' -> '1p (필터 비건 누른 후 첫페이지)'
         const hasExtra = r.rank.replace(/첫\s*(?:페이지|p)/gi, "").trim();
         r.page = hasExtra ? "1p (" + r.rank.replace(/^[(\s]+|[)\s]+$/g, "") + ")" : "1p";
@@ -1909,8 +1898,8 @@ details.help-box summary {
     if (r.platform === "토스") {
       if (!r.page || UNKNOWN.test(r.page) || /비워|모르/.test(r.page)) r.page = "1p";
     } else {
-      // 의뢰서 원문에 미노출이 적혀 있고(예: '1. 검색 키워드(미노출시 저희가 키워드땁니다)'), 위치가 비어있는 경우 가격검색 안내 연동 (11/12 v175)
-      if (!r.page && (/미노출/.test(text) || /가격검색/.test(text))) {
+      // 엔부사과 등: 키워드 라벨이나 의뢰서에 '미노출시' 또는 '가격검색'이 명시되어 있고 순위가 없는 경우 (단, 대봉감처럼 단순히 '신규 등록 상품이라 미노출'만 적힌 경우는 위치 비움 유지)
+      if (!r.page && (/미노출시/.test(text) || /가격\s*검색/.test(text))) {
         const hp = (head && head.headPrices) || [];
         const singleP = r.price || (hp && hp[0]) || "";
         const priceStr = singleP ? Number(String(singleP).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "";
