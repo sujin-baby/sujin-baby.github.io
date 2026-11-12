@@ -1706,6 +1706,7 @@ details.help-box summary {
   function parse(text, head) {
     const f = fieldsOf(text);
     const r = {};
+    r.takdaeYN = f.takdaeYN || "";
     r.takdae = /^\s*Y/i.test(f.takdaeYN || "");
     // 검색 키워드: "모릅니다", 빈칸이면 비워 두고 상품명으로 추천. "A/ B, C" 이면 A가 대표, B·C는 서브
     // <<실링팬>>, [실링팬], "실링팬" 같은 꾸밈 기호는 빼고 (사용자 요청 10/21)
