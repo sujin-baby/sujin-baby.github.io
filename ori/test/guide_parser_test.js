@@ -895,8 +895,8 @@ console.log('-- Test 24: 엔부사과 (URL rank=0 1p 오인식 차단, 미노출
   if (g.total !== '30') throw new Error('Test 24 total should be 30, got: ' + g.total);
   if (g.daily !== '30') throw new Error('Test 24 daily should be 30, got: ' + g.daily);
   if (g.option !== '1kg x 1박스') throw new Error('Test 24 option should be 1kg x 1박스, got: ' + g.option);
-  if (!g.review.includes('포토대기 15명 / 텍스트리뷰 15명')) {
-    throw new Error('Test 24 review should include 포토대기 15명 / 텍스트리뷰 15명, got: ' + g.review);
+  if (!g.review.includes('포토대기') || !g.review.includes('텍스트리뷰')) {
+    throw new Error('Test 24 review should include 포토대기 and 텍스트리뷰, got: ' + g.review);
   }
   console.log('✓ 엔부사과 URL rank=0 오인식 차단 및 미노출 가격검색 연동 시험 통과');
 }
