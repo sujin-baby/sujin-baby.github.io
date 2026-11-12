@@ -929,7 +929,52 @@ console.log('-- Test 24: 엔부사과 (URL rank=0 1p 오인식 차단, 미노출
   console.log('✓ 기본문구 생략 번호 전용 의뢰서(제주 황금향) 파싱 시험 통과');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (25개 샘플 전원 일치)');
+// Test 26: 헤더 택대 vs 10번 N 충돌 시 conflictTakdae 검증 (11/12 v177)
+{
+  const req = `#입금대행 택대 10270
+
+1. 검색 키워드: 엔부사과
+2. 순위: 1p
+3. 총 진행 건수: 30건
+4. 일 진행 건수: 30건
+5. 상품 주소: https://link.coupang.com/a/b96o4K
+6. 옵션: 1kg x 1박스
+7. 포토 / 텍스트 / 별점: 포토 15건 / 텍스트 15건
+8. 리뷰 작성 가이드: 맛있어요
+9. 입금자명: 오르베카
+10.택배대행 Y/N: N`;
+
+  const h = P.parseAll(req);
+  if (!h.conflictTakdae) {
+    throw new Error('Test 26 conflictTakdae should be true for header 택대 vs 10번 N conflict');
+  }
+  console.log('✓ 헤더 택대 vs 10번 N 충돌 감지(conflictTakdae) 시험 통과');
+}
+
+// Test 27: 업체입금 택대 메주 의뢰서 (지니네농수산) 파싱 검증 (11/12 v177)
+{
+  const req = `업체입금  택대 
+
+1//쿠팡 지니네농수산
+
+1. 구매진행시 검색할 키워드 : [국산콩 100%] 전통방식 햇 메주 재래식 메주 된장 간장 담그기 메주 덩어리
+2. 일 진행 건수 : 포토 포함 총 30
+3.상품주소
+https://www.coupang.com/vp/products/9816176361?vendorItemId=96310017095
+텍스트25 별점5
+
+16,200원`;
+
+  const h = P.parseAll(req);
+  if (h.type !== '업체입금') throw new Error('Test 27 type should be 업체입금, got: ' + h.type);
+  if (!h.takdae) throw new Error('Test 27 takdae should be true');
+  const g = h.guides[0];
+  if (g.seller !== '지니네농수산') throw new Error('Test 27 seller should be 지니네농수산, got: ' + g.seller);
+  if (g.price !== '16200') throw new Error('Test 27 price should be 16200, got: ' + g.price);
+  console.log('✓ 업체입금 택대 메주(지니네농수산) 의뢰서 파싱 시험 통과');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (27개 샘플 전원 일치)');
 process.exit(0);
 
 

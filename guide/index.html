@@ -205,7 +205,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v176 (기본문구 생략 번호 전용 의뢰서 파싱 지원)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v177 (헤더 택대 vs 10번 N 충돌 차단 오류 문구 · 업체입금 방제 업)택/업) 표기 · 메주 등 형태 단위어 제외 및 핵심 상품명 추출)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -384,7 +384,7 @@ details.help-box summary {
             <span style="font-weight: 900; font-size: 14px; color: var(--pink-deep, #ff5fa8); display:flex; align-items:center; gap:5px;">
               <span>💬 AI 다이렉트 대화 · 공지 수정 요청</span>
             </span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v176</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v177</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 10px;">
             공지가 이상하게 나왔거나 수정이 필요한가요? 여기서 메시지를 보내면 <b>피클(생성기)</b>과 <b>클로드(시트)</b>에게 실시간으로 전달돼요!
@@ -1506,6 +1506,11 @@ details.help-box summary {
     });
     head.guides = expanded;
     head.takdaeField = head.guides.some(g => g.takdae);
+    // 헤더에 택대가 적혀 있으나 10번에 명시적으로 N이 있는 경우 충돌 플래그 설정 (11/12 오르베카 지적: 생성 전 오류 문구 차단)
+    const hasTakdaeN = head.guides.some(g => g.takdaeYN && /^(N|아니|부|false)/i.test(String(g.takdaeYN).trim()));
+    if (head.takdae && hasTakdaeN) {
+      head.conflictTakdae = true;
+    }
     head.takdae = head.takdae || head.takdaeField;
     // 진행 날짜: "19일 10개" 같은 날짜가 있으면 그 날, 아니면 "@뽀짝오리 월요일", "내일"
     const d0 = ((head.guides[0] || {}).days || [])[0];
@@ -2357,7 +2362,7 @@ details.help-box summary {
     });
     return any;
   }
-  let reqNote = "";
+  let reqNote = "", conflictTakdaeActive = false, takdaeUserEdited = false;
   // 키워드가 없으면 상품명으로 대표 키워드를 넣음 (짧은 상품명도). 서브 키워드는 키워드 찾기 상자에
   function autoKeyword(g) {
     if (!g.pname) return;
@@ -2454,6 +2459,9 @@ details.help-box summary {
     if (r.date) { const d = workdayOnOrAfter(r.date); $("date").value = d; if (d !== r.date) reqNote = "의뢰서 날짜(" + shortDate(r.date) + ")가 쉬는 날이라 " + shortDate(d) + "로 잡았어요. 그날 하면 진행 날짜를 직접 바꾸세요."; }
     else $("date").value = autoDate();
     if (r.takdae && (r.realship || r.rocket)) reqNote += (reqNote ? " " : "") + "의뢰서에 택배대행 Y라고 돼 있지만 " + (r.rocket ? "로켓그로스·로켓배송" : "실배송") + " 상품이라 #택을 안 붙였어요.";
+    if (r.conflictTakdae) {
+      reqNote = "⛔ [택배대행 표기 충돌 오류] 의뢰서 첫 줄에는 [택대]가 적혀 있으나 10번 항목에는 [N(실배송)]으로 적혀 있습니다! 실배송인지 택대인지 의뢰서를 확인하고 [택배대행] 체크를 직접 지정해 주세요. " + reqNote;
+    }
     const keepDay = Number($("day").value) || 1;   // 2일차를 먼저 골라 두고 붙여넣어도 유지
     guides = (r.guides || [r]).map(g => Object.assign({}, g, { guide: shortName(g.keyword || "") }));
     guides.forEach(autoKeyword);
@@ -2810,6 +2818,20 @@ details.help-box summary {
     const br = ((pn.match(/\[([^\]]+)\]/) || [])[1] || "").replace(/\s+/g, "");
     let best = br ? suf(kw, br) : "";
     if (best.length < 2) pn.split(/[\s\[\],/]+/).forEach(w => { const x = suf(kw, w); if (x.length >= 2 && x.length > best.length) best = x; });
+    // '덩어리', '조각', '포기' 등 형태/단위어가 단독으로 뽑히는 것 방지 (11/12 메주 덩어리 지적)
+    const UNIT_NOUN = /^(덩어리|조각|포기|알|봉|개입|묶음|박스|세트|송이|모|단)$/;
+    if (UNIT_NOUN.test(best)) {
+      const mMatch = (pn + " " + rawKw).match(/([가-힣]{2,})\s+(?:덩어리|조각|포기|알|봉|개입|묶음|박스|세트)/);
+      if (mMatch && !KW_STOP.test(mMatch[1])) best = mMatch[1];
+      else best = "";
+    }
+    // 키워드/상품명에서 2회 이상 반복되는 핵심 명사 우대 (예: 메주)
+    if (!best || best.length < 2) {
+      const words = (pn + " " + rawKw).replace(/[\[\](),]/g, " ").split(/\s+/).filter(w => /^[가-힣]{2,4}$/.test(w) && !KW_STOP.test(w) && !UNIT_NOUN.test(w));
+      const cnts = {}; let rep = "", maxC = 1;
+      words.forEach(w => { cnts[w] = (cnts[w] || 0) + 1; if (cnts[w] > maxC) { maxC = cnts[w]; rep = w; } });
+      if (rep && maxC >= 2) best = rep;
+    }
     return best.length >= 2 ? best : shortName(rawKw || "");
   }
   // 카톡 방제는 20자까지 (11/10 사용자: 21자부터 안 됨). 어떤 길로 만들어도 마지막에 한 번 더 맞춤:
@@ -2832,7 +2854,7 @@ details.help-box summary {
   function makeRoom0(date, cnt) {
     const t = type(), tk = $("takdae").checked;
     const g1 = guides[0] || {};
-    const head = (t === "입대" ? "#" : "업") + (tk ? "택" : "") + date;
+    const head = (t === "입대" ? "#" : "업)") + (tk ? "택" : "") + date;
     const fruitRoom = $("fruit").checked;
     const seller0 = (g1.seller || "").replace(/\s+/g, "");
     const shop = fruitRoom ? (seller0 || "(업체명)") : "";
@@ -3627,7 +3649,7 @@ details.help-box summary {
 
       const mention = aiTarget === "claude" ? "@claude" : aiTarget === "all" ? "@모두" : "@피클";
       const lines = [
-        mention + " [생성기 v176 제보]",
+        mention + " [생성기 v177 제보]",
         "• 내용: " + desc,
         "• 가이드 번호: " + curG + " / " + totalG + " (" + (g.platform || "쿠팡") + ")"
       ];
@@ -3688,7 +3710,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v176 공지 오류 제보]",
+        "🚨 [가이드 생성기 v177 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",
