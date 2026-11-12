@@ -205,7 +205,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v174 (키워드 괄호필터 분리·위치 연동 · 상품번호 마스킹 정밀화)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v175 (URL rank=0 1p 오인식 차단·미노출 가격검색 연동 · 썸네일 원클릭 다운로드)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -330,9 +330,12 @@ details.help-box summary {
           <select id="similar"><option value="">아니요</option><option value="1">네, 위치 뒤에 '판매처, 가격 보고 구매' 안내</option></select>
         </label>
         <label class="full" style="display:flex; flex-direction:column; gap:4px;">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px;">
             <span>썸네일 주소 (북마크/확장 프로그램 자동 저장)</span>
-            <a id="thumb-link" class="small ghost" href="#" target="_blank" rel="noopener" hidden style="font-size:12px; padding:3px 8px; text-decoration:none;">🖼️ 썸네일 새 탭에서 열기</a>
+            <div style="display:flex; gap:6px; align-items:center;">
+              <button type="button" id="thumb-download-btn" class="small" style="font-size:12px; padding:3px 8px;" hidden>📥 썸네일 다운로드</button>
+              <a id="thumb-link" class="small ghost" href="#" target="_blank" rel="noopener" hidden style="font-size:12px; padding:3px 8px; text-decoration:none;">🖼️ 썸네일 새 탭에서 열기</a>
+            </div>
           </div>
           <input id="thumb" class="mono">
         </label>
@@ -381,7 +384,7 @@ details.help-box summary {
             <span style="font-weight: 900; font-size: 14px; color: var(--pink-deep, #ff5fa8); display:flex; align-items:center; gap:5px;">
               <span>💬 AI 다이렉트 대화 · 공지 수정 요청</span>
             </span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v174</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v175</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 10px;">
             공지가 이상하게 나왔거나 수정이 필요한가요? 여기서 메시지를 보내면 <b>피클(생성기)</b>과 <b>클로드(시트)</b>에게 실시간으로 전달돼요!
@@ -1694,8 +1697,10 @@ details.help-box summary {
       const urk = text.match(/[?&](?:searchRank|rank)=(\d+)/i);
       if (urk) {
         const rNum = Number(urk[1]);
-        const pNum = Math.max(1, Math.ceil(rNum / 36));
-        r.rank = pNum + "p";
+        if (rNum > 0) {
+          const pNum = Math.max(1, Math.ceil(rNum / 36));
+          r.rank = pNum + "p";
+        }
       }
     }
     r.total = ((f.total || "").match(/\d+/) || [""])[0];
@@ -1874,10 +1879,12 @@ details.help-box summary {
     // 위치가 비어있고 순위(rank)가 있으면 위치 기본값으로 채움
     // '몇위' 표기는 매일 바뀌어 불안정하므로 '1p' 형식으로 변환 (사용자 요청 10/31)
     if (!r.page && r.rank) {
-      const isUnranked = /뜨지\s*않|어뷰징|검색유입/.test(r.rank);
+      const isUnranked = /뜨지\s*않|어뷰징|검색유입|미노출|안\s*나오/.test(r.rank);
       if (isUnranked) {
         const hp = (head && head.headPrices) || [];
-        const priceInfo = hp.length >= 2 ? "쿠팡 " + hp[0] + " 네이버 " + hp[1] : (hp[0] ? hp[0] : "");
+        const singleP = r.price || (hp && hp[0]) || "";
+        const priceStr = singleP ? Number(String(singleP).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "";
+        const priceInfo = hp.length >= 2 ? "쿠팡 " + hp[0] + " 네이버 " + hp[1] : (priceStr ? priceStr : "");
         const filterNotice = "(안나오면 가격검색 해주세요" + (priceInfo ? ". " + priceInfo : "") + ")";
         r.page = "1p " + filterNotice;
         if (r.keyword && r.keyword.indexOf("가격검색") === -1) {
@@ -1895,6 +1902,15 @@ details.help-box summary {
         r.page = r.rank.replace(/(\d+)\s*페이지/i, "$1p");
       }
       // '신상품·신규·미노출'은 위치가 아님 → 1p로 채우지 않음 (11/1 사용자: '1페이지 아닌데 왜 1페이지라고 떠', 대봉감 '신규 등록 상품이라 미노출'). 위치는 확장으로
+    }
+    // 의뢰서 원문에 미노출이 적혀 있고(예: '1. 검색 키워드(미노출시 저희가 키워드땁니다)'), 위치가 비어있는 경우 가격검색 안내 연동 (11/12 v175)
+    if (!r.page && /미노출/.test(text)) {
+      const hp = (head && head.headPrices) || [];
+      const singleP = r.price || (hp && hp[0]) || "";
+      const priceStr = singleP ? Number(String(singleP).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "";
+      const priceInfo = hp.length >= 2 ? "쿠팡 " + hp[0] + " 네이버 " + hp[1] : (priceStr ? priceStr : "");
+      const filterNotice = "(안나오면 가격검색 해주세요" + (priceInfo ? ". " + priceInfo : "") + ")";
+      r.page = "1p " + filterNotice;
     }
     // 키워드에서 추출한 필터 지시문이 있으면 위치에 연동 (11/11 v174)
     if (r.kwFilter) {
@@ -3134,6 +3150,9 @@ details.help-box summary {
       $("thumb-link").hidden = !hasThumb;
       if (hasThumb) $("thumb-link").href = thumb;
     }
+    if ($("thumb-download-btn")) {
+      $("thumb-download-btn").hidden = !hasThumb;
+    }
 
     // 가이드마다 상품 블록, 여러 개면 1) 2) 번호와 구분선. 옵션이 여럿이면 옵션마다 가격
     const product = guides.map((g, i) => {
@@ -3567,7 +3586,7 @@ details.help-box summary {
 
       const mention = aiTarget === "claude" ? "@claude" : aiTarget === "all" ? "@모두" : "@피클";
       const lines = [
-        mention + " [생성기 v174 제보]",
+        mention + " [생성기 v175 제보]",
         "• 내용: " + desc,
         "• 가이드 번호: " + curG + " / " + totalG + " (" + (g.platform || "쿠팡") + ")"
       ];
@@ -3628,7 +3647,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v174 공지 오류 제보]",
+        "🚨 [가이드 생성기 v175 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",
@@ -3812,6 +3831,32 @@ details.help-box summary {
         });
       } else {
         toast("이 브라우저에서는 직접 붙여넣기를 해 주세요");
+      }
+    });
+  }
+
+  // 썸네일 원클릭 다운로드 (사용자 요청 11/12 v175)
+  const thumbDlBtn = $("thumb-download-btn");
+  if (thumbDlBtn) {
+    thumbDlBtn.addEventListener("click", async () => {
+      const u = v("thumb");
+      if (!u) return;
+      try {
+        const resp = await fetch(u, { mode: "cors" });
+        const blob = await resp.blob();
+        const ext = (u.match(/\.(png|jpe?g|webp|gif)(\?|$)/i) || [])[1] || "jpg";
+        const curRoom = (v("o-room") || v("pname") || "썸네일").replace(/[\\/:*?"<>|~#%&{}$!'@+`=^]/g, " ").trim();
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = curRoom + "." + ext;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        toast("썸네일을 다운로드했어요 ✓");
+      } catch (e) {
+        window.open(u, "_blank");
+        toast("이미지를 새 탭에서 열었어요 (우클릭 → 다른 이름으로 저장)");
       }
     });
   }

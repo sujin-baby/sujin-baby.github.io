@@ -862,7 +862,46 @@ console.log('-- Test 23: 산지잇다 감홍사과 (키워드 괄호 필터 분�
   console.log('✓ 산지잇다 감홍사과 키워드 괄호필터 분리·위치 1p 연동·상품번호 마스킹 시험 통과');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (23개 샘플 전원 일치)');
+// ==========================================
+console.log('-- Test 24: 엔부사과 (URL rank=0 1p 오인식 차단, 미노출 가격검색 연동, 30건 일건수·포토15/글15 파싱) (11/12 v175)');
+{
+  const req = `#입금대행 택대 10270
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다) : 엔부사과
+2. 키워드 검색 시 현재 순위 : 모르시면 비워두세요
+3. 총 결제하신 건수 : 30건
+4. 하루 구매하는건수 (어뷰징 피하기위해 
+조금씩 변동될수 있습니다) : 30건
+5. 상품주소(URL) : https://www.coupang.com/vp/products/9814782843?itemId=29394608745&vendorItemId=96305758800&q=%EC%97%94%EB%B6%80%EC%82%AC%EA%B3%BC&searchId=631727792598260&sourceType=search&rank=0&itemsCount=19&searchRank=0&traceId=mwcuyoma
+6. 구매옵션 : 1kg x 1박스
+7. 포토제공 (몇명) / 포토없음 선택 : 포토 15명(1장-5건 / 3장-5건 / 6장이상 - 5건) / 글리뷰 15명
+8. 리뷰 가이드 : 포토에 맞게 작성하되, 붉은 과육과 흰 과육이 함께 있는 사진의 경우에는 맛은 같았고, 맛과 향이 어우러져 좋다는 내용을 넣어주세요.
+9. 입금하실 입금자명 : 신성경
+10.택배대행 Y/N: N
+
+
+*리뷰어 결제수단은 자율입니다`;
+
+  const h = P.parseAll(req);
+  if (h.guides.length !== 1) throw new Error('Test 24 guides length should be 1');
+  const g = h.guides[0];
+  if (g.keyword !== '엔부사과') {
+    throw new Error('Test 24 keyword should be 엔부사과, got: ' + g.keyword);
+  }
+  // URL의 rank=0/searchRank=0으로 인해 단순 '1p'로 끝나지 않고, 미노출 감지로 가격검색 안내문이 연동되어야 함
+  if (!g.page.includes('가격검색') || !g.page.includes('10,270')) {
+    throw new Error('Test 24 page should include 가격검색 and 10,270, got: ' + g.page);
+  }
+  if (g.total !== '30') throw new Error('Test 24 total should be 30, got: ' + g.total);
+  if (g.daily !== '30') throw new Error('Test 24 daily should be 30, got: ' + g.daily);
+  if (g.option !== '1kg x 1박스') throw new Error('Test 24 option should be 1kg x 1박스, got: ' + g.option);
+  if (!g.review.includes('포토대기 15명 / 텍스트리뷰 15명')) {
+    throw new Error('Test 24 review should include 포토대기 15명 / 텍스트리뷰 15명, got: ' + g.review);
+  }
+  console.log('✓ 엔부사과 URL rank=0 오인식 차단 및 미노출 가격검색 연동 시험 통과');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (24개 샘플 전원 일치)');
 process.exit(0);
 
 
