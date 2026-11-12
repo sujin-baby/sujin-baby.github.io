@@ -901,7 +901,35 @@ console.log('-- Test 24: 엔부사과 (URL rank=0 1p 오인식 차단, 미노출
   console.log('✓ 엔부사과 URL rank=0 오인식 차단 및 미노출 가격검색 연동 시험 통과');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (24개 샘플 전원 일치)');
+// Test 25: 기본문구 생략 번호 전용 의뢰서 (제주 황금향) 파싱 검증 (11/12 v176)
+{
+  const req = `#입금대행 택대 9200
+
+1 제주 황금향
+2 ?
+3 30건
+4 30건
+5 https://link.coupang.com/a/iBAdieedLE
+6 2kg
+7 무
+8 맛 신선도
+9 최미화`;
+
+  const h = P.parseAll(req);
+  if (h.guides.length !== 1) throw new Error('Test 25 guides length should be 1');
+  const g = h.guides[0];
+  if (g.keyword !== '제주 황금향') {
+    throw new Error('Test 25 keyword should be 제주 황금향, got: ' + g.keyword);
+  }
+  if (g.total !== '30') throw new Error('Test 25 total should be 30, got: ' + g.total);
+  if (g.daily !== '30') throw new Error('Test 25 daily should be 30, got: ' + g.daily);
+  if (!g.option.includes('2kg')) throw new Error('Test 25 option should include 2kg, got: ' + g.option);
+  if (g.price !== '9200') throw new Error('Test 25 price should be 9200, got: ' + g.price);
+  if (g.pname !== '제주 황금향') throw new Error('Test 25 pname should default to 제주 황금향, got: ' + g.pname);
+  console.log('✓ 기본문구 생략 번호 전용 의뢰서(제주 황금향) 파싱 시험 통과');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (25개 샘플 전원 일치)');
 process.exit(0);
 
 
