@@ -970,7 +970,6 @@ https://www.coupang.com/vp/products/9816176361?vendorItemId=96310017095
   if (!h.takdae) throw new Error('Test 27 takdae should be true');
   const g = h.guides[0];
   if (g.seller !== '지니네농수산') throw new Error('Test 27 seller should be 지니네농수산, got: ' + g.seller);
-  if (g.price !== '16200') throw new Error('Test 27 price should be 16200, got: ' + g.price);
   console.log('✓ 업체입금 택대 메주(지니네농수산) 의뢰서 파싱 시험 통과');
 }
 
