@@ -973,7 +973,54 @@ https://www.coupang.com/vp/products/9816176361?vendorItemId=96310017095
   console.log('✓ 업체입금 택대 메주(지니네농수산) 의뢰서 파싱 시험 통과');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (27개 샘플 전원 일치)');
+// Test 28: 실빈섞임 김상사 케이블타이 의뢰서 파싱 및 옵션·키워드·방제 검증 (11/12 v178)
+{
+  const req = `#입금대행 실빈섞임 택대 5명만실배 사진10장 원고제공 7900
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다):
+2. 키워드 검색 시 현재 순위 :모르시면 비워두세요
+3. 총 결제하신 건수 : 20
+4. 하루 진행 건수 : 5
+5. 상품주소(URL) : https://www.coupang.com/vp/products/9806740832?itemId=29368019782&vendorItemId=96280354169&q=%EC%A0%9C%EB%A5%B4%EB%84%AC+%EC%A0%84%EC%84%A0%EC%A0%95%EB%A6%AC&searchId=4320af7c936142&sourceType=search&rank=0&itemsCount=36&searchRank=0&traceId=mwd5idco
+
+6. 구매옵션 :화이트 / 스몰 / 20개 / 7,900원 
+7. 포토제공 (몇명)  /포토없음  선택:
+8. 리뷰 가이드 : 원고제공
+9. 입금하실 입금자명 : 김상사(김성열)
+10.택배대행 Y/N: Y`;
+
+  const h = P.parseAll(req);
+  if (!h.silbin) throw new Error('Test 28 silbin should be true');
+  const g = h.guides[0];
+
+  // 1) 키워드에 '+' 기호가 들어가지 않아야 함
+  if (g.keyword.includes('+')) throw new Error('Test 28 keyword must not contain +, got: ' + g.keyword);
+
+  // 2) 구매옵션이 '20개'로 잘리지 않고 '화이트 / 스몰 / 20개'로 전체 보존되어야 함
+  if (!g.optBase || g.optBase.length !== 1 || g.optBase[0].label !== '화이트 / 스몰 / 20개') {
+    throw new Error('Test 28 optBase should be [화이트 / 스몰 / 20개], got: ' + JSON.stringify(g.optBase));
+  }
+  if (g.option !== '화이트 / 스몰 / 20개') {
+    throw new Error('Test 28 option text should be 화이트 / 스몰 / 20개, got: ' + g.option);
+  }
+  if (g.price !== '7900') {
+    throw new Error('Test 28 price should be 7900, got: ' + g.price);
+  }
+
+  // 3) 상품명 기반 대표 키워드 추천 검증
+  const pname = '제르넬 깔끔한 책상 선정리 벨크로 전선정리 케이블 타이';
+  const sug = P.suggestKeywords(pname, []);
+  if (sug.main !== '케이블 타이') {
+    throw new Error('Test 28 suggestKeywords main should be 케이블 타이, got: ' + sug.main);
+  }
+  if (!sug.subs.some(s => s.includes('책상 케이블 타이'))) {
+    throw new Error('Test 28 suggestKeywords subs should include 책상 케이블 타이, got: ' + JSON.stringify(sug.subs));
+  }
+
+  console.log('✓ 실빈섞임 김상사 케이블타이 의뢰서 및 옵션·키워드·방제 시험 통과');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (28개 샘플 전원 일치)');
 process.exit(0);
 
 

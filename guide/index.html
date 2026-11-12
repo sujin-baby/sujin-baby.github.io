@@ -205,7 +205,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v177 (헤더 택대 vs 10번 N 충돌 차단 오류 문구 · 업체입금 방제 업)택/업) 표기 · 메주 등 형태 단위어 제외 및 핵심 상품명 추출)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v178 (키워드 '+' 기호 제거 및 케이블타이 등 복합 품목명 추천 · 복합 사양 옵션 보존 · 실/빈 섞임 방제 지원)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -384,7 +384,7 @@ details.help-box summary {
             <span style="font-weight: 900; font-size: 14px; color: var(--pink-deep, #ff5fa8); display:flex; align-items:center; gap:5px;">
               <span>💬 AI 다이렉트 대화 · 공지 수정 요청</span>
             </span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v177</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v178</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 10px;">
             공지가 이상하게 나왔거나 수정이 필요한가요? 여기서 메시지를 보내면 <b>피클(생성기)</b>과 <b>클로드(시트)</b>에게 실시간으로 전달돼요!
@@ -1525,7 +1525,8 @@ details.help-box summary {
     const r = {};
     r.type = /업체\s*입금|업입/.test(l) ? "업체입금" : "입대";
     r.takdae = /택대|택배\s*대행/.test(l.replace(/^\s*#?\s*입금\s*대행/, ""));
-    r.realship = /실배/.test(l);
+    r.silbin = /실\s*빈\s*섞|실\s*[\/ㅣ|]\s*빈|실빈/.test(l);
+    r.realship = !r.silbin && /실배/.test(l);
     r.cart = /장바구니/.test(l);   // 장바구니건: 한 사람이 상품 전부 한 번에 (10/28)
     r.headPrices = (l.match(/\d{1,3}(?:,\d{3})+|\d{4,}/g) || []).map(x => x.replace(/,/g, ""));
     return r;
@@ -1684,6 +1685,15 @@ details.help-box summary {
   function parseOptions(s) {
     s = String(s || "").replace(/\(\s*총[^)]*\)/g, "").replace(/(^|\s)\d+\s*가지(?=\s|$)/g, " ");
     const out = [];
+    // 단일 줄에 '화이트 / 스몰 / 20개'처럼 슬래시(/)로 연결된 복합 사양(색상/사이즈/수량) 단일 옵션인지 검사 (11/12 v178)
+    if (s.indexOf("\n") === -1 && s.indexOf("/") !== -1) {
+      const slashParts = s.split("/").map(x => x.trim()).filter(Boolean);
+      const qtyParts = slashParts.filter(p => /\d+\s*(?:개|건|명|ea|입|매|박스|세트|kg|g|ml|l)/i.test(p));
+      if (slashParts.length >= 2 && qtyParts.length <= 1) {
+        out.push({ label: slashParts.join(" / "), qty: "" });
+        return out;
+      }
+    }
     s.split(/\n|\//).map(x => x.trim()).filter(Boolean).forEach(part => {
       // '10개 11,500원' 처럼 가격이 함께 적힌 경우 가격(11,500원)을 분리 제거하여 옵션명('10개')만 남김 (10/30)
       const cleanPart = part.replace(/\(?\s*(\d{1,3}(?:,\d{3})+|\d{4,})\s*원\s*\)?/, "").trim();
@@ -1718,6 +1728,8 @@ details.help-box summary {
     // 검색 키워드: "모릅니다", 빈칸이면 비워 두고 상품명으로 추천. "A/ B, C" 이면 A가 대표, B·C는 서브
     // <<실링팬>>, [실링팬], "실링팬" 같은 꾸밈 기호는 빼고 (사용자 요청 10/21)
     let kwRaw = ((f.keyword || "").split("\n").map(x => x.trim()).filter(Boolean)[0] || "").replace(/[<>«»《》〈〉【】\[\]"'“”‘’]/g, "").trim();
+    // 키워드 내 '+' 기호 공백 변환 (11/12 v178)
+    kwRaw = kwRaw.replace(/\+/g, " ").trim();
     // 키워드 내 필터·체크 지시문 괄호(예: '감홍사과(비건필터체크후검색해주세요)') 분리 (11/11 v174)
     let kwFilterNote = "";
     const filterMatch = kwRaw.match(/[\(（]\s*([^\)）]*(?:필터|정렬|체크|적용|클릭|순으로|순\s*정렬)[^\)）]*)\s*[\)）]/i);
@@ -1730,15 +1742,24 @@ details.help-box summary {
       kwFilterNote = "(" + note + (/(?:검색|정렬|적용)$/.test(note) ? "" : " 후 검색") + ")";
       kwRaw = kwRaw.replace(filterMatch[0], "").trim();
     }
+    let kwFromUrl = false;
     if (UNKNOWN.test(kwRaw) || !kwRaw) {
       // 의뢰서에 검색 키워드가 없으면 쿠팡 URL의 q= 파라미터에서 추출
       const uq = text.match(/[?&]q=([^&\s]+)/i);
-      if (uq) try { const dec = decodeURIComponent(uq[1]).trim(); if (dec && !UNKNOWN.test(dec)) kwRaw = dec; } catch(e) {}
+      if (uq) try {
+        const dec = decodeURIComponent(uq[1]).replace(/\+/g, " ").trim();
+        if (dec && !UNKNOWN.test(dec)) {
+          kwRaw = dec;
+          kwFromUrl = true;
+        }
+      } catch(e) {}
     }
     const kwParts = UNKNOWN.test(kwRaw) ? [] : kwRaw.split(/[\/,，]/).map(x => x.trim()).filter(Boolean);
     r.keyword = kwParts[0] || "";
     r.kwAlts = kwParts.slice(1);
     r.kwFilter = kwFilterNote;
+    r.kwFromUrl = kwFromUrl;
+    r.kwAuto = kwFromUrl || !r.keyword;
     r.rank = (f.rank || "").replace(/\n/g, " ").trim();
     if (!r.rank || UNKNOWN.test(r.rank) || /비워|모르/.test(r.rank)) {
       const urk = text.match(/[?&](?:searchRank|rank)=(\d+)/i);
@@ -1835,10 +1856,11 @@ details.help-box summary {
     });
     r.url = urls.map(u => (u.label ? u.label + " " : "") + u.url).join("\n");
     // 구매옵션에 상품 전체 제목이 함께 들어온 경우 분리 ("엔라지맨 밀크텐정 ... 2개, 30정")
+    // 단, '화이트 / 스몰 / 20개'처럼 슬래시(/)가 있는 옵션 세부 속성은 상품명이 아니므로 분리 차단 (11/12 v178)
     const optRaw = String(f.option || "").trim();
-    if (optRaw.length > 20 && /[\s,]\d+\s*개/.test(optRaw)) {
+    if (optRaw.length > 30 && !/\//.test(optRaw) && /[\s,]\d+\s*개/.test(optRaw)) {
       const mOpt = optRaw.match(/^(.*?)[,\s]+(\d+\s*개.*)$/);
-      if (mOpt) {
+      if (mOpt && !/\//.test(mOpt[1])) {
         if (!r.pname) r.pname = mOpt[1].trim();
         f.option = mOpt[2].trim();
       }
@@ -2129,7 +2151,7 @@ details.help-box summary {
     const dash = raw.split(/\s+-\s+/);
     let toks = dash[0].split(/[\s,]+/).map(t => t.trim()).filter(Boolean);
     // 진짜 한글 상품 명사 우선 (정, 환, 거치대, 텀블러, 마사지기, 괄사, 스토퍼, 과일/농산물 등)
-    const NOUN_SUFFIX = /(정|환|캡슐|스틱|분말|가루|원액|즙|차|오일|세럼|크림|로션|샴푸|패치|패드|거치대|매트|선풍기|텀블러|청소기|마사지기|괄사|문어괄사|괄사마사지기|워시|토너|앰플|마스크|비누|티슈|세제|치약|칫솔|홀더|걸이|선반|트레이|보틀|쿠션|방석|베개|슬리퍼|양말|장갑|모자|밴드|스토퍼|도어스토퍼|말굽|도어체크|도어락|고정기|가드|보냉백|보온백|런치백|도시락가방|가방|파우치|보냉가방|쿨러백|쇼퍼백|에코백|토트백|크로스백|백팩|손잡이백|보냉팩|보온팩|오메가3|루테인|유산균|콜라겐|비타민|밀크씨슬|프로폴리스|마그네슘|칼슘|아연|철분|나주배|햇배|(?:^배$)|사과|부유단감|단감|대봉감|(?:^감$)|감귤|(?:^귤$)|황금향|레드향|한라봉|천혜향|샤인머스캣|포도|머루포도|거봉|복숭아|자두|살구|딸기|참외|수박|멜론|메론|토마토|방울토마토|키위|참다래|무화과|감홍사과|부사|아오리|홍옥|사과대추|대추|옥광밤|군밤|햇밤|(?:^밤$)|호두|(?:^잣$)|땅콩|과일|고구마|호박고구마|꿀고구마|감자|수미감자|옥수수|초당옥수수|양파|자색양파|마늘|의성마늘|생강|고추|청양고추|당근|열무|총각무|(?:^무$)|배추|절임배추|김치|갓김치|파김치|열무김치|쌀|백미|현미|잡곡|찹쌀|보리|귀리|서리태|(?:^콩$)|(?:^팥$)|견과|말랭이|고구마말랭이|곶감|반건시|건나물|나물|시금치|상추|깻잎|버섯|표고버섯|송이버섯|느타리버섯|팽이버섯|새송이버섯)$/;
+    const NOUN_SUFFIX = /(정|환|캡슐|스틱|분말|가루|원액|즙|차|오일|세럼|크림|로션|샴푸|패치|패드|거치대|매트|선풍기|텀블러|청소기|마사지기|괄사|문어괄사|괄사마사지기|워시|토너|앰플|마스크|비누|티슈|세제|치약|칫솔|홀더|걸이|선반|트레이|보틀|쿠션|방석|베개|슬리퍼|양말|장갑|모자|밴드|스토퍼|도어스토퍼|말굽|도어체크|도어락|고정기|가드|보냉백|보온백|런치백|도시락가방|가방|파우치|보냉가방|쿨러백|쇼퍼백|에코백|토트백|크로스백|백팩|손잡이백|보냉팩|보온팩|오메가3|루테인|유산균|콜라겐|비타민|밀크씨슬|프로폴리스|마그네슘|칼슘|아연|철분|나주배|햇배|(?:^배$)|사과|부유단감|단감|대봉감|(?:^감$)|감귤|(?:^귤$)|황금향|레드향|한라봉|천혜향|샤인머스캣|포도|머루포도|거봉|복숭아|자두|살구|딸기|참외|수박|멜론|메론|토마토|방울토마토|키위|참다래|무화과|감홍사과|부사|아오리|홍옥|사과대추|대추|옥광밤|군밤|햇밤|(?:^밤$)|호두|(?:^잣$)|땅콩|과일|고구마|호박고구마|꿀고구마|감자|수미감자|옥수수|초당옥수수|양파|자색양파|마늘|의성마늘|생강|고추|청양고추|당근|열무|총각무|(?:^무$)|배추|절임배추|김치|갓김치|파김치|열무김치|쌀|백미|현미|잡곡|찹쌀|보리|귀리|서리태|(?:^콩$)|(?:^팥$)|견과|말랭이|고구마말랭이|곶감|반건시|건나물|나물|시금치|상추|깻잎|버섯|표고버섯|송이버섯|느타리버섯|팽이버섯|새송이버섯|타이|케이블타이|선정리기|전선정리|정리기|스트랩|클립|와이어|고정클립|고정기|정리함)$/;
     // 첫 단어가 이미 대표 품목 명사(텀블러, 밴드, 보냉백, 나주배 등)이면 브랜드로 잘라내지 않음 (11/01)
     const brand = toks.length >= 3 && !NOUN_SUFFIX.test(toks[0]) ? toks[0] : "";
     if (brand) toks = toks.slice(1);
@@ -2143,19 +2165,26 @@ details.help-box summary {
     let main = "";
     const tail = t => t.slice(-3);
     const rep = cand.filter(t => t.length >= 4 && cand.some(u => u !== t && u.length >= 4 && tail(u) === tail(t)));
-    // 품목 명사 매칭: 햇- 접두 수식 명사(햇배, 햇사과 등)보다 고유/지역 품종명(나주배, 옥광밤 등)을 우선, 그 외는 상품명 등장 순서 유지 (11/01 v142)
-    const nounMatches = cand.filter(t => NOUN_SUFFIX.test(t));
-    nounMatches.sort((a, b) => {
-      const aHaet = /^햇/.test(a) ? 1 : 0;
-      const bHaet = /^햇/.test(b) ? 1 : 0;
-      if (aHaet !== bHaet) return aHaet - bHaet;
-      return toks.indexOf(a) - toks.indexOf(b);
-    });
-    const nounMatch = nounMatches[0];
-    if (nounMatch) main = nounMatch;
-    else if (rep.length) main = rep[0];
-    else if (cat && cat.length >= 2 && !spec(cat) && !/일반|기타/.test(cat)) main = cat;
-    else main = cand.find(t => /^[가-힣]{2,}$/.test(t) && !/남성|여성|활력/.test(t)) || cand[cand.length - 1] || cand[0] || toks[toks.length - 1] || toks[0] || "";
+    const OFF = /^(식탁|책상|침대|소파|의자|천장|천정|벽|바닥|베란다|현관|창문|화장대|선반|테이블|주방|욕실|화장실|거실|차량용|차량|대시보드)$/;
+    // 끝 두 단어가 '케이블 타이' 등 유효한 복합 명사쌍이면 합성 (11/12 v178)
+    const last2 = cand.slice(-2);
+    if (last2.length === 2 && last2[0] === "케이블" && /타이$/.test(last2[1])) {
+      main = "케이블 타이";
+    } else {
+      // 품목 명사 매칭: 햇- 접두 수식 명사(햇배, 햇사과 등)보다 고유/지역 품종명(나주배, 옥광밤 등)을 우선, 그 외는 상품명 등장 순서 유지 (11/01 v142)
+      const nounMatches = cand.filter(t => NOUN_SUFFIX.test(t) && !OFF.test(t));
+      nounMatches.sort((a, b) => {
+        const aHaet = /^햇/.test(a) ? 1 : 0;
+        const bHaet = /^햇/.test(b) ? 1 : 0;
+        if (aHaet !== bHaet) return aHaet - bHaet;
+        return toks.indexOf(a) - toks.indexOf(b);
+      });
+      const nounMatch = nounMatches[0];
+      if (nounMatch) main = nounMatch;
+      else if (rep.length) main = rep[0];
+      else if (cat && cat.length >= 2 && !spec(cat) && !/일반|기타/.test(cat)) main = cat;
+      else main = cand.filter(t => !OFF.test(t)).find(t => /^[가-힣]{2,}$/.test(t) && !/남성|여성|활력/.test(t)) || cand[cand.length - 1] || cand[0] || toks[toks.length - 1] || toks[0] || "";
+    }
     if (force) { force = String(force).trim(); if (force.indexOf(" ") === -1) main = force; }
     const mainAlts = rep.filter(t => t !== main);
     const subs = [];
@@ -2163,7 +2192,6 @@ details.help-box summary {
     mods.forEach(mm => { add(mm + " " + main); mainAlts.forEach(a => add(mm + " " + a)); });
     // 같은 종류 상품 이름(선풍기, 조명 …)은 '대표 + 종류'로 먼저 (실링팬 선풍기). 상품과 상관없는 가구·자리 말(식탁, 책상 …)은 빼고 (사용자 요청 10/21)
     const TYPE = /(선풍기|서큘레이터|히터|난로|가습기|제습기|청소기|공기청정기|에어컨|냉풍기)$/;
-    const OFF = /^(식탁|책상|침대|소파|의자|천장|천정|벽|바닥|베란다|현관|창문|화장대|선반|테이블)$/;
     const rest = cand.filter(t => t !== main && mainAlts.indexOf(t) === -1 && mods.indexOf(t) === -1 && !OFF.test(t));
     rest.filter(t => TYPE.test(t)).forEach(t => add(main + " " + t));
     // 핵심 복합 키워드 보강 (main 앞에 위치한 cand 내 1~2개 토큰)
@@ -2184,6 +2212,10 @@ details.help-box summary {
     } else if (brand) {
       add(brand + " " + main);
     }
+
+    // 가구/장소 단어도 '책상 케이블 타이'처럼 서브키워드로 추가 지원 (11/12 v178)
+    const offCand = cand.filter(t => OFF.test(t));
+    offCand.forEach(o => add(o + " " + main));
 
     // 서브키워드 1 (예: 산리오 밴드)
     if (rest[0]) add(rest[0] + " " + main);
@@ -2862,7 +2894,8 @@ details.help-box summary {
   function makeRoom0(date, cnt) {
     const t = type(), tk = $("takdae").checked;
     const g1 = guides[0] || {};
-    const head = (t === "입대" ? "#" : "업)") + (tk ? "택" : "") + date;
+    const silbin = /실\s*빈\s*섞|실\s*[\/ㅣ|]\s*빈|실빈/.test(String($("req").value || ""));
+    const head = (t === "입대" ? "#" : "업)") + (silbin ? "" : (tk ? "택" : "")) + date + (silbin ? "실/빈" : "");
     const fruitRoom = $("fruit").checked;
     const seller0 = (g1.seller || "").replace(/\s+/g, "");
     const shop = fruitRoom ? (seller0 || "(업체명)") : "";
@@ -2870,16 +2903,16 @@ details.help-box summary {
     //  상품이 3개 이상이면 '업체명 첫 상품 외' (#10.22 실 시온스 양모볼 외 15, 10/22)
     //  과일 의뢰는 예전 규칙 그대로 '업체명 + 첫 상품 + 외' (#택10.26 모두의농수산옥광밤외12, 10/24: 업체명이 두 번 들어간 것)
     // 장바구니건 방제: 첫 상품 키워드 + 외 + 물건 수 (사용자 10/28 '#10.28 유러피안샐러드외 60')
-    if (cartInfo()) { const kw0 = String(g1.guide || g1.keyword || "").replace(/\s+/g, ""), sl0 = $("realship").checked ? "실" : ""; const a = [head, sl0, kw0 + "외", cnt].filter(Boolean).join(" "); return a.length <= 20 ? a : [head, sl0, kw0 + "외" + cnt].filter(Boolean).join(" "); }
+    if (cartInfo()) { const kw0 = String(g1.guide || g1.keyword || "").replace(/\s+/g, ""), sl0 = silbin ? "" : ($("realship").checked ? "실" : ""); const a = [head, sl0, kw0 + "외", cnt].filter(Boolean).join(" "); return a.length <= 20 ? a : [head, sl0, kw0 + "외" + cnt].filter(Boolean).join(" "); }
     // 의뢰서에 검색 키워드가 없으면 '업체명 + 상품 이름' (10/28 '#택10.28 EMS' → '#택10.28 시온스 저주파발마사지기3'). 상품 이름 = 대표 키워드 + 바로 앞 한글 꾸밈말
     if (guides.length === 1 && (!String(g1.keyword || "").trim() || g1.kwAuto) && !g1.guideEdited && g1.pname && !fruitRoom) {
       const pw = String(g1.pname).replace(/\(.*$/, "").split(/[\s,]+/).filter(Boolean);
       //  물건 이름 끝말(…기, …매트, …대 …)인 첫 낱말, 없으면 상품명 추천 대표 키워드
-      const noun = pw.slice(1).find(t => /^[가-힣]{2,}$/.test(t) && !KW_STOP.test(t) && /(기|러|매트|대|솔|망|병|컵|통|백|볼|팩|칼|판|장갑|테이프|걸이|스토퍼|가위)$/.test(t));
-      const mk = noun || suggestKeywords(g1.pname, []).main;
+      const noun = pw.slice(1).find(t => /^[가-힣]{2,}$/.test(t) && !KW_STOP.test(t) && /(기|러|매트|대|솔|망|병|컵|통|백|볼|팩|칼|판|장갑|테이프|걸이|스토퍼|가위|타이|클립|스트랩)$/.test(t));
+      const mk = suggestKeywords(g1.pname, []).main.replace(/\s+/g, "") || noun;
       const mi0 = pw.indexOf(mk), prev = mi0 > 1 ? pw[mi0 - 1] : "";
       const phrase = (/^[가-힣]{2,4}$/.test(prev) && !KW_STOP.test(prev) ? prev : "") + mk;
-      const sh = (g1.seller || "").replace(/\s+/g, ""), sl = $("realship").checked ? "실" : "";
+      const sh = (g1.seller || "").replace(/\s+/g, ""), sl = silbin ? "" : ($("realship").checked ? "실" : "");
       const opts = [[head, sl, sh, phrase, cnt], [head, sl, sh, mk, cnt], [head, sl, sh, phrase + cnt], [head, sl, sh, mk + cnt], [head, sl, phrase, cnt], [head, sl, mk + cnt]].map(a => a.filter(Boolean).join(" "));
       if (mk) return opts.find(x => x.length <= 20) || opts[opts.length - 1];
     }
@@ -2889,8 +2922,8 @@ details.help-box summary {
     const toks = fw ? [fw] : many3 ? [(g1.seller || "").replace(/\s+/g, ""), nounOf(g1)].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i) : many ? [(g1.seller || "").replace(/\s+/g, "")].concat(guides.map(nounOf)).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i)
       : (((g1.guide || g1.keyword || "(상품)").replace(/\([^)]*\)/g, "").trim()).split(/\s+/));
     const multi = many3 ? "외" : guides.length > 1 && !many ? "외" : "";
-    // 실배송이면 날짜 바로 오른쪽에 '실' (사용자 지정 10/19: #10.19 실 런치버스 텀블러 7)
-    const sil = $("realship").checked ? "실" : "";
+    // 실배송이면 날짜 바로 오른쪽에 '실' (사용자 지정 10/19: #10.19 실 런치버스 텀블러 7). 실/빈일 때는 헤더에 포함
+    const sil = silbin ? "" : ($("realship").checked ? "실" : "");
     // 20자가 넘으면 뒤 단어부터 빼되 메인 키워드(상품명으로 고른 대표 키워드, 예: 텀블러)는 끝까지 남김
     //  런치버스 미니 텀블러 → 런치버스 텀블러 → 텀블러 / 고구마말랭이 말린고구마 반건조 → 고구마말랭이
     // 상품명을 아직 안 가져왔으면 의뢰서 키워드로 대표 키워드를 고름 (10/26 '런치버스 미니 보온보냉 텀블러' → 텀블러, 상품명 오기 전엔 보온보냉이 남았음)
@@ -3657,7 +3690,7 @@ details.help-box summary {
 
       const mention = aiTarget === "claude" ? "@claude" : aiTarget === "all" ? "@모두" : "@피클";
       const lines = [
-        mention + " [생성기 v177 제보]",
+        mention + " [생성기 v178 제보]",
         "• 내용: " + desc,
         "• 가이드 번호: " + curG + " / " + totalG + " (" + (g.platform || "쿠팡") + ")"
       ];
@@ -3718,7 +3751,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v177 공지 오류 제보]",
+        "🚨 [가이드 생성기 v178 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",
