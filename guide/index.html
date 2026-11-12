@@ -1617,6 +1617,13 @@ details.help-box summary {
     const isBareNumbered = labeledCount <= 2 && (numLines[1] && (numLines[5] || numLines[3] || numLines[4]));
 
     lines.forEach(raw => {
+      // 1//쿠팡 지니네농수산 또는 //쿠팡 지니네농수산 형태의 가이드별 플랫폼/판매처 헤더 인식 (11/12 v177)
+      const platSellerMatch = raw.match(/^\s*\d*\s*(?:\/\/|\/)\s*(쿠팡|네이버|토스|올웨이즈|카카오)?\s*([가-힣A-Za-z0-9_]+)\s*$/);
+      if (platSellerMatch) {
+        if (platSellerMatch[1]) f.platform = platSellerMatch[1];
+        if (platSellerMatch[2]) f.seller = platSellerMatch[2];
+        return;
+      }
       const l = raw.replace(/^\s*(?:\d+\s*[.)]\s*)+/, "").trim();
       if (!l) return;
       const key = labelKey(raw);
