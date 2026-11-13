@@ -1543,6 +1543,7 @@ details.help-box summary {
     head.urgent = /긴급|바로\s*구매/.test(text0);
     // 로켓그로스·로켓배송 상품은 쿠팡이 직접 보내서 택배대행이 아님 (택배대행 Y라고 적혀 있어도 #택 안 붙임)
     head.rocket = /그로스|로켓\s*배송/.test(text0);
+    if (head.confirm) head.guides.forEach(g => { g.isConfirm = true; });
     return head;
   }
   function parseHead(l) {
@@ -1552,6 +1553,7 @@ details.help-box summary {
     r.silbin = /실\s*빈\s*섞|실\s*[\/ㅣ|]\s*빈|실빈/.test(l);
     r.realship = !r.silbin && /실배/.test(l);
     r.cart = /장바구니/.test(l);   // 장바구니건: 한 사람이 상품 전부 한 번에 (10/28)
+    r.confirm = /구확|구매\s*확정/.test(l);
     r.headPrices = (l.match(/\d{1,3}(?:,\d{3})+|\d{4,}/g) || []).map(x => x.replace(/,/g, ""));
     return r;
   }
@@ -2948,20 +2950,20 @@ details.help-box summary {
   }
   function makeRoom(date, cnt) { return fitRoom20(makeRoom0(date, cnt)); }
   function makeRoom0(date, cnt) {
-    const t = type(), tk = $("takdae").checked;
+    const isTalkdeal = guides.some(g => g.platform === "카카오톡딜") || /톡딜/.test(String($("req").value || "")) || /store\.kakao\.com|kko\.to/.test(String($("req").value || ""));
+    const t = type(), tk = isTalkdeal ? false : $("takdae").checked;
     const g1 = guides[0] || {};
     const silbin = /실\s*빈\s*섞|실\s*[\/ㅣ|]\s*빈|실빈/.test(String($("req").value || ""));
-    const head = (t === "입대" ? "#" : "업)") + (silbin ? "" : (tk ? "택" : "")) + date + (silbin ? "실/빈" : "");
+    const head = (t === "입대" ? "#" : "업)") + (silbin || isTalkdeal ? "" : (tk ? "택" : "")) + date + (silbin ? "실/빈" : "");
     const fruitRoom = $("fruit").checked;
     const seller0 = (g1.seller || "").replace(/\s+/g, "");
     const shop = fruitRoom ? (seller0 || "(업체명)") : "";
 
     // 톡딜 / 카카오톡딜 방제 규칙 (11/14 v180: 수진 님 지정 #11.16 수면공작소 톡딜 구확70)
-    const isTalkdeal = guides.some(g => g.platform === "카카오톡딜") || /톡딜/.test(String($("req").value || "")) || /store\.kakao\.com|kko\.to/.test(String($("req").value || ""));
     if (isTalkdeal) {
       const bm = (g1.pname || "").match(/\[(.*?)\]/);
       const brand = (bm && bm[1]) || seller0 || "";
-      const isConfirm = reviewKind() === "confirm";
+      const isConfirm = reviewKind() === "confirm" || guides.some(g => g.isConfirm) || /구확|구매\s*확정/.test(String($("req").value || ""));
       const tag = isConfirm ? "톡딜 구확" : "톡딜";
       const tdOpts = [
         [head, brand, tag + cnt].filter(Boolean).join(" "),

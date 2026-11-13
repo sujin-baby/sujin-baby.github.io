@@ -1060,6 +1060,8 @@ SS: 38,800 / Q: 48,800원
   // 상품명 및 방제 검증
   g.pname = '[수면공작소] 국산 모달함량 2배 부드러운 사계절용 프리미엄 모달 침대패드. 영유아KC인증+고급형 자카드 밴드';
   g.seller = '바른자세와 편안함 씨가드';
+  getElem('req').value = req;
+  getElem('takdae').checked = false;
   P.setGuides(h.guides);
   const room = P.makeRoom('11.16', '70');
   if (room !== '#11.16 수면공작소 톡딜 구확70') {
