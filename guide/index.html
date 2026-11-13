@@ -2962,18 +2962,22 @@ details.help-box summary {
       // 상품명에서 핵심 상품 키워드/명사 추출 (g1.guide 또는 g1.pname 기반)
       let prod = (g1.guide || "").replace(/\([^)]*\)/g, "").replace(/\s+/g, "").trim();
       if (!prod || prod === "(상품)" || prod === brand) {
-        const cleanP = (g1.pname || "").replace(/\[.*?\]/g, "").replace(/\(.*?\)/g, "").trim();
+        const cleanP = (g1.pname || "").replace(/\[.*?\]/g, "").replace(/\(.*?\)/g, "").replace(/[.,+]/g, " ").trim();
+        const pw = cleanP.split(/[\s,]+/).filter(Boolean);
+        const specificNoun = pw.find(t => /(침대패드|패드|매트|커버|이불|토퍼|요|시트|타이|케이블타이|선정리|거치대|텀블러|마사지기|양말|장갑|스토퍼|보냉백)$/.test(t));
         const sug = suggestKeywords(cleanP, []);
-        prod = (sug.main || nounOf(g1) || "").replace(/\s+/g, "");
+        prod = (specificNoun || sug.main || nounOf(g1) || "").replace(/\s+/g, "");
       }
       const isConfirm = reviewKind() === "confirm" || guides.some(g => g.isConfirm) || /구확|구매\s*확정/.test(String($("req").value || ""));
       const tag = isConfirm ? "톡딜 구확" : "톡딜";
       const tdOpts = [
         [head, brand, prod, tag + cnt].filter(Boolean).join(" "),
         [head, brand, prod, tag, cnt].filter(Boolean).join(" "),
-        [head, prod, tag + cnt].filter(Boolean).join(" "),
         [head, brand, tag + cnt].filter(Boolean).join(" "),
         [head, brand, tag, cnt].filter(Boolean).join(" "),
+        [head, brand, prod + cnt].filter(Boolean).join(" "),
+        [head, prod, tag + cnt].filter(Boolean).join(" "),
+        [head, "톡딜", prod + cnt].filter(Boolean).join(" "),
         [head, prod, cnt].filter(Boolean).join(" "),
         [head, tag + cnt].filter(Boolean).join(" "),
         [head, tag, cnt].filter(Boolean).join(" ")
