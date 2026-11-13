@@ -2451,6 +2451,9 @@ details.help-box summary {
   // 키워드가 없으면 상품명으로 대표 키워드를 넣음 (짧은 상품명도). 서브 키워드는 키워드 찾기 상자에
   function autoKeyword(g) {
     if (!g.pname) return;
+    const isTalkdeal = g.platform === "카카오톡딜" || /store\.kakao\.com|kko\.to/.test(g.url || "") || /톡딜/.test(String($("req").value || ""));
+    // 톡딜은 키워드가 없으면 예외적 링크구매로 진행되므로 임의로 상품명 키워드를 자동 주입하지 않음 (11/14 수진 님 지침)
+    if (isTalkdeal && g.kwAuto) return;
     const s = suggestKeywords(g.pname, g.kwAlts, g.kwAuto ? "" : g.keyword);
     g.kwSug = s;
     if (!String(g.keyword || "").trim() && s.main) { g.keyword = s.main; g.kwAuto = true; if (!g.guide) g.guide = shortName(s.main); }
@@ -3357,9 +3360,9 @@ details.help-box summary {
     // 가이드마다 상품 블록, 여러 개면 1) 2) 번호와 구분선. 옵션이 여럿이면 옵션마다 가격
     const product = guides.map((g, i) => {
       const isTalkdeal = g.platform === "카카오톡딜" || /store\.kakao\.com|kko\.to/.test(g.url || "") || /톡딜/.test(String($("req").value || ""));
-      // 톡딜이면서 의뢰서에 검색 키워드가 아예 없는 경우(x, -, 없음, 공란)에만 극히 예외적으로 링크구매 적용 (수진 님 11/14 지침)
+      // 톡딜이면서 의뢰서에 검색 키워드가 아예 없는 경우(x, -, 없음, 공란, kwAuto)에만 극히 예외적으로 링크구매 적용 (수진 님 11/14 지침)
       const rawKw = String(g.keyword || "").trim();
-      const hasNoKw = !rawKw || /^(x|X|-|무|없음)$/i.test(rawKw);
+      const hasNoKw = g.kwAuto || !rawKw || /^(x|X|-|무|없음)$/i.test(rawKw);
       const isLinkBuy = isTalkdeal && hasNoKw;
 
       // 배송비가 붙으면 가격 = 상품 가격 + 배송비 (사용자 요청 10/20)
