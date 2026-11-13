@@ -1020,7 +1020,55 @@ https://www.coupang.com/vp/products/9816176361?vendorItemId=96310017095
   console.log('✓ 실빈섞임 김상사 케이블타이 의뢰서 및 옵션·키워드·방제 시험 통과');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (28개 샘플 전원 일치)');
+// Test 29: 카카오톡딜 수면공작소 70건 구확 의뢰서 파싱 및 실배송 해제·방제·시간·옵션 검증 (11/14 v180)
+{
+  const req = `#입금대행 구확 38800 48800
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다): x
+2. 키워드 검색 시 현재 순위 :x
+3. 총 구매 건수 :70
+4. 일 진행 건수 :70
+5. 상품주소(URL) : 
+https://store.kakao.com/cguard/products/767845799
+6. 구매옵션 : SS 40개 Q 30개
+SS: 38,800 / Q: 48,800원
+11월 16일 저녁 5시부터 7시 사이에 구매 요청
+7. 포토제공 유 무  : 무
+8. 리뷰내용 가이드 :  
+-전 공정 대한민국 생산 MADE IN KOREA
+-2합 모달원단 모달함량 2배
+-부드럽고 고급스럽다 듀얼 위브 모달 100%
+-고급형 자카드 밴드로 쉽고 간편하게 설치할수있다.
+9. 입금하실 입금자명 :
+10.택배대행 Y/N:n`;
+
+  const h = P.parseAll(req);
+  if (h.realship) throw new Error('Test 29 realship should be false for talkdeal');
+  if (h.takdae) throw new Error('Test 29 takdae should be false for talkdeal');
+  if (!h.isTalkdeal) throw new Error('Test 29 isTalkdeal should be true');
+  if (h.platform !== '카카오톡딜') throw new Error('Test 29 platform should be 카카오톡딜, got: ' + h.platform);
+  if (h.slot !== 'time') throw new Error('Test 29 slot should be time, got: ' + h.slot);
+  if (h.slottime !== '17:00' || (h.slotend !== '19:00' && h.slotend !== '18:00')) {
+    throw new Error('Test 29 slottime/slotend parse mismatch: ' + h.slottime + ' ~ ' + h.slotend);
+  }
+
+  const g = h.guides[0];
+  if (g.optBase.length !== 2) throw new Error('Test 29 optBase length should be 2, got: ' + g.optBase.length);
+  if (g.optBase[0].label !== 'SS' || g.optBase[0].qty !== '40') throw new Error('Test 29 optBase[0] mismatch: ' + JSON.stringify(g.optBase[0]));
+  if (g.optBase[1].label !== 'Q' || g.optBase[1].qty !== '30') throw new Error('Test 29 optBase[1] mismatch: ' + JSON.stringify(g.optBase[1]));
+
+  // 상품명 및 방제 검증
+  g.pname = '[수면공작소] 국산 모달함량 2배 부드러운 사계절용 프리미엄 모달 침대패드. 영유아KC인증+고급형 자카드 밴드';
+  g.seller = '바른자세와 편안함 씨가드';
+  const room = P.makeRoom('11.16', '70');
+  if (room !== '#11.16 수면공작소 톡딜 구확70') {
+    throw new Error('Test 29 room should be #11.16 수면공작소 톡딜 구확70, got: ' + room);
+  }
+
+  console.log('✓ 카카오톡딜 수면공작소 70건 의뢰서 및 방제·옵션·시간 시험 통과');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (29개 샘플 전원 일치)');
 process.exit(0);
 
 
