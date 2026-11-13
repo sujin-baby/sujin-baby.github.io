@@ -2959,7 +2959,8 @@ details.help-box summary {
     // 톡딜 / 카카오톡딜 방제 규칙 (11/14 v180: 수진 님 지정 #11.16 수면공작소 톡딜 구확70)
     const isTalkdeal = guides.some(g => g.platform === "카카오톡딜") || /톡딜/.test(String($("req").value || "")) || /store\.kakao\.com|kko\.to/.test(String($("req").value || ""));
     if (isTalkdeal) {
-      const brand = pick(g1.pname || "", /\[(.*?)\]/) || seller0 || "";
+      const bm = (g1.pname || "").match(/\[(.*?)\]/);
+      const brand = (bm && bm[1]) || seller0 || "";
       const isConfirm = reviewKind() === "confirm";
       const tag = isConfirm ? "톡딜 구확" : "톡딜";
       const tdOpts = [
