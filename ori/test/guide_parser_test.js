@@ -1071,7 +1071,51 @@ SS: 38,800 / Q: 48,800원
   console.log('✓ 카카오톡딜 수면공작소 70건 의뢰서 및 방제·옵션·시간 시험 통과');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (29개 샘플 전원 일치)');
+// Test 30: 톡딜 택배대행(빈박스) 정상 판정 및 방제 동적 조합·링크구매 키워드 예외 한정 검증 (11/14 v181)
+{
+  const reqTakdae = `#입금대행 택대 톡딜 15000
+
+1. 검색 키워드 : 
+2. 키워드 검색 시 현재 순위 :
+3. 총 구매 건수 : 20
+4. 일 진행 건수 : 20
+5. 상품주소(URL) : https://store.kakao.com/brand/products/123456789
+6. 구매옵션 : 단일
+7. 포토제공 유 무 : 무
+8. 리뷰내용 가이드 : 꼼꼼히 작성
+9. 입금하실 입금자명 :
+10.택배대행 Y/N: Y`;
+
+  const h = P.parseAll(reqTakdae);
+  if (h.realship) throw new Error('Test 30 realship should be false (빈박스)');
+  if (!h.takdae) throw new Error('Test 30 takdae should be true when 10.택배대행 is Y');
+  if (!h.isTalkdeal) throw new Error('Test 30 isTalkdeal should be true');
+
+  // 방제 동적 조합 검증: #택11.16 날짜, 판매처(오즈네즈), 상품명(양말), 톡딜, 건수(20)
+  const g = h.guides[0];
+  g.seller = '오즈네즈';
+  g.pname = '오즈네즈 순면 데일리 양말 세트';
+  g.guide = '양말';
+  getElem('req').value = reqTakdae;
+  getElem('takdae').checked = true;
+  P.setGuides(h.guides);
+  const room = P.makeRoom('11.16', '20');
+  // #택11.16 오즈네즈 양말 톡딜20 (17자)
+  if (room !== '#택11.16 오즈네즈 양말 톡딜20') {
+    throw new Error('Test 30 dynamic room mismatch: ' + room);
+  }
+
+  // 링크구매 예외 한정 검증: 키워드가 있으면 링크구매가 아님
+  const reqWithKw = reqTakdae.replace('1. 검색 키워드 : ', '1. 검색 키워드 : 순면양말');
+  const hWithKw = P.parseAll(reqWithKw);
+  const rawKw = String(hWithKw.guides[0].keyword || '').trim();
+  const hasNoKw = !rawKw || /^(x|X|-|무|없음)$/i.test(rawKw);
+  if (hasNoKw) throw new Error('Test 30: rawKw should not be considered empty when keyword is present');
+
+  console.log('✓ 톡딜 택배대행 정상 판정 및 방제 동적 조합·키워드 예외 한정 시험 통과');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (30개 샘플 전원 일치)');
 process.exit(0);
 
 
