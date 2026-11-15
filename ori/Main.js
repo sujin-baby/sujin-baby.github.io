@@ -1853,7 +1853,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'CABLETAK1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3331,6 +3331,7 @@ function checkFullInner_() {
   try { seol1111Del1_(); } catch (e) {}
   try { geochiDel1_(); } catch (e) {}
   try { rvPhotoFix1_(); } catch (e) {}
+  try { cableTak1_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
   try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
@@ -7989,6 +7990,34 @@ function geminiReadCapture_(blob) {
   if (!m) throw new Error('Gemini 답을 못 읽음: ' + String(t).slice(0, 80));
   const o = JSON.parse(m[0]);
   return { kind: /review|purchase|other/.test(o.kind) ? o.kind : 'other', stars: Math.max(0, Math.min(5, Number(o.stars) || 0)), text: o.text === true, photo: o.photo === true, product: String(o.product || '').slice(0, 120), site: String(o.site || '').slice(0, 20) };
+}
+// (11/16 한 번, 사용자: 김상사 케이블타이 오늘부터 택대시트에 넣어야 하니까 바꿔놔) 11.16부터 진행·일정 계획을 택배대행으로:
+//  방제 앞에 '택'(택대는 방제 앞 택으로 정함, 한눈에가 택 없으면 택대를 끔). 20자라 '김상사 케이블타이' → '김상사케이블타이'(같은 캠페인 키)
+function cableTak1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('CABLETAK1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const key = '김상사케이블타이', t0 = today_().getTime(), out = [];
+    const conv = function (t) { return String(t).replace(/^#(?!택)/, '#택').replace(/김상사\s+케이블타이/, '김상사케이블타이'); };
+    readRuns_().filter(function (r) { return campKey_(r['명단 제목']) === key && r['진행일'] instanceof Date && dayStart_(r['진행일']) >= t0 && r['진행 상태'] !== '종료'; }).forEach(function (r) {
+      const old = bareTitle_(r['명단 제목']), nt = conv(old);
+      if (takTitle_(old) && r['택대'] === 'Y') { out.push(old + ' (이미)'); return; }
+      if (Array.from(nt).length > 20) { out.push(nt + ' 20자 넘음'); return; }
+      out.push(renameRun_(r, nt, '택대로 (사용자 11/16)') ? nt : nt + ' 안 바뀜');
+    });
+    const ps = planSheet_(), pl = ps.getLastRow();
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x, i) {
+      if (x[8] !== '대기' || campKey_(x[4]) !== key) return;
+      let cfg = {}; try { cfg = JSON.parse(x[9] || '{}') || {}; } catch (e) {}
+      cfg.takdae = true;
+      ps.getRange(i + 2, 5, 1, 2).setValues([[conv(x[4]), conv(x[5])]]);
+      ps.getRange(i + 2, 10).setValue(JSON.stringify(cfg));
+      out.push('(일정) ' + conv(x[4]));
+    });
+    const ok = out.length && out.every(function (x) { return !/20자 넘음|안 바뀜/.test(x); });
+    props.setProperty('CABLETAK1', (ok ? '✓ ' : st + ' 실패(') + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '진행 못 찾음') + (ok ? '' : ')'));
+    if (ok) { try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); } }
+  } catch (e) { props.setProperty('CABLETAK1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 // 의뢰서에 포토리뷰가 없는지 (RV_ kind 'text'이고 섞임·가이드에 포토/사진 말이 없음) (11/16)
 function rvNoPhoto_(sid, props) {
