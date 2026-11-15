@@ -4757,16 +4757,17 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
       if (first && lines.length) payBadByCamp[first] = (payBadByCamp[first] || []).concat(lines);
     }
   });
-  const listCamps = [];
-  rows.forEach(function (x) {
+  const listCamps = [], listAt = [];   // listAt: 명단 전달 줄 { c: 방제, i: 보낼메시지 줄 순서(위가 최신), pend: 안 보냄 }
+  rows.forEach(function (x, i) {
     if (String(x[2]) === '명단 전달' && x[4]) {
-      const c = msgvListCamp_(x[4]); if (c) listCamps.push(c);
+      const c = msgvListCamp_(x[4]); if (c) { listCamps.push(c); listAt.push({ c: c, i: i, pend: msgvPending_(x[5]) }); }
     }
   });
+  const sameCamp = function (a, b) { return sameRunTitle_(a, b) || (!!dateTok_(a) && dateTok_(a) === dateTok_(b) && campKey_(a) === campKey_(b)); };
   const payForList = {};
   listCamps.forEach(function (lc) {
     Object.keys(payBadByCamp).forEach(function (pc) {
-      if (sameRunTitle_(lc, pc) || (dateTok_(lc) && dateTok_(lc) === dateTok_(pc) && campKey_(lc) === campKey_(pc))) {
+      if (sameCamp(lc, pc)) {
         payForList[lc] = (payForList[lc] || []).concat(payBadByCamp[pc]);
       }
     });
@@ -4774,15 +4775,17 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
   const known = {}; let otherAt = 0;
   MSGV_GROUPS.forEach(function (g, i) { g.k.forEach(function (k) { known[k] = i; }); if (g.other) otherAt = i; });
   const buckets = MSGV_GROUPS.map(function () { return []; });
-  rows.forEach(function (x) {
+  rows.forEach(function (x, xi) {
     if (!x[0] || !String(x[4] || '').trim()) return;
     const sent = x[5] === '보냄';
     // 보낸 건: 체크한 날과 다음 날까지 회색으로 남김(잘못 눌렀으면 풀 수 있게, 11/8 사용자: 이틀 뒤에 지우기). 다른 데서 보낸 건 오늘 날짜 것만. 취소 등은 안 보임
     if (!msgvPending_(x[5]) && !(sent && (x[1] instanceof Date && x[1].getTime() >= t0 || Number(sentAt[String(x[0])] || 0) >= t0 - 86400000))) return;
     // 명단 전달이 있는 방의 [결제금액 확인]은 명단전달 F칸 비고로 옮겨져 할일 탭에서는 중복 제외 (11/11 사용자 요청)
+    //  단 그 명단 전달을 아직 안 보냈거나, 이 할 일이 명단 전달보다 먼저 생긴 것(보낼 때 F칸에 보였음)만 뺌. 보낼메시지는 위가 최신이라 줄 번호가 크면 먼저 생긴 것.
+    //  명단을 보낸 뒤 새로 생긴 결제금액 확인은 F칸에 보일 데가 없어 할일 탭에 그대로 둠 (11/15: 안 그러면 어디에도 안 보임, 돈 관련)
     if (String(x[2]) === '할 일' && String(x[4]).indexOf('[결제금액 확인]') === 0) {
       const first = String(x[4]).split('\n')[0].replace(/^\[결제금액 확인\]\s*/, '').trim();
-      if (first && listCamps.some(function (lc) { return sameRunTitle_(lc, first) || (dateTok_(lc) && dateTok_(lc) === dateTok_(first) && campKey_(lc) === campKey_(first)); })) return;
+      if (first && listAt.some(function (l) { return sameCamp(l.c, first) && (l.pend || xi > l.i); })) return;
     }
     buckets[known[String(x[2])] != null ? known[String(x[2])] : otherAt].push(x);
   });
@@ -9944,12 +9947,13 @@ function payStatusLink_(rows, dry) {
   if (!rows.length) return [];
   const last = rows[rows.length - 1], rep = [];
   // 의뢰가 다 끝나면(마지막 날 남은 = 0) 그 의뢰 모든 날 '완료보고' 체크 (표시만. 진행비는 10/18부터 그날 수량 × 500원이라 완료보고와 상관없음)
-  //  줄마다 한 번만 체크 (사람이 체크를 풀면 다시 안 건드림)
+  //  줄마다 한 번만 체크 (사람이 체크를 풀면 다시 안 건드림). 지난달 탭 줄도 (11/12 피클 인계: 10월에 시작해 11/6에 끝난 백발백중
+  //  10월 탭 줄이 같은 탭만 보는 조건에 걸려 완료보고가 계속 비어 있었음. 기억 키에 탭 번호가 있어서 탭마다 따로 한 번)
   try {
     if (!dry && last.L.left && last.L.report && last.sh.getRange(last.row, last.L.left).getValue() === 0) {
       const props = PropertiesService.getScriptProperties();
       rows.forEach(function (x) {
-        if (!x.L.report || x.sh.getSheetId() !== last.sh.getSheetId()) return;
+        if (!x.L.report) return;
         const nm = String(x.sh.getRange(x.row, x.L.name).getValue()).replace(/\s+/g, '');
         const key = 'PAYREP_' + x.sh.getSheetId() + '_' + nm;
         if (!nm || props.getProperty(key)) return;

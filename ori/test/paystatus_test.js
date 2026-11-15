@@ -38,5 +38,21 @@ ok(oct2.f[48] === "=IF(G48=0, \"시작전\", IF(OR(O48=0,'11월'!O30=0),\"완료
 const src2 = G('newMonthTab_.toString()') + G('payNewRowFromAbove_.toString()');
 const reNew = /IF\\\(\\s\*OR\\\(\\s\*\(\[A-Z\]\+\\d\+\)\\s\*=\\s\*0\\s\*,\\s\*\(\?:'\(\?:\[\^'\]\|''\)\+'!\|\[\^\\s,\(\)'!\]\+!\)\?/;
 ok(reNew.test(src2), '새 달 탭 정규식에 다른 탭 참조');
+// 완료보고: 의뢰가 다음 달 탭에서 끝나면(마지막 날 남은 0) 지난달 탭 줄도 체크 (11/12 피클 인계: 백발백중 10월 탭 줄 완료보고가 계속 비어 있었음)
+{
+  const mk = (name, id, vals) => { const cell = {}; return { getName: () => name, getSheetId: () => id, cell,
+    getRange: (r, c) => ({ getValue: () => (cell[r + ',' + c] !== undefined ? cell[r + ',' + c] : (vals[r + ',' + c] !== undefined ? vals[r + ',' + c] : '')),
+      setValue: v => { cell[r + ',' + c] = v; }, getFormula: () => '', setFormula: () => {} }) }; };
+  const LR = { status: 0, name: 5, left: 15, report: 8 };
+  const o = mk('10월', 501, { '48,5': '#10.26 백발백중 도서 기대평 42', '57,5': '#10.27 백발백중 도서 기대평 54' });
+  const n = mk('11월', 502, { '6,5': '#11.06 백발백중 도서 기대평 27', '6,15': 0 });
+  G('payStatusLink_')([{ sh: o, L: LR, row: 48 }, { sh: o, L: LR, row: 57 }, { sh: n, L: LR, row: 6 }]);
+  ok(o.cell['48,8'] === true && o.cell['57,8'] === true, '지난달 탭 줄 완료보고 체크 ' + JSON.stringify(o.cell));
+  ok(n.cell['6,8'] === true, '마지막 달 줄 완료보고 체크 ' + JSON.stringify(n.cell));
+  // 아직 안 끝났으면(남은 ≠ 0) 아무 데도 안 건드림
+  const o2 = mk('10월', 601, { '10,5': '#10.30 무슨상품 9' }), n2 = mk('11월', 602, { '3,5': '#11.03 무슨상품 9', '3,15': 4 });
+  G('payStatusLink_')([{ sh: o2, L: LR, row: 10 }, { sh: n2, L: LR, row: 3 }]);
+  ok(o2.cell['10,8'] === undefined && n2.cell['3,8'] === undefined, '안 끝난 의뢰는 체크 안 함');
+}
 console.log(fails.length ? 'XX 월급시트 상태 잇기 시험 실패:\n- ' + fails.join('\n- ') : '✓ 월급시트 상태: 다음 달 탭 마지막 줄로 이음 시험 통과');
 process.exit(fails.length ? 1 : 0);

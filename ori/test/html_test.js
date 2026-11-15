@@ -15,5 +15,11 @@ const check = (name, html, fill) => {
 ['TOOLS_HTML', 'OUTBOX_HTML', 'DIALOG_HTML'].forEach(n => check(n, G(n), true));
 const guide = path.join(__dirname, '../../guide/index.html');
 if (fs.existsSync(guide)) check('guide/index.html', fs.readFileSync(guide, 'utf8'));
+// 공개 페이지에 팀룸 열쇠(32자 16진수)를 넣지 않음 (11/15: 생성기 v171에 팀룸 열쇠가 그대로 들어가 누구나 소스 보기로 볼 수 있었음)
+if (fs.existsSync(guide)) {
+  const g = fs.readFileSync(guide, 'utf8');
+  const tk = g.slice(g.indexOf('TEAM_KEY'), g.indexOf('function askTeamKey'));
+  if (/["'][0-9a-f]{32}["']/.test(g) || /atob\(/.test(tk)) { ok = false; console.log('XX guide/index.html 에 팀룸 열쇠 같은 글자가 들어 있음'); }
+}
 console.log(ok ? '✓ 화면 스크립트 문법 통과' : 'XX 화면 스크립트 문법 오류');
 process.exit(ok ? 0 : 1);
