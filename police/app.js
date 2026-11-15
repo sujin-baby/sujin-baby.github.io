@@ -67,6 +67,14 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     return a.slice(0, n);
   }
   function unitName(cid, u) { var c = COURSE[cid]; return c.units[u] ? c.units[u].n : ''; }
+  /* 지텔프 G-POINT 과목은 강의 대신 G-POINT가 노드 단위 (c.kind === 'gp') */
+  function isGP(c) { return !!(c && c.kind === 'gp'); }
+  function uw(c) { return (c && c.unitWord) ? ' ' + c.unitWord : '강'; }
+  function qLabel(q) {
+    var s = SUBJ[q.s], c = COURSE[q.c];
+    if (q.gp && c) return s.name + ' · G-POINT ' + q.gp + ' ' + (c.lec[q.gp - 1] ? c.lec[q.gp - 1].t : '');
+    return s.name + ' · ' + (c.name ? c.name + ' · ' : '') + unitName(q.c, q.u);
+  }
 
   /* ---------- sound ---------- */
   var AC = null;
@@ -167,27 +175,29 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var s = SUBJ[S.subj], c = curCourse();
     if (!c) return;
     if (lastCourse !== c.id) { lastCourse = c.id; $('#path')._scrolled = false; }
-    $('#heroSub').textContent = s.name + ' · ' + s.teacher + ' 교수';
+    var gp = isGP(c);
+    $('#heroSub').textContent = s.subLabel || (s.name + ' · ' + s.teacher + ' 교수');
     $('#heroName').textContent = c.name;
     var done = checkedNums(c.id).length;
     $('#progBar').style.width = Math.min(100, (done / c.total) * 100) + '%';
     var tL = todayLectures(c.id);
-    $('#progTxt').textContent = done + ' / ' + c.total + '강';
+    $('#progTxt').textContent = done + ' / ' + c.total + uw(c);
     var note = '';
     var btn = $('#ctaToday');
     if (done === 0) {
-      btn.textContent = '먼저 강의를 체크해 주세요';
+      btn.textContent = gp ? '먼저 G-POINT를 체크해 주세요' : '먼저 강의를 체크해 주세요';
       btn.onclick = function () { openSheet(c.id, nextLecture(c.id)); };
-      note = '아래 노드를 눌러 오늘 들은 강의를 체크하면 그 강의 문제가 열립니다.';
+      note = gp ? '아래 노드를 눌러 들은 G-POINT를 체크하면 그 포인트 문제가 열립니다.'
+                : '아래 노드를 눌러 오늘 들은 강의를 체크하면 그 강의 문제가 열립니다.';
     } else if (tL.length) {
-      btn.textContent = '오늘 들은 ' + tL.length + '강 문제 풀기';
+      btn.textContent = '오늘 체크한 ' + tL.length + uw(c) + ' 문제 풀기';
       btn.onclick = function () { startSession('today'); };
-      note = '오늘 체크한 ' + fmtNums(tL) + '에서 문제가 나옵니다.';
+      note = '오늘 체크한 ' + fmtNums(tL, c) + '에서 문제가 나옵니다.';
     } else {
       var lt = latestLectures(c.id);
-      btn.textContent = '최근 들은 강의 문제 풀기';
+      btn.textContent = '최근 체크한 ' + (gp ? 'G-POINT' : '강의') + ' 문제 풀기';
       btn.onclick = function () { startSession('today'); };
-      note = '오늘은 아직 체크한 강의가 없어 ' + lt.date.slice(5).replace('-', '/') + '에 들은 ' + fmtNums(lt.nums) + '(으)로 복습합니다.';
+      note = '오늘은 아직 체크한 ' + (gp ? '포인트' : '강의') + '가 없어 ' + lt.date.slice(5).replace('-', '/') + '에 체크한 ' + fmtNums(lt.nums, c) + '(으)로 복습합니다.';
     }
     $('#heroNote').textContent = note;
     $('#ctaAll').onclick = function () { startSession('all'); };
@@ -195,10 +205,11 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     $('#courseBtn').onclick = openCourseSheet;
     renderPath(c);
   }
-  function fmtNums(a) {
+  function fmtNums(a, c) {
     if (!a.length) return '';
-    if (a.length <= 3) return a.join('·') + '강';
-    return a[0] + '강 외 ' + (a.length - 1) + '강';
+    var gp = isGP(c);
+    if (a.length <= 3) return (gp ? 'G-POINT ' : '') + a.join('·') + (gp ? '' : '강');
+    return gp ? ('G-POINT ' + a[0] + ' 외 ' + (a.length - 1) + '개') : (a[0] + '강 외 ' + (a.length - 1) + '강');
   }
   function nextLecture(cid) {
     var m = ckMap(cid);
@@ -228,7 +239,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       if (doneSet[L.n] === today) cls += ' today';
       b.className = cls;
       b.innerHTML = '<span class="num">' + L.n + '</span>';
-      b.setAttribute('aria-label', L.n + '강');
+      b.setAttribute('aria-label', isGP(c) ? 'G-POINT ' + L.n : L.n + '강');
       b.onclick = function () { sfx('tap'); openSheet(c.id, L.n); };
       w.appendChild(b);
       if (L.n === cur) {
@@ -265,20 +276,22 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!L) return;
     var on = isChecked(cid, n);
     var pool = poolForLecture(cid, n);
-    var st = pool.length ? '<span class="pill">이 단원 문제 ' + pool.length + '개</span>' : '<span class="pill plan">이 단원 문제 준비 중</span>';
+    var gp = isGP(c), what = gp ? '이 포인트 문제' : '이 단원 문제';
+    var st = pool.length ? '<span class="pill">' + what + ' ' + pool.length + '개</span>' : '<span class="pill plan">' + what + ' 준비 중</span>';
     var isCur = n === nextLecture(cid);
     $('#sheetIn').innerHTML =
       '<button class="sheet-close" data-close="1">✕</button>' +
-      '<div class="sheet-num">' + c.name + ' · ' + n + '강' + (L.up ? '' : ' <span class="pill plan">업로드 예정</span>') + (on ? ' <span class="pill done">체크됨</span>' : '') + '</div>' +
-      '<div class="sheet-title">' + (L.t ? esc(L.t) : '아직 제목이 공개되지 않은 회차예요') + '</div>' +
+      '<div class="sheet-num">' + (gp ? SUBJ[c.sub].name + ' · G-POINT ' + n : c.name + ' · ' + n + '강') + (L.up ? '' : ' <span class="pill plan">업로드 예정</span>') + (on ? ' <span class="pill done">체크됨</span>' : '') + '</div>' +
+      '<div class="sheet-title">' + (gp ? 'G-POINT ' + n + (L.t ? ' · ' + esc(L.t) : '') : (L.t ? esc(L.t) : '아직 제목이 공개되지 않은 회차예요')) + '</div>' +
       '<div class="sheet-meta">' + (unitOf(cid, n) ? esc(unitOf(cid, n)) + ' · ' : '') + (L.up ? '' : '업로드 예정이지만 미리 체크할 수 있어요 · ') + st + '</div>' +
-      '<button class="btn ' + (on ? 'ghost' : 'primary') + '" id="shToggle">' + (on ? '체크 해제' : '이 강의 들었어요 ✓') + '</button>' +
-      '<button class="btn ghost" id="shQuiz" ' + (on && pool.length ? '' : 'disabled style="opacity:.45"') + '>이 단원 문제 풀기</button>' +
-      (isCur ? '<button class="btn ghost" id="shNext">다음 강의 보기 →</button>' : '');
+      '<button class="btn ' + (on ? 'ghost' : 'primary') + '" id="shToggle">' + (on ? '체크 해제' : (gp ? '이 G-POINT 들었어요 ✓' : '이 강의 들었어요 ✓')) + '</button>' +
+      '<button class="btn ghost" id="shQuiz" ' + (on && pool.length ? '' : 'disabled style="opacity:.45"') + '>' + what + ' 풀기</button>' +
+      (isCur ? '<button class="btn ghost" id="shNext">다음 ' + (gp ? 'G-POINT' : '강의') + ' 보기 →</button>' : '');
     $('#sheet').classList.remove('hidden');
     $('#shToggle').onclick = function () {
-      if (isChecked(cid, n)) { delete ckMap(cid)[n]; toast(n + '강 체크를 해제했어요'); }
-      else { ckMap(cid)[n] = todayStr(); touchDay(); toast(n + '강 체크! 오늘의 복습에 들어갑니다'); sfx('ok'); }
+      var nm = gp ? 'G-POINT ' + n : n + '강';
+      if (isChecked(cid, n)) { delete ckMap(cid)[n]; toast(nm + ' 체크를 해제했어요'); }
+      else { ckMap(cid)[n] = todayStr(); touchDay(); toast(nm + ' 체크! 오늘의 복습에 들어갑니다'); sfx('ok'); }
       save(); closeSheet(); renderAll();
     };
     var qb = $('#shQuiz');
@@ -294,11 +307,11 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
   function openCourseSheet() {
     var s = SUBJ[S.subj];
-    var html = '<button class="sheet-close" data-close="1">✕</button><div class="sheet-num">' + s.name + ' · ' + s.teacher + ' 교수</div><div class="sheet-title">강좌 선택</div><div class="sheet-meta">본인이 듣는 강좌를 고르면 진도가 그 강좌 기준으로 쌓입니다.</div>';
+    var html = '<button class="sheet-close" data-close="1">✕</button><div class="sheet-num">' + (s.subLabel || s.name + ' · ' + s.teacher + ' 교수') + '</div><div class="sheet-title">강좌 선택</div><div class="sheet-meta">본인이 듣는 강좌를 고르면 진도가 그 강좌 기준으로 쌓입니다.</div>';
     s.courses.forEach(function (c) {
       var d = checkedNums(c.id).length;
       html += '<button class="btn ' + (S.course[s.id] === c.id ? 'primary' : 'ghost') + '" data-c="' + c.id + '" style="justify-content:space-between">' +
-        '<span>' + esc(c.name) + '</span><span style="font-size:12px;opacity:.8">' + d + '/' + c.total + '강</span></button>';
+        '<span>' + esc(c.name) + '</span><span style="font-size:12px;opacity:.8">' + d + '/' + c.total + uw(c) + '</span></button>';
     });
     $('#sheetIn').innerHTML = html;
     $('#sheet').classList.remove('hidden');
@@ -312,9 +325,14 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
 
   /* ---------- pools ---------- */
   function poolForLecture(cid, n) {
-    var c = COURSE[cid], out = [];
+    var c = COURSE[cid], out = [], m = QBY[cid] || {};
+    /* G-POINT 문제(gp)는 그 포인트 문제만, 없으면 예전처럼 그 단원 전체 */
+    Object.keys(m).forEach(function (u) {
+      m[u].forEach(function (q) { if (q.gp === n) out.push(q); });
+    });
+    if (out.length) return out;
     c.units.forEach(function (u, i) {
-      if (n >= u.a && n <= u.b) out = out.concat(QBY[cid] && QBY[cid][i] ? QBY[cid][i] : []);
+      if (n >= u.a && n <= u.b) out = out.concat(m[i] ? m[i] : []);
     });
     return out;
   }
@@ -360,8 +378,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var allN = checkedNums(c.id).length;
     var wrongN = D.questions.filter(function (q) { return S.wrong[q.i] && (S.mix || q.s === S.subj); }).length;
     $('#reviewSub').textContent = (S.mix ? '전체 과목' : s.name) + ' · 들은 강의에서만 문제가 나옵니다.';
-    $('#mTodayTxt').textContent = tN ? '오늘 체크한 ' + tN + '강' : '오늘 체크한 강의 없음 (최근 강의로)';
-    $('#mAllTxt').textContent = '지금까지 들은 ' + allN + '강 누적';
+    $('#mTodayTxt').textContent = tN ? '오늘 체크한 ' + tN + uw(c) : '오늘 체크한 ' + (isGP(c) ? 'G-POINT' : '강의') + ' 없음 (최근 것으로)';
+    $('#mAllTxt').textContent = '지금까지 체크한 ' + allN + uw(c) + ' 누적';
     $('#mWrongTxt').textContent = wrongN ? wrongN + '문제 대기' : '오답 없음';
     $$('#lenChips .chip').forEach(function (b) {
       b.classList.toggle('on', Number(b.getAttribute('data-len')) === S.qlen);
@@ -383,7 +401,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         if (!d && s.courses.length > 1 && S.course[s.id] !== c.id) return;
         var w = document.createElement('div');
         w.className = 'prog-item';
-        w.innerHTML = '<div class="pi-top"><span>' + s.emoji + ' ' + s.name + ' · ' + esc(c.name) + '</span><i>' + d + '/' + c.total + '강</i></div>' +
+        w.innerHTML = '<div class="pi-top"><span>' + s.emoji + ' ' + s.name + ' · ' + esc(c.name) + '</span><i>' + d + '/' + c.total + uw(c) + '</i></div>' +
           '<div class="bar"><i style="width:' + Math.min(100, d / c.total * 100) + '%;background:' + s.color + '"></i></div>';
         el.appendChild(w);
       });
@@ -396,7 +414,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     arr.slice(0, 40).forEach(function (q) {
       var d = document.createElement('div');
       d.className = 'wrong-item';
-      d.innerHTML = '<span class="wi-tag">' + SUBJ[q.s].name + ' · ' + unitName(q.c, q.u) + ' · ' + (S.wrong[q.i].c || 1) + '번 틀림</span>' +
+      d.innerHTML = '<span class="wi-tag">' + qLabel(q) + ' · ' + (S.wrong[q.i].c || 1) + '번 틀림</span>' +
         esc(q.q) + '<div class="wi-e">정답: ' + esc(q.o[q.a]) + '<br>' + esc(q.e) + '</div>';
       wl.appendChild(d);
     });
@@ -440,7 +458,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var it = QS.items[QS.i], q = it.q;
     QS.locked = false; QS.sel = -1;
     $('#qBar').style.width = (QS.i / QS.items.length * 100) + '%';
-    var tag = SUBJ[q.s].name + ' · ' + (COURSE[q.c].name ? COURSE[q.c].name + ' · ' : '') + unitName(q.c, q.u);
+    var tag = qLabel(q);
     var keys = ['A', 'B', 'C', 'D'];
     var h = '<div class="q-tag">' + esc(tag) + '</div>' +
       '<h2 class="q-text">' + esc(q.q) + '</h2><div class="opts">';

@@ -1,7 +1,7 @@
 {
-  "name": "경찰 인강 복습",
-  "short_name": "경찰 복습",
-  "description": "형사법·경찰학·범죄학 인강 진도 체크와 누적 랜덤 복습",
+  "name": "인강 복습",
+  "short_name": "인강 복습",
+  "description": "형사법·경찰학·범죄학·지텔프(G-POINT 33) 진도 체크와 누적 랜덤 복습",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
