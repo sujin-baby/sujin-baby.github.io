@@ -114,3 +114,17 @@ const okS = badRes.ok === false && goodRes.slack.token === true && /\?slack=1$/.
 console.log(okS ? '✓ 슬랙 바로 답 통과' : 'XX 슬랙 시험 실패');
 if (!okS) process.exit(1);
 
+// 열쇠 교체(rotate): owner만 가능, 모든 열쇠와 열쇠 파일이 새 값으로 바뀌고 옛 열쇠는 거절됨
+const rotDenied = api('pickle', { api: 'rotate' });
+const oldOwnerKey = kOf('owner');
+const rotOk = api('owner', { api: 'rotate' });
+const newKeys = JSON.parse(props.get('ROOM_KEYS'));
+const newOwnerKey = Object.keys(newKeys).find(k => newKeys[k] === 'owner');
+const oldRejected = JSON.parse(G('doGet(' + JSON.stringify({ parameter: { k: oldOwnerKey, api: 'read' } }) + ')').t);
+const newAccepted = JSON.parse(G('doGet(' + JSON.stringify({ parameter: { k: newOwnerKey, api: 'read' } }) + ')').t);
+const okRot = rotDenied.ok === false && rotOk.ok === true && newOwnerKey && newOwnerKey !== oldOwnerKey &&
+  oldRejected.ok === false && newAccepted.ok === true &&
+  Object.values(env.DriveApp.files).find(f => /열쇠/.test(f.name)).content.indexOf(newOwnerKey) >= 0;
+console.log(okRot ? '✓ 열쇠 교체 시험 통과' : 'XX 열쇠 교체 시험 실패');
+if (!okRot) process.exit(1);
+

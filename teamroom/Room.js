@@ -147,6 +147,18 @@ function api_(me, op, a) {
     return { ok: true, gpt: !!rp_().getProperty('OPENAI_KEY') };
   }
   if (op === 'slack' && me === 'owner') return slackSetToken_(String(a.token || '').trim());
+  if (op === 'rotate' && me === 'owner') {
+    const p = rp_(), ks = {};
+    MEMBERS.forEach(function (m) { ks[Utilities.getUuid().replace(/-/g, '')] = m.id; });
+    p.setProperty('ROOM_KEYS', JSON.stringify(ks));
+    p.deleteProperty('ROOM_KEYFILE_V');
+    const kf = keyFile_(), base = url_(), out = { ok: true, sheet: kf.getUrl(), keys: {} };
+    MEMBERS.forEach(function (m) {
+      const k = Object.keys(ks).filter(function (x) { return ks[x] === m.id; })[0];
+      out.keys[m.id] = { key: k, url: base + '?k=' + k };
+    });
+    return out;
+  }
   throw new Error('모르는 요청: ' + op);
 }
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
