@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+<title>경찰 인강 복습 · 형사법·경찰학·범죄학</title>
+<meta name="description" content="형사법(신광은)·경찰학(장정훈)·범죄학(박상민) 인강 진도를 체크하고, 들은 강의만 골라 누적 랜덤 복습하는 듀오링고식 학습 앱">
+<meta name="theme-color" content="#101828">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="경찰 복습">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="brand"><span class="brand-dot">🎯</span><span class="brand-txt">경찰 인강 복습</span></div>
+  <div class="hud">
+    <button id="mute" class="hud-btn" aria-label="소리 켜기/끄기">🔊</button>
+    <div class="hud-chip" title="연속 학습일"><span>🔥</span><b id="streakN">0</b></div>
+    <div class="hud-chip" title="XP"><span>⚡</span><b id="xpN">0</b></div>
+  </div>
+</header>
+
+<nav class="subtabs" id="subtabs"></nav>
+
+<main id="view-stage" class="view">
+  <section class="hero" id="hero">
+    <div class="hero-head">
+      <div>
+        <div class="hero-sub" id="heroSub">형사법 · 신광은</div>
+        <h1 class="hero-name" id="heroName">형법 [총론]</h1>
+      </div>
+      <button class="course-btn" id="courseBtn">강좌<span id="courseChev">▾</span></button>
+    </div>
+    <div class="hero-prog">
+      <div class="bar"><i id="progBar"></i></div>
+      <div class="prog-txt" id="progTxt">0 / 0강</div>
+    </div>
+    <button class="btn primary" id="ctaToday">오늘 들은 강의 문제 풀기</button>
+    <div class="cta-row">
+      <button class="btn ghost" id="ctaAll">누적 랜덤 복습</button>
+      <button class="btn ghost" id="ctaWrong">오답 집중</button>
+    </div>
+    <p class="hero-note" id="heroNote"></p>
+  </section>
+  <div class="path-wrap">
+    <svg id="pathSvg" class="path-svg" aria-hidden="true"></svg>
+    <div id="path" class="path"></div>
+  </div>
+  <div class="foot-note">아직 사이트에 안 올라온 회차도 노드를 눌러 직접 체크할 수 있어요.</div>
+</main>
+
+<main id="view-review" class="view hidden">
+  <h1 class="page-title">복습</h1>
+  <p class="page-sub" id="reviewSub">들은 강의에서만 문제가 나옵니다.</p>
+  <div class="cards">
+    <button class="mode-card" id="mToday">
+      <span class="mode-ico">📅</span>
+      <span class="mode-body"><b>오늘 들은 강의</b><i id="mTodayTxt">-</i></span>
+      <span class="mode-go">›</span>
+    </button>
+    <button class="mode-card" id="mAll">
+      <span class="mode-ico">🌀</span>
+      <span class="mode-body"><b>누적 랜덤 복습</b><i id="mAllTxt">-</i></span>
+      <span class="mode-go">›</span>
+    </button>
+    <button class="mode-card" id="mWrong">
+      <span class="mode-ico">🩹</span>
+      <span class="mode-body"><b>오답 집중 복습</b><i id="mWrongTxt">-</i></span>
+      <span class="mode-go">›</span>
+    </button>
+  </div>
+
+  <h2 class="sec-title">문제 수</h2>
+  <div class="chip-row" id="lenChips">
+    <button class="chip" data-len="5">5문제</button>
+    <button class="chip" data-len="10">10문제</button>
+    <button class="chip" data-len="20">20문제</button>
+    <button class="chip" data-len="99">끝까지</button>
+  </div>
+  <label class="switch-row">
+    <span>다른 과목까지 섞기</span>
+    <input type="checkbox" id="mixAll">
+    <i class="switch"></i>
+  </label>
+</main>
+
+<main id="view-stats" class="view hidden">
+  <h1 class="page-title">기록</h1>
+  <div class="stat-grid">
+    <div class="stat"><b id="stStreak">0</b><span>연속 학습일</span></div>
+    <div class="stat"><b id="stXp">0</b><span>XP</span></div>
+    <div class="stat"><b id="stAcc">-</b><span>정답률</span></div>
+    <div class="stat"><b id="stAns">0</b><span>푼 문제</span></div>
+  </div>
+  <h2 class="sec-title">과목별 진도</h2>
+  <div id="stProg" class="prog-list"></div>
+  <h2 class="sec-title">오답노트</h2>
+  <div id="stWrong" class="wrong-list"></div>
+  <h2 class="sec-title">설정</h2>
+  <button class="btn ghost wide" id="installTip">📲 홈화면에 추가하는 방법</button>
+  <button class="btn danger wide" id="reset">학습 기록 초기화</button>
+  <p class="tiny">기록은 이 기기 브라우저(localStorage)에만 저장됩니다.</p>
+</main>
+
+<nav class="tabbar">
+  <button class="tab on" data-view="stage"><span>🗺️</span><i>스테이지</i></button>
+  <button class="tab" data-view="review"><span>🔁</span><i>복습</i></button>
+  <button class="tab" data-view="stats"><span>📊</span><i>기록</i></button>
+</nav>
+
+<div id="quiz" class="quiz hidden">
+  <div class="quiz-top">
+    <button id="qClose" class="q-close" aria-label="닫기">✕</button>
+    <div class="bar thin"><i id="qBar"></i></div>
+    <div class="combo" id="qCombo">🔥 0</div>
+  </div>
+  <div class="quiz-body" id="qBody"></div>
+  <div class="feedback hidden" id="qFb">
+    <div class="fb-head" id="fbHead"></div>
+    <div class="fb-text" id="fbText"></div>
+    <button class="btn primary wide" id="fbNext">다음</button>
+  </div>
+</div>
+
+<div id="sheet" class="sheet hidden">
+  <div class="sheet-bg" data-close="1"></div>
+  <div class="sheet-in" id="sheetIn"></div>
+</div>
+
+<div id="fx" class="fx"></div>
+<div id="toast" class="toast hidden"></div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
