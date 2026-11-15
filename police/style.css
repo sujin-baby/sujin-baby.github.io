@@ -556,3 +556,4 @@ button{font-family:inherit;font-size:inherit;color:inherit;border:0;background:n
   .cal-cell .cc-b{font-size:7.5px;letter-spacing:-.45px}
   .cal-cell .cc-exam{font-size:6.5px;padding:1px 2px}
 }
+.cal-key{font-size:10px;font-weight:800;color:var(--ink3);margin-top:5px;text-align:center;letter-spacing:-.2px}
