@@ -3603,6 +3603,11 @@ function listMsgText_(r) {
       tail = sib.length === 1 ? '마지막' : md(sib[0]) + '~ ' + md(me) + '  ' + (isExpect_(me) ? EXP_LINKS.length * 15 + '건 작성완료' : total + '건 구매완료');
       let pc = []; try { pc = priceChangeLines_(me, sib, runs); } catch (e) {}
       if (pc.length) tail += '\n' + (sib.length === 1 ? '\n' : '') + pc.join('\n');
+    } else {
+      // 마지막 날이 아니어도 그날까지 결제금액이 공지와 다르면 맨 밑에 가격변동 (11/16 사용자: #11.16실/빈 김상사 케이블타이5 5명이 9,000원 결제(공지 7,900원)인데 명단 전달에 없음)
+      const idx = sib.findIndex(function (x) { return x.row === me.row; });
+      let pc = []; try { if (idx >= 0) pc = priceChangeLines_(me, sib.slice(0, idx + 1), runs); } catch (e) {}
+      if (pc.length) tail = pc.join('\n');
     }
   } catch (e) {}
   // 앞 진행일보다 공지 가격이 바뀌었으면 '가격변동 9100 > 9200' (사용자 요청 10/28 마켓담온 귤). 그날 방 공지(없으면 폼 설명)의 🐥가격
@@ -4646,7 +4651,9 @@ function todayItems_(runs) {
     if (!x[0] || !msgvPending_(x[5]) || !String(x[4] || '').trim() || x[1] === '포토전달대기') return;
     const due = x[1] instanceof Date ? dayStart_(x[1]) : null;
     if (due !== null && due > t0) { out.later++; return; }   // 앞으로 보낼 것은 그날에
-    const kind = String(x[2]), gi = known[kind] != null ? known[kind] : other;
+    const kind = String(x[2]);
+    let gi = known[kind] != null ? known[kind] : other;
+    if (MSGV_GROUPS[gi].merged) gi = Math.max(0, MSGV_GROUPS.map(function (g) { return g.key; }).indexOf(MSGV_GROUPS[gi].merged));
     let copy = String(x[4]);
     if (kind === '리뷰 독촉') copy = String((copy.match(/아직 리뷰 확인이 안 된 분\s*:\s*([^\n]*)/) || [])[1] || copy).trim();
     else if (kind === '리뷰비 요청') copy = '';
@@ -4745,7 +4752,7 @@ function msgvLinks_(x, ctx) {
  *  - 보낼메시지가 바뀌면 실행이 끝날 때 바뀐 탭만 다시 그림. 다시 그린 지 20초 안에 누른 칸이 다른 메시지로 밀렸으면 체크를 되돌리고 알림
  */
 const MSGV_CHWAN_COL = 3;   // 리뷰비 탭 취완 체크칸 (C, 보냄 B 바로 옆. 11/16 전엔 L)
-const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '11', MSGV_COLS = 5;   // 11: 리뷰비 탭 취완 체크 C칸으로, L칸 리뷰이미지 (11/16)   // 10: 리뷰독촉 탭 리뷰이미지 링크 칸, 페이백 글 한 줄 띄움·줄 높이 (11/15)   // 9: 리뷰비 탭 L칸에 걸린 취완은 취완 탭에서 뺌, 페이백 줄 E~K 합침 (11/15)   // 8: 명단전달 F열 '비고'(가격 틀리게 산 사람) 및 할일 탭 중복 제외 (11/11)   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
+const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '12', MSGV_COLS = 5;   // 11: 리뷰비 탭 취완 체크 C칸으로, L칸 리뷰이미지 (11/16)   // 10: 리뷰독촉 탭 리뷰이미지 링크 칸, 페이백 글 한 줄 띄움·줄 높이 (11/15)   // 9: 리뷰비 탭 L칸에 걸린 취완은 취완 탭에서 뺌, 페이백 줄 E~K 합침 (11/15)   // 8: 명단전달 F열 '비고'(가격 틀리게 산 사람) 및 할일 탭 중복 제외 (11/11)   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
 const MSGV_GROUPS = [
   { key: 'notice', base: '🐥방공지', t: '🐥 방 공지', k: ['방 공지'], bg: '#eee6f7', tab: '#b48fd9' },
   { key: 'list', base: '📋명단전달', t: '📋 명단 전달 (오리명단방)', k: ['명단 전달', '업체 명단'], bg: '#d9ead2', tab: '#7fbf6a' },
@@ -4754,7 +4761,7 @@ const MSGV_GROUPS = [
   { key: 'report', base: '📦리뷰취합', t: '📦 리뷰 취합 보고 (사장님께)', k: ['리뷰 보고'], bg: '#d0dfe2', tab: '#76a5af', req: true },
   { key: 'nag', base: '⏰리뷰독촉', t: '⏰ 리뷰 독촉 · 안 산 사람', k: ['리뷰 독촉', '안 산 사람'], bg: '#fbe4cd', tab: '#f6a35b', req: true, links: [[7, 'list', '명단'], [8, 'img', '리뷰이미지']] },   // 리뷰이미지 링크 (11/15 사용자)
   { key: 'pay', base: '💰리뷰비', t: '💰 리뷰비 · 페이백 요청', k: ['리뷰비 요청', '페이백 요청'], bg: '#ead1dc', tab: '#d36f9a', fee: true, links: [[12, 'img', '리뷰이미지']] },   // L칸 리뷰이미지 (11/16 사용자 승인)
-  { key: 'done', base: '✅취완', t: '✅ 취완 (방 사람 리뷰 다 확인됨)', k: ['취완'], bg: '#e3e3e3', tab: '#999999', links: [[6, 'img', '리뷰이미지'], [7, 'list', '명단']] }
+  { key: 'done', base: '✅취완', t: '✅ 취완 (방 사람 리뷰 다 확인됨)', k: ['취완'], bg: '#e3e3e3', tab: '#999999', links: [[6, 'img', '리뷰이미지'], [7, 'list', '명단']], merged: 'pay' }   // 11/16 사용자: 취완 탭 없앰 → 리뷰비 탭 하나로
 ];
 const MSGV_ROOM_BG = ['#fde2e4', '#dbeafe', '#dcfce7', '#fef3c7', '#f3e8ff', '#ffedd5', '#cffafe', '#fce7f3', '#e0e7ff', '#ecfccb', '#fee2e2', '#e2e8f0'];
 const MSGV_FIXED_BG = { '내 할 일': '#fff8e1', '사장님': '#e0f2f1', '리뷰비시트': '#fce4ec' };
@@ -4871,6 +4878,12 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
     });
   });
   MSGV_GROUPS.forEach(function (g, gi) { if (g.key === 'done') buckets[gi] = buckets[gi].filter(function (x) { return !linked[String(x[0])]; }); });
+  // 리뷰비 줄에 안 걸린 취완(여러 날 의뢰 중 먼저 끝난 방 등)도 리뷰비 탭 줄로 (11/16 사용자: 취완 탭은 없어도 됨). 그 줄은 B칸 보냄 = 그 취완 보냄
+  MSGV_GROUPS.forEach(function (g, gi) {
+    if (!g.merged) return;
+    const to = MSGV_GROUPS.map(function (x) { return x.key; }).indexOf(g.merged);
+    if (to >= 0) { buckets[to] = buckets[to].concat(buckets[gi]); buckets[gi] = []; }
+  });
   const colors = {};
   const groups = buckets.map(function (g, gi) {
     const grp = MSGV_GROUPS[gi];
@@ -4904,7 +4917,7 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
         if (lc && payForList[lc]) lnote = payForList[lc].filter(function (v, i, a) { return a.indexOf(v) === i; }).join('\n');
       }
       return { type: 'msg', id: xs.map(function (y) { return String(y[0]); }).join(','), sent: isSent, day: msgvDay_(x[1]), over: od, today: x[1] instanceof Date && x[1].getTime() === t0,
-        room: head ? head + '\n' + room : room, boldTo: head ? head.length : 0, msg: msgvPaybackGap_(kind, msgvCombine_(xs)), bg: msgvRoomBg_(camp || x[3], colors),
+        room: head ? head + '\n' + room : room, boldTo: head ? head.length : 0, msg: grp.fee && kind === '취완' ? '취완  →  ' + String(x[3]) : msgvPaybackGap_(kind, msgvCombine_(xs)), bg: msgvRoomBg_(camp || x[3], colors),
         reqF: rq ? String(rq.f || '') : null, reqNote: rq ? String(rq.note || '') : '', reqUrl: rq ? String(rq.url || '') : '',
         listNote: lnote,
         fee: grp.fee && String(x[2]) === '리뷰비 요청' ? msgvFeeCells_(x) : null, kind: String(x[2]),
@@ -5014,7 +5027,7 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
       }
       if (grp.fee) { sh.setColumnWidth(7, 80); sh.setColumnWidth(8, 70); sh.setColumnWidth(9, 90); sh.setColumnWidth(10, 90); sh.setColumnWidth(11, 420); sh.getRange(1, 5, sh.getMaxRows(), 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.OVERFLOW); sh.getRange(1, 6, sh.getMaxRows(), 6).setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP); }
       if (grp.req) sh.getRange(1, 6, sh.getMaxRows(), 1).setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
-      sh.getRange('C:C').setNumberFormat('@');
+      if (!grp.fee) sh.getRange('C:C').setNumberFormat('@');   // 리뷰비 탭 C칸은 취완 체크칸이라 글자 형식이면 체크칸 대신 'false'가 보임 (11/16)
       sh.getRange(1, 1, sh.getMaxRows(), MSGV_COLS).setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
       sh.hideColumns(1);
       sh.setFrozenRows(1);
@@ -5129,6 +5142,7 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
         else { lv.push(['']); lb.push([l.type === 'title' ? grp.bg : l.type === 'msg' ? (l.sent ? '#f3f3f3' : '#ffffff') : null]); ld.push([null]); mv.push(['']); }
       }
       const lr = sh.getRange(1, MSGV_CHWAN_COL, n, 1);
+      try { lr.setNumberFormat('General'); } catch (e) {}   // 예전 C칸 글자 형식(@)이면 체크칸이 'false' 글자로 보임 (11/16)
       lr.clearDataValidations(); lr.setValues(lv); lr.setDataValidations(ld); lr.setBackgrounds(lb).setHorizontalAlignment('center');
       sh.getRange(1, 13, n, 1).setValues(mv);
       sh.getRange(1, MSGV_CHWAN_COL).setFontWeight('bold').setFontColor('#7a2e57');
@@ -5205,6 +5219,7 @@ function msgViewBuild_(force, only) {
   let wrote = false;
   MSGV_GROUPS.forEach(function (grp, gi) {
     if (only != null && only !== gi) return;
+    if (grp.merged) { if (found[gi]) { try { ss.deleteSheet(found[gi]); } catch (e) {} } return; }   // 다른 탭으로 합친 종류 (11/16 취완 → 리뷰비): 예전 탭은 지움 (보낼메시지에서 만든 보기라 잃는 것 없음)
     const g = m.groups[gi];
     let sh = found[gi], made = false;
     if (!sh) { sh = ss.insertSheet(g.name, Math.max(0, at)); made = true; }

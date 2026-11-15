@@ -47,7 +47,8 @@ env.__ROWS = rows5;
 const m5 = G('msgViewModel_')(rows5, {}, null, null, G('__CH'));
 const gd = G("MSGV_GROUPS.map(function (g) { return g.key; }).indexOf('done')");
 const dids = m5.groups[gd].lines.filter(l => l.type === 'msg').map(l => l.id);
-ok(dids.indexOf('a1') < 0 && dids.indexOf('b1') < 0 && dids.indexOf('c1') >= 0, '취완 탭에는 리뷰비 줄에 안 걸린 것만 ' + JSON.stringify(dids));
+const pids = m5.groups[gp].lines.filter(l => l.type === 'msg').map(l => l.id);
+ok(!dids.length && pids.indexOf('a1') < 0 && pids.indexOf('b1') < 0 && pids.indexOf('c1') >= 0, '취완 탭 없앰: 리뷰비 줄에 걸린 취완은 C칸, 안 걸린 것만 리뷰비 탭 줄로 ' + JSON.stringify([dids, pids]));
 // 6) 한 줄에 취완 여러 개(여러 날 의뢰 방마다) → L칸 체크 하나로 다 보냄
 const tab3 = new H.Sheet('💰리뷰비 2', [['', '보냄', '취완', '', '주문 날짜', '', '', '', '', '', '', '리뷰이미지', ''], ['a2', false, true, '', '', '', '', '', '', '', '', '', 'a1,b1']]);
 G('msgvChwanEdit_')(G('__EV'), tab3, 2, 1, function (t) { toastMsg = t; });
