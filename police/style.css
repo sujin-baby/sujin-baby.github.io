@@ -199,3 +199,11 @@ button{font-family:inherit;font-size:inherit;color:inherit;border:0;background:n
 
 .node.plan{background:#fbfcfe;border-style:dashed;border-color:#dbe2ee;color:#b6c0d0}
 .node.plan.current{background:var(--c);border-style:solid;color:#fff}
+
+/* 폭넓은 화면 보정 */
+@media(min-width:720px){
+  .subtabs{justify-content:center}
+  .top{padding-left:max(14px,calc(50% - 280px));padding-right:max(14px,calc(50% - 280px))}
+}
+.opt.ok{animation:okpulse .5s ease}
+@keyframes okpulse{0%{transform:scale(1)}40%{transform:scale(1.03);box-shadow:0 0 0 6px rgba(34,197,94,.18)}100%{transform:scale(1)}}

@@ -179,12 +179,12 @@
     } else if (tL.length) {
       btn.textContent = '오늘 들은 ' + tL.length + '강 문제 풀기';
       btn.onclick = function () { startSession('today'); };
-      note = '오늘 체크한 ' + fmtNums(tL) + '강에서 문제가 나옵니다.';
+      note = '오늘 체크한 ' + fmtNums(tL) + '에서 문제가 나옵니다.';
     } else {
       var lt = latestLectures(c.id);
       btn.textContent = '최근 들은 강의 문제 풀기';
       btn.onclick = function () { startSession('today'); };
-      note = '오늘은 아직 체크한 강의가 없어 ' + lt.date.slice(5).replace('-', '/') + '에 들은 ' + fmtNums(lt.nums) + '강으로 복습합니다.';
+      note = '오늘은 아직 체크한 강의가 없어 ' + lt.date.slice(5).replace('-', '/') + '에 들은 ' + fmtNums(lt.nums) + '(으)로 복습합니다.';
     }
     $('#heroNote').textContent = note;
     $('#ctaAll').onclick = function () { startSession('all'); };
