@@ -1,0 +1,39 @@
+// 포토리뷰 없는 의뢰(전체 텍스트)는 AI가 포토라고 해도 포토 폴더에 안 넣음 + (한 번) 이미 들어간 것 옮김 (11/16 더호 차량용 거치대)  node rvphoto_test.js <Main.js>
+const H = require('./harness'); const vm = require('vm');
+const env = H.makeEnv({ main: process.argv[2], props: { OUTBOX_SORTED: '1', OUTBOX_FMT2: '1' } }); const G = k => vm.runInContext(k, env);
+const fails = [], ok = (c, m) => { if (!c) fails.push(m); };
+const iter = a => { let i = 0; const b = a.slice(); return { hasNext: () => i < b.length, next: () => b[i++] }; };
+function folder(name) {
+  const f = { name, files: [], dirs: [], trashed: false,
+    getName: () => f.name, setName: n => { f.name = n; }, getId: () => 'id_' + f.name, setTrashed: () => { f.trashed = true; },
+    getFiles: () => iter(f.files), getFolders: () => iter(f.dirs.filter(d => !d.trashed)),
+    createFolder: n => { const d = folder(n); d.parent = f; f.dirs.push(d); return d; } };
+  return f;
+}
+function file(name, desc, parent) {
+  const x = { name, desc, parent, getName: () => name, getDescription: () => desc, getMimeType: () => 'image/png',
+    moveTo: d => { x.parent.files.splice(x.parent.files.indexOf(x), 1); x.parent = d; d.files.push(x); } };
+  parent.files.push(x); return x;
+}
+const img = folder('리뷰이미지'), ph = img.createFolder('포토 (1개)'), tx = img.createFolder('텍스트 (8개)');
+file('a.png', 'AI {"kind":"review","stars":5,"text":true,"photo":true}', ph);
+for (let i = 0; i < 8; i++) file('t' + i + '.png', 'AI {"kind":"review","stars":5,"text":true,"photo":false}', tx);
+const img2 = folder('리뷰이미지2'), ph2 = img2.createFolder('포토 (2개)');
+file('p1.png', 'AI {"kind":"review","photo":true}', ph2); file('p2.png', 'AI {"kind":"review","photo":true}', ph2);
+env.DriveApp = { getFolderById: id => ({ IMG1: img, IMG2: img2 })[id] };
+const LH = G('LIST_HEADER'), mk = o => LH.map(h => o[h] !== undefined ? o[h] : '');
+env.__ss.sheets['진행목록'] = new H.Sheet('진행목록', [LH.slice(),
+  mk({ '진행일': new Date(), '명단 제목': '#택11.13 더호 차량용 거치대 3 (뽀짝오리)', '시트ID': 'S1', '진행 상태': '진행중' }),
+  mk({ '진행일': new Date(), '명단 제목': '#11.13 포토 의뢰 5 (뽀짝오리)', '시트ID': 'S2', '진행 상태': '진행중' })]);
+[['RVIMG_S1', 'IMG1'], ['RV_S1', '{"kind":"text","mix":"","guide":"별점5개 + 자율작성"}'], ['RVIMG_S2', 'IMG2'], ['RV_S2', '{"kind":"photo","mix":"","guide":"사진 첨부"}']].forEach(([k, v]) => env.__props.set(k, v));
+ok(G("rvNoPhoto_('S1')") === true && G("rvNoPhoto_('S2')") === false, '포토 없는 의뢰 판단');
+let err = ''; try { G('rvPhotoFix1_()'); } catch (e) { err = String(e.stack || e); }
+ok(!err, '오류 ' + err);
+const live = f => f.dirs.filter(d => !d.trashed);
+ok(live(img).map(d => d.name).join('|') === '텍스트 (9개)' && live(img)[0].files.length === 9, '포토 → 텍스트 ' + live(img).map(d => d.name + ':' + d.files.length).join('|'));
+ok(ph2.files.length === 2 && !ph2.trashed, '포토 의뢰는 그대로');
+ok(/^✓/.test(env.__props.get('RVPHOTOFIX1')) && /거치대 1장/.test(env.__props.get('RVPHOTOFIX1')), '결과 ' + env.__props.get('RVPHOTOFIX1'));
+const src = require('fs').readFileSync(process.argv[2], 'utf8');
+ok(/noPhoto && o\.kind === 'review' && o\.photo \? Object\.assign\(\{\}, o, \{ photo: false \}\)/.test(src), 'AI 나눌 때도 포토 안 넣음');
+console.log(fails.length ? 'XX 포토 없는 의뢰 포토 폴더 시험 실패:\n- ' + fails.join('\n- ') : '✓ 포토 없는 의뢰는 포토 폴더에 안 넣음 시험 통과');
+process.exit(fails.length ? 1 : 0);
