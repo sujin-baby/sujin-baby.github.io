@@ -702,11 +702,11 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
   function poolForLecture(cid, n) {
     var c = COURSE[cid], out = [], m = QBY[cid] || {};
-    // 지텔프 G-POINT: 포인트 번호가 곧 문제 묶음
+    // 지텔프 G-POINT: 포인트 번호가 곧 문제 묶음 (없으면 단원 문제로 대체하지 않는다)
     Object.keys(m).forEach(function (u) {
       m[u].forEach(function (q) { if (q.gp === n) out.push(q); });
     });
-    if (out.length) return out;
+    if (out.length || isGP(c)) return out;
     var ui = unitIndex(cid, n);
     if (ui < 0) return out;
     // 그 강의가 속한 단원의 문제 (강좌별 단원 구간이 회차 기준으로 나뉘어 있어도 문제은행은 기준 강좌에서 가져온다)
