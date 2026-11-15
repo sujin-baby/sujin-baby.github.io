@@ -1,3 +1,6 @@
+window.__policeErrors = [];
+window.addEventListener('error', function (e) { try { window.__policeErrors.push(String(e.message)); } catch (x) {} });
+window.addEventListener('unhandledrejection', function (e) { try { window.__policeErrors.push('promise:' + e.reason); } catch (x) {} });
 (function () {
   'use strict';
   var D = window.POLICE_DATA;
