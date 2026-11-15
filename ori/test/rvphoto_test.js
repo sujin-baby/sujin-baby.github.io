@@ -33,6 +33,16 @@ const live = f => f.dirs.filter(d => !d.trashed);
 ok(live(img).map(d => d.name).join('|') === '텍스트 (9개)' && live(img)[0].files.length === 9, '포토 → 텍스트 ' + live(img).map(d => d.name + ':' + d.files.length).join('|'));
 ok(ph2.files.length === 2 && !ph2.trashed, '포토 의뢰는 그대로');
 ok(/^✓/.test(env.__props.get('RVPHOTOFIX1')) && /거치대 1장/.test(env.__props.get('RVPHOTOFIX1')), '결과 ' + env.__props.get('RVPHOTOFIX1'));
+// 실배송 의뢰는 빼고, 한 번 옮긴 것 되돌림 (11/16 하루비 백팩)
+const img3 = folder('리뷰이미지3'), tx3 = img3.createFolder('텍스트 (2개)');
+file('h1.png', 'AI {"kind":"review","text":true,"photo":true}', tx3); file('h2.png', 'AI {"kind":"review","text":true,"photo":false}', tx3);
+const DA = env.DriveApp.getFolderById; env.DriveApp = { getFolderById: id => id === 'IMG3' ? img3 : DA(id) };
+env.__ss.sheets['진행목록'].rows.push(mk({ '진행일': new Date(), '명단 제목': '#11.5 실 하루비 가방 백팩 6 (뽀짝오리)', '시트ID': 'S3', '진행 상태': '진행중', '실배송': 'Y' }));
+[['RVIMG_S3', 'IMG3'], ['RV_S3', '{"kind":"text","mix":"","guide":"보부상 가방 참고"}']].forEach(([k, v]) => env.__props.set(k, v));
+ok(G("rvNoPhoto_('S3')") === false, '실배송은 포토 없는 의뢰로 안 봄');
+G('rvPhotoFix2_()');
+ok(live(img3).map(d => d.name).sort().join('|') === '텍스트 (1개)|포토 (1개)', '실배송 포토 되돌림 ' + live(img3).map(d => d.name).join('|') + ' ' + env.__props.get('RVPHOTOFIX2'));
+ok(live(img).map(d => d.name).join('|') === '텍스트 (9개)', '거치대는 그대로');
 const src = require('fs').readFileSync(process.argv[2], 'utf8');
 ok(/noPhoto && o\.kind === 'review' && o\.photo \? Object\.assign\(\{\}, o, \{ photo: false \}\)/.test(src), 'AI 나눌 때도 포토 안 넣음');
 console.log(fails.length ? 'XX 포토 없는 의뢰 포토 폴더 시험 실패:\n- ' + fails.join('\n- ') : '✓ 포토 없는 의뢰는 포토 폴더에 안 넣음 시험 통과');

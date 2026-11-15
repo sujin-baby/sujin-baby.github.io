@@ -1853,7 +1853,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'CABLETAK1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3332,6 +3332,7 @@ function checkFullInner_() {
   try { geochiDel1_(); } catch (e) {}
   try { rvPhotoFix1_(); } catch (e) {}
   try { cableTak1_(); } catch (e) {}
+  try { rvPhotoFix2_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
   try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
@@ -8020,9 +8021,37 @@ function cableTak1_() {
   } catch (e) { props.setProperty('CABLETAK1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 // 의뢰서에 포토리뷰가 없는지 (RV_ kind 'text'이고 섞임·가이드에 포토/사진 말이 없음) (11/16)
-function rvNoPhoto_(sid, props) {
+//  실배송 의뢰는 빼기: 물건을 실제로 받아 사진을 찍어 올리는 일이 많아서 AI 판단 그대로 (11/16: 하루비 백팩 6장을 텍스트로 옮겼다가 되돌림)
+function rvNoPhoto_(sid, props, runs) {
   let rv = {}; try { rv = JSON.parse((props || PropertiesService.getScriptProperties()).getProperty('RV_' + sid) || '{}') || {}; } catch (e) {}
-  return rv.kind === 'text' && !/포토|사진|촬영|이미지/.test(String(rv.mix || '') + ' ' + String(rv.guide || ''));
+  if (!(rv.kind === 'text' && !/포토|사진|촬영|이미지/.test(String(rv.mix || '') + ' ' + String(rv.guide || '')))) return false;
+  let mine = []; try { mine = (runs || readRuns_()).filter(function (r) { return String(r['시트ID']) === String(sid); }); } catch (e) {}
+  return !mine.some(function (r) { return r['실배송'] === 'Y' || /(^|[\s#\d.])실(\/빈)?(\s|$)/.test(bareTitle_(r['명단 제목'])); });
+}
+// (11/16 한 번) rvPhotoFix1_이 실배송 의뢰(하루비 백팩)의 포토 사진까지 텍스트로 옮겨서 되돌림: 실배송 의뢰 텍스트 폴더에서 AI가 포토라고 본 사진 → 포토
+function rvPhotoFix2_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('RVPHOTOFIX2') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5 || !/^✓/.test(String(props.getProperty('RVPHOTOFIX1') || ''))) return;
+  try {
+    const runs = readRuns_(), by = {}, moved = [];
+    runs.forEach(function (r) { const sid = String(r['시트ID'] || ''); if (sid) (by[sid] = by[sid] || []).push(r); });
+    Object.keys(by).forEach(function (sid) {
+      const imgId = props.getProperty('RVIMG_' + sid);
+      if (!imgId || rvSentAny_(by[sid])) return;
+      let rv = {}; try { rv = JSON.parse(props.getProperty('RV_' + sid) || '{}') || {}; } catch (e) {}
+      if (rv.kind !== 'text' || rvNoPhoto_(sid, props, runs)) return;   // 실배송이라 빠진 의뢰만
+      const img = DriveApp.getFolderById(imgId), it = img.getFolders(), dirs = [];
+      while (it.hasNext()) { const f = it.next(); if (rvTypeOf_(f.getName()) === '텍스트') dirs.push(f); }
+      let n = 0;
+      dirs.forEach(function (f) {
+        const fi = f.getFiles();
+        while (fi.hasNext()) { const x = fi.next(); let o = {}; try { o = JSON.parse(String(x.getDescription() || '').replace(/^AI\s*/, '')) || {}; } catch (e) {} if (o.photo === true) { x.moveTo(rvSubDir_(img, '포토')); n++; } }
+      });
+      if (n) { try { rvCountDirs_(img, rvCartOf_(sid)); } catch (e) {} moved.push(campOf_(by[sid][0]['명단 제목']) + ' ' + n + '장'); }
+    });
+    props.setProperty('RVPHOTOFIX2', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (moved.join(', ') || '되돌릴 것 없음'));
+    if (moved.length) note_('✓ 실배송 의뢰 포토 사진 되돌림: ' + moved.join(', '));
+  } catch (e) { props.setProperty('RVPHOTOFIX2', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 // (11/16 한 번) 포토리뷰가 없는 의뢰인데 포토 폴더에 들어간 사진(상품 썸네일을 AI가 포토로 봄) → 텍스트(글 없으면 별점) 폴더로. 업체에 아직 안 보낸 의뢰만
 function rvPhotoFix1_() {
