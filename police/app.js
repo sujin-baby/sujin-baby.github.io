@@ -221,6 +221,7 @@
       var cls = 'node';
       if (doneSet[L.n]) cls += ' done';
       else if (L.n === cur) cls += ' current';
+      if (!L.up) cls += ' plan';
       if (doneSet[L.n] === today) cls += ' today';
       b.className = cls;
       b.innerHTML = '<span class="num">' + L.n + '</span>';
@@ -266,8 +267,8 @@
     $('#sheetIn').innerHTML =
       '<button class="sheet-close" data-close="1">✕</button>' +
       '<div class="sheet-num">' + c.name + ' · ' + n + '강' + (L.up ? '' : ' <span class="pill plan">업로드 예정</span>') + (on ? ' <span class="pill done">체크됨</span>' : '') + '</div>' +
-      '<div class="sheet-title">' + esc(L.t) + '</div>' +
-      '<div class="sheet-meta">' + (c.units ? '' : '') + (unitOf(cid, n) ? unitOf(cid, n) : '') + ' ' + st + '</div>' +
+      '<div class="sheet-title">' + (L.t ? esc(L.t) : '아직 제목이 공개되지 않은 회차예요') + '</div>' +
+      '<div class="sheet-meta">' + (unitOf(cid, n) ? esc(unitOf(cid, n)) + ' · ' : '') + (L.up ? '' : '업로드 예정이지만 미리 체크할 수 있어요 · ') + st + '</div>' +
       '<button class="btn ' + (on ? 'ghost' : 'primary') + '" id="shToggle">' + (on ? '체크 해제' : '이 강의 들었어요 ✓') + '</button>' +
       '<button class="btn ghost" id="shQuiz" ' + (on && pool.length ? '' : 'disabled style="opacity:.45"') + '>이 강의 문제 풀기</button>' +
       (isCur ? '<button class="btn ghost" id="shNext">다음 강의 보기 →</button>' : '');

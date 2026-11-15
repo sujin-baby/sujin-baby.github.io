@@ -196,3 +196,6 @@ button{font-family:inherit;font-size:inherit;color:inherit;border:0;background:n
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + var(--safe-b));z-index:95;background:#101828;color:#fff;font-size:13px;font-weight:700;padding:10px 16px;border-radius:99px;box-shadow:0 10px 30px -12px #101828;animation:fade .2s}
 
 .node.done::before{content:"✓";position:absolute;top:-3px;right:-3px;width:21px;height:21px;border-radius:50%;background:var(--green);color:#fff;font-size:11px;font-weight:900;display:grid;place-items:center;border:2px solid #fff;z-index:3}
+
+.node.plan{background:#fbfcfe;border-style:dashed;border-color:#dbe2ee;color:#b6c0d0}
+.node.plan.current{background:var(--c);border-style:solid;color:#fff}
