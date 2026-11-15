@@ -1874,7 +1874,7 @@ function doGet(e) {
   // 읽기 전용 점검 (10/24): 진행목록·일정·보낼메시지·트리거·최근 확인 결과를 JSON으로. 아무것도 안 바꿈 (원격으로 버그 원인 찾기용)
   if (p.p === 'diag') return ContentService.createTextOutput(diagText_(p)).setMimeType(ContentService.MimeType.JSON);
   if (p.p === 'roomlink') return ContentService.createTextOutput(JSON.stringify(saveRoomLink_(p.room, p.url))).setMimeType(ContentService.MimeType.JSON);
-  if (p.p === 'sent') { markMsg_(p.id, p.st === 'fail' ? '대기' : '보냄'); return ContentService.createTextOutput('ok'); }
+  if (p.p === 'sent') { markMsgSide_(p.id, p.st === 'fail' ? '대기' : '보냄'); return ContentService.createTextOutput('ok'); }
   if (p.p === 'rank') return rankPage_(p);
   if (p.p === 'review') return reviewPage_(p);
   if (p.p === 'tools') {
@@ -4608,8 +4608,59 @@ function markMsgInner_(id, st) {
 
 function markSentFromPage(k, id) {
   if (k !== CONFIG.KEY) throw new Error('권한이 없어요.');
-  markMsg_(id, '보냄');
+  markMsgSide_(id, '보냄');
   return true;
+}
+// 페이지(진행 도우미·메시지함)에서 보냄: 메시지 탭에서 체크한 것과 같게 (11/16) — 체크 시각(이틀 회색),
+//  리뷰 보고 → 진행목록 업체 전송 날짜, 리뷰비·페이백 요청·취완 → 리뷰 취합 날짜
+function markMsgSide_(id, st) {
+  const on = st === '보냄';
+  markMsg_(id, on ? '보냄' : '대기');
+  try {
+    const ob = outboxSheet_(), ol = ob.getLastRow();
+    if (ol < 2 || !id) return;
+    const y = ob.getRange(2, 1, ol - 1, 6).getValues().filter(function (v) { return String(v[0]) === String(id); })[0];
+    if (!y) return;
+    const props = PropertiesService.getScriptProperties();
+    try { if (on) props.setProperty('MSGV_S_' + id, String(Date.now())); else props.deleteProperty('MSGV_S_' + id); } catch (e) {}
+    if (String(y[2]) === '리뷰 보고') { try { rvSetSent_(rvSidOfReport_(y[4]), on); } catch (e) {} }
+    if (/^(리뷰비 요청|페이백 요청|취완)$/.test(String(y[2]))) { try { rvSetColl_(y, on); } catch (e) {} }
+  } catch (e) { note_('페이지 보냄 처리 실패: ' + e); }
+}
+// 진행 도우미 '오늘 할 것' (11/16 사용자 승인): 메시지 탭 8개에 흩어진 안 보낸 것 중 오늘·지난 날짜 것만 탭 순서대로 한 화면에.
+//  복사 글은 탭에서 복사하는 것과 같게 (리뷰 독촉 = 이름만, 페이백 = 한 줄 띄움). 리뷰비 요청은 리뷰비 시트 수식 때문에 탭에서 E~K 복사 (탭 열기)
+function todayItems_(runs) {
+  const ob = outboxSheet_(), last = ob.getLastRow(), out = { items: [], later: 0, tabs: [] };
+  try {
+    const ids = JSON.parse(PropertiesService.getScriptProperties().getProperty('MSGV_IDS') || '{}') || {}, url = adminSs_().getUrl();
+    out.tabs = MSGV_GROUPS.map(function (g) { return ids[g.key] ? url + '#gid=' + ids[g.key] : ''; });
+  } catch (e) {}
+  if (last < 2) return out;
+  const t0 = dayStart_(today_()), known = {};
+  let other = 0;
+  MSGV_GROUPS.forEach(function (g, i) { g.k.forEach(function (k) { known[k] = i; }); if (g.other) other = i; });
+  let links = {}; try { links = roomLinksAll_(); } catch (e) {}
+  const ctx = { runs: runs || readRuns_(), all: PropertiesService.getScriptProperties().getProperties() };
+  const md = function (d) { return (d.getMonth() + 1) + '/' + d.getDate(); };
+  ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (x) {
+    if (!x[0] || !msgvPending_(x[5]) || !String(x[4] || '').trim() || x[1] === '포토전달대기') return;
+    const due = x[1] instanceof Date ? dayStart_(x[1]) : null;
+    if (due !== null && due > t0) { out.later++; return; }   // 앞으로 보낼 것은 그날에
+    const kind = String(x[2]), gi = known[kind] != null ? known[kind] : other;
+    let copy = String(x[4]);
+    if (kind === '리뷰 독촉') copy = String((copy.match(/아직 리뷰 확인이 안 된 분\s*:\s*([^\n]*)/) || [])[1] || copy).trim();
+    else if (kind === '리뷰비 요청') copy = '';
+    else copy = msgvPaybackGap_(kind, copy);
+    let lk = {}; try { lk = msgvLinks_(x, ctx) || {}; } catch (e) {}
+    let link = ''; try { link = roomLinkOf_(String(x[3]), links) || ''; } catch (e) {}
+    const fee = kind === '리뷰비 요청' ? msgvFeeCells_(x) : null;
+    out.items.push({ id: String(x[0]), g: gi, gname: MSGV_GROUPS[gi].base, kind: kind, room: String(x[3]), msg: fee ? fee[0] + ' · ' + fee[1] + ' · ' + fee[4] + '건' : String(x[4]).slice(0, 1500),
+      copy: copy.slice(0, 3000), over: due !== null && due < t0, day: due !== null ? md(new Date(due)) : '', list: String(lk.list || ''), rvimg: String(lk.img || ''), link: link, todo: kind === '할 일' });
+    if (kind === '방 공지') { try { out.items[out.items.length - 1].img = thumbOfRoom_(String(x[3]), ctx.runs); } catch (e) {} }   // 썸네일 (길게 눌러 저장)
+  });
+  out.items.sort(function (a, b) { return a.g - b.g || (b.over ? 1 : 0) - (a.over ? 1 : 0); });
+  out.items = out.items.slice(0, 80);
+  return out;
 }
 
 /* ---------------- 처음 붙여넣은 의뢰서 원문 (11/8 사용자 요청: 리뷰 가이드 더블체크용) ----------------
@@ -5625,7 +5676,7 @@ function showToolsSidebar_() {
 }
 
 // 진행 도우미 페이지: 서버가 내용을 채워서 보냄 (페이지가 서버 응답을 기다리지 않게)
-const TOOLS_PV = '4';   // 진행 도우미 화면 버전. 화면 동작을 바꾸면 올림 → 예전에 열어 둔 화면은 저장을 막고 다시 열라고 알림
+const TOOLS_PV = '5';   // 진행 도우미 화면 버전. 화면 동작을 바꾸면 올림 → 예전에 열어 둔 화면은 저장을 막고 다시 열라고 알림
 function toolsPage_(o, mode) {
   const j = function (x) { return JSON.stringify(x).replace(/</g, '\\u003c'); };
   const html = TOOLS_HTML.replace('__K__', function () { return j(CONFIG.KEY); }).replace('__INIT__', function () { return j(o || {}); }).replace('__PV__', function () { return j(TOOLS_PV); })
@@ -6031,7 +6082,7 @@ function toolAction_(d) {
     out.black = Object.keys(blacklist_()).map(function (k) { return blacklist_()[k]; });
   } catch (e) { out.status = []; }
   if (d.act === 'sent' && d.id) markMsg_(String(d.id), '보냄');
-  try { out.outbox = outboxItems_().filter(function (x) { return x.st === '대기'; }).slice(0, 15); } catch (e) { out.outbox = []; }
+  try { out.today = todayItems_(runs); } catch (e) { out.today = { items: [], later: 0, tabs: [], err: String(e.message || e) }; }
   let r = list.filter(function (x) { return String(x['명단 제목']) === String(d.title || ''); })[0];
   // 공지를 붙여넣으면 어느 진행인지 알아서 찾음 (진행을 안 골라도 됨)
   if (d.act === 'assign' && String(d.text || '').trim()) {
@@ -6400,6 +6451,11 @@ const TOOLS_HTML = String.raw`
     border-radius: 10px; padding: 10px;
   }
   .two { display: flex; gap: 8px; }
+  .tg { margin: 14px 0 2px; padding: 6px 10px; border-radius: 10px; background: var(--pink-bg); font-weight: 900; color: var(--ink); display: flex; justify-content: space-between; align-items: center; }
+  .tg a { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+  .ob.over .rm { color: var(--alert); }
+  .ob .lk { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; font-size: 13px; font-weight: 700; }
+  .ob .lk a { color: var(--ink); }
   .two button, .two a { flex: 1; }
   .two a {
     display: block; text-align: center; margin-top: 10px; padding: 12px;
@@ -6421,7 +6477,14 @@ const TOOLS_HTML = String.raw`
   <div id="alts"></div>
 </div>
 
-<!-- 최상단: 카톡 공지 저장 (배정 등록) -->
+<!-- 맨 위: 오늘 할 것 (메시지 탭 8개 모음, 11/16) -->
+<div class="card">
+  <h2>📋 오늘 할 것 <span id="obcnt"></span></h2>
+  <p class="hint">메시지 탭 8개에서 오늘·지난 날짜 안 보낸 것만 모았어요. <b>[복사]</b> → 카톡에 붙여넣고 보낸 뒤 <b>[보냄 ✔]</b>을 눌러 주세요.</p>
+  <div id="ob"></div>
+</div>
+
+<!-- 카톡 공지 저장 (배정 등록) -->
 <div class="card card-hero" id="card-notice">
   <h2>📋 카톡 공지 저장 (배정 등록)</h2>
   <p class="hint">카톡방의 배정 완료 공지를 복사해서 아래 칸에 붙여넣고 <b>[이 진행에 저장]</b>을 누르면 시트 배정 탭에 쏙 들어갑니다.</p>
@@ -6459,12 +6522,6 @@ const TOOLS_HTML = String.raw`
   </div>
 </div>
 
-<!-- 보낼 것 -->
-<div class="card">
-  <h2>💬 카톡에 보낼 공지</h2>
-  <p class="hint"><b>[복사]</b>를 누르면 보낸 것으로 자동 체크됩니다. 카톡방에 붙여넣고 전송해 주세요.</p>
-  <div id="ob"></div>
-</div>
 
 <!-- 리뷰 공지 -->
 <div class="card">
@@ -6537,29 +6594,53 @@ function roomBits(x, K, EXEC, c, before, linkEl) {
   };
   return b;
 }
-function outbox(list) {
-  var box = $('ob'); box.innerHTML = '';
-  if (!(list || []).length) { box.innerHTML = '<span class="ok">✔ 보낼 거 없어요</span>'; return; }
+function outbox(list) { today({ items: (list || []).map(function (x) { return Object.assign({ g: 0, gname: '', copy: x.msg }, x); }) }); }
+// 오늘 할 것 (11/16): 메시지 탭 8개의 안 보낸 것 중 오늘·지난 날짜 것만 탭 순서대로. [복사]는 복사만, [보냄 ✔]을 눌러야 보냄 체크 (실수로 체크되지 않게)
+function today(o) {
+  var box = $('ob'), list = (o && o.items) || [], tabs = (o && o.tabs) || [];
+  box.innerHTML = '';
+  $('obcnt').textContent = list.length ? '· ' + list.length + '개' : '';
+  if (!list.length) { box.innerHTML = '<span class="ok">✔ 오늘 할 거 없어요</span>'; }
+  var cur = -1;
   list.forEach(function (x) {
-    var c = document.createElement('div'); c.className = 'ob';
-    c.innerHTML = '<span class="rm"></span><span class="kd"></span><pre></pre><div class="two"><button class="btn-mint">복사</button><a href="kakaotalk://">카톡 열기</a></div>';
-    c.querySelector('.rm').textContent = x.room || '(방 이름 없음)'; c.querySelector('.kd').textContent = x.kind; c.querySelector('pre').textContent = x.msg;
-    var lb = roomBits(x, K, EXEC, c, c.querySelector('pre'), c.querySelector('.two a')); if (lb) c.appendChild(lb);
-    var b = c.querySelector('button');
-    b.onclick = function () {
-      var done = function () {
-        b.textContent = '복사됨 ✔ (보냄 표시)';
-        try { google.script.run.markSentFromPage(K, x.id); } catch (e) {}
-        if (MODE === 'web') { try { new Image().src = EXEC + '?p=sent&k=' + encodeURIComponent(K) + '&id=' + encodeURIComponent(x.id); } catch (e) {} }
-      };
-      if (navigator.clipboard) navigator.clipboard.writeText(x.msg).then(done, fb); else fb();
-      function fb() { var t = document.createElement('textarea'); t.value = x.msg; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); done(); }
+    if (x.g !== cur && x.gname) {
+      cur = x.g;
+      var h = document.createElement('div'); h.className = 'tg';
+      var n = list.filter(function (y) { return y.g === x.g; }).length;
+      h.appendChild(document.createTextNode(x.gname + ' · ' + n + '개'));
+      if (tabs[x.g]) { var ta = document.createElement('a'); ta.href = tabs[x.g]; ta.target = '_blank'; ta.textContent = '탭 열기'; h.appendChild(ta); }
+      box.appendChild(h);
+    }
+    var c = document.createElement('div'); c.className = 'ob' + (x.over ? ' over' : '');
+    c.innerHTML = '<span class="rm"></span><span class="kd"></span><pre></pre><div class="lk"></div><div class="two"><button class="btn-mint">복사</button><button class="btn-outline">보냄 ✔</button></div>';
+    c.querySelector('.rm').textContent = (x.over ? '⏰ ' + x.day + ' ' : '') + (x.room || '(방 이름 없음)');
+    c.querySelector('.kd').textContent = x.kind;
+    c.querySelector('pre').textContent = x.copy || x.msg;
+    var lk = c.querySelector('.lk');
+    [['list', '📋 명단'], ['rvimg', '🖼 리뷰이미지']].forEach(function (p) { if (x[p[0]]) { var a = document.createElement('a'); a.href = x[p[0]]; a.target = '_blank'; a.textContent = p[1]; lk.appendChild(a); } });
+    var ka = document.createElement('a'); ka.href = 'kakaotalk://'; ka.textContent = '카톡 열기'; lk.appendChild(ka);
+    if (!x.todo && x.kind !== '리뷰비 요청' && x.kind !== '리뷰 보고') { try { var lb = roomBits(x, K, EXEC, c, c.querySelector('pre'), ka); if (lb) c.appendChild(lb); } catch (e) {} }
+    var bs = c.querySelectorAll('.two button'), cb = bs[0], sb = bs[1];
+    if (x.todo) sb.textContent = '완료 ✔';
+    if (!x.copy) { cb.textContent = '탭에서 복사'; cb.onclick = function () { if (tabs[x.g]) window.open(tabs[x.g], '_blank'); }; }
+    else cb.onclick = function () {
+      var ok = function () { cb.textContent = '복사됨 ✔'; };
+      if (navigator.clipboard) navigator.clipboard.writeText(x.copy).then(ok, fb); else fb();
+      function fb() { var t = document.createElement('textarea'); t.value = x.copy; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); ok(); }
+    };
+    sb.onclick = function () {
+      sb.disabled = true; sb.textContent = '체크 중…';
+      var done = function () { sb.textContent = (x.todo ? '완료' : '보냄') + ' 체크됨 ✔'; c.style.opacity = '0.45'; };
+      var bad = function () { sb.disabled = false; sb.textContent = '다시 눌러 주세요'; };
+      if (MODE === 'web') { var im = new Image(); im.onload = im.onerror = done; im.src = EXEC + '?p=sent&k=' + encodeURIComponent(K) + '&id=' + encodeURIComponent(x.id); }
+      else { try { google.script.run.withSuccessHandler(done).withFailureHandler(bad).markSentFromPage(K, x.id); } catch (e) { bad(); } }
     };
     box.appendChild(c);
   });
+  if (o && o.later) { var lt = document.createElement('p'); lt.className = 'hint'; lt.textContent = '내일 이후 보낼 것 ' + o.later + '개는 그날 여기에 나와요.'; box.appendChild(lt); }
 }
 function show(o) {
-  if (o.outbox) outbox(o.outbox);
+  if (o.today) today(o.today); else if (o.outbox) outbox(o.outbox);
   var alts = ((o.msg && /저장했어요|옮겼어요/.test(o.msg)) || JUST) ? (o.alts || []) : [];
   $('altcard').style.display = alts.length ? '' : 'none';
   var ab = $('alts'); ab.innerHTML = '';
@@ -6742,9 +6823,21 @@ function ensureEditTab_() {
   ensureDupControl_(sh);
   // 어제 진행부터 앞으로 진행만, 날짜순 (사용자 요청 10/21)
   const yd = today_().getTime() - 86400000;
-  const titles = readRuns_().filter(function (r) { return r['진행 상태'] !== '종료' && r['시트ID'] && r['진행일'] instanceof Date && dayStart_(r['진행일']) >= yd; })
-    .sort(function (a, b) { return (a['진행일'] - b['진행일']) || (a.row - b.row); }).map(function (r) { return String(r['명단 제목']); });
+  const live = readRuns_().filter(function (r) { return r['진행 상태'] !== '종료' && r['시트ID'] && r['진행일'] instanceof Date && dayStart_(r['진행일']) >= yd; })
+    .sort(function (a, b) { return (a['진행일'] - b['진행일']) || (a.row - b.row); });
+  const titles = live.map(function (r) { return String(r['명단 제목']); });
   sh.getRange('B1').setDataValidation(titles.length ? SpreadsheetApp.newDataValidation().requireValueInList(titles, true).setAllowInvalid(true).build() : null);
+  // B1에 지난 진행(목록에 없음)이 남아 있으면 오늘 진행으로 바꿈 (11/16 사용자 승인: 지난 날짜가 남아 빨간 유효성 오류 표시).
+  //  삭제 체크를 해 둔 중이면(체크된 줄이 있으면) 안 바꿈. 오늘 진행이 없으면 가장 가까운 다음 진행, 그것도 없으면 비움
+  try {
+    const cur = String(sh.getRange('B1').getValue()).trim();
+    if (cur && titles.indexOf(cur) < 0 && /\|$/.test(editMarks_(sh))) {
+      const t0 = today_().getTime();
+      const pick = live.filter(function (r) { return dayStart_(r['진행일']) === t0; })[0] || live.filter(function (r) { return dayStart_(r['진행일']) > t0; })[0];
+      if (pick) sh.getRange('B1').setValue(String(pick['명단 제목'])); else sh.getRange('B1').clearContent();
+      loadEditTab_(sh, '📅 지난 진행(' + bareTitle_(cur) + ')이라 ' + (pick ? '오늘 진행으로 바꿨어요' : '비웠어요'));
+    }
+  } catch (e) { note_('폼수정 B1 날짜 바꾸기 실패: ' + e); }
   const has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'onAdminEdit'; });
   if (!has) ScriptApp.newTrigger('onAdminEdit').forSpreadsheet(ss).onEdit().create();
   return sh;
@@ -10984,6 +11077,7 @@ function morningCheck_() {
   } catch (e) {}
   // 8~10 (10/30 자가 점검): 사용자가 직접 찾아냈던 종류를 먼저 찾기. 읽기만 함
   try { selfCheck_(runs, t0).forEach(function (x) { issues.push(x); }); } catch (e) { issues.push('자가 점검 실패: ' + e); }
+  if (CONFIG.PAY_SHEET_ID) { try { paySimilarDups_().forEach(function (x) { issues.push(x); }); } catch (e) { issues.push('월급시트 비슷한 줄 확인 실패: ' + e); } }
   const when = Utilities.formatDate(now, CONFIG.TIMEZONE, 'M/d HH:mm');
   props.setProperty('MORNING_LAST', when + ' ' + (issues.length ? issues.length + '개: ' + issues.join(' | ') : '이상 없음').slice(0, 1500));
   // 어제 새벽 점검 할 일이 안 보낸 채 남아 있으면 지움 (11/2: 오늘은 이상 없는데 어제 것이 남아 헷갈림)
@@ -10992,6 +11086,25 @@ function morningCheck_() {
   queueMsg_('내 할 일', '🌅 새벽 점검 (' + when + '): 확인할 것 ' + issues.length + '개\n' + issues.map(function (x) { return '- ' + x; }).join('\n'), '할 일');
   try { MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[체험단] 새벽 점검: 확인할 것 ' + issues.length + '개', issues.map(function (x) { return '- ' + x; }).join('\n') + '\n\n보낼메시지 탭 할 일에도 넣었어요.'); } catch (e) {}
   note_('⚠ 새벽 점검: 확인할 것 ' + issues.length + '개 (보낼메시지 할 일)');
+}
+// 새벽 점검 (11/16 사용자 요청): 월급시트(이번 달·다음 달 탭)에 같은 날·같은 스토어인데 캠페인 이름이 같거나 서로 포함된 줄이 두 개 이상이면 알림.
+//  한 진행이 두 줄이면 진행비가 두 번 잡힘 (11/15 #택11.5 차량용 거치대 / 더호 차량용 거치대). 읽기만, 지우지 않음
+function paySimilarDups_() {
+  const out = [];
+  payTabsNow_().forEach(function (sh) {
+    const L = payLayout_(sh); if (!L || !L.name) return;
+    const last = sh.getLastRow(); if (last <= L.head) return;
+    const n = last - L.head, names = sh.getRange(L.head + 1, L.name, n, 1).getValues(), stores = L.store ? sh.getRange(L.head + 1, L.store, n, 1).getValues() : null;
+    const it = names.map(function (x, i) { return { row: L.head + 1 + i, nm: String(x[0]).trim(), d: dateTok_(x[0]), k: campKey_(x[0]), st: stores ? String(stores[i][0]).replace(/\s+/g, '') : '' }; })
+      .filter(function (x) { return x.nm && x.d && x.k.length >= 2; });
+    for (let i = 0; i < it.length; i++) for (let j = i + 1; j < it.length; j++) {
+      const a = it[i], b = it[j];
+      if (a.d !== b.d || a.st !== b.st) continue;
+      if (a.k !== b.k && a.k.indexOf(b.k) < 0 && b.k.indexOf(a.k) < 0) continue;
+      out.push(sh.getName() + ' ' + a.row + '행 ' + a.nm + ' / ' + b.row + '행 ' + b.nm);
+    }
+  });
+  return out.length ? ['월급시트 같은 날·같은 스토어에 비슷한 줄 (한 진행이 두 줄이면 진행비가 두 번): ' + out.slice(0, 6).join(' | ') + (out.length > 6 ? ' 외 ' + (out.length - 6) + '개' : '') + ' → 같은 진행이면 한 줄을 지워 주세요'] : [];
 }
 // 배정 탭 자동 정리 (사용자 허락 10/30): 하루 한 번(5시 넘어 첫 확인) 진행일이 전 근무일보다 앞인(그저께 이전) 진행의 배정 줄을 지움
 //  사용자가 날마다 손으로 지우던 일. 결제금액 확인은 옵션 가격을 OPTPRICE_로 따로 기억해서 줄이 없어도 됨
