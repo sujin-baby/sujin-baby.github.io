@@ -8160,7 +8160,7 @@ function rvLooseCheck_(runs) {
   });
   Object.keys(at).forEach(function (k) { if (!bySid[k]) delete at[k]; });
   props.setProperty('RVLOOSE_AT', JSON.stringify(at));
-  if (added) { props.setProperty('RVAI_Q', q.join(',')); try { ensureAiQueueTrigger_(); } catch (e) {} note_('진행 중 리뷰 사진 AI 분류 대기열 ' + added + '개 의뢰'); }
+  if (added) { props.setProperty('RVAI_Q', q.join(',')); try { ensureAiQueueTrigger_(); } catch (e) {} note_('✓ 진행 중 리뷰 사진 AI 분류 대기열 ' + added + '개 의뢰'); }   // ✓: 문제 아님 (11/15 자동 확인 '문제 1건'으로 잡힘)
   return added;
 }
 // 15분 확인에서 AI 분류 이어 하기 (남은 사진이 있으면 1분 연쇄 트리거로 3~4분 만에 완결, 11/6)
