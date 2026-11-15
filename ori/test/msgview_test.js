@@ -33,8 +33,9 @@ const fails = [], ok = (c, m) => { if (!c) fails.push(m); };
 let err = '';
 try { G('msgViewBuild_(false)'); } catch (e) { err = String(e.stack || e); }
 ok(!err, '그리기 오류 ' + err);
-const BASES = G('MSGV_GROUPS.map(function (g) { return g.base; })');
-const tab = base => Object.values(env.__ss.sheets).find(s => G('msgvGroupOfName_(' + JSON.stringify(s.name) + ')') === BASES.indexOf(base));
+const BASES = G('MSGV_GROUPS.filter(function (g) { return !g.merged; }).map(function (g) { return g.base; })');   // 취완은 리뷰비 탭으로 합침 (11/16)
+const GBASES = G('MSGV_GROUPS.map(function (g) { return g.base; })');
+const tab = base => Object.values(env.__ss.sheets).find(s => G('msgvGroupOfName_(' + JSON.stringify(s.name) + ')') === GBASES.indexOf(base));
 const T = {}; BASES.forEach(b => { T[b] = tab(b); ok(!!T[b], b + ' 탭이 없음'); });
 if (fails.length) { console.log('XX ' + fails.join('\n')); process.exit(1); }
 const ids = sh => sh.rows.map(r => String(r[0] || ''));
@@ -47,7 +48,7 @@ const expect = { m1: '🐥방공지', m2: '🐥방공지', m3: '🐥방공지', 
 Object.keys(expect).forEach(id => ok(where(id)[0] === expect[id], id + ' → ' + where(id)[0] + ' (기대 ' + expect[id] + ')'));
 ['m3b', 'm4', 'm9'].forEach(id => ok(rowOf(id) === 0, id + ' 보이면 안 됨'));
 ok(T['🐥방공지'].name === '🐥방공지 2', '탭 이름 개수 ' + T['🐥방공지'].name);
-ok(T['✅취완'].name === '✅취완' && /보낼 것 없어요/.test(T['✅취완'].rows[1][3]), '빈 탭');
+ok(!tab('✅취완'), '취완 탭 없음 (리뷰비 탭으로 합침)');
 ok(T['📝할일'].name === '📝할일 33', '할일 탭 이름 ' + T['📝할일'].name);
 const pr = ids(T['📝할일']).indexOf('p0,p1,p2') + 1;
 ok(pr > 0, '결제금액 확인 3개가 한 줄이 아님: ' + ids(T['📝할일']).filter(x => /^p/.test(x)).join(' / '));
@@ -113,7 +114,7 @@ ok(cellOf('m2', 4) === '사과 공지', '보기 칸 고친 걸 안 되돌림');
 env.__ss.sheets['블랙리스트'] = new H.Sheet('블랙리스트', [['이름'], ['가']]);
 env.__ss.sheets['보낼메시지'].rows.splice(1, 0, ['mz', day(0), '취완', '실 밴드 (전체 3개 방)', '취완 글', '대기']);
 G('onAdminEdit')({ range: env.__ss.sheets['블랙리스트'].getRange(2, 1), source: { toast() {} }, value: '가' });
-ok(where('mz')[0] === '✅취완', '다른 탭 고친 뒤 새 메시지 안 들어옴');
+ok(where('mz')[0] === '💰리뷰비', '다른 탭 고친 뒤 새 메시지 안 들어옴 (취완은 리뷰비 탭) ' + where('mz')[0]);
 // 체크한 건 이틀 남음: 어제 체크한 것은 보이고, 사흘 전 체크한 것은 안 보임 (11/8)
 env.__props.set('MSGV_S_m3b', String(Date.now() - 86400000)); env.__props.set('MSGV_S_m4', String(Date.now() - 3 * 86400000));
 G('msgViewBuild_(true)');
@@ -153,8 +154,8 @@ ok(T['⏰리뷰독촉'].rows[rowOf('m15') - 1][4] === '주현지, 이슬비', '�
 env.__ss.sheets['진행목록'].rows[1][LH.indexOf('시트 링크')] = 'https://docs.google.com/spreadsheets/d/S9/edit';
 env.__props.set('RVIMG_S9', 'FOLDER12345abc');
 G('CacheService.getScriptCache().remove("MSGVL_m13")'); G('msgViewBuild_(true)');
-const cr = T['✅취완'].rows[rowOf('m13') - 1];
-ok(/HYPERLINK\("https:\/\/drive.google.com\/drive\/folders\/FOLDER12345abc","리뷰이미지"\)/.test(cr[5]) && /HYPERLINK\("https:\/\/docs.google.com\/spreadsheets\/d\/S9\/edit","명단"\)/.test(cr[6]), '취완 링크 ' + JSON.stringify(cr.slice(5, 7)));
+const cr = T['💰리뷰비'].rows[rowOf('m13') - 1];
+ok(where('m13')[0] === '💰리뷰비' && /HYPERLINK\("https:\/\/drive.google.com\/drive\/folders\/FOLDER12345abc","리뷰이미지"\)/.test(cr[11]) && /취완\s+→\s+#10\.27 실링팬 2/.test(cr[4]), '리뷰비 줄에 안 걸린 취완은 리뷰비 탭 줄로 (리뷰이미지 L칸) ' + JSON.stringify(cr.slice(5, 7)));
 // 리뷰독촉 탭: 명단(G) 옆 리뷰이미지(H) 링크 (11/15 사용자)
 G('CacheService.getScriptCache().remove("MSGVL_m15")'); G('msgViewBuild_(true)');
 const nr = T['⏰리뷰독촉'].rows[rowOf('m15') - 1];
@@ -175,11 +176,11 @@ ok(T['⏰리뷰독촉'].rows[0][7] === '리뷰이미지', '독촉 탭 머리글 
   obr.splice(obr.findIndex(r => r[0] === 'm16'), 1);
   G('msgViewBuild_(true)');
 }
-edit(T['✅취완'], rowOf('m13'), true);
+edit(T['💰리뷰비'], rowOf('m13'), true);
 edit(T['💰리뷰비'], rowOf('m14'), true);
 ok(coll('#10.27 실링팬') instanceof Date && coll('#10.27 실링팬').getTime() === t0.getTime(), '취완 → 리뷰 취합 ' + coll('#10.27 실링팬'));
 ok(coll('#10.28 실링팬') instanceof Date, '리뷰비 요청 → 리뷰 취합 ' + coll('#10.28 실링팬'));
-edit(T['✅취완'], rowOf('m13'), false);
+edit(T['💰리뷰비'], rowOf('m13'), false);
 ok(coll('#10.27 실링팬') === '', '취완 체크 풀었는데 리뷰 취합 남음');
 // 리뷰 보고 글에 종류별 개수 (11/8)
 const rm3 = G('rvReportMsg_')('L', [{ '명단 제목': '#택10.23 과일쏙 대봉감 5 (뽀짝오리)', '인원': 5, '총건수': 15 }, { '명단 제목': '#택10.27 과일쏙 대봉감 5 (뽀짝오리)', '인원': 5, '총건수': 15 }], '', { 포토: 0, 텍스트: 15, 별점: 0 });
