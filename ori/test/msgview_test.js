@@ -155,6 +155,11 @@ env.__props.set('RVIMG_S9', 'FOLDER12345abc');
 G('CacheService.getScriptCache().remove("MSGVL_m13")'); G('msgViewBuild_(true)');
 const cr = T['✅취완'].rows[rowOf('m13') - 1];
 ok(/HYPERLINK\("https:\/\/drive.google.com\/drive\/folders\/FOLDER12345abc","리뷰이미지"\)/.test(cr[5]) && /HYPERLINK\("https:\/\/docs.google.com\/spreadsheets\/d\/S9\/edit","명단"\)/.test(cr[6]), '취완 링크 ' + JSON.stringify(cr.slice(5, 7)));
+// 리뷰독촉 탭: 명단(G) 옆 리뷰이미지(H) 링크 (11/15 사용자)
+G('CacheService.getScriptCache().remove("MSGVL_m15")'); G('msgViewBuild_(true)');
+const nr = T['⏰리뷰독촉'].rows[rowOf('m15') - 1];
+ok(/HYPERLINK\("https:\/\/docs.google.com\/spreadsheets\/d\/S9\/edit","명단"\)/.test(nr[6]) && /HYPERLINK\("https:\/\/drive.google.com\/drive\/folders\/FOLDER12345abc","리뷰이미지"\)/.test(nr[7]), '독촉 탭 명단·리뷰이미지 링크 ' + JSON.stringify(nr.slice(6, 8)));
+ok(T['⏰리뷰독촉'].rows[0][7] === '리뷰이미지', '독촉 탭 머리글 ' + T['⏰리뷰독촉'].rows[0][7]);
 edit(T['✅취완'], rowOf('m13'), true);
 edit(T['💰리뷰비'], rowOf('m14'), true);
 ok(coll('#10.27 실링팬') instanceof Date && coll('#10.27 실링팬').getTime() === t0.getTime(), '취완 → 리뷰 취합 ' + coll('#10.27 실링팬'));
@@ -197,6 +202,7 @@ ok(where('mpay1')[0] !== '📝할일', '안 보낸 명단의 결제금액 확인
   const [pb, pr] = where('mpb1');
   ok(pb === '💰리뷰비' && globalThis.__MG.some(m => /리뷰비/.test(m[0]) && m[1] === pr && m[2] === 5 && m[3] === 1 && m[4] === 7), '페이백 줄 E~K 합침 ' + pb + ' ' + pr + ' ' + JSON.stringify(globalThis.__MG));
   ok(!globalThis.__MG.some(m => /리뷰비/.test(m[0]) && m[1] === 1), '머리글 줄은 안 합침');
+  ok(cellOf('mpb1', 4) === '[전원 리뷰완료] #11.6 실 제이컴퍼니 바나나링정 5 페이백 요청드립니다!\n\n명단시트: https://y', '페이백 글 요청 줄과 명단시트 사이 한 줄 ' + JSON.stringify(cellOf('mpb1', 4)));
   delete RP.merge;
 }
 // 탭 이름에 없는 사용자 탭은 종류 탭으로 안 봄

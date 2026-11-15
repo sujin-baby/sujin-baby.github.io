@@ -9,7 +9,7 @@ ok(G("takTitle_('#10.28 실 효자손외 6')") === false, '#10.28 실 효자손�
 ok(G("takTitle_('#택11.04 과일쏙 10 (뽀짝오리)')") === true, '닉네임 붙은 명단 제목도');
 ok(G("PAYBACK_ROOM") === '오리명단방(뽀짝)' && G("REVFEE_ROOM") === '리뷰비시트', '페이백 → 오리명단방(뽀짝), 리뷰비 → 리뷰비시트');
 const src = require('fs').readFileSync(process.argv[2], 'utf8');
-ok(/'\[전원 리뷰완료\] ' \+ title \+ ' 페이백 요청드립니다!\\n명단시트: ' \+ url/.test(src), "페이백 문구: '[전원 리뷰완료] 방제 페이백 요청드립니다!' + 명단시트");
+ok(/'\[전원 리뷰완료\] ' \+ title \+ ' 페이백 요청드립니다!\\n\\n명단시트: ' \+ url/.test(src), "페이백 문구: '[전원 리뷰완료] 방제 페이백 요청드립니다!' + 한 줄 띄우고 명단시트 (11/15)");
 ok(!/queueMsg_\('내 할 일', rvUploadMsg_\(/.test(src), "'리뷰 다 끝남 → 서랍에서 저장' 할 일 안 넣음");
 if (fail) { console.error(fail + '개 실패'); process.exit(1); }
 console.log('✓ 택대·날짜별 요청 시험 통과');

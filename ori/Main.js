@@ -1725,6 +1725,16 @@ function diag_(p) {
     });
     try { const ib = rvInbox_(), l2 = []; walk(ib, 0, l2, ''); out.rvtree['(리뷰 사진 받는 곳)'] = l2.slice(0, 200); } catch (e) { out.rvtree['(리뷰 사진 받는 곳)'] = ['오류 ' + e.message]; }
   } catch (e) { out.rvtreeErr = String(e); }
+  // &folder=폴더ID: 그 폴더 이름·위 폴더·안 폴더(사진 수)·파일, 그 폴더를 리뷰이미지로 쓰는 진행 (읽기만, 11/15 리뷰이미지에 '포토' 폴더가 안 보임)
+  if (p.folder) try {
+    const fo = DriveApp.getFolderById(String(p.folder)), pr = PropertiesService.getScriptProperties().getProperties(), o = { name: fo.getName(), parents: [], dirs: [], files: [] };
+    const pa = fo.getParents(); while (pa.hasNext()) o.parents.push(pa.next().getName());
+    const di = fo.getFolders(); while (di.hasNext()) { const d = di.next(), fi = d.getFiles(); let n = 0, img = 0; while (fi.hasNext()) { n++; if (/^image\//.test(fi.next().getMimeType())) img++; } o.dirs.push(d.getName() + ' | 파일 ' + n + ' (사진 ' + img + ')'); }
+    const fi = fo.getFiles(); let k = 0; while (fi.hasNext() && k < 40) { const x = fi.next(); k++; o.files.push(x.getName() + ' | ' + x.getMimeType() + ' | ' + Utilities.formatDate(x.getDateCreated(), CONFIG.TIMEZONE, 'MM-dd HH:mm')); }
+    const sid = Object.keys(pr).filter(function (k2) { return k2.indexOf('RVIMG_') === 0 && pr[k2] === String(p.folder); }).map(function (k2) { return k2.slice(6); })[0] || '';
+    if (sid) { o.sid = '…' + sid.slice(-6); o.runs = readRuns_().filter(function (r) { return String(r['시트ID']) === sid; }).map(function (r) { return bareTitle_(r['명단 제목']) + ' ' + r['진행 상태'] + ' 인원' + r['인원']; }); o.rvzip = String(pr['RVZIP_' + sid] || ''); o.rv = String(pr['RV_' + sid] || '').slice(0, 600); }
+    out.folder = o;
+  } catch (e) { out.folderErr = String(e); }
   // &colgrp=글자: 진행 제목에 그 글자가 든 의뢰 명단 시트 '명단' 탭 칸마다 숨김·묶음 상태 (읽기만, 11/9 + 대신 <> 로 숨겨진 원인 찾기). 글자가 '*'면 최근 진행 12개
   if (p.colgrp) try {
     const seen = {}; out.colgrp = {};
@@ -4679,14 +4689,14 @@ function msgvLinks_(x, ctx) {
  *  - B칸 체크 = 보낼메시지 그 줄 '보냄' (번호로 찾아서), 체크 풀면 '대기'. 체크한 줄은 그 자리에서 회색만 (줄이 안 움직여 옆 줄을 잘못 누르지 않게)
  *  - 보낼메시지가 바뀌면 실행이 끝날 때 바뀐 탭만 다시 그림. 다시 그린 지 20초 안에 누른 칸이 다른 메시지로 밀렸으면 체크를 되돌리고 알림
  */
-const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '9', MSGV_COLS = 5;   // 9: 리뷰비 탭 L칸에 걸린 취완은 취완 탭에서 뺌, 페이백 줄 E~K 합침 (11/15)   // 8: 명단전달 F열 '비고'(가격 틀리게 산 사람) 및 할일 탭 중복 제외 (11/11)   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
+const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '10', MSGV_COLS = 5;   // 10: 리뷰독촉 탭 리뷰이미지 링크 칸, 페이백 글 한 줄 띄움·줄 높이 (11/15)   // 9: 리뷰비 탭 L칸에 걸린 취완은 취완 탭에서 뺌, 페이백 줄 E~K 합침 (11/15)   // 8: 명단전달 F열 '비고'(가격 틀리게 산 사람) 및 할일 탭 중복 제외 (11/11)   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
 const MSGV_GROUPS = [
   { key: 'notice', base: '🐥방공지', t: '🐥 방 공지', k: ['방 공지'], bg: '#eee6f7', tab: '#b48fd9' },
   { key: 'list', base: '📋명단전달', t: '📋 명단 전달 (오리명단방)', k: ['명단 전달', '업체 명단'], bg: '#d9ead2', tab: '#7fbf6a' },
   { key: 'todo', base: '📝할일', t: '📝 내 할 일 · 사장님', k: ['할 일'], other: true, bg: '#fff1cc', tab: '#f2c94c' },
   { key: 'photo', base: '📸포토가이드', t: '📸 포토 가이드 · 리뷰 안내', k: ['포토 가이드', '리뷰'], bg: '#cfe1f3', tab: '#6fa8dc', req: true },
   { key: 'report', base: '📦리뷰취합', t: '📦 리뷰 취합 보고 (사장님께)', k: ['리뷰 보고'], bg: '#d0dfe2', tab: '#76a5af', req: true },
-  { key: 'nag', base: '⏰리뷰독촉', t: '⏰ 리뷰 독촉 · 안 산 사람', k: ['리뷰 독촉', '안 산 사람'], bg: '#fbe4cd', tab: '#f6a35b', req: true, links: [[7, 'list', '명단']] },
+  { key: 'nag', base: '⏰리뷰독촉', t: '⏰ 리뷰 독촉 · 안 산 사람', k: ['리뷰 독촉', '안 산 사람'], bg: '#fbe4cd', tab: '#f6a35b', req: true, links: [[7, 'list', '명단'], [8, 'img', '리뷰이미지']] },   // 리뷰이미지 링크 (11/15 사용자)
   { key: 'pay', base: '💰리뷰비', t: '💰 리뷰비 · 페이백 요청', k: ['리뷰비 요청', '페이백 요청'], bg: '#ead1dc', tab: '#d36f9a', fee: true },
   { key: 'done', base: '✅취완', t: '✅ 취완 (방 사람 리뷰 다 확인됨)', k: ['취완'], bg: '#e3e3e3', tab: '#999999', links: [[6, 'img', '리뷰이미지'], [7, 'list', '명단']] }
 ];
@@ -4713,6 +4723,8 @@ function msgvRoomBg_(room, map) {
   if (!map[k]) map[k] = MSGV_ROOM_BG[Object.keys(map).length % MSGV_ROOM_BG.length];
   return map[k];
 }
+// 페이백 요청 글: 요청 줄과 '명단시트:' 사이 한 줄 띄움 (11/15 사용자. 예전에 만든 글도 탭에서는 띄워 보여 줌 → 복사하면 띄운 채로)
+function msgvPaybackGap_(kind, msg) { return kind === '페이백 요청' ? String(msg).replace(/^(\[전원 리뷰완료\][^\n]*)\n(?=명단시트:)/, '$1\n\n') : msg; }
 // 명단 전달 글 속 캠페인 방제 (#11.11 …)
 function msgvListCamp_(text) {
   const ls = String(text || '').split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
@@ -4836,7 +4848,7 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
         if (lc && payForList[lc]) lnote = payForList[lc].filter(function (v, i, a) { return a.indexOf(v) === i; }).join('\n');
       }
       return { type: 'msg', id: xs.map(function (y) { return String(y[0]); }).join(','), sent: isSent, day: msgvDay_(x[1]), over: od, today: x[1] instanceof Date && x[1].getTime() === t0,
-        room: head ? head + '\n' + room : room, boldTo: head ? head.length : 0, msg: msgvCombine_(xs), bg: msgvRoomBg_(camp || x[3], colors),
+        room: head ? head + '\n' + room : room, boldTo: head ? head.length : 0, msg: msgvPaybackGap_(kind, msgvCombine_(xs)), bg: msgvRoomBg_(camp || x[3], colors),
         reqF: rq ? String(rq.f || '') : null, reqNote: rq ? String(rq.note || '') : '', reqUrl: rq ? String(rq.url || '') : '',
         listNote: lnote,
         fee: grp.fee && String(x[2]) === '리뷰비 요청' ? msgvFeeCells_(x) : null, kind: String(x[2]),
@@ -4934,11 +4946,16 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
     try { const f = sh.getFilter(); if (f) f.remove(); } catch (e) {}
     try { sh.getBandings().forEach(function (b) { b.remove(); }); } catch (e) {}
     try { sh.setFrozenColumns(0); } catch (e) {}
-    const keepC = grp.fee ? 13 : grp.links ? 8 : MSGV_COLS + 1;   // 리뷰비 탭은 E~K + L 취완 체크 + M 취완 번호(숨김), 링크 있는 탭은 G까지
+    const linkMax = grp.links ? Math.max.apply(null, grp.links.map(function (lk) { return lk[0]; })) : 0;
+    const keepC = grp.fee ? 13 : grp.links ? linkMax + 1 : MSGV_COLS + 1;   // 리뷰비 탭은 E~K + L 취완 체크 + M 취완 번호(숨김), 링크 있는 탭은 마지막 링크 칸 + 빈 칸
     try { const mc = Number(sh.getMaxColumns()) || 0; if (mc > keepC) sh.deleteColumns(keepC + 1, mc - keepC); else if (mc && mc < keepC) sh.insertColumnsAfter(mc, keepC - mc); } catch (e) {}
     try {
       sh.setColumnWidth(1, 20); sh.setColumnWidth(2, 46); sh.setColumnWidth(3, 82); sh.setColumnWidth(4, grp.fee ? 130 : 230); sh.setColumnWidth(5, grp.fee ? 120 : grp.req ? 520 : 600); sh.setColumnWidth(6, grp.req ? 420 : grp.fee ? 150 : grp.key === 'list' ? 320 : 20);
-      if (grp.links) { if (grp.key === 'done') { sh.setColumnWidth(5, 200); sh.setColumnWidth(6, 90); } sh.setColumnWidth(7, 60); sh.setColumnWidth(8, 20); sh.getRange(1, grp.key === 'done' ? 6 : 7, sh.getMaxRows(), grp.key === 'done' ? 2 : 1).setHorizontalAlignment('center').setVerticalAlignment('middle'); }
+      if (grp.links) {
+        if (grp.key === 'done') { sh.setColumnWidth(5, 200); }
+        grp.links.forEach(function (lk) { sh.setColumnWidth(lk[0], lk[1] === 'img' ? 90 : 60); sh.getRange(1, lk[0], sh.getMaxRows(), 1).setHorizontalAlignment('center').setVerticalAlignment('middle'); });
+        sh.setColumnWidth(linkMax + 1, 20);
+      }
       if (grp.fee) { sh.setColumnWidth(7, 80); sh.setColumnWidth(8, 70); sh.setColumnWidth(9, 90); sh.setColumnWidth(10, 90); sh.setColumnWidth(11, 420); sh.setColumnWidth(12, 20); sh.getRange(1, 5, sh.getMaxRows(), 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.OVERFLOW); sh.getRange(1, 6, sh.getMaxRows(), 6).setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP); }
       if (grp.req) sh.getRange(1, 6, sh.getMaxRows(), 1).setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
       sh.getRange('C:C').setNumberFormat('@');
@@ -5035,9 +5052,12 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
     try { sh.getRange(1, 6, n, 3).setNumberFormat('@'); sh.getRange(1, 9, n, 1).setNumberFormat('0'); sh.getRange(1, 10, n, 1).setNumberFormat('#,##0'); sh.getRange(1, 11, n, 1).setNumberFormat('@'); } catch (e) {}
     const gr = sh.getRange(1, 6, n, 6);
     gr.setValues(gv); gr.setBackgrounds(gb);
+    // 합친 칸은 줄 높이가 저절로 안 늘어서(11/15: 둘째 줄만 보이고 첫 줄이 가려짐) 글 줄 수만큼 높이를 줌. 다른 줄은 기본 높이로
+    try { sh.setRowHeights(1, n, 21); } catch (e) {}
     for (let i = 0; i < n; i++) {
       const l = lines[i] || {};
       if (l.type !== 'msg' || l.fee) continue;
+      try { sh.setRowHeight(i + 1, Math.max(21, String(l.msg || '').split('\n').length * 18 + 8)); } catch (e) {}
       try { sh.getRange(i + 1, 5, 1, 7).merge().setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP).setVerticalAlignment('middle'); } catch (e) {}
     }
     try { sh.getRange(2, 6, 1, 6).setFontWeight('bold').setFontColor('#7a2e57'); } catch (e) {}
@@ -7266,7 +7286,7 @@ function reviewDone_(runs, only) {
         props.setProperty(dk2, '1');
         if (dayReqInit) return;
         const title = bareTitle_(r['명단 제목']), url = lss.getUrl();
-        if (r['실배송'] === 'Y') queueMsg_(PAYBACK_ROOM, '[전원 리뷰완료] ' + title + ' 페이백 요청드립니다!\n명단시트: ' + url, '페이백 요청');
+        if (r['실배송'] === 'Y') queueMsg_(PAYBACK_ROOM, '[전원 리뷰완료] ' + title + ' 페이백 요청드립니다!\n\n명단시트: ' + url, '페이백 요청');   // 요청 줄과 명단시트 사이 한 줄 띄움 (11/15 사용자)
         else queueMsg_(REVFEE_ROOM, [Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'M/d'), title, ppl.length + '건', url].join('\t'), '리뷰비 요청');
         note_('✓ ' + (r['실배송'] === 'Y' ? '페이백' : '리뷰비') + ' 요청 넣음: ' + title);
       });
