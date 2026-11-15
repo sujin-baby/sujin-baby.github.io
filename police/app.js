@@ -465,12 +465,13 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!ns.length) return '';
     if (ns.length === 1) return pre + ns[0] + unit;
     if (isCont(ns)) return pre + ns[0] + '-' + ns[ns.length - 1] + unit;
+    if (ns.length <= 4) return pre + ns.join('·') + unit;
     return pre + ns[0] + unit + ' 외 ' + (ns.length - 1) + unit;
   }
   function badgeTxt(g) {
     var ns = g.nums;
     if (ns.length === 1) return g.ab + ' ' + ns[0];
-    return isCont(ns) ? g.ab + ' ' + ns[0] + '-' + ns[ns.length - 1] : g.ab + ' ' + ns[0] + '+';
+    return g.ab + ' ' + ns[0] + '-' + ns[ns.length - 1];
   }
   function doneByDay() {
     var out = {};
@@ -653,6 +654,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       '<div class="cal-grid" id="calGrid"></div>' +
       '<div class="cal-detail" id="calDetail"></div>' +
       '<div class="cal-legend"><span class="lg done"></span>다 들은 날 <span class="lg part"></span>일부만 <span class="lg miss"></span>못 들은 날 <span class="lg sel"></span>선택</div>' +
+      '<div class="cal-key">지 지텔프 · 범 범죄학 · 형 형사법 · 경 경찰학</div>' +
       '</div>' +
       '<div id="stageBody" class="hidden"></div>' +
       '<div class="plan-foot">' +
