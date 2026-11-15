@@ -160,6 +160,21 @@ G('CacheService.getScriptCache().remove("MSGVL_m15")'); G('msgViewBuild_(true)')
 const nr = T['⏰리뷰독촉'].rows[rowOf('m15') - 1];
 ok(/HYPERLINK\("https:\/\/docs.google.com\/spreadsheets\/d\/S9\/edit","명단"\)/.test(nr[6]) && /HYPERLINK\("https:\/\/drive.google.com\/drive\/folders\/FOLDER12345abc","리뷰이미지"\)/.test(nr[7]), '독촉 탭 명단·리뷰이미지 링크 ' + JSON.stringify(nr.slice(6, 8)));
 ok(T['⏰리뷰독촉'].rows[0][7] === '리뷰이미지', '독촉 탭 머리글 ' + T['⏰리뷰독촉'].rows[0][7]);
+// 리뷰비 탭: 취완 체크 C칸(보냄 B 옆), L칸 리뷰이미지 링크 (11/16 사용자 승인)
+{
+  const fr = T['💰리뷰비'].rows, r14 = fr[rowOf('m14') - 1];
+  ok(fr[0][2] === '취완' && fr[0][11] === '리뷰이미지', '리뷰비 탭 머리글 C·L ' + JSON.stringify([fr[0][2], fr[0][11]]));
+  ok(/HYPERLINK\("https:\/\/drive.google.com\/drive\/folders\/FOLDER12345abc","리뷰이미지"\)/.test(r14[11]), '리뷰비 줄 L칸 리뷰이미지 ' + JSON.stringify(r14[11]));
+  ok(r14[2] === '', '취완 없는 줄은 C칸 비움(날짜 안 씀) ' + JSON.stringify(r14[2]));
+  // 그 방 취완이 생기면 C칸 체크칸 + M칸 번호, 취완 탭에는 안 나옴
+  const obr = env.__ss.sheets['보낼메시지'].rows;
+  obr.splice(1, 0, ['m16', day(-1), '취완', '#10.28 실링팬 2', '취완', '대기']);
+  G('msgViewBuild_(true)');
+  const r14b = T['💰리뷰비'].rows[rowOf('m14') - 1];
+  ok(r14b[2] === false && r14b[12] === 'm16' && where('m16')[0] === null, '리뷰비 줄 C칸 취완 체크·M칸 번호 ' + JSON.stringify([r14b[2], r14b[12], where('m16')[0]]));
+  obr.splice(obr.findIndex(r => r[0] === 'm16'), 1);
+  G('msgViewBuild_(true)');
+}
 edit(T['✅취완'], rowOf('m13'), true);
 edit(T['💰리뷰비'], rowOf('m14'), true);
 ok(coll('#10.27 실링팬') instanceof Date && coll('#10.27 실링팬').getTime() === t0.getTime(), '취완 → 리뷰 취합 ' + coll('#10.27 실링팬'));

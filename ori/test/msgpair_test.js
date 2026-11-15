@@ -23,23 +23,23 @@ const gp = G("MSGV_GROUPS.map(function (g) { return g.key; }).indexOf('pay')");
 const pl = m.groups[gp].lines;
 ok(pl.length === 2 && pl.every(l => l.chwan && l.chwan.id) && pl.find(l => l.kind === '리뷰비 요청').chwan.id === 'a1' && pl.find(l => l.kind === '페이백 요청').chwan.id === 'b1', '리뷰비 탭 줄에 취완 번호 ' + JSON.stringify(pl.map(l => [l.kind, l.chwan])));
 // 2) L칸 체크 → 취완만 보냄
-const tab = new H.Sheet('💰리뷰비 2', [['', '보냄', '', '', '주문 날짜', '', '', '', '', '', '', '취완', ''], ['a2', false, '', '', '', '', '', '', '', '', '', true, 'a1']]);
+const tab = new H.Sheet('💰리뷰비 2', [['', '보냄', '취완', '', '주문 날짜', '', '', '', '', '', '', '리뷰이미지', ''], ['a2', false, true, '', '', '', '', '', '', '', '', '', 'a1']]);   // 11/16: 취완 체크 C칸
 G('msgViewBuild_ = function (f, gi) { (globalThis.__RB = globalThis.__RB || []).push(gi); }; rvSetColl_ = function () { return 0; };');
 let toastMsg = '';
-env.__EV = { range: tab.getRange(2, 12), source: { toast: function (t) { toastMsg = t; } } };
+env.__EV = { range: tab.getRange(2, 3), source: { toast: function (t) { toastMsg = t; } } };
 let err = ''; try { G('msgvChwanEdit_')(G('__EV'), tab, 2, 1, function (t) { toastMsg = t; }); } catch (e) { err = String(e.stack || e); }
 ok(!err, '오류 ' + err);
 ok(st().a1 === '보냄' && st().a2 === '대기', '취완만 보냄, 리뷰비 요청은 그대로 ' + JSON.stringify(st()));
 ok(env.__props.get('MSGV_S_a1'), '보낸 시각 (이틀 회색)');
 ok(/취완 1개 보냄 체크/.test(toastMsg), '알림 ' + toastMsg);
 // 3) 풀면 대기
-tab.rows[1][11] = false;
+tab.rows[1][2] = false;
 G('msgvChwanEdit_')(G('__EV'), tab, 2, 1, function (t) { toastMsg = t; });
 ok(st().a1 === '대기' && !env.__props.get('MSGV_S_a1'), '풀면 대기 ' + JSON.stringify(st()));
 // 4) 취완 번호 없는 줄에 체크 → 지움
-const tab2 = new H.Sheet('💰리뷰비 2', [['', '보냄'], ['zz', false, '', '', '', '', '', '', '', '', '', true, '']]);
+const tab2 = new H.Sheet('💰리뷰비 2', [['', '보냄'], ['zz', false, true, '', '', '', '', '', '', '', '', '', '']]);
 G('msgvChwanEdit_')(G('__EV'), tab2, 2, 1, function (t) { toastMsg = t; });
-ok(tab2.rows[1][11] === '' && /아직 없어요/.test(toastMsg), '취완 없는 줄 ' + JSON.stringify(tab2.rows[1]) + ' ' + toastMsg);
+ok(tab2.rows[1][2] === '' && /아직 없어요/.test(toastMsg), '취완 없는 줄 ' + JSON.stringify(tab2.rows[1]) + ' ' + toastMsg);
 ok(!G("typeof msgvPairSync_ === 'function'"), '자동 같이 체크는 없앰');
 // 5) 리뷰비 탭 L칸에 걸린 취완은 ✅취완 탭에서 뺌 (한 곳에서만 체크, 11/15). 리뷰비·페이백 줄이 없는 방 취완은 취완 탭에 그대로
 const rows5 = rows.concat([['c1', new Date(), '취완', '#11.4 사과 3', '취완', '대기']]);
@@ -49,7 +49,7 @@ const gd = G("MSGV_GROUPS.map(function (g) { return g.key; }).indexOf('done')");
 const dids = m5.groups[gd].lines.filter(l => l.type === 'msg').map(l => l.id);
 ok(dids.indexOf('a1') < 0 && dids.indexOf('b1') < 0 && dids.indexOf('c1') >= 0, '취완 탭에는 리뷰비 줄에 안 걸린 것만 ' + JSON.stringify(dids));
 // 6) 한 줄에 취완 여러 개(여러 날 의뢰 방마다) → L칸 체크 하나로 다 보냄
-const tab3 = new H.Sheet('💰리뷰비 2', [['', '보냄', '', '', '주문 날짜', '', '', '', '', '', '', '취완', ''], ['a2', false, '', '', '', '', '', '', '', '', '', true, 'a1,b1']]);
+const tab3 = new H.Sheet('💰리뷰비 2', [['', '보냄', '취완', '', '주문 날짜', '', '', '', '', '', '', '리뷰이미지', ''], ['a2', false, true, '', '', '', '', '', '', '', '', '', 'a1,b1']]);
 G('msgvChwanEdit_')(G('__EV'), tab3, 2, 1, function (t) { toastMsg = t; });
 ok(st().a1 === '보냄' && st().b1 === '보냄' && st().a2 === '대기', '취완 여러 개 같이 보냄 ' + JSON.stringify(st()));
 // 7) 서버 chwanOf: 그 의뢰 방들의 안 보낸 취완 전부 (소스 확인)
