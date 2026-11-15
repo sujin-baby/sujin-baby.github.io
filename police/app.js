@@ -60,7 +60,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   var S = {
     xp: 0, streak: { n: 0, last: '', best: 0 }, checked: {}, wrong: {},
     ans: 0, ok: 0, muted: false, subj: 'crim', course: {}, qlen: 10, mix: false, days: {},
-    dday: DTARGET, ddayNote: '예상일', unit: {}, gpSeeded: false, goal: { xp: 50, q: 10 }, bestCombo: 0
+    dday: DTARGET, ddayNote: '예상일', unit: {}, node: {}, gpSeeded: false, goal: { xp: 50, q: 10 }, bestCombo: 0
   };
   try {
     var raw = localStorage.getItem(SKEY);
@@ -76,6 +76,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   if (!S.wrong) S.wrong = {};
   if (!S.days) S.days = {};
   if (!S.unit) S.unit = {};
+  if (!S.node) S.node = {};
   if (!S.goal) S.goal = { xp: 50, q: 10 };
   if (!S.dday) S.dday = DTARGET;
   D.subjects.forEach(function (s) {
@@ -498,8 +499,9 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var pool = nodePool(cid, n);
     if (!pool.length) return false;
     for (var i = 0; i < pool.length; i++) if (S.wrong[pool[i].i]) return false;
-    // 실제로 한 문제 이상 맞혀야 왕관을 준다
-    var ui = unitIndex(cid, n), st = S.unit[cid + ':' + ui];
+    // 실제로 한 문제 이상 맞혀야 왕관을 준다 (지텔프는 G-POINT 단위, 나머지는 단원 단위)
+    var key = isGP(COURSE[cid]) ? (cid + ':gp' + n) : (cid + ':u' + unitIndex(cid, n));
+    var st = S.node[key];
     return !!(st && st.ok > 0);
   }
 
@@ -920,8 +922,11 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var uk = q.c + ':' + q.u;
     var u = S.unit[uk] || (S.unit[uk] = { a: 0, ok: 0 });
     u.a++;
+    var nk = q.gp ? (q.c + ':gp' + q.gp) : (q.c + ':u' + q.u);
+    var nd = S.node[nk] || (S.node[nk] = { a: 0, ok: 0 });
+    nd.a++;
     if (right) {
-      S.ok++; day.ok = (day.ok || 0) + 1; u.ok++;
+      S.ok++; day.ok = (day.ok || 0) + 1; u.ok++; nd.ok++;
       QS.ok++; QS.combo++; QS.maxCombo = Math.max(QS.maxCombo, QS.combo);
       var gain = 10 + Math.min(10, (QS.combo - 1) * 2);
       var bonus = 0;
@@ -1084,7 +1089,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     S = {
       xp: 0, streak: { n: 0, last: '', best: 0 }, checked: {}, wrong: {}, ans: 0, ok: 0,
       muted: S.muted, subj: S.subj, course: {}, qlen: 10, mix: false, days: {},
-      dday: DTARGET, ddayNote: '예상일', unit: {}, gpSeeded: true, goal: { xp: 50, q: 10 }
+      dday: DTARGET, ddayNote: '예상일', unit: {}, node: {}, gpSeeded: true, goal: { xp: 50, q: 10 }
     };
     D.subjects.forEach(function (s) { S.course[s.id] = s.defaultCourse || s.courses[0].id; });
     var seed = {};
