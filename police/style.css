@@ -383,3 +383,11 @@ button{font-family:inherit;font-size:inherit;color:inherit;border:0;background:n
   .rank-badge{font-size:10.5px;padding:6px 8px}
   .hud{gap:4px}
 }
+
+/* 모바일 헤더 줄바꿈 방지 */
+.brand-txt{white-space:nowrap}
+@media(max-width:400px){
+  .brand{font-size:13.5px;gap:4px}
+  .brand-dot{font-size:15px}
+  .top{gap:5px;padding-left:10px;padding-right:10px}
+}

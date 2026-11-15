@@ -333,6 +333,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       };
       el.appendChild(b);
     });
+    var onTab = el.querySelector('.stab.on');
+    if (onTab && onTab.scrollIntoView) { try { onTab.scrollIntoView({ block: 'nearest', inline: 'center' }); } catch (e) {} }
   }
 
   /* ---------- 오늘의 목표 ---------- */
@@ -1106,6 +1108,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   });
 
   /* ---------- boot ---------- */
+  $('#path')._scrolled = true;   // 첫 화면에서 D-Day·히어로가 가려지지 않게 자동 스크롤 생략
   renderAll();
   if (D.questions.length === 0) toast('문제 데이터를 불러오지 못했어요');
 })();
