@@ -432,7 +432,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     todayChallenges().forEach(function (c) { var pp = challengeProgress(c); if (pp.v >= pp.n) cd++; });
     var q1 = $('#dashQuest'), q2 = $('#dashPass'), q3 = $('#dashChal');
     if (q1) q1.textContent = '목표 ' + done + '/3';
-    if (q2) q2.textContent = p.ans ? '합격 예측 ' + p.acc + '%' : '합격 예측 -';
+    if (q2) q2.textContent = p.ans ? '합격 ' + p.acc + '%' : '합격 -';
     if (q3) q3.textContent = '챌린지 ' + cd + '/2';
     var dash = $('#dash'), panel = $('#dashPanel'), bar = $('#dashBar');
     if (dash) dash.classList.toggle('done', done >= 3 && cd >= 2);
