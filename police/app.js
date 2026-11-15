@@ -265,7 +265,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!L) return;
     var on = isChecked(cid, n);
     var pool = poolForLecture(cid, n);
-    var st = pool.length ? '<span class="pill">문제 ' + pool.length + '개 있음</span>' : '<span class="pill plan">이 회차 전용 문제는 아직 없음 · 같은 단원 문제로 출제</span>';
+    var st = pool.length ? '<span class="pill">이 단원 문제 ' + pool.length + '개</span>' : '<span class="pill plan">이 단원 문제 준비 중</span>';
     var isCur = n === nextLecture(cid);
     $('#sheetIn').innerHTML =
       '<button class="sheet-close" data-close="1">✕</button>' +
@@ -273,7 +273,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       '<div class="sheet-title">' + (L.t ? esc(L.t) : '아직 제목이 공개되지 않은 회차예요') + '</div>' +
       '<div class="sheet-meta">' + (unitOf(cid, n) ? esc(unitOf(cid, n)) + ' · ' : '') + (L.up ? '' : '업로드 예정이지만 미리 체크할 수 있어요 · ') + st + '</div>' +
       '<button class="btn ' + (on ? 'ghost' : 'primary') + '" id="shToggle">' + (on ? '체크 해제' : '이 강의 들었어요 ✓') + '</button>' +
-      '<button class="btn ghost" id="shQuiz" ' + (on && pool.length ? '' : 'disabled style="opacity:.45"') + '>이 강의 문제 풀기</button>' +
+      '<button class="btn ghost" id="shQuiz" ' + (on && pool.length ? '' : 'disabled style="opacity:.45"') + '>이 단원 문제 풀기</button>' +
       (isCur ? '<button class="btn ghost" id="shNext">다음 강의 보기 →</button>' : '');
     $('#sheet').classList.remove('hidden');
     $('#shToggle').onclick = function () {
@@ -380,7 +380,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     D.subjects.forEach(function (s) {
       s.courses.forEach(function (c) {
         var d = checkedNums(c.id).length;
-        if (!d && s.courses.length > 1) return;
+        if (!d && s.courses.length > 1 && S.course[s.id] !== c.id) return;
         var w = document.createElement('div');
         w.className = 'prog-item';
         w.innerHTML = '<div class="pi-top"><span>' + s.emoji + ' ' + s.name + ' · ' + esc(c.name) + '</span><i>' + d + '/' + c.total + '강</i></div>' +
