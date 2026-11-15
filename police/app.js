@@ -422,6 +422,25 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     $('#passNeed').textContent = p.ans ? (p.gt >= 22 ? '목표 22문항 달성!' : '목표 22문항까지 ' + (22 - p.gt) + '문항') : '목표: 문법 22/26';
   }
 
+  /* ---------- 첫 화면 컴팩트 대시보드 ---------- */
+  function renderDash() {
+    var d = dayRec();
+    var lecN = todayLectureCount();
+    var done = [lecN >= 1, (d.xp || 0) >= S.goal.xp, (d.ans || 0) >= S.goal.q].filter(Boolean).length;
+    var p = passGauge();
+    var cd = 0;
+    todayChallenges().forEach(function (c) { var pp = challengeProgress(c); if (pp.v >= pp.n) cd++; });
+    var q1 = $('#dashQuest'), q2 = $('#dashPass'), q3 = $('#dashChal');
+    if (q1) q1.textContent = '목표 ' + done + '/3';
+    if (q2) q2.textContent = p.ans ? '합격 예측 ' + p.acc + '%' : '합격 예측 -';
+    if (q3) q3.textContent = '챌린지 ' + cd + '/2';
+    var dash = $('#dash'), panel = $('#dashPanel'), bar = $('#dashBar');
+    if (dash) dash.classList.toggle('done', done >= 3 && cd >= 2);
+    if (panel) panel.classList.toggle('hidden', !S.dashOpen);
+    if (dash) dash.classList.toggle('open', !!S.dashOpen);
+    if (bar) bar.setAttribute('aria-expanded', S.dashOpen ? 'true' : 'false');
+  }
+
   /* ---------- mascot ---------- */
   function renderMascot() {
     var d = dayRec();
@@ -963,7 +982,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     QS.best = Math.max(QS.best || 0, QS.combo);
     if (QS.combo > (S.bestCombo || 0)) { S.bestCombo = QS.combo; }
     save();
-    renderHud(); renderQuest(); renderMascot(); renderChallenges();
+    renderHud(); renderQuest(); renderMascot(); renderChallenges(); renderPass(); renderDash();
     checkPromotion();
   }
 
@@ -1015,7 +1034,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (home) home.onclick = function () { closeQuiz(); renderAll(); };
     var retry = $('#qRetryWrong');
     if (retry) retry.onclick = function () { closeQuiz(); startSession('ids', { ids: wrongNow, title: '틀린 문제 다시 풀기' }); };
-    renderHud(); renderReview(); renderStats(); renderQuest(); renderMascot(); renderChallenges();
+    renderHud(); renderReview(); renderStats(); renderQuest(); renderMascot(); renderChallenges(); renderPass(); renderDash();
     checkPromotion();
   }
 
@@ -1039,7 +1058,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   /* ---------- render all ---------- */
   function renderAll() {
     applyTheme(); renderHud(); renderSubtabs(); renderDday(); renderQuest(); renderMascot();
-    renderChallenges(); renderPass(); renderStage(); renderReview(); renderStats();
+    renderChallenges(); renderPass(); renderDash(); renderStage(); renderReview(); renderStats();
   }
 
   /* ---------- events ---------- */
@@ -1048,6 +1067,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!S.muted) sfx('tap');
   };
   $('#planBtn').onclick = function () { sfx('tap'); openPlanSheet(); };
+  var _dashBar = $('#dashBar');
+  if (_dashBar) _dashBar.onclick = function () { S.dashOpen = !S.dashOpen; save(); sfx('tap'); renderDash(); };
   $('#rankBadge').onclick = function () { sfx('tap'); openRankSheet(rankOf(S.xp || 0).r, false); };
   $('#stWeakGo').onclick = function () {
     var ws = weakUnits();

@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=20261116q">
+<link rel="stylesheet" href="style.css?v=20261116r">
 </head>
 <body>
 
@@ -72,6 +72,16 @@
     <p class="hero-note" id="heroNote"></p>
   </section>
 
+  <section class="dash" id="dash">
+    <button class="dash-bar" id="dashBar" aria-expanded="false" aria-controls="dashPanel">
+      <span class="dash-item"><i>🎯</i><b id="dashQuest">목표 0/3</b></span>
+      <span class="dash-dot"></span>
+      <span class="dash-item"><i>📈</i><b id="dashPass">합격 -</b></span>
+      <span class="dash-dot"></span>
+      <span class="dash-item"><i>🔥</i><b id="dashChal">챌린지 0/2</b></span>
+      <span class="dash-caret" id="dashCaret">▾</span>
+    </button>
+    <div class="dash-panel hidden" id="dashPanel">
   <section class="quest" id="questCard">
     <div class="quest-head"><b>오늘의 목표</b><span id="questPct">0/3 완료</span></div>
     <div class="quest-line">
@@ -100,6 +110,8 @@
   <section class="challenge">
     <div class="ch-head"><b>오늘의 챌린지</b><span>매일 바뀌어요</span></div>
     <div id="challengeList"></div>
+  </section>
+    </div>
   </section>
 
   <div class="path-wrap">
@@ -200,7 +212,7 @@
 <div id="fx" class="fx"></div>
 <div id="toast" class="toast hidden"></div>
 
-<script src="data.js?v=20261116q"></script>
-<script src="app.js?v=20261116q"></script>
+<script src="data.js?v=20261116r"></script>
+<script src="app.js?v=20261116r"></script>
 </body>
 </html>
