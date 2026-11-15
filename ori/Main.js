@@ -3511,6 +3511,7 @@ function checkFullInner_() {
   // 리뷰 사진 AI 분류가 남은 의뢰가 있으면 이어서 (10/31)
   if (props.getProperty('RVAI_Q') && !late_(200)) { step_('리뷰 사진 AI'); rvAiQueue_(); }
   if (geminiKey_()) { try { ensureInboxTrigger_(); } catch (e) {} }
+  try { subTime_('한눈에 명단 칸 확인', function () { dashListStale_(); }); } catch (e) { note_('한눈에 명단 칸 확인 실패: ' + e); }
   if (geminiKey_() && !late_(200)) { try { subTime_('리뷰 사진 받는 곳', function () { rvInboxSort_(null); }); } catch (e) { note_('리뷰 사진 받는 곳 실패: ' + e); } }
   // 사용법 탭 글이 바뀌었으면 바로 (정리는 30분마다라 새 칸이 늦게 생김. 같으면 속성 하나만 보고 끝)
   try { ensureUsageTab_(); } catch (e) {}
@@ -10667,7 +10668,7 @@ function buildDashboard_(force) {
     try { sh.setColumnWidth(15, 180); } catch (e) {}
   }
   // 아래: 명단 내용 (중복, 금액, 옵션 확인 표시는 여기서만. 명단 시트는 업체도 봐서 깨끗하게 둠)
-  const rules = [], takCutRows = {};
+  const rules = [], takCutRows = {}, listBlocks = [];
   const A = "'" + ASSIGN_TAB + "'!";
   show.forEach(function (id) {
     const x = sheets[id], top = x.top, n = x.n, width = Math.max(x.layout.length + (x.chk ? 1 : 0), 6);
@@ -10713,6 +10714,7 @@ function buildDashboard_(force) {
     const dt = function (t) { return isFinite(t) && t > 0 ? 'DATE(' + Utilities.formatDate(new Date(t), CONFIG.TIMEZONE, 'yyyy,M,d') + ')' : (t > 0 ? '99999' : '0'); };
     const inWin = '(INDEX(d,0,1)<>"")*(INDEX(d,0,1)>=' + dt(x.from) + ')*(INDEX(d,0,1)<' + dt(x.to) + ')';
     sh.getRange(top + 2, 1).setFormula('=IFERROR(LET(d,' + imp + ',IF(COUNTA(INDEX(d,0,1))=0,"",IFERROR(LET(e,FILTER(d,' + inWin + '),HSTACK(' + parts.join(',') + ')),""))),"이 칸을 눌러 액세스 허용을 한 번 눌러 주세요")');
+    listBlocks.push({ top: top, n: n, row: x.runs[0].row, t: bareTitle_(x.runs[0]['명단 제목']), w: width });   // 명단 칸 늦게 새로 고침 확인용 (11/16)
     sh.getRange(top + 1, 1, 1, Math.max(width2, 6)).setFontWeight('bold').setBackground('#faf7fd');
     // 보기 좋게: 가운데 맞춤, 제목 줄은 왼쪽, 머리글 굵게, 테두리
     // 머리글 줄은 가운데, 명단 줄은 왼쪽 맞춤
@@ -10807,6 +10809,7 @@ function buildDashboard_(force) {
   if (block0Top > gapStart) {
     try { sh.getRange(gapStart, 1, block0Top - gapStart, sh.getMaxColumns()).clear().clearDataValidations().clearNote(); } catch (e) {}
   }
+  props.setProperty('DASH_LISTS', JSON.stringify(listBlocks));
   props.setProperty('DASH_TAKCUT', JSON.stringify(takCutRows));   // 한눈에 마감 시각 칸 줄 → 방제 (고치면 onAdminEdit에서 저장)
   props.setProperty('DASH_SIG', sig);
   props.setProperty('DASH_TITLES', JSON.stringify(runs.map(function (r) { return bareTitle_(r['명단 제목']); })));
@@ -11193,6 +11196,36 @@ function assignCleanDaily_() {
     i = j - 1;
   }
   note_('✓ 배정 탭 정리: ' + Utilities.formatDate(pw, CONFIG.TIMEZONE, 'M/d') + ' 전 진행 ' + del.length + '줄 지움');
+}
+// 한눈에 아래 명단 칸이 명단 시트보다 적게 보이면(IMPORTRANGE를 구글이 늦게 새로 고침) 다시 불러오고 제목 줄에 경고 (11/16 사용자:
+//  #택11.16 온드프레시 콜라비 10이 명단 시트는 10명인데 한눈에 7명 → 택배시트에 잘못 옮길 뻔함). 15분마다. 맞으면 경고 지움
+const DASH_STALE_COL = 14;
+function dashListStale_(runs) {
+  const props = PropertiesService.getScriptProperties();
+  let blocks = []; try { blocks = JSON.parse(props.getProperty('DASH_LISTS') || '[]') || []; } catch (e) {}
+  const sh = adminSs_().getSheetByName(DASH_TAB);
+  if (!sh || !blocks.length) return [];
+  const byRow = {}; (runs || readRuns_()).forEach(function (r) { byRow[r.row] = r; });
+  const out = [];
+  blocks.forEach(function (b) {
+    const r = byRow[b.row];
+    if (!r || bareTitle_(r['명단 제목']) !== b.t) return;   // 진행목록 줄이 바뀌었으면 다음에 한눈에를 다시 그릴 때
+    const want = Number(r['인원']) || 0, look = Math.max(b.n, want) + 2;
+    let shown = 0;
+    try { shown = sh.getRange(b.top + 2, 1, look, 1).getValues().filter(function (v) { return v[0] instanceof Date; }).length; } catch (e) { return; }
+    const wc = sh.getRange(b.top, DASH_STALE_COL);
+    if (shown >= want) { if (String(wc.getValue())) wc.clearContent(); return; }
+    // 다시 불러오기: IMPORTRANGE 범위 끝을 바꿔(같은 칸들) 구글이 새로 가져오게
+    try {
+      const fc = sh.getRange(b.top + 2, 1), f = fc.getFormula();
+      const nf = f.replace(/(IMPORTRANGE\("[^"]*","[^"]*![A-Z]+\d+:[A-Z]+)(\d*)("\))/, function (m, a1, d, z) { return a1 + (d ? '' : '20000') + z; });
+      if (nf !== f) fc.setFormula(nf);
+    } catch (e) {}
+    wc.setValue('⚠ 명단 시트는 ' + want + '명인데 여기 ' + shown + '명 → 새로 불러오는 중 (택배시트는 명단 시트 보고 옮기기)').setFontColor('#d93025').setFontWeight('bold');
+    out.push(b.t + ' ' + shown + '/' + want);
+  });
+  if (out.length) note_('한눈에 명단 칸이 덜 불러와짐 → 다시 불러옴: ' + out.join(', '));
+  return out;
 }
 // 한눈에 탭의 오류 칸 (#REF! 등) 주소들
 function dashErrorCells_() {
