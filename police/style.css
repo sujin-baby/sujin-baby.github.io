@@ -341,3 +341,45 @@ button{font-family:inherit;font-size:inherit;color:inherit;border:0;background:n
 .ci-on{flex:0 0 auto;font-size:10px;font-weight:900;color:#fff;background:var(--c);border-radius:99px;padding:3px 7px}
 .ci-meta{font-size:10.5px;color:var(--ink3);font-weight:700}
 .ci-tag{color:var(--c);font-weight:900}
+
+/* 계급 배지 */
+.rank-badge{display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,#101828,#334155);color:#fff;font-size:11.5px;font-weight:900;padding:7px 10px;border-radius:11px;letter-spacing:-.2px;box-shadow:0 4px 10px -6px #101828}
+.rank-badge span{font-size:12.5px}
+
+/* 승진 연출 */
+.promo{text-align:center;padding:10px 0 16px}
+.promo-emoji{font-size:56px;animation:winPop .6s cubic-bezier(.2,1.5,.4,1)}
+.promo h2{font-size:22px;font-weight:900;letter-spacing:-.6px;margin:8px 0 4px;color:var(--gold-d)}
+.promo p{font-size:13px;color:var(--ink2);margin:0}
+.rank-list{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0}
+.rank-item{flex:1 1 44%;display:flex;align-items:center;gap:6px;background:#f7f9fd;border:1px solid var(--line);border-radius:12px;padding:9px 10px;opacity:.45}
+.rank-item.got{opacity:1;background:#fff8e8;border-color:#ffe0a3}
+.rank-item b{font-size:12px;font-weight:900}
+.rank-item i{font-style:normal;font-size:10px;color:var(--ink3);margin-left:auto}
+
+/* 합격 예측 */
+.pass-card{margin:12px 0 0;background:#fff;border:1px solid var(--line);border-radius:18px;padding:13px 14px}
+.pass-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.pass-top b{font-size:13.5px;font-weight:900}
+.pass-top span{font-size:13px;font-weight:900;color:var(--c)}
+.pass-card .bar i{background:linear-gradient(90deg,#22c55e,#84cc16)}
+.pass-meta{display:flex;justify-content:space-between;gap:8px;margin-top:7px;font-size:11px;color:var(--ink3);font-weight:700}
+.pass-meta em{font-style:normal;color:var(--ink2);font-weight:800;white-space:nowrap}
+
+/* 오늘의 챌린지 */
+.challenge{margin:10px 0 0;background:#fff;border:1px solid var(--line);border-radius:18px;padding:13px 14px}
+.ch-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.ch-head b{font-size:13.5px;font-weight:900}
+.ch-head span{font-size:10.5px;color:var(--ink3);font-weight:700}
+.ch-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;background:#f7f9fd;margin-bottom:6px;font-size:12.5px;font-weight:800}
+.ch-item:last-child{margin-bottom:0}
+.ch-item.done{background:#f1fdf5;color:#15803d}
+.ch-ico{font-size:13px}
+.ch-t{flex:1}
+.ch-n{font-size:11px;color:var(--ink3);font-weight:900}
+.ch-item.done .ch-n{color:#15803d}
+
+@media(max-width:400px){
+  .rank-badge{font-size:10.5px;padding:6px 8px}
+  .hud{gap:4px}
+}

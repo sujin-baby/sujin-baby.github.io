@@ -29,6 +29,22 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   var DTARGET = '2027-08-21';            // 2027년 2차 순경 필기 (예상일)
   var GTELP = '2026-11-29';              // 지텔프 Level 2 (수진 님 응시일)
 
+  var RANKS = [
+    { n: '순경', xp: 0, e: '👮' },
+    { n: '경장', xp: 300, e: '🎖️' },
+    { n: '경사', xp: 900, e: '🏅' },
+    { n: '경위', xp: 2000, e: '🥇' },
+    { n: '경감', xp: 4000, e: '⭐' },
+    { n: '경정', xp: 8000, e: '🌟' },
+    { n: '총경', xp: 15000, e: '💫' }
+  ];
+  var CHALLENGES = [
+    { id: 'c10', t: '오늘 10문제 풀기', need: 10 },
+    { id: 'combo', t: '5연속 정답 만들기', need: 5 },
+    { id: 'xp', t: 'XP 100 모으기', need: 100 },
+    { id: 'lec', t: '강의 2개 체크하기', need: 2 }
+  ];
+
   var ROADMAP = [
     { p: '2026.09~10', t: '네친구', d: '형사법·경찰학·범죄학 기본 이론 1회독' },
     { p: '2026.11~12', t: '기출총정리 · 112특강 · 전국모의고사 / 11월 올인원', d: '기출 총정리와 올인원 이론을 병행하는 구간', now: true },
@@ -44,7 +60,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   var S = {
     xp: 0, streak: { n: 0, last: '', best: 0 }, checked: {}, wrong: {},
     ans: 0, ok: 0, muted: false, subj: 'crim', course: {}, qlen: 10, mix: false, days: {},
-    dday: DTARGET, ddayNote: '예상일', unit: {}, gpSeeded: false, goal: { xp: 50, q: 10 }
+    dday: DTARGET, ddayNote: '예상일', unit: {}, gpSeeded: false, goal: { xp: 50, q: 10 }, bestCombo: 0
   };
   try {
     var raw = localStorage.getItem(SKEY);
@@ -260,10 +276,46 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var f = function (v) { v = Math.round(v + 255 * amt); return Math.max(0, Math.min(255, v)); };
     return '#' + [f(r), f(g), f(b)].map(function (v) { return ('0' + v.toString(16)).slice(-2); }).join('');
   }
+  function rankOf(xp) {
+    var r = RANKS[0], i = 0;
+    for (var k = 0; k < RANKS.length; k++) if (xp >= RANKS[k].xp) { r = RANKS[k]; i = k; }
+    return { r: r, i: i, next: RANKS[i + 1] || null };
+  }
   function renderHud() {
     $('#streakN').textContent = S.streak.n || 0;
     $('#xpN').textContent = S.xp || 0;
     $('#mute').textContent = S.muted ? '🔇' : '🔊';
+    var rk = rankOf(S.xp || 0);
+    $('#rankBadge').innerHTML = '<span>' + rk.r.e + '</span>' + rk.r.n;
+    $('#rankBadge').title = rk.next ? (rk.next.n + '까지 ' + (rk.next.xp - (S.xp || 0)) + ' XP') : '최고 계급';
+  }
+  function checkPromotion() {
+    var now = rankOf(S.xp || 0);
+    if (S.rankIdx === undefined) { S.rankIdx = now.i; return; }
+    if (now.i > S.rankIdx) {
+      S.rankIdx = now.i; save();
+      sfx('level'); confetti(80);
+      openRankSheet(now.r, true);
+    } else if (now.i < S.rankIdx) { S.rankIdx = now.i; save(); }
+  }
+  function openRankSheet(rank, promoted) {
+    var rk = rankOf(S.xp || 0);
+    var html = '<button class="sheet-close" data-close="1">✕</button>' ;
+    if (promoted) {
+      html += '<div class="promo"><div class="promo-emoji">' + rank.e + '</div>' +
+        '<h2>' + rank.n + ' 승진!</h2><p>축하합니다! XP ' + (S.xp || 0) + '로 <b>' + rank.n + '</b>이 되었어요.</p></div>';
+    } else {
+      html += '<div class="sheet-num">나의 계급</div><div class="sheet-title">' + rk.r.e + ' ' + rk.r.n + '</div>' +
+        '<div class="sheet-meta">XP ' + (S.xp || 0) + (rk.next ? ' · 다음 계급 ' + rk.next.n + '까지 ' + (rk.next.xp - (S.xp || 0)) + ' XP' : ' · 최고 계급') + '</div>';
+    }
+    html += '<div class="rank-list">';
+    RANKS.forEach(function (r, i) {
+      var cls = 'rank-item' + (i <= rk.i ? ' got' : '');
+      html += '<div class="' + cls + '"><span>' + r.e + '</span><b>' + r.n + '</b><i>' + r.xp + ' XP</i></div>';
+    });
+    html += '</div><button class="btn primary" data-close="1">확인</button>';
+    $('#sheetIn').innerHTML = html;
+    $('#sheet').classList.remove('hidden');
   }
   function renderSubtabs() {
     var el = $('#subtabs'); el.innerHTML = '';
@@ -317,6 +369,54 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var done = [lecN >= 1, (d.xp || 0) >= S.goal.xp, (d.ans || 0) >= S.goal.q].filter(Boolean).length;
     $('#questPct').textContent = done + '/3 완료';
     $('#questCard').classList.toggle('all-done', all);
+  }
+
+  /* ---------- 오늘의 챌린지 ---------- */
+  function todayChallenges() {
+    var d = new Date();
+    var seed = d.getFullYear() * 372 + (d.getMonth() + 1) * 31 + d.getDate();
+    var a = CHALLENGES[seed % CHALLENGES.length];
+    var b = CHALLENGES[(seed + 2) % CHALLENGES.length];
+    if (b.id === a.id) b = CHALLENGES[(seed + 1) % CHALLENGES.length];
+    return [a, b];
+  }
+  function challengeProgress(c) {
+    var day = dayRec();
+    if (c.id === 'c10') return { v: day.ans || 0, n: c.need };
+    if (c.id === 'combo') return { v: Math.max(S.bestCombo || 0, (typeof QS !== 'undefined' && QS ? QS.maxCombo : 0)), n: c.need };
+    if (c.id === 'xp') return { v: day.xp || 0, n: c.need };
+    if (c.id === 'lec') return { v: todayLectureCount(), n: c.need };
+    return { v: 0, n: 1 };
+  }
+  function renderChallenges() {
+    var el = $('#challengeList');
+    if (!el) return;
+    var ch = todayChallenges(), html = '';
+    ch.forEach(function (c) {
+      var p = challengeProgress(c);
+      var done = p.v >= p.n;
+      html += '<div class="ch-item' + (done ? ' done' : '') + '"><span class="ch-ico">' + (done ? '✅' : '🎯') + '</span>' +
+        '<span class="ch-t">' + c.t + '</span>' +
+        '<span class="ch-n">' + Math.min(p.v, p.n) + '/' + p.n + '</span></div>';
+    });
+    el.innerHTML = html;
+  }
+  function passGauge() {
+    var acc = S.ans ? S.ok / S.ans : 0;
+    var gtelpAns = 0, gtelpOk = 0;
+    Object.keys(S.unit).forEach(function (k) { });
+    // 지텔프 문법 정답률 → 26문항 환산 (문법 몰빵 전략)
+    var gt = S.ans ? Math.round(acc * 26) : 0;
+    var score = Math.round(26 * 100 * acc / 26);
+    var band = acc >= 0.9 ? '안정권' : acc >= 0.8 ? '합격선 근접' : acc >= 0.65 ? '조금 더' : '기초 다지기';
+    return { acc: Math.round(acc * 100), gt: gt, band: band, ans: S.ans || 0 };
+  }
+  function renderPass() {
+    var p = passGauge();
+    $('#passBar').style.width = Math.min(100, p.acc) + '%';
+    $('#passPct').textContent = p.ans ? p.acc + '%' : '-';
+    $('#passTxt').textContent = p.ans < 10 ? '문제를 10개 이상 풀면 예측이 정확해져요' : '문법 26문항 기준 ' + p.gt + '/26 · ' + p.band;
+    $('#passNeed').textContent = p.ans ? (p.gt >= 22 ? '목표 22문항 달성!' : '목표 22문항까지 ' + (22 - p.gt) + '문항') : '목표: 문법 22/26';
   }
 
   /* ---------- mascot ---------- */
@@ -851,8 +951,11 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       fb(false, q, 3, 0);
     }
     touchStreak();
+    QS.best = Math.max(QS.best || 0, QS.combo);
+    if (QS.combo > (S.bestCombo || 0)) { S.bestCombo = QS.combo; }
     save();
-    renderHud(); renderQuest(); renderMascot();
+    renderHud(); renderQuest(); renderMascot(); renderChallenges();
+    checkPromotion();
   }
 
   function fb(ok, q, gain, bonus) {
@@ -903,7 +1006,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (home) home.onclick = function () { closeQuiz(); renderAll(); };
     var retry = $('#qRetryWrong');
     if (retry) retry.onclick = function () { closeQuiz(); startSession('ids', { ids: wrongNow, title: '틀린 문제 다시 풀기' }); };
-    renderHud(); renderReview(); renderStats(); renderQuest(); renderMascot();
+    renderHud(); renderReview(); renderStats(); renderQuest(); renderMascot(); renderChallenges();
+    checkPromotion();
   }
 
   function closeQuiz() {
@@ -926,7 +1030,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   /* ---------- render all ---------- */
   function renderAll() {
     applyTheme(); renderHud(); renderSubtabs(); renderDday(); renderQuest(); renderMascot();
-    renderStage(); renderReview(); renderStats();
+    renderChallenges(); renderPass(); renderStage(); renderReview(); renderStats();
   }
 
   /* ---------- events ---------- */
@@ -935,6 +1039,17 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!S.muted) sfx('tap');
   };
   $('#planBtn').onclick = function () { sfx('tap'); openPlanSheet(); };
+  $('#rankBadge').onclick = function () { sfx('tap'); openRankSheet(rankOf(S.xp || 0).r, false); };
+  $('#stWeakGo').onclick = function () {
+    var ws = weakUnits();
+    if (!ws.length) { toast('문제를 3개 이상 풀면 약점 단원이 잡혀요'); return; }
+    var ids = [];
+    ws.forEach(function (w) {
+      poolForUnit(w.cid, w.ui).forEach(function (q) { if (ids.indexOf(q.i) < 0) ids.push(q.i); });
+    });
+    if (!ids.length) { toast('그 단원 문제가 아직 없어요'); return; }
+    startSession('ids', { ids: ids, title: '약점 단원 집중 복습' });
+  };
   $('#ddayEdit').onclick = function () { sfx('tap'); openDdaySheet(); };
   $('#gtChip').onclick = function () { toast('지텔프 Level 2 · 2026-11-29 (일) · ' + ddayLabel(GTELP)); };
   $('#planChip').onclick = function () { openPlanSheet(); };

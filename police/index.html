@@ -13,13 +13,14 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=20261116g">
+<link rel="stylesheet" href="style.css?v=20261116h">
 </head>
 <body>
 
 <header class="top">
   <div class="brand"><span class="brand-dot">🎯</span><span class="brand-txt">인강 복습</span></div>
   <div class="hud">
+    <button id="rankBadge" class="rank-badge" aria-label="내 계급">👮 순경</button>
     <button id="planBtn" class="hud-btn" aria-label="학습 계획">🗺️</button>
     <button id="mute" class="hud-btn" aria-label="소리 켜기/끄기">🔊</button>
     <div class="hud-chip" title="연속 학습일"><span>🔥</span><b id="streakN">0</b></div>
@@ -90,6 +91,17 @@
     </div>
   </section>
 
+  <section class="pass-card">
+    <div class="pass-top"><b>🎯 합격 예측</b><span id="passPct">-</span></div>
+    <div class="bar"><i id="passBar"></i></div>
+    <div class="pass-meta"><span id="passTxt">문제를 풀면 예측이 나와요</span><em id="passNeed">목표: 문법 22/26</em></div>
+  </section>
+
+  <section class="challenge">
+    <div class="ch-head"><b>오늘의 챌린지</b><span>매일 바뀌어요</span></div>
+    <div id="challengeList"></div>
+  </section>
+
   <div class="path-wrap">
     <svg id="pathSvg" class="path-svg" aria-hidden="true"></svg>
     <div id="path" class="path"></div>
@@ -145,6 +157,7 @@
   <div id="stProg" class="prog-list"></div>
   <h2 class="sec-title">약점 단원</h2>
   <div id="stWeak" class="weak-list"></div>
+  <button class="btn ghost wide" id="stWeakGo">🧩 약점 단원만 집중 복습</button>
   <h2 class="sec-title">오답노트</h2>
   <button class="btn ghost wide" id="stWrongGo">🩹 오답 바로 복습</button>
   <div id="stWrong" class="wrong-list"></div>
@@ -187,7 +200,7 @@
 <div id="fx" class="fx"></div>
 <div id="toast" class="toast hidden"></div>
 
-<script src="data.js?v=20261116g"></script>
-<script src="app.js?v=20261116g"></script>
+<script src="data.js?v=20261116h"></script>
+<script src="app.js?v=20261116h"></script>
 </body>
 </html>
