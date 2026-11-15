@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=20261116t">
+<link rel="stylesheet" href="style.css?v=20261116u">
 </head>
 <body>
 
@@ -82,6 +82,11 @@
       <span class="dash-caret" id="dashCaret">▾</span>
     </button>
     <div class="dash-panel hidden" id="dashPanel">
+  <section class="week-card" id="weekCardDash">
+    <div class="week-head"><b>🔥 이번 주 불꽃</b><span id="weekNoteDash">-</span></div>
+    <div class="week-row" id="weekRowDash"></div>
+    <div class="week-streak" id="weekStreakDash">오늘 한 문제라도 풀면 불꽃이 켜져요</div>
+  </section>
   <section class="quest" id="questCard">
     <div class="quest-head"><b>오늘의 목표</b><span id="questPct">0/3 완료</span></div>
     <div class="quest-line">
@@ -124,6 +129,10 @@
 <main id="view-review" class="view hidden">
   <h1 class="page-title">복습</h1>
   <p class="page-sub" id="reviewSub">들은 강의에서만 문제가 나옵니다.</p>
+  <section class="week-card tight">
+    <div class="week-head"><b>🔥 이번 주 불꽃</b><span id="weekNoteRev">-</span></div>
+    <div class="week-row" id="weekRowRev"></div>
+  </section>
   <div class="cards">
     <button class="mode-card" id="mToday">
       <span class="mode-ico">📅</span>
@@ -165,6 +174,11 @@
     <div class="stat"><b id="stAns">0</b><span>푼 문제</span></div>
     <div class="stat wide"><b id="stToday">0</b><span>오늘 체크한 강의·G-POINT</span></div>
   </div>
+  <section class="week-card">
+    <div class="week-head"><b>🔥 이번 주 불꽃</b><span id="weekNoteStats">-</span></div>
+    <div class="week-row" id="weekRowStats"></div>
+    <div class="week-streak" id="weekStreakStats">-</div>
+  </section>
   <h2 class="sec-title">과목별 진도</h2>
   <div id="stProg" class="prog-list"></div>
   <h2 class="sec-title">약점 단원</h2>
@@ -189,11 +203,13 @@
   <div class="quiz-top">
     <button id="qClose" class="q-close" aria-label="닫기">✕</button>
     <div class="q-top-mid">
-      <div class="q-title" id="qTitle">복습</div>
-      <div class="bar thin"><i id="qBar"></i></div>
+      <div class="q-top-row">
+        <div class="q-title" id="qTitle">복습</div>
+        <div class="combo" id="qCombo">🔥 0</div>
+        <div class="q-count" id="qCount">1/10</div>
+      </div>
+      <div class="q-prog" id="qProg"><i id="qBar"></i><span class="q-prog-gloss"></span></div>
     </div>
-    <div class="combo" id="qCombo">🔥 0</div>
-    <div class="q-count" id="qCount">1/10</div>
   </div>
   <div class="quiz-body" id="qBody"></div>
   <div class="feedback hidden" id="qFb">
@@ -212,7 +228,7 @@
 <div id="fx" class="fx"></div>
 <div id="toast" class="toast hidden"></div>
 
-<script src="data.js?v=20261116t"></script>
-<script src="app.js?v=20261116t"></script>
+<script src="data.js?v=20261116u"></script>
+<script src="app.js?v=20261116u"></script>
 </body>
 </html>

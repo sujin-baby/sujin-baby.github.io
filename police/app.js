@@ -422,6 +422,44 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     $('#passNeed').textContent = p.ans ? (p.gt >= 22 ? '목표 22문항 달성!' : '목표 22문항까지 ' + (22 - p.gt) + '문항') : '목표: 문법 22/26';
   }
 
+  /* ---------- 이번 주 요일별 불꽃(월~일) ---------- */
+  function weekInfo() {
+    var d0 = new Date(); d0.setHours(0, 0, 0, 0);
+    d0.setDate(d0.getDate() - ((d0.getDay() + 6) % 7));   // 이번 주 월요일
+    var L = ['월', '화', '수', '목', '금', '토', '일'], today = todayStr(), days = [], n = 0, ans = 0;
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(d0); d.setDate(d0.getDate() + i);
+      var k = dstr(d);
+      var rec = (S.days && S.days[k]) || {};
+      var on = !!((rec.xp || 0) > 0 || (rec.ans || 0) > 0);
+      if (on) { n++; ans += (rec.ans || 0); }
+      days.push({ k: k, label: L[i], on: on, today: k === today, future: k > today, ans: rec.ans || 0 });
+    }
+    return { days: days, n: n, ans: ans };
+  }
+  function renderWeek() {
+    var w = weekInfo(), html = '';
+    w.days.forEach(function (d) {
+      html += '<div class="wk-day' + (d.on ? ' on' : '') + (d.today ? ' today' : '') + (d.future ? ' future' : '') + '"' +
+        ' title="' + d.k + (d.on ? ' · 문제 ' + d.ans + '개' : '') + '">' +
+        '<span class="wd">' + d.label + '</span><i class="wf">🔥</i><b class="wn">' + (d.on ? d.ans : '') + '</b></div>';
+    });
+    ['weekRowDash', 'weekRowRev', 'weekRowStats'].forEach(function (id) {
+      var el = $('#' + id); if (el) el.innerHTML = html;
+    });
+    var note = '이번 주 ' + w.n + '일 · 문제 ' + w.ans + '개';
+    ['weekNoteDash', 'weekNoteRev', 'weekNoteStats'].forEach(function (id) {
+      var el = $('#' + id); if (el) el.textContent = note;
+    });
+    var msg = w.n >= 7 ? '7일 개근! 완벽한 한 주예요 🏆'
+      : w.n ? '이번 주 ' + w.n + '일 불꽃 · 연속 ' + (S.streak.n || 0) + '일'
+        : '오늘 한 문제라도 풀면 불꽃이 켜져요';
+    var best = S.streak.best ? ' <i style="font-style:normal;color:var(--ink3)">최고 ' + S.streak.best + '일</i>' : '';
+    ['weekStreakDash', 'weekStreakStats'].forEach(function (id) {
+      var el = $('#' + id); if (el) el.innerHTML = '<b>🔥</b> ' + esc(msg) + best;
+    });
+  }
+
   /* ---------- 첫 화면 컴팩트 대시보드 ---------- */
   function renderDash() {
     var d = dayRec();
@@ -887,7 +925,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     QS = { items: items, i: 0, ok: 0, combo: 0, maxCombo: 0, xp: 0, mode: mode, title: title, locked: false, sel: -1, opt: opt, wrongIds: [] };
     document.body.style.overflow = 'hidden';
     $('#quiz').classList.remove('hidden');
-    $('#qCombo').textContent = '🔥 0';
+    $('#qCombo').innerHTML = '🔥 0';
+    setCombo(0, 0);
     $('#qTitle').textContent = title;
     renderQ();
   }
@@ -897,6 +936,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     QS.locked = false; QS.sel = -1;
     $('#qBar').style.width = (QS.i / QS.items.length * 100) + '%';
     $('#qCount').textContent = (QS.i + 1) + '/' + QS.items.length;
+    var pb = $('#qProg');
+    if (pb) { pb.classList.remove('pop'); void pb.offsetWidth; pb.classList.add('pop'); }
     var tag = qLabel(q);
     var badge = srcBadge(q);
     var keys = ['A', 'B', 'C', 'D'];
@@ -912,6 +953,16 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     $$('#qBody .opt').forEach(function (b) {
       b.onclick = function () { answer(Number(b.getAttribute('data-i')), b); };
     });
+  }
+
+  function setCombo(n, bonus) {
+    var el = $('#qCombo'); if (!el) return;
+    el.innerHTML = '🔥 <b>' + n + '</b> COMBO' + (bonus ? ' <i>+' + bonus + 'XP</i>' : '');
+    el.className = 'combo' + (n >= 5 ? ' lv3' : n >= 3 ? ' lv2' : n >= 2 ? ' lv1' : '');
+    if (n > 1) {
+      el.classList.add('hot');
+      setTimeout(function () { el.classList.remove('hot'); }, 380);
+    }
   }
 
   function comboBanner(txt, big) {
@@ -959,8 +1010,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       var total = gain + bonus;
       QS.xp += total; S.xp += total; day.xp = (day.xp || 0) + total;
       delete S.wrong[q.i];
-      $('#qCombo').textContent = '🔥 ' + QS.combo;
-      if (QS.combo > 1) { $('#qCombo').classList.add('hot'); setTimeout(function () { $('#qCombo').classList.remove('hot'); }, 320); }
+      setCombo(QS.combo, bonus);
       sfx(bonus >= 10 ? 'combo5' : bonus >= 5 ? 'combo3' : QS.combo > 1 ? 'combo' : 'ok');
       if (bonus) comboBanner(QS.combo + '연속 정답! +' + bonus + ' XP', QS.combo >= 5);
       confetti(bonus ? 34 : 22);
@@ -973,7 +1023,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       var w = S.wrong[q.i] || { c: 0 };
       S.wrong[q.i] = { c: (w.c || 0) + 1, d: todayStr() };
       if (QS.wrongIds.indexOf(q.i) < 0) QS.wrongIds.push(q.i);
-      $('#qCombo').textContent = '🔥 0';
+      setCombo(0, 0);
       sfx('no');
       var qb = $('#quiz'); qb.classList.add('shake'); setTimeout(function () { qb.classList.remove('shake'); }, 320);
       fb(false, q, 3, 0);
@@ -1058,7 +1108,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   /* ---------- render all ---------- */
   function renderAll() {
     applyTheme(); renderHud(); renderSubtabs(); renderDday(); renderQuest(); renderMascot();
-    renderChallenges(); renderPass(); renderDash(); renderStage(); renderReview(); renderStats();
+    renderChallenges(); renderPass(); renderDash(); renderWeek(); renderStage(); renderReview(); renderStats();
   }
 
   /* ---------- events ---------- */
