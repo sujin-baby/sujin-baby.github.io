@@ -360,7 +360,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     $('#goalXpTxt').textContent = (d.xp || 0) + ' / ' + S.goal.xp + ' XP';
     $('#goalQTxt').textContent = (d.ans || 0) + ' / ' + S.goal.q + '문제';
     var lecN = todayLectureCount();
-    $('#goalLecTxt').textContent = lecN + ' / 1강';
+    $('#goalLecTxt').textContent = lecN + '강 (목표 1강)';
     $('#questLec').classList.toggle('done', lecN >= 1);
     $('#questXp').classList.toggle('done', (d.xp || 0) >= S.goal.xp);
     $('#questQ').classList.toggle('done', (d.ans || 0) >= S.goal.q);
@@ -498,7 +498,9 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var pool = nodePool(cid, n);
     if (!pool.length) return false;
     for (var i = 0; i < pool.length; i++) if (S.wrong[pool[i].i]) return false;
-    return true;
+    // 실제로 한 문제 이상 맞혀야 왕관을 준다
+    var ui = unitIndex(cid, n), st = S.unit[cid + ':' + ui];
+    return !!(st && st.ok > 0);
   }
 
   function renderPath(c) {
