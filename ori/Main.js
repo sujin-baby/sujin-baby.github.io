@@ -3505,6 +3505,8 @@ function checkFullInner_() {
       note_(left.length ? '⚠ 한눈에 오류 칸(' + bad.slice(0, 3).join(', ') + ')을 다시 그렸는데 ' + left.length + '개 남음: ' + left.slice(0, 3).join(', ') + why : '✓ 한눈에 오류 칸 ' + bad.length + '개(' + bad.slice(0, 3).join(', ') + ') → 다시 그려서 고침');
     }
   } catch (e) { note_('한눈에 오류 칸 확인 실패: ' + e); }
+  // 진행 중 의뢰 리뷰이미지에 바로 올린 사진도 대기열로 (11/15)
+  if (geminiKey_() && !late_(200)) { try { subTime_('리뷰 사진 진행 중', function () { rvLooseCheck_(readRuns_()); }); } catch (e) { note_('진행 중 리뷰 사진 확인 실패: ' + e); } }
   // 리뷰 사진 AI 분류가 남은 의뢰가 있으면 이어서 (10/31)
   if (props.getProperty('RVAI_Q') && !late_(200)) { step_('리뷰 사진 AI'); rvAiQueue_(); }
   if (geminiKey_()) { try { ensureInboxTrigger_(); } catch (e) {} }
@@ -8126,6 +8128,40 @@ function expRunNow_(runs) {
   const t = today_().getTime();
   return runs.filter(function (r) { return isExpect_(r) && r['진행일'] instanceof Date && dayStart_(r['진행일']) <= t; })
     .sort(function (a, b) { return b['진행일'] - a['진행일']; })[0] || null;
+}
+// 진행 중인 의뢰 리뷰이미지에 바로 올린 사진도 AI로 나눔 (11/15 사용자: 리뷰가 다 확인돼야(RVRPT_) 나눠서, 진행 중엔 사진이 리뷰이미지에
+//  그냥 쌓여 포토·텍스트·별점 폴더가 하나도 없었음 — #택 더호 차량용 거치대 9장). 리뷰 확인이 다 끝난 의뢰는 지금처럼 rvZip_이 나눔.
+//  드라이브 읽기를 줄이려고 의뢰마다 1시간에 한 번, 한 번에 15개 의뢰까지만 봄. 맨 위 사진이 10분 넘게 그대로면 AI 대기열(RVAI_Q)에 넣음 → 1분 연쇄로 나눔
+function rvLooseCheck_(runs) {
+  if (!geminiKey_()) return 0;
+  const props = PropertiesService.getScriptProperties(), now = Date.now(), cut = now - 45 * 86400000;
+  const q = String(props.getProperty('RVAI_Q') || '').split(',').filter(Boolean);
+  let at = {}; try { at = JSON.parse(props.getProperty('RVLOOSE_AT') || '{}') || {}; } catch (e) {}
+  const bySid = {};
+  runs.forEach(function (r) { const sid = String(r['시트ID'] || ''); if (sid && r['진행일'] instanceof Date) (bySid[sid] = bySid[sid] || []).push(r); });
+  let added = 0, looked = 0;
+  Object.keys(bySid).forEach(function (sid) {
+    if (looked >= 15 || late_(200)) return;
+    const mine = bySid[sid];
+    if (!mine.some(function (r) { return r['마감 시각'] instanceof Date; }) || !mine.some(function (r) { return r['진행일'].getTime() >= cut; })) return;
+    if (q.indexOf(sid) >= 0 || props.getProperty('RVRPT_' + sid) || rvSentAny_(mine)) return;   // 이미 대기열 / 리뷰 다 끝남(rvZip_이 나눔) / 업체에 보냄
+    const imgId = props.getProperty('RVIMG_' + sid);
+    if (!imgId || now - Number(at[sid] || 0) < 3600000) return;
+    let kind = ''; try { kind = (JSON.parse(props.getProperty('RV_' + sid) || '{}') || {}).kind || ''; } catch (e) {}
+    if (kind === 'confirm') return;   // 구매확정만 (리뷰 사진 없음)
+    at[sid] = now; looked++;
+    try {
+      const it = DriveApp.getFolderById(imgId).getFiles();
+      let n = 0, newest = 0;
+      while (it.hasNext()) { const x = it.next(); if (!/^image\//.test(x.getMimeType())) continue; n++; newest = Math.max(newest, x.getDateCreated().getTime(), x.getLastUpdated().getTime()); }
+      if (n && now - newest >= 10 * 60000) { q.push(sid); added++; }
+      else if (n) delete at[sid];   // 아직 올리는 중 → 다음 확인에서 다시 봄
+    } catch (e) {}
+  });
+  Object.keys(at).forEach(function (k) { if (!bySid[k]) delete at[k]; });
+  props.setProperty('RVLOOSE_AT', JSON.stringify(at));
+  if (added) { props.setProperty('RVAI_Q', q.join(',')); try { ensureAiQueueTrigger_(); } catch (e) {} note_('진행 중 리뷰 사진 AI 분류 대기열 ' + added + '개 의뢰'); }
+  return added;
 }
 // 15분 확인에서 AI 분류 이어 하기 (남은 사진이 있으면 1분 연쇄 트리거로 3~4분 만에 완결, 11/6)
 function rvAiQueue_() {
