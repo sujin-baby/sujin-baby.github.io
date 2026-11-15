@@ -1843,7 +1843,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3319,6 +3319,7 @@ function checkFullInner_() {
   try { lunchReclass2_(); } catch (e) {}
   try { tossNoticeGap1_(); } catch (e) {}
   try { seol1111Del1_(); } catch (e) {}
+  try { geochiDel1_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
   try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
@@ -5441,6 +5442,40 @@ function seol1111Del1_() {
     props.setProperty('SEOLDEL1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + msg + ' 총건수 ' + tot);
     try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); }
   } catch (e) { props.setProperty('SEOLDEL1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/15 한 번, 사용자 승인) 월급시트 11월 탭 옛 이름 줄 '#택11.5·11.6·11.9 차량용 거치대 3' 지움: 이름을 '더호 차량용 거치대'로 바꿨을 때
+//  월급시트 이름이 안 바뀌어(payRename_이 다른 상품으로 봄) 같은 날 줄이 하나 더 생겼고, 옛 줄은 '진행중' + 진행비 1,500원씩 두 번 잡힘
+//  같은 날 '더호' 줄이 있고 그날 수량이 같고, 진행목록에 옛 이름 진행이 없을 때만 지움
+function geochiDel1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('GEOCHIDEL1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const ns = function (t) { return String(t || '').replace(/\s+/g, ''); };
+    if (readRuns_().some(function (r) { return /^#택11\.\d+차량용거치대\d+$/.test(ns(bareTitle_(r['명단 제목']))); })) { props.setProperty('GEOCHIDEL1', st + ' 실패(진행목록에 옛 이름 진행이 있음)'); return; }
+    const sh = payTab_(11, true), L = sh && payLayout_(sh);
+    if (!L) { props.setProperty('GEOCHIDEL1', st + ' 실패(11월 탭 없음)'); return; }
+    const last = sh.getLastRow(), n = last - L.head;
+    const names = sh.getRange(L.head + 1, L.name, n, 1).getValues().map(function (x) { return ns(x[0]); });
+    const del = [], miss = [];
+    [['11.5', '11-5'], ['11.6', '11-6'], ['11.9', '11-9']].forEach(function (d) {
+      const oi = names.indexOf(ns('#택' + d[0] + ' 차량용 거치대 3')), ni = names.indexOf(ns('#택' + d[0] + ' 더호 차량용 거치대 3'));
+      if (oi === -1) { miss.push(d[0] + ' 옛 줄 없음'); return; }
+      if (ni === -1) { miss.push(d[0] + ' 더호 줄 없음'); return; }
+      const c = L.days[d[1]];
+      const q = function (i) { return c ? sh.getRange(L.head + 1 + i, c).getValue() : null; };
+      if (!c || q(oi) !== q(ni)) { miss.push(d[0] + ' 수량 다름'); return; }
+      del.push(oi);
+    });
+    del.sort(function (a, b) { return b - a; }).forEach(function (i) {
+      const row = L.head + 1 + i;
+      if (ns(sh.getRange(row, L.name).getValue()) !== names[i]) throw new Error(row + '행 이름이 바뀜');
+      sh.deleteRow(row);
+      note_('✓ 월급시트 11월 옛 이름 중복 줄 지움: ' + row + '행 ' + names[i]);
+    });
+    const done = del.length || miss.every(function (m) { return /옛 줄 없음/.test(m); });   // 옛 줄이 다 없으면 이미 지운 것
+    const msg = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 지움 ' + (del.map(function (i) { return (L.head + 1 + i) + '행'; }).join(',') || '없음') + (miss.length ? ' / 안 지움: ' + miss.join(', ') : '');
+    props.setProperty('GEOCHIDEL1', done ? '✓ ' + msg : st + ' 실패(' + msg + ')');
+  } catch (e) { props.setProperty('GEOCHIDEL1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 // 실행이 끝날 때 (로더 이름 함수 감쌈): 보낼메시지가 바뀌었으면 바뀐 탭만 다시 그림. 모아보기 체크 직후엔 안 그림 (줄이 안 움직이게)
 function msgViewSync_() {
@@ -9475,7 +9510,7 @@ function updatePay_(resumable) {
     if (prog && prog.done.indexOf(rid) >= 0) return;
     if (tooLate()) stop('줄 ' + prog.done.length + '/' + runs.length);
     const sp = subTime_('월급시트: 줄 계산', function () { return payRowSpec_(r, all); });
-    if (!fresh(rid, sp.sig)) { subTime_('월급시트: 줄 쓰기', function () { writePayRow_(r, sp.name, sp.total, sp.prev, sp.shared, sp.ex); }); rowSig[rid] = { s: sp.sig, t: Date.now() }; }
+    if (!fresh(rid, sp.sig)) { subTime_('월급시트: 줄 쓰기', function () { writePayRow_(r, sp.name, sp.total, sp.prev, sp.shared, sp.ex, all); }); rowSig[rid] = { s: sp.sig, t: Date.now() }; }
     if (prog) prog.done.push(rid);
   });
   // 줄 다음 정리들도 하나씩 (시간이 모자라면 다음 확인에서 그 단계부터)
@@ -9656,7 +9691,9 @@ function payTime_(t) {
 function payRename_(oldName, newName) {
   const o = String(oldName).replace(/\s+/g, ''), n = String(newName).replace(/\s+/g, '');
   if (!o || o === n) return;
-  if (campKey_(oldName) !== campKey_(newName) && !globalThis.__PAY_RENAME_ANY) { note_('⛔ 월급시트 이름 안 바꿈 (다른 상품): ' + oldName + ' → ' + newName); return; }   // 다른 진행 줄 이름을 바꾸지 않게 (10/23)
+  // 앞뒤에 업체명 등 단어만 붙이거나 뺀 것(차량용 거치대 → 더호 차량용 거치대)은 같은 상품 (11/15: 다른 상품으로 봐서 안 바꿔 같은 날 줄이 두 개 됨)
+  const ok0 = campKey_(oldName), nk0 = campKey_(newName), grow = ok0.length >= 2 && nk0.length >= 2 && (nk0.indexOf(ok0) >= 0 || ok0.indexOf(nk0) >= 0);
+  if (ok0 !== nk0 && !grow && !globalThis.__PAY_RENAME_ANY) { note_('⛔ 월급시트 이름 안 바꿈 (다른 상품): ' + oldName + ' → ' + newName); return; }   // 다른 진행 줄 이름을 바꾸지 않게 (10/23)
   payTabsNow_().forEach(function (sh) {
     const L = payLayout_(sh); if (!L) return;
     const last = sh.getLastRow(); if (last <= L.head) return;
@@ -9713,7 +9750,7 @@ function payRowNow_(r, runs) {
   if (!CONFIG.PAY_SHEET_ID || r['진행 상태'] === '종료' || !r['시트ID'] || !(r['진행일'] instanceof Date)) return;
   const all = runs.filter(function (x) { return x['시트ID'] && x['진행일'] instanceof Date; });
   const sp = payRowSpec_(r, all);
-  writePayRow_(r, sp.name, sp.total, sp.prev, sp.shared, sp.ex);
+  writePayRow_(r, sp.name, sp.total, sp.prev, sp.shared, sp.ex, all);
   const props = PropertiesService.getScriptProperties();
   let rowSig = {}; try { rowSig = JSON.parse(props.getProperty('PAY_ROWSIG') || '{}'); } catch (e) {}
   rowSig[r.row + '|' + payNameOf_(r)] = { s: sp.sig, t: Date.now() };
@@ -9771,7 +9808,7 @@ function payRowSpec_(r, all) {
   const sigN = sigOf([nameOf(r), total * cf, prev * cf, shN, exN, String(r['시트ID']), String(r['진행일']), r['인원'], r['택대'], r['실배송'], r['일차']]);
   return { name: nameOf(r), total: total * cf, prev: prev * cf, shared: shN, ex: exN, sig: sigN };
 }
-function writePayRow_(r, name, remain, prevMonth, shared, ex) {
+function writePayRow_(r, name, remain, prevMonth, shared, ex, allRuns) {
   ex = ex || { store: r['업체'], time: payTime_(r['구매시간']), photo: r['포토'] };
   const day = r['진행일'];
   const sh = payTab_(day.getMonth() + 1);
@@ -9788,6 +9825,24 @@ function writePayRow_(r, name, remain, prevMonth, shared, ex) {
   // 방제 끝 숫자를 고친 경우: 같은 날짜·캠페인 줄을 찾아 캠페인명을 새 이름으로
   let renamed = false;
   if (byName === -1) { byName = names.findIndex(function (nm) { return nm && sameRunTitle_(nm, name); }); renamed = byName !== -1; }
+  // 캠페인명 앞뒤에 업체명 등을 붙이거나 뺀 경우(차량용 거치대 → 더호 차량용 거치대): 같은 날짜, 이름이 서로 포함, 스토어 같음,
+  //  진행목록 어느 진행 것도 아닌 줄이 딱 하나면 그 줄을 새 이름으로 씀 (11/15: 새 줄이 생겨 같은 날 두 줄·진행비 두 번)
+  if (byName === -1 && allRuns) {
+    const dk = dateTok_(name), ck = campKey_(name), used = {};
+    allRuns.forEach(function (x) { used[payNameOf_(x).replace(/\s+/g, '')] = 1; });
+    const stores = L.store ? sh.getRange(L.head + 1, L.store, Math.max(last - L.head, 1), 1).getValues() : null;
+    const st0 = String((ex && ex.store) || r['업체'] || '').replace(/\s+/g, '');
+    const cand = [];
+    names.forEach(function (nm, i) {
+      if (!nm || used[nm] || !dk || dateTok_(nm) !== dk) return;
+      const k = campKey_(nm);
+      if (k.length < 2 || ck.length < 2 || k === ck || (ck.indexOf(k) < 0 && k.indexOf(ck) < 0)) return;
+      const s1 = stores ? String(stores[i][0]).replace(/\s+/g, '') : '';
+      if (st0 && s1 && st0 !== s1) return;
+      cand.push(i);
+    });
+    if (cand.length === 1) { byName = cand[0]; renamed = true; note_('월급시트 이름 바뀐 줄 이어 씀: ' + names[byName] + ' → ' + name); }
+  }
   let row = shared && byName !== -1 ? byName : links.findIndex(function (u, i) { return u && u.indexOf(sid) !== -1 && (!shared || !names[i]); });
   const hasLink = row !== -1 && !!links[row];
   if (row === -1) row = byName;

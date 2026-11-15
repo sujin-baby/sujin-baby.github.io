@@ -54,5 +54,25 @@ try { res2 = G('writePayRow_')({ '진행일': new Date(2026, 10, 6), '시트ID':
 ok(res2 && res2.row === 6, '빈 줄 번호 ' + (res2 && res2.row));
 ok(F[key(6, 4)] === '=B6-H6-J6' && F[key(6, 5)] === '=IF(D6=0,"완료","진행중")' && F[key(6, 10)] === '=SUM(H6:I6)', '빈 줄 수식 ' + [F[key(6, 4)], F[key(6, 5)], F[key(6, 10)]].join(' '));
 ok(sh.rows[5][0] === '#택11.6 차량용 거치대 3' && sh.rows[5][8] === 3 && sh.rows[5][6] === '더호컴퍼니', '빈 줄 값 ' + JSON.stringify(sh.rows[5]));
+// 캠페인명 앞에 업체명을 붙이면(차량용 거치대 → 더호 차량용 거치대) 같은 날 옛 줄을 이어 씀, 새 줄 안 만듦 (11/15: 같은 날 두 줄·진행비 두 번)
+const n0 = sh.rows.length;
+const thoRun = { '진행일': new Date(2026, 10, 6), '시트ID': 'SY', '인원': 3, '택대': 'Y', '실배송': '', '일차': 1, '명단 제목': '#택11.6 더호 차량용 거치대 3 (뽀짝오리)' };
+let rA = null; try { rA = G('writePayRow_')(thoRun, '#택11.6 더호 차량용 거치대 3', 21, 0, false, { store: '더호컴퍼니', time: '', photo: '', earlier: 0, mult: 1 }, [thoRun]); } catch (e) { fails.push('오류A ' + e); }
+ok(rA && rA.row === 6 && sh.rows[5][0] === '#택11.6 더호 차량용 거치대 3' && sh.rows.length === n0, '옛 이름 줄 이어 씀 ' + (rA && rA.row) + ' ' + sh.rows[5][0] + ' 줄 수 ' + sh.rows.length);
+// 진행목록 진행이 쓰는 줄은 안 가져감 (#11.6 실 밴드 10 진행이 있음)
+const band = { '진행일': new Date(2026, 10, 6), '시트ID': 'S1', '인원': 3, '명단 제목': '#11.6 실 밴드 10 (뽀짝오리)' };
+const set = { '진행일': new Date(2026, 10, 6), '시트ID': 'SZ', '인원': 2, '명단 제목': '#11.6 실 밴드 세트 10 (뽀짝오리)' };
+let rB = null; try { rB = G('writePayRow_')(set, '#11.6 실 밴드 세트 10', 10, 0, false, { store: '아텍스', time: '', photo: '', earlier: 0, mult: 1 }, [band, set]); } catch (e) { fails.push('오류B ' + e); }
+ok(rB && rB.row !== 4 && sh.rows[3][0] === '#11.6 실 밴드 10', '진행 중인 다른 줄은 안 가져감 ' + (rB && rB.row) + ' ' + sh.rows[3][0]);
+// 스토어가 다르면 안 가져감
+const gomu = { '진행일': new Date(2026, 10, 6), '시트ID': 'SW', '인원': 2, '명단 제목': '#11.6 실 고무 밴드 10 (뽀짝오리)' };
+let rC = null; try { rC = G('writePayRow_')(gomu, '#11.6 실 고무 밴드 10', 10, 0, false, { store: '다른가게', time: '', photo: '', earlier: 0, mult: 1 }, [gomu]); } catch (e) { fails.push('오류C ' + e); }
+ok(rC && rC.row !== 4 && sh.rows[3][0] === '#11.6 실 밴드 10', '스토어 다르면 안 가져감 ' + (rC && rC.row));
+// 진행 이름 바꾸기: 업체명만 붙인 건 월급시트 이름도 바꿈, 다른 상품은 안 바꿈
+G('payTabsNow_ = function () { return [globalThis.__PAY]; }');
+G('payRename_')('#11.6 실 밴드 세트 10', '#11.6 실 아텍스 밴드 세트 10');
+ok(sh.rows.some(x => x[0] === '#11.6 실 아텍스 밴드 세트 10'), '업체명 붙인 이름 바꿈');
+G('payRename_')('#11.6 실 고무 밴드 10', '#11.6 실 양말 10');
+ok(sh.rows.some(x => x[0] === '#11.6 실 고무 밴드 10') && !sh.rows.some(x => x[0] === '#11.6 실 양말 10'), '다른 상품 이름은 안 바꿈');
 console.log(fails.length ? 'XX 월급시트 새 줄 시험 실패:\n- ' + fails.join('\n- ') : '✓ 월급시트 새 줄 시험 통과 (서식·수식만 복사, 값 안 섞임)');
 process.exit(fails.length ? 1 : 0);
