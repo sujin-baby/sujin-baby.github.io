@@ -377,8 +377,9 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var tN = todayLectures(c.id).length;
     var allN = checkedNums(c.id).length;
     var wrongN = D.questions.filter(function (q) { return S.wrong[q.i] && (S.mix || q.s === S.subj); }).length;
-    $('#reviewSub').textContent = (S.mix ? '전체 과목' : s.name) + ' · 들은 강의에서만 문제가 나옵니다.';
-    $('#mTodayTxt').textContent = tN ? '오늘 체크한 ' + tN + uw(c) : '오늘 체크한 ' + (isGP(c) ? 'G-POINT' : '강의') + ' 없음 (최근 것으로)';
+    $('#reviewSub').textContent = (S.mix ? '전체 과목' : s.name) + ' · ' + (isGP(c) ? '체크한 G-POINT에서만' : '들은 강의에서만') + ' 문제가 나옵니다.';
+    var mt = $('#mToday b'); if (mt) mt.textContent = isGP(c) ? '오늘 체크한 G-POINT' : '오늘 들은 강의';
+    $('#mTodayTxt').textContent = tN ? (isGP(c) ? tN + uw(c) : '오늘 체크한 ' + tN + uw(c)) : (isGP(c) ? 'G-POINT 없음 (최근 것으로)' : '오늘 체크한 강의 없음 (최근 것으로)');
     $('#mAllTxt').textContent = '지금까지 체크한 ' + allN + uw(c) + ' 누적';
     $('#mWrongTxt').textContent = wrongN ? wrongN + '문제 대기' : '오답 없음';
     $$('#lenChips .chip').forEach(function (b) {
