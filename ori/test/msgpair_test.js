@@ -41,5 +41,19 @@ const tab2 = new H.Sheet('💰리뷰비 2', [['', '보냄'], ['zz', false, '', '
 G('msgvChwanEdit_')(G('__EV'), tab2, 2, 1, function (t) { toastMsg = t; });
 ok(tab2.rows[1][11] === '' && /아직 없어요/.test(toastMsg), '취완 없는 줄 ' + JSON.stringify(tab2.rows[1]) + ' ' + toastMsg);
 ok(!G("typeof msgvPairSync_ === 'function'"), '자동 같이 체크는 없앰');
+// 5) 리뷰비 탭 L칸에 걸린 취완은 ✅취완 탭에서 뺌 (한 곳에서만 체크, 11/15). 리뷰비·페이백 줄이 없는 방 취완은 취완 탭에 그대로
+const rows5 = rows.concat([['c1', new Date(), '취완', '#11.4 사과 3', '취완', '대기']]);
+env.__ROWS = rows5;
+const m5 = G('msgViewModel_')(rows5, {}, null, null, G('__CH'));
+const gd = G("MSGV_GROUPS.map(function (g) { return g.key; }).indexOf('done')");
+const dids = m5.groups[gd].lines.filter(l => l.type === 'msg').map(l => l.id);
+ok(dids.indexOf('a1') < 0 && dids.indexOf('b1') < 0 && dids.indexOf('c1') >= 0, '취완 탭에는 리뷰비 줄에 안 걸린 것만 ' + JSON.stringify(dids));
+// 6) 한 줄에 취완 여러 개(여러 날 의뢰 방마다) → L칸 체크 하나로 다 보냄
+const tab3 = new H.Sheet('💰리뷰비 2', [['', '보냄', '', '', '주문 날짜', '', '', '', '', '', '', '취완', ''], ['a2', false, '', '', '', '', '', '', '', '', '', true, 'a1,b1']]);
+G('msgvChwanEdit_')(G('__EV'), tab3, 2, 1, function (t) { toastMsg = t; });
+ok(st().a1 === '보냄' && st().b1 === '보냄' && st().a2 === '대기', '취완 여러 개 같이 보냄 ' + JSON.stringify(st()));
+// 7) 서버 chwanOf: 그 의뢰 방들의 안 보낸 취완 전부 (소스 확인)
+const src = require('fs').readFileSync(process.argv[2], 'utf8');
+ok(/ids: use\.map/.test(src) && /buckets\[gi\]\.filter\(function \(x\) \{ return !linked/.test(src), '서버 chwanOf·취완 탭 빼기');
 console.log(fails.length ? 'XX 리뷰비 탭 취완 체크 시험 실패:\n- ' + fails.join('\n- ') : '✓ 리뷰비 탭에서 취완 따로 체크 시험 통과');
 process.exit(fails.length ? 1 : 0);

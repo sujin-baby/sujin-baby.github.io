@@ -4679,7 +4679,7 @@ function msgvLinks_(x, ctx) {
  *  - B칸 체크 = 보낼메시지 그 줄 '보냄' (번호로 찾아서), 체크 풀면 '대기'. 체크한 줄은 그 자리에서 회색만 (줄이 안 움직여 옆 줄을 잘못 누르지 않게)
  *  - 보낼메시지가 바뀌면 실행이 끝날 때 바뀐 탭만 다시 그림. 다시 그린 지 20초 안에 누른 칸이 다른 메시지로 밀렸으면 체크를 되돌리고 알림
  */
-const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '8', MSGV_COLS = 5;   // 8: 명단전달 F열 '비고'(가격 틀리게 산 사람) 및 할일 탭 중복 제외 (11/11)   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
+const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '9', MSGV_COLS = 5;   // 9: 리뷰비 탭 L칸에 걸린 취완은 취완 탭에서 뺌, 페이백 줄 E~K 합침 (11/15)   // 8: 명단전달 F열 '비고'(가격 틀리게 산 사람) 및 할일 탭 중복 제외 (11/11)   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
 const MSGV_GROUPS = [
   { key: 'notice', base: '🐥방공지', t: '🐥 방 공지', k: ['방 공지'], bg: '#eee6f7', tab: '#b48fd9' },
   { key: 'list', base: '📋명단전달', t: '📋 명단 전달 (오리명단방)', k: ['명단 전달', '업체 명단'], bg: '#d9ead2', tab: '#7fbf6a' },
@@ -4790,6 +4790,19 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
     }
     buckets[known[String(x[2])] != null ? known[String(x[2])] : otherAt].push(x);
   });
+  // 리뷰비 탭 L칸에 걸린 취완은 ✅취완 탭에서 뺌: 한 곳에서만 체크 (11/15 사용자: 두 탭에 같은 취완이 있어 헷갈림).
+  //  리뷰비·페이백 줄이 아직 없는 취완(여러 날 의뢰 중 먼저 끝난 방 등)은 취완 탭에 그대로
+  const chwanMemo = {}, linked = {};
+  if (chwanOf) MSGV_GROUPS.forEach(function (g, gi) {
+    if (!g.fee) return;
+    buckets[gi].forEach(function (x) {
+      let c = null; try { c = chwanOf(x); } catch (e) {}
+      if (c && !c.ids && c.id) c.ids = [c.id];
+      chwanMemo[String(x[0])] = c;
+      if (c) c.ids.forEach(function (id) { linked[id] = 1; });
+    });
+  });
+  MSGV_GROUPS.forEach(function (g, gi) { if (g.key === 'done') buckets[gi] = buckets[gi].filter(function (x) { return !linked[String(x[0])]; }); });
   const colors = {};
   const groups = buckets.map(function (g, gi) {
     const grp = MSGV_GROUPS[gi];
@@ -4827,7 +4840,7 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
         reqF: rq ? String(rq.f || '') : null, reqNote: rq ? String(rq.note || '') : '', reqUrl: rq ? String(rq.url || '') : '',
         listNote: lnote,
         fee: grp.fee && String(x[2]) === '리뷰비 요청' ? msgvFeeCells_(x) : null, kind: String(x[2]),
-        chwan: grp.fee && chwanOf ? chwanOf(x) : null,   // 리뷰비 탭 L칸: 그 방 취완 체크 (11/10 사용자: 한 탭에서 두 개 체크)
+        chwan: grp.fee && chwanOf ? (chwanMemo[String(x[0])] || null) : null,   // 리뷰비 탭 L칸: 그 방 취완 체크 (11/10 사용자: 한 탭에서 두 개 체크)
         // 리뷰 독촉 탭은 이름만 (11/8 사용자: 기한 문구·부탁 문구 빼고 이름만 복사해서 씀)
         names: grp.key === 'nag' && String(x[2]) === '리뷰 독촉' ? String((String(x[4]).match(/아직 리뷰 확인이 안 된 분\s*:\s*([^\n]*)/) || [])[1] || x[4]).trim() : null,
         links: grp.links && linkOf ? (linkOf(x) || {}) : null };
@@ -5009,7 +5022,8 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
   if (grp.fee) {
     // 리뷰비 탭 F~K: 진행명, 진행자, 구확건수, 리뷰작성건수, 리뷰비 총합, 진행링크 (E는 주문 날짜). E~K를 같이 복사해 리뷰비 시트 B칸에 붙이면 B~H
     //  리뷰비 총합 칸은 리뷰비 시트와 같은 수식 =(구확건수*500)+(리뷰작성건수*1000) (빈칸을 붙이면 그 시트 수식이 지워져서, 같은 수식을 넣어 둠. 붙이면 =(E*500)+(F*1000)이 됨)
-    //  페이백 줄은 E에 메시지 그대로
+    //  페이백 줄은 E에 메시지 그대로. E~K를 합쳐 줄바꿈으로 다 보이게 (11/15 사용자: E칸이 좁아 '[전원 리뷰완료] …'가 잘림). 다시 그릴 때 먼저 풀고 다시 합침
+    try { sh.getRange(1, 5, n, 7).breakApart(); } catch (e) {}
     const gv = [], gb = [];
     for (let i = 0; i < n; i++) {
       const l = lines[i] || { type: 'none' }, r = i + 1;
@@ -5021,6 +5035,11 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
     try { sh.getRange(1, 6, n, 3).setNumberFormat('@'); sh.getRange(1, 9, n, 1).setNumberFormat('0'); sh.getRange(1, 10, n, 1).setNumberFormat('#,##0'); sh.getRange(1, 11, n, 1).setNumberFormat('@'); } catch (e) {}
     const gr = sh.getRange(1, 6, n, 6);
     gr.setValues(gv); gr.setBackgrounds(gb);
+    for (let i = 0; i < n; i++) {
+      const l = lines[i] || {};
+      if (l.type !== 'msg' || l.fee) continue;
+      try { sh.getRange(i + 1, 5, 1, 7).merge().setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP).setVerticalAlignment('middle'); } catch (e) {}
+    }
     try { sh.getRange(2, 6, 1, 6).setFontWeight('bold').setFontColor('#7a2e57'); } catch (e) {}
     // L칸 '취완': 그 방 취완도 이 탭에서 체크 (B칸 리뷰비 요청과 따로, 11/10 사용자: 하나만 했는데 둘 다 한 걸로 되면 안 됨). M칸(숨김) = 취완 메시지 번호
     try {
@@ -5028,7 +5047,7 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
       for (let i = 0; i < n; i++) {
         const l = lines[i] || { type: 'none' };
         if (l.type === 'hdr') { lv.push(['취완']); lb.push(['#fbe9f2']); ld.push([null]); mv.push(['']); }
-        else if (l.type === 'msg' && l.chwan) { lv.push([!!l.chwan.sent]); lb.push([l.chwan.sent ? '#f3f3f3' : '#e3e3e3']); ld.push([cb2]); mv.push([l.chwan.id]); }
+        else if (l.type === 'msg' && l.chwan) { lv.push([!!l.chwan.sent]); lb.push([l.chwan.sent ? '#f3f3f3' : '#e3e3e3']); ld.push([cb2]); mv.push([(l.chwan.ids || [l.chwan.id]).join(',')]); }
         else { lv.push(['']); lb.push([l.type === 'title' ? grp.bg : null]); ld.push([null]); mv.push(['']); }
       }
       const lr = sh.getRange(1, 12, n, 1);
@@ -5098,8 +5117,9 @@ function msgViewBuild_(force, only) {
     if (!rctx) rctx = { runs: readRuns_(), all: allP };
     const rooms = rvCollRunsOf_(x, rctx.runs).map(function (r) { return String(r['카톡방'] || bareTitle_(r['명단 제목'])); });
     const cs = rows.filter(function (y) { return String(y[2]) === '취완' && rooms.indexOf(String(y[3]).replace(/\s*\(전체 \d+개 방\)$/, '')) >= 0; });
-    const c = cs.filter(function (y) { return y[5] !== '보냄'; })[0] || cs[cs.length - 1];
-    return c ? { id: String(c[0]), sent: c[5] === '보냄' } : null;
+    // 그 의뢰 방들의 안 보낸 취완 전부 (여러 날 의뢰는 방마다 취완). 다 보냈으면 마지막 것(체크된 채로 보임)
+    const pend = cs.filter(function (y) { return msgvPending_(y[5]); }), use = pend.length ? pend : cs.slice(-1);
+    return use.length ? { id: String(use[0][0]), ids: use.map(function (y) { return String(y[0]); }), sent: !pend.length } : null;
   };
   const m = msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf), fresh = props.getProperty('MSGV_VER') !== MSGV_VER;
   // 새 탭 넣을 자리: 예전 모아보기 탭 자리(없으면 보낼메시지 뒤)부터 차례로
@@ -5548,19 +5568,23 @@ function msgvChwanEdit_(e, sh, r0, n, toast) {
   orows.forEach(function (x, i) { at[String(x[0])] = i; });
   let k = 0, any = false, runs = null;
   for (let i = 0; i < n; i++) {
-    const id = String(ids[i][0] || ''), v = vals[i][0], on = v === true || String(v).toUpperCase() === 'TRUE';
-    if (!id || at[id] == null) { if (v !== '' && v != null) sh.getRange(r0 + i, 12).setValue(''); continue; }
-    const y = orows[at[id]];
+    // M칸 = 그 줄 취완 번호들 (쉼표, 여러 날 의뢰는 방마다 취완)
+    const idl = String(ids[i][0] || '').split(',').map(function (x) { return x.trim(); }).filter(function (x) { return x && at[x] != null; });
+    const v = vals[i][0], on = v === true || String(v).toUpperCase() === 'TRUE';
+    if (!idl.length) { if (v !== '' && v != null) sh.getRange(r0 + i, 12).setValue(''); continue; }
     any = true;
-    if (on !== (y[5] === '보냄')) { obSet_(ob, id, 6, on ? '보냄' : '대기'); k++; }
-    try { if (on) props.setProperty('MSGV_S_' + id, String(Date.now())); else props.deleteProperty('MSGV_S_' + id); } catch (err) {}
-    try { if (!runs) runs = readRuns_(); rvSetColl_(y, on, null, runs); } catch (err) {}
+    idl.forEach(function (id) {
+      const y = orows[at[id]];
+      if (on !== (y[5] === '보냄')) { obSet_(ob, id, 6, on ? '보냄' : '대기'); k++; }
+      try { if (on) props.setProperty('MSGV_S_' + id, String(Date.now())); else props.deleteProperty('MSGV_S_' + id); } catch (err) {}
+      try { if (!runs) runs = readRuns_(); rvSetColl_(y, on, null, runs); } catch (err) {}
+    });
     try { sh.getRange(r0 + i, 12).setBackground(on ? '#f3f3f3' : '#e3e3e3'); } catch (err) {}
   }
   if (!any) { toast('이 줄은 취완 메시지가 아직 없어요 (그 방 사람 리뷰가 다 확인되면 생겨요)', 8); return; }
   const gd = MSGV_GROUPS.map(function (g) { return g.key; }).indexOf('done');
   if (k && gd >= 0) { try { msgViewBuild_(true, gd); } catch (err) {} }
-  toast(k ? '취완 ' + k + '개 ' + (vals.some(function (v) { return v[0] === true; }) ? '보냄 체크했어요 (✅취완 탭도 같이)' : '체크를 풀었어요') : '취완 체크 그대로예요', 8);
+  toast(k ? '취완 ' + k + '개 ' + (vals.some(function (v) { return v[0] === true; }) ? '보냄 체크했어요' : '체크를 풀었어요') : '취완 체크 그대로예요', 8);
 }
 
 /* ---------------- 진행 도우미 (휴대폰 페이지): 공지 붙여넣기, 중복 지우기, 내일 추가 모집을 한 화면에서 ---------------- */

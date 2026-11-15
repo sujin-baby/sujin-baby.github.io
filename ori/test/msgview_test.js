@@ -187,6 +187,18 @@ G('msgViewBuild_(true)');
 ok(where('mpay3')[0] === '📝할일', '명단 보낸 뒤 생긴 결제금액 확인은 할일 탭에: ' + where('mpay3')[0]);
 ok(where('mpay2')[0] !== '📝할일', '명단보다 먼저 생긴 건(보낼 때 F칸에 보였음) 할일 탭에서 뺌: ' + where('mpay2')[0]);
 ok(where('mpay1')[0] !== '📝할일', '안 보낸 명단의 결제금액 확인은 계속 뺌: ' + where('mpay1')[0]);
+// 리뷰비 탭 페이백 줄: E~K 합쳐서 줄바꿈으로 다 보이게 (11/15 사용자: '[전원 리뷰완료] …'가 E칸에서 잘림)
+{
+  const RP = Object.getPrototypeOf(T['💰리뷰비'].getRange(1, 1));
+  globalThis.__MG = [];
+  RP.merge = function () { globalThis.__MG.push([this.sh.name, this.r, this.c, this.nr, this.nc]); return this; };
+  env.__ss.sheets['보낼메시지'].rows.splice(1, 0, ['mpb1', day(0), '페이백 요청', '오리명단방(뽀짝)', '[전원 리뷰완료] #11.6 실 제이컴퍼니 바나나링정 5 페이백 요청드립니다!\n명단시트: https://y', '대기']);
+  G('msgViewBuild_(true)');
+  const [pb, pr] = where('mpb1');
+  ok(pb === '💰리뷰비' && globalThis.__MG.some(m => /리뷰비/.test(m[0]) && m[1] === pr && m[2] === 5 && m[3] === 1 && m[4] === 7), '페이백 줄 E~K 합침 ' + pb + ' ' + pr + ' ' + JSON.stringify(globalThis.__MG));
+  ok(!globalThis.__MG.some(m => /리뷰비/.test(m[0]) && m[1] === 1), '머리글 줄은 안 합침');
+  delete RP.merge;
+}
 // 탭 이름에 없는 사용자 탭은 종류 탭으로 안 봄
 ok(G('msgvGroupOfName_("🐥방공지 메모")') === -1 && G('msgvGroupOfName_("한눈에")') === -1, '탭 이름 구분');
 console.log(fails.length ? 'XX 메시지 종류별 탭 시험 실패:\n- ' + fails.join('\n- ') : '✓ 메시지 종류별 탭 시험 통과 (탭 ' + BASES.length + '개)');
