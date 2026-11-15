@@ -45,22 +45,12 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     { id: 'lec', t: '강의 2개 체크하기', need: 2 }
   ];
 
-  var ROADMAP = [
-    { p: '2026.09~10', t: '네친구', d: '형사법·경찰학·범죄학 기본 이론 1회독' },
-    { p: '2026.11~12', t: '기출총정리 · 112특강 · 전국모의고사 / 11월 올인원', d: '기출 총정리와 올인원 이론을 병행하는 구간', now: true },
-    { p: '2027.01~03', t: '진도별·동형 모의고사 · 일망타진 · 마무리', d: '1차 대비 실전 모의고사 집중' },
-    { p: '2027.01~03', t: '2027 경찰 1차 시험', d: '1차 필기', exam: true },
-    { p: '2027.03~04', t: '올인원 이론', d: '2차 대비 이론 재정리' },
-    { p: '2027.05~06', t: '올인원 이론 · 기출OX · 전국 모의고사', d: '이론 + 기출 반복' },
-    { p: '2027.07~08', t: '동형 모의고사 · 112/일망타진 · 마무리 특강', d: '2차 실전 마무리' },
-    { p: '2027.08.21', t: '2027 경찰 2차 시험', d: '최종 목표', exam: true }
-  ];
-
   /* ---------- state ---------- */
   var S = {
     xp: 0, streak: { n: 0, last: '', best: 0 }, checked: {}, wrong: {},
-    ans: 0, ok: 0, muted: false, subj: 'crim', course: {}, qlen: 10, mix: false, days: {},
-    dday: DTARGET, ddayNote: '예상일', unit: {}, node: {}, qok: {}, gpSeeded: false, goal: { xp: 50, q: 10 }, bestCombo: 0
+    ans: 0, ok: 0, muted: false, subj: 'cri', course: {}, qlen: 10, mix: false, days: {},
+    dday: DTARGET, ddayNote: '예상일', unit: {}, node: {}, qok: {}, gpSeeded: false, goal: { xp: 50, q: 10 }, bestCombo: 0,
+    planLog: {}, planSubj: ''
   };
   try {
     var raw = localStorage.getItem(SKEY);
@@ -70,32 +60,82 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       Object.keys(p).forEach(function (k) { S[k] = p[k]; });
     }
   } catch (e) {}
-  if (!S.streak) S.streak = { n: 0, last: '', best: 0 };
-  if (!S.course) S.course = {};
-  if (!S.checked) S.checked = {};
-  if (!S.wrong) S.wrong = {};
-  if (!S.days) S.days = {};
-  if (!S.unit) S.unit = {};
-  if (!S.node) S.node = {};
-  if (!S.qok) S.qok = {};
-  if (!S.goal) S.goal = { xp: 50, q: 10 };
-  if (!S.dday) S.dday = DTARGET;
-  D.subjects.forEach(function (s) {
-    if (!S.course[s.id] || !COURSE[S.course[s.id]]) S.course[s.id] = s.defaultCourse || s.courses[0].id;
-  });
-  if (!SUBJ[S.subj]) S.subj = 'crim';
-
-  /* 지텔프 첫 실행: G-POINT 1~8을 '들었음'으로 미리 체크 (수진 님 현재 진도) */
-  if (!S.gpSeeded) {
-    S.gpSeeded = true;
-    if (!S.checked['gtp33'] || !Object.keys(S.checked['gtp33']).length) {
-      var seed = {};
-      for (var gi = 1; gi <= 8; gi++) seed[gi] = todayStr();
-      S.checked['gtp33'] = seed;
+  function normalizeState() {
+    if (!S.streak) S.streak = { n: 0, last: '', best: 0 };
+    if (!S.course) S.course = {};
+    if (!S.checked) S.checked = {};
+    if (!S.wrong) S.wrong = {};
+    if (!S.days) S.days = {};
+    if (!S.unit) S.unit = {};
+    if (!S.node) S.node = {};
+    if (!S.qok) S.qok = {};
+    if (!S.goal) S.goal = { xp: 50, q: 10 };
+    if (!S.dday) S.dday = DTARGET;
+    if (!S.planLog) S.planLog = {};
+    D.subjects.forEach(function (s) {
+      if (!S.course[s.id] || !COURSE[S.course[s.id]]) S.course[s.id] = s.defaultCourse || s.courses[0].id;
+    });
+    if (!SUBJ[S.subj]) S.subj = 'cri';
+    /* 지텔프 첫 실행: G-POINT 1~8을 '들었음'으로 미리 체크 (수진 님 현재 진도) */
+    if (!S.gpSeeded) {
+      S.gpSeeded = true;
+      if (!S.checked['gtp33'] || !Object.keys(S.checked['gtp33']).length) {
+        var seed = {};
+        for (var gi = 1; gi <= 8; gi++) seed[gi] = todayStr();
+        S.checked['gtp33'] = seed;
+      }
+    }
+    /* 노베이스 시작: 이제 막 시작한 사람은 범죄학(박상민 올인원)부터 보이게 */
+    if (!S.planSubj) {
+      S.planSubj = 'done';
+      S.subj = 'cri';
+      if (!S.course['cri']) S.course['cri'] = 'cri';
     }
   }
+  normalizeState();
 
-  function save() { try { localStorage.setItem(SKEY, JSON.stringify(S)); } catch (e) {} }
+  function save() {
+    try { localStorage.setItem(SKEY, JSON.stringify(S)); } catch (e) {}
+    flashSaved();
+  }
+  function flashSaved() {
+    var el = document.getElementById('saveBadge');
+    if (!el) return;
+    el.classList.add('on');
+    el.innerHTML = '✅ 저장됨';
+    clearTimeout(el._h);
+    el._h = setTimeout(function () { el.classList.remove('on'); el.innerHTML = '💾 자동저장'; }, 1300);
+  }
+  /* 기록 JSON 내보내기 / 불러오기 (브라우저를 바꿔도 이어서) */
+  function exportState() {
+    try {
+      var data = { app: 'police-review', v: 2, exportedAt: new Date().toISOString(), state: S };
+      var blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = '경찰복습기록-' + todayStr() + '.json';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { try { URL.revokeObjectURL(a.href); a.remove(); } catch (x) {} }, 1500);
+      toast('기록 파일을 내보냈어요 · 새 기기에서 불러오면 그대로 이어져요');
+    } catch (e) { toast('내보내기에 실패했어요'); }
+  }
+  function importState(file) {
+    var r = new FileReader();
+    r.onload = function () {
+      var st = null;
+      try {
+        var p = JSON.parse(String(r.result));
+        st = p && p.state ? p.state : p;
+      } catch (e) { st = null; }
+      if (!st || !st.checked) { toast('기록 파일을 읽을 수 없어요'); return; }
+      if (!confirm('지금 기기 기록을 파일 기록으로 바꿀까요? (지금 기록은 사라져요)')) return;
+      S = st;
+      normalizeState();
+      save(); closeSheet(); renderAll(); toast('기록을 불러왔어요');
+    };
+    r.readAsText(file);
+  }
   function ckMap(cid) { return S.checked[cid] || (S.checked[cid] = {}); }
   function isChecked(cid, n) { return !!ckMap(cid)[n]; }
   function checkedNums(cid) { return Object.keys(ckMap(cid)).map(Number); }
@@ -233,35 +273,465 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     };
   }
 
-  /* ---------- 학습 계획 ---------- */
-  function curStage() {
-    var d = new Date();
-    var key = d.getFullYear() + '.' + pad(d.getMonth() + 1);
-    if (key < '2026.09') return 0;
-    if (key <= '2026.12') return 1;
-    if (key <= '2027.03') return 2;
-    if (key <= '2027.04') return 4;
-    if (key <= '2027.06') return 5;
-    if (key <= '2027.08') return 6;
-    return 7;
+  /* ---------- 학습 계획 (달력형) ---------- */
+  var PLAN_TARGET = '2027-08-20';        // 2차 시험 전날까지 배분
+  var PLAN_BLOCKS = [
+    // 0단계 단기 병행 — 11/29 지텔프 시험 전 완주
+    { cid: 'gtp33', stage: 0, lane: 'gp', ab: '지' },
+    // 1단계 기본+심화 올인원 (노베이스 순서: 범죄학 → 형사법 → 경찰학)
+    { cid: 'cri', stage: 1, ab: '범' },
+    { cid: 'crim_g', stage: 1, ab: '형' },
+    { cid: 'crim_a', stage: 1, ab: '형' },
+    { cid: 'crim_s', stage: 1, ab: '형' },
+    { cid: 'crim_e', stage: 1, ab: '형' },
+    { cid: 'pol', stage: 1, ab: '경' },
+    // 2단계 기출·핵심요약
+    { cid: 'c4035', stage: 2, ab: '범' },
+    { cid: 'c3747', stage: 2, ab: '범' },
+    { cid: 'c4566', stage: 2, ab: '형' },
+    { cid: 'c4390', stage: 2, ab: '형' },
+    { cid: 'c4579', stage: 2, ab: '경' },
+    { cid: 'c4367', stage: 2, ab: '경' },
+    // 3단계 실전 문제풀이·동형 모의고사·마무리 특강
+    { cid: 'c4215', stage: 3, ab: '형' },
+    { cid: 'c4218', stage: 3, ab: '경' },
+    { cid: 'c4226', stage: 3, ab: '범' },
+    { cid: 'c4270', stage: 3, ab: '형' },
+    { cid: 'c4271', stage: 3, ab: '경' },
+    { cid: 'c4274', stage: 3, ab: '범' }
+  ];
+  var PLAN_STAGES = [
+    { n: 0, t: '0단계 단기 병행 · 지텔프', d: '11/29 지텔프 시험 전까지 G-POINT를 끝내고 범죄학과 병행해요.' },
+    { n: 1, t: '1단계 기본+심화 올인원', d: '박상민 범죄학 → 신광은 형사법 → 장정훈 경찰학 순서로 이론을 한 바퀴 돌려요.' },
+    { n: 2, t: '2단계 기출·핵심요약', d: '기출 총정리와 네친구 핵심요약으로 2차 시험 범위를 정리해요.' },
+    { n: 3, t: '3단계 실전 모의고사·마무리', d: '동형 모의고사와 마무리 특강으로 시험 전 최종 점검해요.' }
+  ];
+  var PLAN = { month: '', sel: '', tab: 'cal', info: null };
+
+  function dOf(iso) { return new Date(iso + 'T00:00:00'); }
+  function addDays(iso, n) { var d = dOf(iso); d.setDate(d.getDate() + n); return dstr(d); }
+  function dayDiff(a, b) { return Math.round((dOf(b) - dOf(a)) / 86400000); }
+  function dateList(a, b) {
+    var out = [], d = dOf(a), e = dOf(b);
+    if (e < d) return out;
+    while (d <= e) { out.push(dstr(d)); d.setDate(d.getDate() + 1); }
+    return out;
+  }
+  function monthTitle(ym) { return ym.slice(0, 4) + '년 ' + Number(ym.slice(5, 7)) + '월'; }
+  /* 학습일 = 시험일(지텔프 11/29)은 빼고 배분 */
+  function studyDays(a, b) {
+    var all = dateList(a, b);
+    var out = all.filter(function (d) { return d !== GTELP; });
+    return out.length ? out : all;
+  }
+  function planMonthMax() { return String(S.dday || DTARGET).slice(0, 7); }
+  function clampMonth(ym) {
+    if (ym < '2026-11') return '2026-11';
+    if (ym > planMonthMax()) return planMonthMax();
+    return ym;
+  }
+  function shortName(c) {
+    var mt = /^\[([^\]]+)\]\s*(.*)$/.exec(c.name || '');
+    var nm = mt ? mt[2] : (c.name || '');
+    nm = nm.replace(/\s*\(2[0-9]년\s*\d{1,2}월\)\s*$/, '').replace(/\s+/g, ' ').trim();
+    return nm || (c.name || '');
+  }
+  function planAb(cid) {
+    var ab = '';
+    PLAN_BLOCKS.forEach(function (b) { if (b.cid === cid) ab = b.ab; });
+    return ab;
+  }
+  function planCourses() {
+    var out = [];
+    PLAN_BLOCKS.forEach(function (b) {
+      var c = COURSE[b.cid];
+      if (!c) return;
+      out.push({ cid: b.cid, c: c, subj: SUBJ[c.sub], stage: b.stage, lane: b.lane || 'main', ab: b.ab, to: c.total });
+    });
+    return out;
+  }
+  function planRemain(lane) {
+    var out = [];
+    planCourses().forEach(function (b) {
+      if ((b.lane === 'gp') !== (lane === 'gp')) return;
+      var m = ckMap(b.cid), gp = b.lane === 'gp';
+      for (var n = 1; n <= b.to; n++) {
+        if (m[n]) continue;
+        var L = b.c.lec[n - 1];
+        out.push({
+          cid: b.cid, n: n, ab: b.ab, stage: b.stage, gp: gp,
+          name: shortName(b.c), color: b.subj ? b.subj.color : '#5b7cfa',
+          up: !!(L && L.up)
+        });
+      }
+    });
+    return out;
+  }
+  /* 남은 강의를 남은 날짜에 고르게 배분 (하루 몫 = 남은 강의 / 남은 날) */
+  function spread(items, days) {
+    var out = {}, D = days.length, N = items.length;
+    if (!D || !N) return out;
+    for (var k = 0; k < N; k++) {
+      var idx = Math.floor(k * D / N);
+      if (idx > D - 1) idx = D - 1;
+      var key = days[idx];
+      if (!out[key]) out[key] = [];
+      out[key].push(items[k]);
+    }
+    return out;
+  }
+  function targetDate() { return S.dday || DTARGET; }
+  function planEnd() {
+    var t = todayStr();
+    var end = targetDate() > t ? addDays(targetDate(), -1) : PLAN_TARGET;
+    return end < t ? t : end;
+  }
+  function gpEndDay() {
+    var t = todayStr();
+    if (GTELP < t) return '';
+    var ge = addDays(GTELP, -1);
+    return ge < t ? t : ge;
+  }
+  function keyOf(it) { return it.cid + '#' + it.n; }
+  /* 오늘 몫은 그날 처음 열었을 때 정해 하루 동안 고정한다 (체크할수록 오늘 목표가 늘어나지 않게) */
+  function planTodaySet() {
+    var t = todayStr();
+    if (!S.planLog) S.planLog = {};
+    if (!S.planLog[t]) {
+      var keys = [], ge = gpEndDay();
+      var lanes = [spread(planRemain('gp'), ge ? dateList(t, ge) : []), spread(planRemain('main'), studyDays(t, planEnd()))];
+      lanes.forEach(function (src) {
+        (src[t] || []).forEach(function (it) { keys.push(keyOf(it)); });
+      });
+      S.planLog[t] = keys;
+      save();
+    }
+    return S.planLog[t];
+  }
+  function itemsByKey(keys) {
+    var pool = {}, out = [];
+    planRemain('gp').concat(planRemain('main')).forEach(function (it) { pool[it.cid + '#' + it.n] = it; });
+    keys.forEach(function (k) { if (pool[k]) out.push(pool[k]); });
+    return out;
+  }
+  function planAssign() {
+    var t = todayStr(), target = targetDate(), end = planEnd(), ge = gpEndDay();
+    var todayKeys = planTodaySet();
+    var inToday = {};
+    todayKeys.forEach(function (k) { inToday[k] = 1; });
+    var todayItems = itemsByKey(todayKeys);
+    var gp = planRemain('gp').filter(function (it) { return !inToday[keyOf(it)]; });
+    var main = planRemain('main').filter(function (it) { return !inToday[keyOf(it)]; });
+    var futureDays = studyDays(addDays(t, 1), end);
+    var map = {};
+    if (todayItems.length) map[t] = todayItems;
+    function put(m) {
+      Object.keys(m).forEach(function (d) {
+        if (!map[d]) map[d] = [];
+        m[d].forEach(function (it) { map[d].push(it); });
+      });
+    }
+    if (ge && gp.length) {
+      var gDays = dateList(addDays(t, 1), ge);
+      if (!gDays.length) gDays = [t];
+      put(spread(gp, gDays));
+    }
+    if (main.length) put(spread(main, futureDays.length ? futureDays : [t]));
+    return {
+      today: t, target: target, end: end, map: map,
+      gpN: planRemain('gp').length, mainN: planRemain('main').length,
+      days: futureDays.length, gpDays: ge ? dateList(t, ge).length : 0,
+      avg: futureDays.length ? main.length / futureDays.length : main.length,
+      left: dayDiff(t, target)
+    };
+  }
+  function groupByCourse(items) {
+    var out = [], idx = {};
+    (items || []).forEach(function (it) {
+      var g = idx[it.cid];
+      if (!g) { g = idx[it.cid] = { cid: it.cid, ab: it.ab, color: it.color, name: it.name, gp: it.gp, nums: [], pend: 0 }; out.push(g); }
+      g.nums.push(it.n);
+      if (!it.up) g.pend++;
+    });
+    out.forEach(function (g) { g.nums.sort(function (a, b) { return a - b; }); });
+    return out;
+  }
+  function isCont(nums) {
+    for (var i = 1; i < nums.length; i++) if (nums[i] !== nums[i - 1] + 1) return false;
+    return true;
+  }
+  function rangeTxt(g) {
+    var ns = g.nums, pre = g.gp ? 'G-POINT ' : '', unit = g.gp ? '' : '강';
+    if (!ns.length) return '';
+    if (ns.length === 1) return pre + ns[0] + unit;
+    if (isCont(ns)) return pre + ns[0] + '-' + ns[ns.length - 1] + unit;
+    return pre + ns[0] + unit + ' 외 ' + (ns.length - 1) + unit;
+  }
+  function badgeTxt(g) {
+    var ns = g.nums;
+    if (ns.length === 1) return g.ab + ' ' + ns[0];
+    return isCont(ns) ? g.ab + ' ' + ns[0] + '-' + ns[ns.length - 1] : g.ab + ' ' + ns[0] + '+';
+  }
+  function doneByDay() {
+    var out = {};
+    D.subjects.forEach(function (s) {
+      s.courses.forEach(function (c) {
+        var m = S.checked[c.id];
+        if (!m) return;
+        Object.keys(m).forEach(function (n) {
+          var d = m[n];
+          if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+          if (!out[d]) out[d] = [];
+          out[d].push({ cid: c.id, n: Number(n), ab: planAb(c.id), color: s.color, name: shortName(c), gp: isGP(c), up: true });
+        });
+      });
+    });
+    Object.keys(out).forEach(function (d) {
+      out[d].sort(function (a, b) { return a.cid === b.cid ? a.n - b.n : (a.cid < b.cid ? -1 : 1); });
+    });
+    return out;
+  }
+  function keyParts(k) { var p = String(k).split('#'); return { cid: p[0], n: Number(p[1]) }; }
+  function missedOn(iso) {
+    var log = (S.planLog && S.planLog[iso]) || [];
+    return log.filter(function (k) { var p = keyParts(k); return !(S.checked[p.cid] && S.checked[p.cid][p.n]); })
+      .map(function (k) {
+        var p = keyParts(k), c = COURSE[p.cid], L = c && c.lec[p.n - 1];
+        return { cid: p.cid, n: p.n, gp: isGP(c), up: !!(L && L.up) };
+      });
+  }
+  function calCells(ym) {
+    var y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7));
+    var first = new Date(y, m - 1, 1), pad0 = first.getDay(), last = new Date(y, m, 0).getDate();
+    var cells = [], i, d;
+    for (i = 0; i < pad0; i++) cells.push('');
+    for (d = 1; d <= last; d++) cells.push(dstr(new Date(y, m - 1, d)));
+    while (cells.length % 7) cells.push('');
+    return cells;
+  }
+  function dayMark(iso, info, dm) {
+    var t = info.today;
+    if (iso > t) return '';
+    var log = (S.planLog && S.planLog[iso]) || [];
+    var done = (dm[iso] || []).length;
+    var miss = missedOn(iso).length;
+    if (iso === t) return (log.length && !miss) ? 'done' : '';
+    if (log.length) {
+      if (!miss) return 'done';
+      if (done) return 'part';
+      return 'miss';
+    }
+    return done ? 'done' : '';
+  }
+  function cellHtml(iso, info, dm) {
+    var cls = 'cal-cell';
+    if (iso === info.today) cls += ' today';
+    if (iso === PLAN.sel) cls += ' sel';
+    if (iso < info.today) cls += ' past';
+    if (iso === GTELP) cls += ' exam';
+    if (iso === info.target) cls += ' exam dday';
+    var mark = dayMark(iso, info, dm);
+    var h = '<button class="' + cls + '" data-day="' + iso + '">';
+    h += '<span class="cc-d">' + Number(iso.slice(8, 10)) + '</span>';
+    if (mark === 'done') h += '<i class="cc-ck">✓</i>';
+    else if (mark === 'part') h += '<i class="cc-ck part">!</i>';
+    else if (mark === 'miss') h += '<i class="cc-ck miss">!</i>';
+    if (iso === GTELP) h += '<span class="cc-exam">지텔프</span>';
+    if (iso === info.target) h += '<span class="cc-exam dday">2차</span>';
+    if (iso >= info.today) {
+      var groups = groupByCourse(info.map[iso]);
+      groups.slice(0, 2).forEach(function (g) {
+        h += '<span class="cc-b" style="background:' + shade(g.color, 0.82) + ';color:' + shade(g.color, -0.32) + '">' + badgeTxt(g) + '</span>';
+      });
+      if (groups.length > 2) h += '<span class="cc-b more">+' + (groups.length - 2) + '</span>';
+    } else if ((dm[iso] || []).length) {
+      h += '<span class="cc-b past">' + (dm[iso] || []).length + '강</span>';
+    }
+    h += '</button>';
+    return h;
+  }
+  function cdRow(g, doneSet) {
+    var h = '<div class="cd-row"><span class="cd-dot" style="background:' + g.color + '"></span><div class="cd-body">' +
+      '<b>' + esc(g.name) + '</b>' +
+      '<i>' + rangeTxt(g) + (g.pend ? ' · ⏳ 업로드 예정 ' + g.pend + (g.gp ? '개' : '강') : '') + '</i>' +
+      '<div class="cd-chips">';
+    g.nums.forEach(function (n) {
+      var got = doneSet && doneSet.indexOf(g.cid + '#' + n) >= 0;
+      h += '<button class="cd-chip' + (got ? ' got' : '') + '" data-cid="' + g.cid + '" data-n="' + n + '">' +
+        (g.gp ? 'G' : '') + n + (g.gp ? '' : '강') + (got ? ' ✓' : '') + '</button>';
+    });
+    h += '</div></div></div>';
+    return h;
+  }
+  function detailHtml(iso, info, dm) {
+    var t = info.today;
+    var plan = info.map[iso] || [];
+    var done = dm[iso] || [];
+    var doneSet = done.map(function (it) { return it.cid + '#' + it.n; });
+    var h = '<div class="cd-date"><b>' + iso.slice(0, 4) + '.' + Number(iso.slice(5, 7)) + '.' + Number(iso.slice(8, 10)) + ' (' + weekday(iso) + ')</b>';
+    if (iso === t) h += '<span class="cd-pill today">오늘</span>';
+    else if (iso < t) h += '<span class="cd-pill">지난 날</span>';
+    else h += '<span class="cd-pill fut">' + dayDiff(t, iso) + '일 뒤</span>';
+    h += '</div>';
+    if (iso === GTELP) h += '<div class="cd-exam">📘 지텔프 Level 2 시험일 — 이 날은 강의 대신 시험이에요</div>';
+    if (iso === info.target) h += '<div class="cd-exam red">🏁 2027년 2차 순경 필기 시험일 — 최종 목표</div>';
+    if (done.length) {
+      h += '<div class="cd-sec">✅ 이 날 들은 강의 ' + done.length + '</div>';
+      groupByCourse(done).forEach(function (g) { h += cdRow(g, doneSet); });
+    }
+    if (plan.length && iso >= t) {
+      h += '<div class="cd-sec">' + (iso === t ? '📌 오늘 들을 강의 ' : '📅 이 날 계획 ') + plan.length + '</div>';
+      groupByCourse(plan).forEach(function (g) { h += cdRow(g, doneSet); });
+    }
+    if (iso < t) {
+      var miss = missedOn(iso);
+      if (miss.length) h += '<div class="cd-miss">↪ 못 들은 ' + miss.length + '강은 오늘 이후로 자동 이월돼 다시 배분됐어요</div>';
+    }
+    if (!done.length && !plan.length && iso !== GTELP && iso !== info.target) {
+      h += '<div class="cd-empty">' + (iso < t ? '이 날은 학습 기록이 없어요.' : '이 날은 배정된 강의가 없어요.') + '</div>';
+    }
+    return h;
+  }
+  function sumHtml(info) {
+    var tot = 0, done = 0;
+    planCourses().forEach(function (b) {
+      tot += b.to;
+      var m = ckMap(b.cid);
+      for (var n = 1; n <= b.to; n++) if (m[n]) done++;
+    });
+    return '<div>계획 <b>' + tot + '</b>강 중 <b>' + done + '</b>강 완료 · 2차까지 <b>' + info.left + '일</b></div>' +
+      '<div class="ps-sub">남은 ' + (tot - done) + '강을 남은 ' + info.days + '일에 나눠 하루 <b>' + (info.avg ? info.avg.toFixed(1) : '0') + '강</b>' +
+      (info.gpN ? ' · 지텔프 ' + info.gpN + '포인트는 11/28까지' : '') + '</div>';
+  }
+  function stageHtml(info) {
+    var courses = planCourses(), cur = -1;
+    courses.forEach(function (b) {
+      if (cur >= 0) return;
+      var m = ckMap(b.cid);
+      for (var n = 1; n <= b.to; n++) if (!m[n]) { cur = b.stage; return; }
+    });
+    var h = '';
+    PLAN_STAGES.forEach(function (st) {
+      var tot = 0, done = 0, rows = '';
+      courses.forEach(function (b) {
+        if (b.stage !== st.n) return;
+        var dn = 0, m = ckMap(b.cid);
+        for (var n = 1; n <= b.to; n++) if (m[n]) dn++;
+        tot += b.to; done += dn;
+        rows += '<button class="st-row" data-cid="' + b.cid + '"><span class="st-dot" style="background:' + (b.subj ? b.subj.color : '#5b7cfa') + '"></span><b>' + esc(shortName(b.c)) + '</b><i>' + dn + '/' + b.to + (b.lane === 'gp' ? '' : '강') + '</i></button>';
+      });
+      if (!tot) return;
+      var pct = Math.round(done / tot * 100);
+      h += '<div class="st-card' + (st.n === cur ? ' now' : '') + '">' +
+        '<div class="st-head"><b>' + st.t + '</b>' + (st.n === cur ? '<span class="st-now">지금</span>' : '') + '</div>' +
+        '<div class="st-desc">' + st.d + '</div>' +
+        '<div class="bar thin"><i style="width:' + pct + '%;background:' + (st.n === cur ? 'var(--c)' : '#c9d3e6') + '"></i></div>' +
+        '<div class="st-meta">' + done + ' / ' + tot + (st.n === 0 ? ' 포인트' : '강') + ' · ' + pct + '%</div>' +
+        '<div class="st-rows">' + rows + '</div></div>';
+    });
+    return h;
   }
   function openPlanSheet() {
-    var now = curStage();
-    var html = '<button class="sheet-close" data-close="1">✕</button>' +
-      '<div class="sheet-num">미래인재경찰 커리큘럼</div>' +
-      '<div class="sheet-title">2027년 2차 시험까지 학습 계획</div>' +
-      '<div class="sheet-meta">지금은 <b>' + ROADMAP[now].p + ' · ' + ROADMAP[now].t + '</b> 구간입니다.</div>' +
-      '<div class="roadmap">';
-    ROADMAP.forEach(function (r, i) {
-      var cls = 'rm-item' + (i === now ? ' now' : '') + (r.exam ? ' exam' : '');
-      html += '<div class="' + cls + '">' +
-        '<span class="rm-dot">' + (r.exam ? '🏁' : (i < now ? '✓' : '·')) + '</span>' +
-        '<div class="rm-body"><b>' + r.p + ' · ' + r.t + '</b><i>' + r.d + '</i></div>' +
-        (i === now ? '<span class="rm-now">지금</span>' : '') + '</div>';
-    });
-    html += '</div><button class="btn primary" data-close="1">확인</button>';
-    $('#sheetIn').innerHTML = html;
+    var t = todayStr();
+    PLAN.month = clampMonth(t.slice(0, 7));
+    PLAN.sel = t;
+    PLAN.tab = 'cal';
+    $('#sheetIn').innerHTML =
+      '<button class="sheet-close" data-close="1">✕</button>' +
+      '<div class="sheet-num">학습 계획표</div>' +
+      '<div class="sheet-title">2027년 2차 시험까지 달력 계획</div>' +
+      '<div class="plan-sum" id="planSum"></div>' +
+      '<div class="plan-tabs">' +
+      '<button class="ptab on" id="ptabCal">📅 달력</button>' +
+      '<button class="ptab" id="ptabStage">🗺️ 단계별</button>' +
+      '</div>' +
+      '<div id="calBody">' +
+      '<div class="cal-nav"><button class="cal-mv" id="calPrev" aria-label="이전 달">‹</button>' +
+      '<b id="calTitle">-</b>' +
+      '<div class="cal-nav-r"><button class="cal-today" id="calToday">오늘</button><button class="cal-mv" id="calNext" aria-label="다음 달">›</button></div></div>' +
+      '<div class="cal-dow"><span class="sun">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span class="sat">토</span></div>' +
+      '<div class="cal-grid" id="calGrid"></div>' +
+      '<div class="cal-detail" id="calDetail"></div>' +
+      '<div class="cal-legend"><span class="lg done"></span>다 들은 날 <span class="lg part"></span>일부만 <span class="lg miss"></span>못 들은 날 <span class="lg sel"></span>선택</div>' +
+      '</div>' +
+      '<div id="stageBody" class="hidden"></div>' +
+      '<div class="plan-foot">' +
+      '<button class="mini" id="planExp">⬇️ 기록 내보내기</button>' +
+      '<button class="mini" id="planImp">⬆️ 기록 불러오기</button>' +
+      '<input type="file" id="planFile" accept="application/json,.json" style="display:none">' +
+      '</div>' +
+      '<button class="btn ghost" data-close="1" style="margin-top:8px">닫기</button>';
     $('#sheet').classList.remove('hidden');
+    $('#ptabCal').onclick = function () { planTab('cal'); };
+    $('#ptabStage').onclick = function () { planTab('stage'); };
+    $('#calPrev').onclick = function () { moveMonth(-1); };
+    $('#calNext').onclick = function () { moveMonth(1); };
+    $('#calToday').onclick = function () {
+      PLAN.month = clampMonth(todayStr().slice(0, 7)); PLAN.sel = todayStr(); sfx('tap'); planPaint();
+    };
+    $('#planExp').onclick = function () { exportState(); };
+    $('#planImp').onclick = function () { var f = $('#planFile'); if (f) f.click(); };
+    $('#planFile').onchange = function () { if (this.files && this.files[0]) importState(this.files[0]); this.value = ''; };
+    planPaint();
+  }
+  function planTab(k) {
+    PLAN.tab = k;
+    $('#ptabCal').classList.toggle('on', k === 'cal');
+    $('#ptabStage').classList.toggle('on', k === 'stage');
+    $('#calBody').classList.toggle('hidden', k !== 'cal');
+    $('#stageBody').classList.toggle('hidden', k !== 'stage');
+    sfx('tap');
+  }
+  function moveMonth(k) {
+    var y = Number(PLAN.month.slice(0, 4)), m = Number(PLAN.month.slice(5, 7)) + k;
+    while (m < 1) { m += 12; y--; }
+    while (m > 12) { m -= 12; y++; }
+    var ym = clampMonth(y + '-' + pad(m));
+    if (ym === PLAN.month) return;
+    PLAN.month = ym; sfx('tap'); planPaint();
+  }
+  function planPaint() {
+    if (!$('#calGrid')) return;
+    var info = planAssign();
+    PLAN.info = info;
+    var dm = doneByDay();
+    var h = '';
+    calCells(PLAN.month).forEach(function (iso) {
+      h += iso ? cellHtml(iso, info, dm) : '<span class="cal-cell blank"></span>';
+    });
+    $('#calGrid').innerHTML = h;
+    $('#calTitle').textContent = monthTitle(PLAN.month);
+    $('#calDetail').innerHTML = detailHtml(PLAN.sel, info, dm);
+    $('#planSum').innerHTML = sumHtml(info);
+    $('#calPrev').disabled = PLAN.month <= '2026-11';
+    $('#calNext').disabled = PLAN.month >= planMonthMax();
+    $$('#calGrid [data-day]').forEach(function (b) {
+      b.onclick = function () { PLAN.sel = b.getAttribute('data-day'); sfx('tap'); planPaint(); };
+    });
+    $$('#calDetail [data-cid]').forEach(function (b) {
+      b.onclick = function () { sfx('tap'); openSheet(b.getAttribute('data-cid'), Number(b.getAttribute('data-n'))); };
+    });
+    var sb = $('#stageBody');
+    if (sb) {
+      sb.innerHTML = stageHtml(info);
+      $$('#stageBody [data-cid]').forEach(function (b) {
+        b.onclick = function () { var cid = b.getAttribute('data-cid'); sfx('tap'); openSheet(cid, nextLecture(cid)); };
+      });
+    }
+  }
+  /* 첫 화면 '오늘의 계획' 한 줄 */
+  function renderTodayPlan() {
+    var el = $('#todayPlanTxt');
+    if (!el) return;
+    var info = planAssign();
+    var t = info.today;
+    var plan = info.map[t] || [];
+    var groups = groupByCourse(plan);
+    if (!groups.length) { el.textContent = '오늘 몫을 다 했어요 🎉'; return; }
+    el.textContent = groups.map(function (g) {
+      var ns = g.nums;
+      return g.ab + ' ' + ns[0] + (ns.length > 1 ? '-' + ns[ns.length - 1] : '');
+    }).join(' · ');
   }
 
   /* ---------- header / tabs ---------- */
@@ -522,10 +992,10 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var note = '';
     var btn = $('#ctaToday');
     if (done === 0) {
-      btn.textContent = gp ? '먼저 G-POINT를 체크해 주세요' : '먼저 강의를 체크해 주세요';
+      btn.textContent = gp ? 'G-POINT 체크하고 시작하기' : '1강부터 체크하고 시작하기';
       btn.onclick = function () { openSheet(c.id, nextLecture(c.id)); };
-      note = gp ? '아래 노드를 눌러 들은 G-POINT를 체크하면 그 포인트 문제가 열립니다.'
-                : '아래 노드를 눌러 오늘 들은 강의를 체크하면 그 강의 문제가 열립니다.';
+      note = gp ? '1번 노드를 눌러 “이 G-POINT 들었어요 ✓”를 누르면 그 포인트 문제가 바로 열려요.'
+                : '1번 노드를 눌러 “이 강의 들었어요 ✓”를 누르면 그 강의 문제가 바로 열려요.';
     } else if (tL.length) {
       btn.textContent = '오늘 체크한 ' + tL.length + uw(c) + ' 문제 풀기';
       btn.onclick = function () { startSession('today'); };
@@ -1109,6 +1579,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   function renderAll() {
     applyTheme(); renderHud(); renderSubtabs(); renderDday(); renderQuest(); renderMascot();
     renderChallenges(); renderPass(); renderDash(); renderWeek(); renderStage(); renderReview(); renderStats();
+    renderTodayPlan();
   }
 
   /* ---------- events ---------- */
@@ -1133,6 +1604,12 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   $('#ddayEdit').onclick = function () { sfx('tap'); openDdaySheet(); };
   $('#gtChip').onclick = function () { toast('지텔프 Level 2 · 2026-11-29 (일) · ' + ddayLabel(GTELP)); };
   $('#planChip').onclick = function () { openPlanSheet(); };
+  var _tpRow = $('#todayPlanRow');
+  if (_tpRow) _tpRow.onclick = function () { sfx('tap'); openPlanSheet(); };
+  var _saveBadge = $('#saveBadge');
+  if (_saveBadge) _saveBadge.onclick = function () {
+    toast('체크·XP·오답이 이 기기 브라우저에 자동 저장돼요 · 🗺️ 학습 계획에서 파일로 내보낼 수 있어요');
+  };
   $$('.tab').forEach(function (b) {
     b.onclick = function () {
       $$('.tab').forEach(function (x) { x.classList.remove('on'); });
@@ -1163,7 +1640,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     S = {
       xp: 0, streak: { n: 0, last: '', best: 0 }, checked: {}, wrong: {}, ans: 0, ok: 0,
       muted: S.muted, subj: S.subj, course: {}, qlen: 10, mix: false, days: {},
-      dday: DTARGET, ddayNote: '예상일', unit: {}, node: {}, qok: {}, gpSeeded: true, goal: { xp: 50, q: 10 }
+      dday: DTARGET, ddayNote: '예상일', unit: {}, node: {}, qok: {}, gpSeeded: true, goal: { xp: 50, q: 10 },
+      planLog: {}, planSubj: 'done'
     };
     D.subjects.forEach(function (s) { S.course[s.id] = s.defaultCourse || s.courses[0].id; });
     var seed = {};

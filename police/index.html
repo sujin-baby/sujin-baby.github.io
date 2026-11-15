@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=20261116u">
+<link rel="stylesheet" href="style.css?v=20261116v">
 </head>
 <body>
 
@@ -44,7 +44,13 @@
     <div class="dday-chips">
       <button class="dday-chip" id="gtChip">📘 <b id="gtChipTxt">지텔프 D-14</b></button>
       <button class="dday-chip" id="planChip">🗺️ 학습 계획</button>
+      <button class="dday-chip save" id="saveBadge" title="이 기기 브라우저에 자동 저장">💾 자동저장</button>
     </div>
+    <button class="today-plan" id="todayPlanRow">
+      <span class="tp-k">📅 오늘의 계획</span>
+      <b class="tp-v" id="todayPlanTxt">계산 중…</b>
+      <i class="tp-go">›</i>
+    </button>
   </section>
 
   <section class="hero" id="hero">
@@ -229,6 +235,6 @@
 <div id="toast" class="toast hidden"></div>
 
 <script src="data.js?v=20261116u"></script>
-<script src="app.js?v=20261116u"></script>
+<script src="app.js?v=20261116v"></script>
 </body>
 </html>
