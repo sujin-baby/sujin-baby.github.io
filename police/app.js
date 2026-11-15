@@ -202,7 +202,6 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   function renderDday() {
     var iso = S.dday || DTARGET;
     $('#ddayNum').textContent = ddayLabel(iso).replace(/^D-/, '');
-    $('#ddayState').textContent = ddayLabel(iso).indexOf('D-') === 0 ? '' : '';
     $('#ddayTitle').textContent = '2027년 2차 순경 필기';
     $('#ddaySub').textContent = iso + ' (' + weekday(iso) + ') · ' + (S.ddayNote || '예상일') + ' (1월 공고 시 수정 가능)';
     var g = daysTo(GTELP);
