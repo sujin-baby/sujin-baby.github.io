@@ -1853,7 +1853,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3330,6 +3330,7 @@ function checkFullInner_() {
   try { tossNoticeGap1_(); } catch (e) {}
   try { seol1111Del1_(); } catch (e) {}
   try { geochiDel1_(); } catch (e) {}
+  try { rvPhotoFix1_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
   try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
@@ -7988,6 +7989,37 @@ function geminiReadCapture_(blob) {
   const o = JSON.parse(m[0]);
   return { kind: /review|purchase|other/.test(o.kind) ? o.kind : 'other', stars: Math.max(0, Math.min(5, Number(o.stars) || 0)), text: o.text === true, photo: o.photo === true, product: String(o.product || '').slice(0, 120), site: String(o.site || '').slice(0, 20) };
 }
+// 의뢰서에 포토리뷰가 없는지 (RV_ kind 'text'이고 섞임·가이드에 포토/사진 말이 없음) (11/16)
+function rvNoPhoto_(sid, props) {
+  let rv = {}; try { rv = JSON.parse((props || PropertiesService.getScriptProperties()).getProperty('RV_' + sid) || '{}') || {}; } catch (e) {}
+  return rv.kind === 'text' && !/포토|사진|촬영|이미지/.test(String(rv.mix || '') + ' ' + String(rv.guide || ''));
+}
+// (11/16 한 번) 포토리뷰가 없는 의뢰인데 포토 폴더에 들어간 사진(상품 썸네일을 AI가 포토로 봄) → 텍스트(글 없으면 별점) 폴더로. 업체에 아직 안 보낸 의뢰만
+function rvPhotoFix1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('RVPHOTOFIX1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const by = {}, moved = [];
+    readRuns_().forEach(function (r) { const sid = String(r['시트ID'] || ''); if (sid) (by[sid] = by[sid] || []).push(r); });
+    Object.keys(by).forEach(function (sid) {
+      const imgId = props.getProperty('RVIMG_' + sid);
+      if (!imgId || !rvNoPhoto_(sid, props) || rvSentAny_(by[sid])) return;
+      const img = DriveApp.getFolderById(imgId), it = img.getFolders(), dirs = [];
+      while (it.hasNext()) { const f = it.next(); if (rvTypeOf_(f.getName()) === '포토') dirs.push(f); }
+      let n = 0;
+      dirs.forEach(function (f) {
+        const fi = f.getFiles();
+        while (fi.hasNext()) {
+          const x = fi.next(); let o = {}; try { o = JSON.parse(String(x.getDescription() || '').replace(/^AI\s*/, '')) || {}; } catch (e) {}
+          x.moveTo(rvSubDir_(img, o.text === false ? '별점' : '텍스트')); n++;
+        }
+      });
+      if (n) { try { rvCountDirs_(img, rvCartOf_(sid)); } catch (e) {} moved.push(campOf_(by[sid][0]['명단 제목']) + ' ' + n + '장'); }
+    });
+    props.setProperty('RVPHOTOFIX1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (moved.join(', ') || '옮길 것 없음'));
+    if (moved.length) note_('✓ 포토리뷰 없는 의뢰의 포토 폴더 사진 → 텍스트로: ' + moved.join(', '));
+  } catch (e) { props.setProperty('RVPHOTOFIX1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
 // 읽은 결과 → 옮길 폴더 이름
 function rvAiDir_(o) {
   if (o.kind === 'review') return o.photo ? '포토' : o.text ? '텍스트' : '별점';
@@ -8045,6 +8077,7 @@ function rvAiSort_(f, sid, props) {
     left.push(x);
   });
   if (Number(props.getProperty('GEMINI_WAIT') || 0) > Date.now()) { setQ(left.length > 0); return left.length; }
+  const noPhoto = rvNoPhoto_(sid, props);
   const t0 = Date.now();
   let done = 0, moved = {};
   for (let i = 0; i < left.length; i++) {
@@ -8062,7 +8095,8 @@ function rvAiSort_(f, sid, props) {
       if (/키가 안 맞아요|키 없음/.test(String(e && e.message))) break;
       continue;
     }
-    const d = rvAiDir_(o);
+    // 의뢰서에 포토리뷰가 없는 의뢰(전체 텍스트·별점)는 AI가 포토라고 해도 포토 폴더에 안 넣음 (11/16: 더호 차량용 거치대 상품 썸네일을 포토로 봄)
+    const d = rvAiDir_(noPhoto && o.kind === 'review' && o.photo ? Object.assign({}, o, { photo: false }) : o);
     try { x.setDescription('AI ' + JSON.stringify(o)); } catch (e) {}
     x.moveTo(dirOf(d));
     moved[d] = (moved[d] || 0) + 1; done++;
