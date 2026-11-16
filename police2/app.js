@@ -2752,7 +2752,6 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     return h;
   }
 
-  window.__T = { blankDeck: blankDeck, cardDeck: cardDeck, memoLine: memoLine, subjectPool: subjectPool, S: function () { return S; } };
   /* ---------- boot ---------- */
   $('#path')._scrolled = true;   // 첫 화면에서 D-Day·히어로가 가려지지 않게 자동 스크롤 생략
   renderAll();
