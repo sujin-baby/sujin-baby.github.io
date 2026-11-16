@@ -314,6 +314,8 @@ button{font-family:inherit;font-size:inherit;color:inherit;border:0;background:n
 .q-src{display:inline-block;font-size:11px;font-weight:800;padding:5px 9px;border-radius:99px;background:#f4f6fb;color:var(--ink2)}
 .q-src.cafe{background:#eef4ff;color:#3f5fe0}
 .q-src.lec{background:#f2f7f3;color:#15803d}
+.q-src.exam{background:#fff4e5;color:#b45309;border:1px solid #fcd9a8;font-weight:900;letter-spacing:-.2px}
+.q-src.cafe{background:#eef4ff;color:#3f5fe0;border:1px solid #cfdcff;font-weight:900}
 
 /* 콤보 배너 */
 .combo-banner{position:fixed;left:50%;top:calc(76px + var(--safe-t));transform:translateX(-50%);z-index:75;background:#101828;color:#fff;font-size:13px;font-weight:900;padding:9px 16px;border-radius:99px;box-shadow:0 12px 26px -14px #101828;animation:comboPop .35s cubic-bezier(.2,1.4,.4,1);pointer-events:none}
