@@ -391,7 +391,7 @@ function renameRun_(r, title, why) {
   } catch (e) {}
   setRun_(r.row, '카톡방', title); r['카톡방'] = title;
   // 명단 시트·폼·폴더 이름도 같이 (10/26 효자손: 방제만 바뀌고 시트·폼은 '# 실 유앤아이푸드 효자손외'로 남아 서로 달랐음)
-  try { renameRunFiles_(r, sheetName_(oldTitle), sheetName_(title)); } catch (e) { note_('명단 시트·폼 이름 바꾸기 실패: ' + e); }
+  if (!globalThis.__NO_FILE_RENAME) { try { renameRunFiles_(r, sheetName_(oldTitle), sheetName_(title)); } catch (e) { note_('명단 시트·폼 이름 바꾸기 실패: ' + e); } }   // 명단 시트 이름은 한 번 만들면 안 바꿈 (11/16 사용자)
   try {
     const ob = outboxSheet_(), last = ob.getLastRow();
     if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) {
@@ -1865,7 +1865,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3385,6 +3385,7 @@ function checkFullInner_() {
   try { cableRevert1_(); } catch (e) {}
   try { rvPhotoFix3_(); } catch (e) {}
   try { rvPhotoFix4_(); } catch (e) {}
+  try { albRename1_(); } catch (e) {}
   try { rvPhotoFix2_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
@@ -8124,6 +8125,31 @@ function cableRevert1_() {
     if (ok && out.length) { try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); } }
   } catch (e) { props.setProperty('CABLEREV1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
+// (11/16 한 번, 사용자: 1일차를 '#11.16 앨비나프레시 황금향 10'으로 고쳐 만들었는데 2일차가 '#11.17 앨비나프레시 제주황금10' → 고쳐놔)
+//  같은 명단 시트의 다음 일차 진행·일정 계획 방제를 1일차 방제 기준으로 (planDayTitle_). 명단 시트·폼은 1일차 것을 같이 써서 그대로
+function albRename1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('ALBREN1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const runs = readRuns_(), d1 = runs.filter(function (r) { return bareTitle_(r['명단 제목']).replace(/\s+/g, '') === '#11.16앨비나프레시황금향10'; })[0];
+    if (!d1) { props.setProperty('ALBREN1', st + ' 실패(1일차 못 찾음)'); return; }
+    const out = [], iso = function (d) { return Utilities.formatDate(d, CONFIG.TIMEZONE, 'yyyy-MM-dd'); };
+    runs.filter(function (r) { return String(r['시트ID']) === String(d1['시트ID']) && r.row !== d1.row && r['진행일'] instanceof Date && r['진행일'] > d1['진행일'] && /제주황금/.test(r['명단 제목']); }).forEach(function (r) {
+      const nt = planDayTitle_(d1['명단 제목'], iso(r['진행일']), r['명단 제목']);
+      globalThis.__PAY_RENAME_ANY = true; globalThis.__NO_FILE_RENAME = true;
+      try { out.push(renameRun_(r, nt, '1일차 방제 따라 (사용자 11/16)') ? nt : nt + ' 안 바뀜'); } finally { globalThis.__PAY_RENAME_ANY = false; globalThis.__NO_FILE_RENAME = false; }
+    });
+    const ps = planSheet_(), pl = ps.getLastRow();
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x, i) {
+      if (x[8] !== '대기' || !/제주황금/.test(String(x[4])) || !/앨비나/.test(String(x[4])) || !(x[3] instanceof Date)) return;
+      const room = planDayTitle_(d1['카톡방'] || d1['명단 제목'], iso(x[3]), x[4]), title = planDayTitle_(d1['명단 제목'], iso(x[3]), x[5]) + ((String(x[5]).match(/\s*\([^)]*\)\s*$/) || [''])[0]);
+      ps.getRange(i + 2, 5, 1, 2).setValues([[room, title]]); out.push('(일정) ' + room);
+    });
+    const ok = out.every(function (x) { return !/안 바뀜/.test(x); });
+    props.setProperty('ALBREN1', (ok ? '✓ ' : st + ' 실패(') + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '바꿀 것 없음') + (ok ? '' : ')'));
+    if (ok && out.length) { try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); } }
+  } catch (e) { props.setProperty('ALBREN1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
 // 의뢰서에 포토리뷰가 없는지 (RV_ kind 'text'이고 섞임·가이드에 포토/사진 말이 없음) (11/16)
 //  실배송 의뢰는 빼기: 물건을 실제로 받아 사진을 찍어 올리는 일이 많아서 AI 판단 그대로 (11/16: 하루비 백팩 6장을 텍스트로 옮겼다가 되돌림)
 function rvNoPhoto_(sid, props, runs) {
@@ -8970,7 +8996,8 @@ function fixFormQuestions_(form, real) {
 function withSil_(t) {
   t = String(t || '');
   t = t.replace(/\s+실(\s+\d+(?:\s*\([^)]*\))?\s*)$/, '$1');   // 끝 쪽 '실 7' → '7'
-  if (/^[#업택\s]*\d{1,2}\.\d{1,2}\s+실(\/빈)?(\s|$)/.test(t)) return t;   // '실/빈'도 이미 있는 걸로
+  // '실/빈'도, 날짜에 붙은 '#11.17실 …'도 이미 있는 걸로 (11/16 '#11.17 실 실 에스지엠컴퍼니문풍지외3': 생성기가 날짜에 붙여 보내 한 번 더 붙였음)
+  if (/^[#업택\s]*\d{1,2}\.\d{1,2}\s*실(\/빈)?(\s|$)/.test(t)) return t;
   return /^[#업택\s]*\d{1,2}\.\d{1,2}/.test(t) ? t.replace(/^([#업택\s]*\d{1,2}\.\d{1,2})\s*/, '$1 실 ') : t;
 }
 
@@ -9481,10 +9508,23 @@ function savePlan_(d) {
     croom: d.croom, shop: d.shop, photo: d.photo, opts: d.opts, desc: tpl, slot2: d.slot2 || '자정 ~ 오전 8시 20분 구매', total: d.total, camp: camp, base: d.n });
   const sh = planSheet_();
   plan.forEach(function (x) {
-    sh.appendRow([String(d.n || camp) + '-' + x.k, camp, x.k, new Date(x.date + 'T00:00:00'), x.room, x.title, x.n, JSON.stringify(x.c), '대기', cfg]);
+    // 다음 일차 방제·명단 제목은 1일차 실제 방제(생성기에서 고친 것, '실' 붙인 것)에서 날짜·끝 숫자만 바꿈 (11/16: 1일차를 '#11.16 앨비나프레시 황금향 10'으로
+    //  고쳤는데 2일차가 생성기 자동 이름 '#11.17 앨비나프레시 제주황금10'으로 만들어짐)
+    const room = planDayTitle_(d.room || d.title, x.date, x.room), title = planDayTitle_(bareTitle_(d.title), x.date, x.title) + ((String(x.title).match(/\s*\([^)]*\)\s*$/) || [''])[0]);
+    sh.appendRow([String(d.n || camp) + '-' + x.k, camp, x.k, new Date(x.date + 'T00:00:00'), room, title, x.n, JSON.stringify(x.c), '대기', cfg]);
   });
 }
 
+// 1일차 방제(base)에서 날짜를 그날로, 끝 숫자를 생성기가 준 그날 방제(dayT)의 끝 숫자로. 날짜가 없으면 생성기 것 그대로
+function planDayTitle_(base, iso, dayT) {
+  base = bareTitle_(String(base || '')); dayT = bareTitle_(String(dayT || ''));
+  const m = String(iso || '').match(/^\d{4}-(\d{2})-(\d{2})/);
+  if (!m || !/\d{1,2}\.\d{1,2}/.test(base)) return dayT || base;
+  let t = base.replace(/\d{1,2}\.\d{1,2}/, Number(m[1]) + '.' + Number(m[2]));
+  const n = (dayT.match(/(\d+)\s*$/) || [])[1];
+  if (n && /\d+\s*$/.test(t)) t = t.replace(/\d+\s*$/, n);
+  return t;
+}
 // 그날 폼 옵션: 상품마다 옵션이 하나씩이면(옵션 줄 수 = 상품 수) 그날 0명인 상품 옵션은 뺌 (11/10 쿠팡 취소). 모르면 그대로
 function planDayOpts_(opts, counts) {
   const L = String(opts || '').split('\n');
