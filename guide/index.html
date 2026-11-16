@@ -205,7 +205,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v186 (택대 경고창·다중 상품 일차 인원 합산·이름 날짜 없음)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v187 (택대 경고창은 택이 빠졌을 때만)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -2984,7 +2984,7 @@ details.help-box summary {
     if ($("realship").checked || rocketRun) return false;   // 실배송·로켓은 #택이 아님
     const isTak = $("takdae").checked || !!(lastHead && lastHead.takdae && !lastHead.realship && !lastHead.rocket);
     if (!isTak) return false;
-    return !roomHasTak(room) || !takConfirmed;
+    return !roomHasTak(room);   // 방제에 '택'이 빠졌을 때만 물어봄 (11/17 수진 님: 택이 이미 있으면 확인창 안 띄움)
   }
   // 명단 시트·폼·폴더 이름: 방제에서 날짜와 끝 인원 수를 뺀 것 (서버 sheetName_과 같은 규칙, 11/16 수진 님: 이름에 날짜·끝 숫자를 넣지 않기)
   //  '#택11.17 실 에스지엠컴퍼니문풍지외4' → '#택 실 에스지엠컴퍼니문풍지외', '#11.17 실 빌랑 흡착장난감 4' → '# 실 빌랑 흡착장난감'

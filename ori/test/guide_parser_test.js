@@ -1208,7 +1208,7 @@ console.log('-- Test 31: 다중 상품 일차 인원 합산·일차 계획 방�
   getElem('takdae').checked = true;
   getElem('realship').checked = false;
   if (P.takAskNeeded('#11.17 문풍지 4') !== true) throw new Error('Test 31 택대인데 택이 없으면 확인창이 떠야 함');
-  if (P.takAskNeeded('#택11.17 문풍지 4') !== true) throw new Error('Test 31 택대면 확인 안 받기 전엔 한 번 물어봐야 함');
+  if (P.takAskNeeded('#택11.17 문풍지 4') !== false) throw new Error('Test 31 방제에 택이 이미 있으면 확인창 안 뜸 (11/17 수진 님)');
   getElem('realship').checked = true;
   if (P.takAskNeeded('#11.17 문풍지 4') !== false) throw new Error('Test 31 실배송이면 택 확인창이 뜨면 안 됨');
   getElem('takdae').checked = false;
