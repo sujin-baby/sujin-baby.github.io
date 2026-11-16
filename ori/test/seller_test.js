@@ -10,10 +10,11 @@ const src = {
 // 판매처 코드: '/* 판매처: 첫 후보가' 부터 '정리'(브랜드샵 지우기) 바로 앞까지
 function sellerCode(s, label) {
   const a = s.indexOf('/* 판매처: 첫 후보가');
-  const ends = ['if (seller) {', 'let opt = readOption();'].map(x => s.indexOf(x, a)).filter(x => x > a);
+  const ends = ['if (seller) {', 'let opt = readOption();', 'let seller = readCoupangSeller();'].map(x => s.indexOf(x, a)).filter(x => x > a);
   const b = ends.length ? Math.min.apply(null, ends) : -1;
   if (a < 0 || b < 0) throw new Error(label + ': 판매처 코드를 못 찾음');
-  return s.slice(a, b);
+  const out = s.slice(a, b);
+  return /const readCoupangSeller =/.test(out) ? out + '\nseller = readCoupangSeller();' : out;   // 11/16 oy.js: 판매처 읽기를 함수로 (렌더링 대기)
 }
 const cases = [
   { t: '화면에 판매자 가입만, 페이지 데이터 없음 → 상품명 첫 단어로 채우지 않고 비움', brands: [], txt: '입점신청\n판매자 가입\n상품 정보', html: '', name: '가을제철 햇감 달콤말랑 시즌한정 홍시용대봉감, 1박스, 3kg 소과', want: '' },
@@ -30,7 +31,7 @@ for (const [label, s] of Object.entries(src)) {
   const code = sellerCode(s, label);
   for (const c of cases) {
     const ctx = {
-      document: { querySelectorAll: () => c.brands.map(t => ({ textContent: t })), documentElement: { innerHTML: c.html } },
+      document: { querySelectorAll: () => c.brands.map(t => ({ textContent: t })), documentElement: { innerHTML: c.html }, body: { innerText: c.txt } },
       txt: c.txt, html: c.html, name: c.name, seller: '',
       jv: k => { const m = c.html.match(new RegExp('"' + k + '"\\s*:\\s*"([^"]+)"')); return m ? m[1] : ''; },
     };

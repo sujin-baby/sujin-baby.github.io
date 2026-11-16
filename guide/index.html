@@ -1007,8 +1007,9 @@ details.help-box summary {
     alert("쿠팡 접속 차단('사용권한이 없습니다') 화면이에요.\n공지에 차단 문구가 들어가지 않도록 중단합니다.");
     return;
   }
+  /* 판매처: 첫 후보가 '가입' 같은 엉터리면 버리고 다음 후보로 (seller_test가 이 줄부터 잘라 시험함, 지우지 마세요) */
   const BAD_SELLER = /가입|보러가기|평가|정보|^특가|로켓|할인|쿠폰|무료|배송|와우|입점|다를\s*수|있습니다|없습니다|합니다|바랍니다|드립니다|확인|주의|안내|참고|동일|상이|기준|경우|제외|배지|인증/;
-  const okSeller = s => !!s && s.length <= 30 && !/^[는은이가의를와과,\s]/.test(s) && !BAD_SELLER.test(s);
+  const okSeller = s => !!s && s.length <= 30 && !/^(?:[는은이가의를와과]\s|[,\s])/.test(s) && !BAD_SELLER.test(s);
   const readCoupangSeller = () => {
     for (const e of document.querySelectorAll('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]')) {
       const t = (e.textContent || "").replace(/\s+/g, " ").trim();
