@@ -2170,7 +2170,15 @@ function createRunInner_(d) {
   // 썸네일 주소·카톡방 링크 (생성기가 넘기면): 보낼 메시지함 방 공지 옆 사진, [이 방 열기] (10/30)
   if (/^https:\/\/\S+$/.test(String(d.thumb || ''))) { try { PropertiesService.getScriptProperties().setProperty('THUMB_' + ss.getId(), String(d.thumb).slice(0, 500)); } catch (e) {} }
   if (d.roomlink) { try { saveRoomLink_(d.room || d.title, d.roomlink); } catch (e) {} }
-  if (d.rv) { try { const pk = 'RV_' + ss.getId(), pr = PropertiesService.getScriptProperties(); if (!pr.getProperty(pk)) pr.setProperty(pk, String(d.rv).slice(0, 8000)); } catch (e) {} }
+  if (d.rv) { try {
+    const pk = 'RV_' + ss.getId(), pr = PropertiesService.getScriptProperties(), old = pr.getProperty(pk);
+    if (!old) pr.setProperty(pk, String(d.rv).slice(0, 8000));
+    else {
+      // 생성기에서 리뷰 가이드를 직접 적었으면(manual) 같은 명단 시트의 다음 날 진행이어도 가이드를 그 글로 (11/17 사용자)
+      const nv = JSON.parse(String(d.rv)), ov = JSON.parse(old);
+      if (nv && nv.manual && String(nv.guide || '').trim() && ov && typeof ov === 'object') { ov.guide = String(nv.guide); ov.manual = 1; pr.setProperty(pk, JSON.stringify(ov).slice(0, 8000)); note_('✓ 리뷰 가이드 직접 입력으로 바꿈: ' + bareTitle_(d.title)); }
+    }
+  } catch (e) {} }
   return { notice: notice, formUrl: formUrl, sheetUrl: ss.getUrl(), folderUrl: folder.getUrl() };
 }
 
@@ -3879,7 +3887,8 @@ function reviewGuideMsg_(rv, ppl, counts, k) {
   let pw = [];   // 업체 사진을 기다리는 몫(포토대기): 리뷰 가이드 대신 ⭐️포토대기⭐️
   const ask = [];
   // 가이드: 상품마다 '상품 : 줄 / 줄 / …' (한 줄이면 상품 하나). 줄은 원래대로 한 줄씩
-  const prods = String(rv.guide || '').split('\n').map(function (x) { return x.replace(/[^:：\s/][^:：/]{0,30}(예시|요청|참고)\s*[:：]\s*/g, ' ').trim(); }).filter(Boolean).map(function (x) {
+  // 직접 적은 가이드(rv.manual, 생성기 v188)는 머리말 지우기 없이 글 그대로
+  const prods = String(rv.guide || '').split('\n').map(function (x) { return rv.manual ? x.trim() : x.replace(/[^:：\s/][^:：/]{0,30}(예시|요청|참고)\s*[:：]\s*/g, ' ').trim(); }).filter(Boolean).map(function (x) {
     const m = x.match(/^([^:：/]{1,20})\s*[:：]\s*(.+)$/);
     const body = m ? m[2] : x;
     return { name: m ? m[1].trim() : '', lines: body.split(/\s*\/\s*/).map(function (y) { return y.trim(); }).filter(Boolean) };
@@ -3930,7 +3939,7 @@ function reviewGuideMsg_(rv, ppl, counts, k) {
   } else if (prods.length) {
     const ls = prods[0].lines.slice();
     // 맨 앞 짧은 부탁 문장(최대한 티안나게 깔끔하게 해주세요)은 '하단 내용 참고하셔서 …!'로
-    if (ls.length > 1 && /해\s*주세요\s*[.!]*$/.test(ls[0]) && ls[0].length <= 30) body.push('하단 내용 참고하셔서 ' + ls.shift().replace(/[.!\s]+$/, '') + '!', '');
+    if (!rv.manual && ls.length > 1 && /해\s*주세요\s*[.!]*$/.test(ls[0]) && ls[0].length <= 30) body.push('하단 내용 참고하셔서 ' + ls.shift().replace(/[.!\s]+$/, '') + '!', '');
     body.push.apply(body, ls); body.push('');
   }
   return body;

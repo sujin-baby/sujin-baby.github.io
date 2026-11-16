@@ -22,5 +22,13 @@ const mk = (d, k, req, st, n) => ({ '진행일': new Date(2026, d[0], d[1]), '�
 env.__R = [mk([9, 26], 1, 'exp-100-4', '종료', 3), mk([10, 6], 2, 'exp-100-4-v5-2', '진행중', 3), mk([10, 17], 1, 'exp2-1', '진행예정', 0)];
 const ch = G('chainsOf_(__R)');
 ok(ch.length === 2 && ch[1].runs.length === 1 && ch[1].total === 15, '새 묶음 ' + J(ch.map(c => [c.total, c.done, c.runs.length])));
+// (11/17) 생성기에서 직접 적은 리뷰 가이드(manual)는 글 그대로 리뷰 가이드 메시지에
+{
+  const rvM = { kind: 'text', mix: '텍스트리뷰 2', guide: '향이 은은한 점 언급해 주세요 / 참고: 사진 1장 꼭 넣어 주세요', manual: 1 };
+  env.__RVM = rvM;
+  let m = ''; try { m = G('reviewGuideMsg_(__RVM, [{ nm: "가", n: 1 }, { nm: "나", n: 1 }], [2], 0)'); } catch (e) { m = 'ERR ' + e; }
+  const msg = typeof m === 'string' ? m : (m && m.msg) || JSON.stringify(m);
+  ok(/향이 은은한 점 언급해 주세요/.test(msg) && /참고: 사진 1장 꼭 넣어 주세요/.test(msg) && !/하단 내용 참고하셔서/.test(msg), '직접 가이드 그대로 ' + msg.slice(0, 300));
+}
 if (fails.length) { console.log('✗ ' + fails.join('\n✗ ')); process.exit(1); }
 console.log('✓ 택 방제·업체입금·기대평 2차 시험 통과');

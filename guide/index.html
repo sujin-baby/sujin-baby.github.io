@@ -205,7 +205,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v187 (택대 경고창은 택이 빠졌을 때만)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v188 (리뷰 가이드 직접 입력 칸)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -457,6 +457,12 @@ details.help-box summary {
             • <b>띄어쓰기 닉네임</b>: 대괄호로 묶기 <span class="mono" style="background:#f1e4eb; padding:1px 5px; border-radius:4px;">그린 (2명) [시묘 심효진] 조혜정</span><br>
             • <b>배정 수정</b>: 나중에 이름을 채우고 아래 버튼을 다시 누르면 배정 탭만 자동 업데이트돼요!
           </div>
+        </div>
+
+        <div class="card-out" style="margin: 12px 0; background: #f3f9ff; border: 2px solid var(--ink); border-radius: 12px; padding: 12px 14px;">
+          <div style="font-weight: 900; font-size: 13px; color: #1c6fb8; margin-bottom: 6px;">📝 리뷰 가이드 직접 입력 <span style="font-weight:600; color:#666; font-size:12px;">(비워 두면 의뢰서에서 자동)</span></div>
+          <textarea id="rv-manual" rows="5" style="width:100%; box-sizing:border-box; font-size:13px; line-height:1.5; padding:8px; border:1.5px solid #c9d6e3; border-radius:8px;" placeholder="여기 적으면 관리 시트 리뷰 가이드(📸포토가이드 탭 '🐥리뷰내용 가이드🐥')에 이 글이 그대로 들어가요.&#10;예) 향이 은은하고 오래가는 점 언급해 주세요&#10;     사용 전후 비교 사진 1장 꼭 넣어 주세요&#10;상품이 여럿이면 줄마다  상품명 : 가이드"></textarea>
+          <div class="note" id="rv-manual-note" style="font-size:12px; margin-top:4px; color:#555;">줄마다 한 줄씩 들어가요. 상품이 여럿이면 줄 앞에 <b>상품명 :</b> 을 붙이면 상품마다 나눠요.</div>
         </div>
 
         <a class="btn primary" id="make-run" href="#" target="_blank" rel="noopener" style="display:block; text-align:center; padding:15px; font-size:15px; font-weight:900; margin-bottom:10px; border-radius:12px; box-shadow: 2px 2px 0 var(--ink); line-height: 1.4;">
@@ -2555,6 +2561,8 @@ details.help-box summary {
   function fill(r) {
     lastHead = r;
     takConfirmed = false;   // 새 의뢰서를 넣었으면 택대 확인을 다시 받음 (11/17)
+    // 다른 의뢰서를 넣었으면 직접 적은 리뷰 가이드를 비움 (같은 의뢰서를 다시 분석할 때는 그대로)
+    try { const rq = String($("req").value || "").trim(); if ($("rv-manual") && rq !== (window.__rvManReq || "")) { if (window.__rvManReq !== undefined) $("rv-manual").value = ""; window.__rvManReq = rq; } } catch (e) {}
     noticeEdited = false;
     roomEdited = false;
     runNonce = Math.random().toString(36).slice(2, 10);
@@ -3637,9 +3645,12 @@ details.help-box summary {
     Object.assign(base, { auto: "1", date: v("date"), n: runNonce, room: fnameRaw, croom: v("croom") });
     // 리뷰 배정 페이지(구매·폼 끝난 뒤)가 쓸 리뷰 정보
     // 원고 의뢰는 원고 글이 길어서 주소가 너무 길어져 구글이 400 오류 (10/26 도어스토퍼외 5개 원고). 관리 시트는 '원고' 여부만 쓰니 원고 줄만 보냄
-    let rvG = reviewGuideText();
-    if (/원고/.test(rvG) && rvG.length > 600) rvG = rvG.split(/\n|\s\/\s/).filter(l => /원고/.test(l)).map(l => l.trim().slice(0, 40)).join("\n").slice(0, 200);
-    Object.assign(base, { rv: JSON.stringify({ kind: reviewKind(), mix: reviewTotals(), guide: rvG }) });
+    // 리뷰 가이드를 직접 적었으면 그 글 그대로 (11/17 수진 님). 상품명 : 이 없는 여러 줄은 한 상품 가이드의 줄들로 (서버가 ' / '로 줄을 나눔)
+    const rvMan = ($("rv-manual") && $("rv-manual").value || "").replace(/\r/g, "").split("\n").map(l => l.trim()).filter(Boolean);
+    const rvNamed = rvMan.length > 1 && rvMan.every(l => /^[^:：/]{1,20}\s*[:：]\s*\S/.test(l));
+    let rvG = rvMan.length ? (rvNamed ? rvMan.join("\n") : rvMan.join(" / ")).slice(0, 1500) : reviewGuideText();
+    if (!rvMan.length && /원고/.test(rvG) && rvG.length > 600) rvG = rvG.split(/\n|\s\/\s/).filter(l => /원고/.test(l)).map(l => l.trim().slice(0, 40)).join("\n").slice(0, 200);
+    Object.assign(base, { rv: JSON.stringify(Object.assign({ kind: reviewKind(), mix: reviewTotals(), guide: rvG }, rvMan.length ? { manual: 1 } : {})) });
     // 상품 페이지 주소 (관리 시트 한눈에 탭 '상품' 칸 링크)
     Object.assign(base, { urls: guides.map(g => (String(g.url || "").match(/https?:\/\/\S+/) || [""])[0]).filter(Boolean).join("\n") });
     const plan = buildPlan();
@@ -3819,6 +3830,7 @@ details.help-box summary {
     b.addEventListener("touchend", handleSlot);
   });
   $("o-notice").addEventListener("input", () => { noticeEdited = true; fitNotice(); updateMakeRun(); });
+  if ($("rv-manual")) $("rv-manual").addEventListener("input", () => { const n = ($("rv-manual").value || "").length; if ($("rv-manual-note")) $("rv-manual-note").textContent = n > 1500 ? "1500자까지만 들어가요 (지금 " + n + "자)" : n ? "이 글이 시트 리뷰 가이드로 들어가요 (" + n + "자)" : "줄마다 한 줄씩 들어가요. 상품이 여럿이면 줄 앞에 '상품명 :' 을 붙이면 상품마다 나눠요."; updateMakeRun(); });
   window.addEventListener("resize", fitNotice);
   $("notice-reset").addEventListener("click", () => { noticeEdited = false; render(); toast("자동 내용으로 되돌렸어요"); });
 
