@@ -205,7 +205,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v185 (만년필·필기감 명사 추출 보강)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v186 (택대 경고창·다중 상품 일차 인원 합산·이름 날짜 없음)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -2554,6 +2554,7 @@ details.help-box summary {
   function autoDate() { const t = todayKST(); return v("slot") === "midnight" ? nextWorkday(t) : workdayOnOrAfter(t); }
   function fill(r) {
     lastHead = r;
+    takConfirmed = false;   // 새 의뢰서를 넣었으면 택대 확인을 다시 받음 (11/17)
     noticeEdited = false;
     roomEdited = false;
     runNonce = Math.random().toString(36).slice(2, 10);
@@ -2974,6 +2975,49 @@ details.help-box summary {
     return (head + " " + mid).slice(0, 20 - c.length) + c;
   }
   function makeRoom(date, cnt) { return fitRoom20(makeRoom0(date, cnt)); }
+  // 방제 앞머리(첫 낱말)에 '택'이 있는지: '#택11.17 …', '#11.17택 …', '업)택11.16 …' (서버 takTitle_과 같은 규칙, 11/17)
+  function roomHasTak(room) { const h = String(room || "").trim().split(/\s+/)[0] || ""; return /택/.test(h); }
+  // 택대인데 방제에 '택'이 없으면 '#택11.17 …' 모양으로 붙임 (서버 addTak_과 같은 모양) — 붙이기 전에 수진 님께 물어봄 (11/17 "자동으로붙이기전 나한테 경고창뜨게해")
+  function takFixRoom(room) { const t = String(room || ""); return !t || roomHasTak(t) ? t : t.replace(/^([#업)]*)\s*/, "$1택"); }
+  // 의뢰서가 택대 Y인데 폼을 만들려는 순간 — 아직 수진 님 확인을 안 받았으면 true (확인 뒤에는 안 물어봄)
+  function takAskNeeded(room) {
+    if ($("realship").checked || rocketRun) return false;   // 실배송·로켓은 #택이 아님
+    const isTak = $("takdae").checked || !!(lastHead && lastHead.takdae && !lastHead.realship && !lastHead.rocket);
+    if (!isTak) return false;
+    return !roomHasTak(room) || !takConfirmed;
+  }
+  // 명단 시트·폼·폴더 이름: 방제에서 날짜와 끝 인원 수를 뺀 것 (서버 sheetName_과 같은 규칙, 11/16 수진 님: 이름에 날짜·끝 숫자를 넣지 않기)
+  //  '#택11.17 실 에스지엠컴퍼니문풍지외4' → '#택 실 에스지엠컴퍼니문풍지외', '#11.17 실 빌랑 흡착장난감 4' → '# 실 빌랑 흡착장난감'
+  function sheetBaseName(room, cnt) {
+    let s = String(room || "").replace(/\s*\([^)]*\)\s*$/, "").trim();
+    s = s.replace(/\d{1,2}\.\d{1,2}/, " ").replace(/\s+/g, " ").trim();   // 날짜(11.17)만 뺌, 날짜에 붙은 택·실/빈은 남김
+    const c = String(cnt == null ? "" : cnt).trim();
+    if (/^\d+$/.test(c) && c) s = s.replace(new RegExp("\\s*" + c + "$"), "");   // 끝 인원 수 (외4 · 4 둘 다)
+    if (/\d$/.test(s)) s = s.replace(/(외|실)\s*\d+$/, "$1").replace(/\s\d+$/, "");   // 인원 수가 달라도 서버 규칙대로 한 번 더
+    return s.replace(/\s+/g, " ").trim();
+  }
+  // 다음 일차 방제: 1일차 방제(수진 님이 직접 고친 것 포함)에서 날짜와 끝 인원 수만 바꿈 (11/17: 다중 상품도 1일차 형식 그대로)
+  function planRoomFrom(base, date, cnt) {
+    let s = String(base || "").trim();
+    if (!s) return makeRoom(date, cnt);
+    s = s.replace(/\s*\([^)]*\)\s*$/, "");
+    if (/\d{1,2}\.\d{1,2}/.test(s)) s = s.replace(/\d{1,2}\.\d{1,2}/, date);
+    else s = s.replace(/^([#업)]*)\s*/, "$1" + date + " ");
+    if (/\d+\s*$/.test(s)) s = s.replace(/\d+\s*$/, cnt);
+    else s = s + " " + cnt;
+    return s.replace(/\s+/g, " ").trim();   // 1일차 모양 그대로 (서버 planDayTitle_처럼 다시 줄이지 않음)
+  }
+  // 그날 전체 인원 = 그날 진행되는 상품별 인원의 합 (11/17 문풍지 3 + 풍선 1 = 4, 2일차는 2 + 0 = 2). 숫자를 모르면 '?'
+  function dayTotalOf(k) {
+    let unknown = false, n = 0;
+    guides.forEach(g => {
+      const has = !!(g.days && g.days.length);
+      const c = String((has ? (g.days[k - 1] || {}).n : g.daily) || "").trim();
+      if (!has && !/^\d+$/.test(c)) unknown = true;
+      n += dayCount(g, k);
+    });
+    return unknown ? "?" : String(n);
+  }
   function makeRoom0(date, cnt) {
     const isTalkdeal = guides.some(g => g.platform === "카카오톡딜") || /톡딜/.test(String($("req").value || "")) || /store\.kakao\.com|kko\.to/.test(String($("req").value || ""));
     const t = type(), tk = $("takdae").checked;
@@ -3118,7 +3162,8 @@ details.help-box summary {
       const di = prev;
       const n = counts.reduce((a, c) => a + c[0], 0);
       const ciP = cartInfo(), np = ciP ? Math.max(...counts.map(c => c[0])) : n;
-      const room = makeRoom(shortDate(di), String(ciP ? np * ciP.n : n));   // 장바구니건 방 제목 끝 숫자 = 물건 수 (사람 × 상품 수, 사용자 10/28)
+      // 방제는 1일차 방제(직접 고친 것 포함)에서 날짜·끝 숫자만 바꿔 형식을 그대로 따름 (11/17 다중 상품도 1일차와 같은 모양)
+      const room = planRoomFrom($("o-room").value !== undefined ? $("o-room").value : $("o-room").textContent, shortDate(di), String(ciP ? np * ciP.n : n));   // 장바구니건 방 제목 끝 숫자 = 물건 수 (사람 × 상품 수, 사용자 10/28)
       plan.push({ k: k, date: di, n: np, room: room, title: room + " (" + NICK + ")", c: counts });
     }
     return plan;
@@ -3280,7 +3325,9 @@ details.help-box summary {
 
     // 방제 = 시트 이름 = 명단 이름 (사장님 지시): "#택 10.14 모두의농수산 옥광밤외 12"
     // 카톡 팀채팅 방제는 20자까지라 넘으면 띄어쓰기를 줄임: "#택10.14 모두의농수산옥광밤외12"
-    const sumDaily = gs => gs.some(g => !/^\d+$/.test((g.daily || "").trim())) ? "?" : cartInfo() ? String(cartInfo().people * cartInfo().n) : String(gs.reduce((n, g) => n + Number(g.daily), 0));   // 장바구니건은 물건 수 (사람 × 상품 수)
+    // 그날 인원 = 그날 진행되는 상품별 인원의 합 (11/17 다중 상품: 문풍지 3 + 풍선 1 = 4, 방제 끝 숫자·목표인원도 이 값)
+    const dayNow = Math.max(1, Number($("day").value) || 1);
+    const sumDaily = gs => cartInfo() ? String(cartInfo().people * cartInfo().n) : dayTotalOf(dayNow);   // 장바구니건은 물건 수 (사람 × 상품 수)
     // 방제: "#10.14 고구마말랭이 10", 과일이면 업체명 앞에 "#택10.14 모두의농수산 옥광밤외 12"
     // 20자 넘으면 짧은 상품명 뒤 단어부터 빼고, 그래도 넘으면 업체명, 상품명, 건수를 붙여 씀
     const room = makeRoom(date, sumDaily(guides));
@@ -3538,6 +3585,7 @@ details.help-box summary {
   // 방 공지나 방제를 직접 고치면 그 내용을 유지하고, 새 진행 만들기에도 고친 공지를 넘김
   let noticeEdited = false;
   let roomEdited = false;
+  let takConfirmed = false;   // 택대 '택' 붙이기를 수진 님께 한 번 확인받았는지 (11/17)
   let runNonce = Math.random().toString(36).slice(2, 10);
   var roomTpl = "";
   function updateMakeRun() {
@@ -3550,10 +3598,17 @@ details.help-box summary {
 
     // 웹 앱으로 새 진행 만들기 (값 미리 채움, 주소가 너무 길면 공지는 빼고 엶)
     const q = p => Object.keys(p).map(k => k + "=" + encodeURIComponent(p[k])).join("&");
-    const fname = $("o-room").value !== undefined ? $("o-room").value : $("o-room").textContent;
+    const fnameRaw = $("o-room").value !== undefined ? $("o-room").value : $("o-room").textContent;
+    // 명단 시트·폼·폴더 이름은 날짜·끝 숫자 없이 (11/16 수진 님) — 서버 sheetName_이 또 지우지만 여기서 미리 깨끗한 이름으로 보냄
+    const ciM0 = cartInfo();
+    const dayK0 = Math.max(1, Number($("day").value) || 1);
+    const dayCnt0 = ciM0 ? String(ciM0.people * ciM0.n) : dayTotalOf(dayK0);   // 그날 방제 끝 숫자 (문풍지 3 + 풍선 1 = 4)
+    const fname = sheetBaseName(fnameRaw, dayCnt0);
     const allPrices = guides.map(g => { const sN = Number(String(g.ship || "").replace(/[^0-9]/g, "")) || 0; return priceAt(g).filter(hasNum).map(p => Number(p.replace(/[^0-9]/g, "")) + sN).join(","); }).filter(Boolean).join(",");
     const ciM = cartInfo();
-    const dsum = guides.every(g => /^\d+$/.test((g.daily || "").trim())) ? String(ciM ? ciM.people : guides.reduce((n, g) => n + Number(g.daily), 0)) : "";
+    // 목표인원(서버가 목표인원으로 씀)도 그날 인원 — 11/17 다중 상품은 상품별 인원 합 (장바구니건은 사람 수)
+    const dayCnt1 = ciM ? String(ciM.people) : dayTotalOf(dayK0);
+    const dsum = /^\d+$/.test(dayCnt1) ? dayCnt1 : "";
     const base = { title: $("o-list").value !== undefined ? $("o-list").value : $("o-list").textContent, prices: allPrices, daily: dsum, fname: fname, type: t, platform: plat, takdae: tk ? "1" : "0", realship: real ? "1" : "0" };
     // 폼 '옵션' 질문 보기: 가이드가 여럿이면 짧은 상품명을 앞에, 가격도 같이 (예: 옥광밤 1kg*1 (17,200원))
     const optList = [];
@@ -3579,7 +3634,7 @@ details.help-box summary {
     const rLink = v("roomlink") || "";
     if (thumbUrl) Object.assign(base, { thumb: thumbUrl });
     if (rLink) Object.assign(base, { roomlink: rLink });
-    Object.assign(base, { auto: "1", date: v("date"), n: runNonce, room: ($("o-room").value !== undefined ? $("o-room").value : $("o-room").textContent), croom: v("croom") });
+    Object.assign(base, { auto: "1", date: v("date"), n: runNonce, room: fnameRaw, croom: v("croom") });
     // 리뷰 배정 페이지(구매·폼 끝난 뒤)가 쓸 리뷰 정보
     // 원고 의뢰는 원고 글이 길어서 주소가 너무 길어져 구글이 400 오류 (10/26 도어스토퍼외 5개 원고). 관리 시트는 '원고' 여부만 쓰니 원고 줄만 보냄
     let rvG = reviewGuideText();
@@ -3689,7 +3744,7 @@ details.help-box summary {
     if (id === "keyword") { saveCur(); guides[cur].kwAuto = false; }
     render();
   }));
-  ["t-ip","t-up","takdae","realship","fruit","cart"].forEach(id => $(id).addEventListener("change", render));
+  ["t-ip","t-up","takdae","realship","fruit","cart"].forEach(id => $(id).addEventListener("change", () => { if (id === "takdae" || id === "realship") takConfirmed = false; render(); }));
   // 장바구니건: 상품 수, 한 사람 결제 합계(배송비 포함)
   function cartInfo() {
     if (!$("cart").checked || guides.length < 2) return null;
@@ -3713,7 +3768,33 @@ details.help-box summary {
   }
   $("make-run").addEventListener("click", ev => {
     const b = $("make-run").dataset.block; if (b) { ev.preventDefault(); toast(b); return; }
-    let key = WEBKEY || (function(){ try { return localStorage.getItem("ori-webkey") || sessionStorage.getItem("ori-webkey") || ""; } catch(e){ return ""; } })();
+    // 택대 Y인데 방제에 '택'이 없으면 자동으로 붙이기 전에 먼저 물어봄 (11/17 수진 님 지시)
+    const room0 = ($("o-room").value !== undefined ? $("o-room").value : $("o-room").textContent || "").trim();
+    if (takAskNeeded(room0)) {
+      const fixed = takFixRoom(room0);
+      const ok = confirm("의뢰서에 택배대행(택대)이 Y로 돼 있어요.\n\n" + (fixed !== room0 ? "방제에 '택'을 붙일까요?\n\n붙이면  →  " + fixed : "이 방제로 폼을 만들까요?\n\n" + fixed) + "\n\n[확인] 붙이고 폼 만들기\n[취소] 만들지 않고 멈춤 (방제를 직접 고친 뒤 다시, 또는 택대가 아니면 [택배대행] 체크를 끄고 다시 누르세요)");
+      if (!ok) {
+        ev.preventDefault();
+        takConfirmed = false;
+        toast("멈췄어요. 방제·택배대행 표시를 직접 확인해 주세요.");
+        return;
+      }
+      takConfirmed = true;
+      if (fixed && fixed !== room0) {
+        if ($("o-room").tagName === "INPUT") $("o-room").value = fixed; else $("o-room").textContent = fixed;
+        roomEdited = true;
+        if ($("o-list")) $("o-list").value = fixed + " (" + NICK + ")";
+        if ((fixed + " (" + NICK + ")").length > 20) toast("방제가 20자를 넘어요: " + fixed);
+        if ($("room-len")) $("room-len").textContent = fixed.length + "자" + (fixed.length > 20 ? " (20자 넘음, 짧은 상품명을 줄여 주세요)" : "");
+        if ($("room-reset")) $("room-reset").hidden = false;
+        updateMakeRun();
+        ev.preventDefault();
+        let w = null;
+        try { w = window.open($("make-run").href, "_blank", "noopener"); } catch (e) { w = null; }
+        if (!w) { try { location.href = $("make-run").href; } catch (e) {} }
+        return;
+      }
+    }    let key = WEBKEY || (function(){ try { return localStorage.getItem("ori-webkey") || sessionStorage.getItem("ori-webkey") || ""; } catch(e){ return ""; } })();
     if (!key) {
       key = (prompt("관리 웹 앱 열쇠(KEY)가 비어 있어요.\n관리 시트 '사용법' 탭 맨 위 링크를 복사해 열었거나 열쇠를 알고 계시면 입력해 주세요:") || "").trim();
       if (key) {
@@ -4281,7 +4362,8 @@ details.help-box summary {
 
   if (typeof globalThis !== "undefined") {
     globalThis.__PARSER__ = {
-      parseAll, parseHead, setGuides: gs => { guides = gs; }, fieldsOf, parseOptions, parse, parseCoupang, optionText, baseName, makeRoom, shortName, suggestKeywords, sugKw, kwList, reviewMix, isBlockedText, posText, okSeller, maskItem
+      parseAll, parseHead, setGuides: gs => { guides = gs; }, fieldsOf, parseOptions, parse, parseCoupang, optionText, baseName, makeRoom, shortName, suggestKeywords, sugKw, kwList, reviewMix, isBlockedText, posText, okSeller, maskItem,
+      buildPlan, planRoomFrom, dayTotalOf, roomHasTak, takFixRoom, sheetBaseName, takAskNeeded
     };
   }
 })();
