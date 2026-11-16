@@ -755,3 +755,8 @@ body.speed #qBar{background:linear-gradient(90deg,#ffd166,#ff8a3c)}
   .gp-jbtn{font-size:10px;padding:4px 7px}
   .gp-jump{gap:5px}
 }
+@media(max-width:360px){
+  .gp-cond{font-size:10px;line-height:1.4}
+  .gp-ans{font-size:11px}
+  .sheet-title{font-size:17px}
+}
