@@ -1692,8 +1692,9 @@ function diag_(p) {
       if (String(x[0]).indexOf(String(p.pay)) < 0) return;
       const row = L.head + 1 + i, lc = Math.min(sh.getLastColumn(), 60), hd = sh.getRange(L.head, 1, 1, lc).getDisplayValues()[0], dv = sh.getRange(row, 1, 1, lc).getDisplayValues()[0], fm = sh.getRange(row, 1, 1, lc).getFormulas()[0];
       out.payRows.push(sh.getName() + '!' + row + ' ' + x[0]);
-      out.payDetail = (out.payDetail || []).concat([{ row: row, cells: hd.map(function (h, j) { return (dv[j] || fm[j]) ? colLetter_(j + 1) + '[' + h + ']=' + dv[j] + (fm[j] ? ' {' + fm[j] + '}' : '') : ''; }).filter(Boolean), L: L }]);
+      out.payDetail = (out.payDetail || []).concat([{ row: row, bg: (function () { try { return sh.getRange(row, L.name).getBackground(); } catch (e) { return ''; } })(), cells: hd.map(function (h, j) { return (dv[j] || fm[j]) ? colLetter_(j + 1) + '[' + h + ']=' + dv[j] + (fm[j] ? ' {' + fm[j] + '}' : '') : ''; }).filter(Boolean), L: L }]);
     }); });
+    try { (p.paym ? [payTab_(Number(p.paym), true)].filter(Boolean) : payTabsNow_()).forEach(function (sh) { out.payMax = (out.payMax || []).concat([sh.getName() + ' 마지막 ' + sh.getLastRow() + ' / 최대 ' + sh.getMaxRows()]); }); } catch (e) {}
   } catch (e) { out.payErr = String(e); }
   // &resp=요청ID: 그 진행 명단 시트의 폼 응답 (시각, 닉네임, 수령인, 전화 뒤 4자리, 옵션) — 중복·두 번 낸 사람 찾기 (읽기만)
   if (p.resp) try {
@@ -1868,6 +1869,9 @@ function diag_(p) {
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
+    // 속성 용량 (11/16 '데이터 용량 오류'): 전체 글자 수·개수, 앞부분(접두어)별 크기 상위 12
+    try { const by = {}; let tot = 0; Object.keys(pr).forEach(function (k) { const n = k.length + String(pr[k]).length; tot += n; const pf = (k.match(/^[A-Z]+_?/) || [k])[0]; by[pf] = (by[pf] || 0) + n; });
+      out.propsSize = { total: tot, count: Object.keys(pr).length, top: Object.keys(by).sort(function (a, b) { return by[b] - by[a]; }).slice(0, 12).map(function (k) { return k + ' ' + by[k]; }) }; } catch (e) {}
   } catch (e) { out.propsErr = String(e); }
   try { out.reports = JSON.parse(CacheService.getScriptCache().get('REPORT_LOG') || '[]'); } catch (e) { out.reportsErr = String(e); }
   try { out.obTrace = JSON.parse(CacheService.getScriptCache().get('OB_TRACE') || '[]'); } catch (e) {}
