@@ -446,7 +446,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var gpLeft = planRemain('gp').length;
     var gpCap = gpDays.length ? Math.min(2, Math.max(1, Math.ceil(gpLeft / gpDays.length))) : 0;
     var gpRest = gpDays.length ? place(planRemain('gp'), gpDays, gpCap) : gpLeft;
-    var mainRest = place(planRemain('main'), dateList(t, end), per);
+    var mainRest = place(planRemain('main'), dateList(t, end).filter(function (d) { return d !== GTELP; }), per);
     return { today: t, end: end, ge: ge, map: map, per: per, rest: gpRest + mainRest };
   }
   function planTodaySet() {
