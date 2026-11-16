@@ -2764,6 +2764,11 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     return h;
   }
 
+  window.__QA = {
+    correct: function () { if (!QS) return 'no'; var q = QS.items[QS.i].q; var b = $('#qBody .opt[data-i="' + q.a + '"]'); if (b) b.click(); return 'ok'; },
+    next: function () { var b = $('#fbNext'); if (b) b.click(); return 'ok'; },
+    state: function () { return QS ? { i: QS.i, n: QS.items.length, combo: QS.combo, boss: !!QS.items[QS.i].boss } : 'none'; }
+  };
   /* ---------- boot ---------- */
   $('#path')._scrolled = true;   // 첫 화면에서 D-Day·히어로가 가려지지 않게 자동 스크롤 생략
   renderAll();
