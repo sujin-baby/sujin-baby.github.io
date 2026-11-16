@@ -255,7 +255,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var iso = S.dday || DTARGET;
     $('#ddayNum').textContent = ddayLabel(iso).replace(/^D-/, '');
     $('#ddayTitle').textContent = '2027년 2차 순경 필기';
-    $('#ddaySub').textContent = iso + ' (' + weekday(iso) + ') · ' + (S.ddayNote || '예상일') + ' (1월 공고 시 수정 가능)';
+    $('#ddaySub').textContent = iso + ' (' + weekday(iso) + ') · ' + (S.ddayNote || '예상일');
     var g = daysTo(GTELP);
     $('#gtChipTxt').textContent = '지텔프 ' + (g > 0 ? 'D-' + g : g === 0 ? 'D-DAY' : 'D+' + (-g));
     $('#ddayLeft').textContent = daysTo(iso) >= 0 ? daysTo(iso) + '일 남음' : Math.abs(daysTo(iso)) + '일 지남';
@@ -2131,8 +2131,16 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var sp = subjectPool(sid);
     if (!sp.pool.length) return '강의를 체크하면 오늘 외울 한 줄이 여기 나와요.';
     var q = sp.pool[seedOf(t + sid) % sp.pool.length];
-    var un = unitName(q.c, q.u) || s.name;
-    return '『' + clip(un, 14) + '』 ' + clip(q.o[q.a], 44);
+    var un = clip(unitName(q.c, q.u) || s.name, 14);
+    var b = blankOf(q);
+    var key = b ? b.key : '';
+    if (!key) {
+      var ans = String(q.o[q.a] || '');
+      var cut = ans.slice(0, 30);
+      cut = cut.slice(0, Math.max(6, cut.lastIndexOf(' ')));
+      key = cut + '…';
+    }
+    return '『' + un + '』 ' + key;
   }
 
   /* ---------- 카드/빈칸 재료 ---------- */
@@ -2744,6 +2752,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     return h;
   }
 
+  window.__T = { blankDeck: blankDeck, cardDeck: cardDeck, memoLine: memoLine, subjectPool: subjectPool, S: function () { return S; } };
   /* ---------- boot ---------- */
   $('#path')._scrolled = true;   // 첫 화면에서 D-Day·히어로가 가려지지 않게 자동 스크롤 생략
   renderAll();
