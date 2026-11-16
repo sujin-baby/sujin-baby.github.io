@@ -3358,6 +3358,7 @@ function checkFullInner_() {
   try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
   try { morningCheck_(); } catch (e) { note_('새벽 점검 실패: ' + e); }
   try { assignCleanDaily_(); } catch (e) { note_('배정 탭 정리 실패: ' + e); }
+  try { propsCleanup_(); } catch (e) { note_('속성 정리 실패: ' + e); }
   if (!props.getProperty('NPROD_CLEAN_V1')) try { props.setProperty('NPROD_CLEAN_V1', '1'); Object.keys(props.getProperties()).forEach(function (k) { if (/^NPROD_/.test(k) && k !== 'NPROD_CLEAN_V1') props.deleteProperty(k); }); } catch (e) {}   // 옛 공지 상품 기억(영구) 지움 → 6시간 캐시로 (표시 이름도 NPROD_로 시작해서 같이 지워지던 것 10/30)
   const runs = readRuns_(), times = {};
   step_('알림');
@@ -4824,6 +4825,27 @@ const MSGV_GROUPS = [
 ];
 const MSGV_ROOM_BG = ['#fde2e4', '#dbeafe', '#dcfce7', '#fef3c7', '#f3e8ff', '#ffedd5', '#cffafe', '#fce7f3', '#e0e7ff', '#ecfccb', '#fee2e2', '#e2e8f0'];
 const MSGV_FIXED_BG = { '내 할 일': '#fff8e1', '사장님': '#e0f2f1', '리뷰비시트': '#fce4ec' };
+function msgvSigHash_(sig) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, String(sig), Utilities.Charset.UTF_8)); }
+// 속성 정리 (11/16 '데이터 용량 오류': 속성 3,800개·한글이라 한도 500KB에 닿음). 하루 한 번, 캐시성 속성만:
+//  진행목록에 없는 명단 시트의 LISTK_/LISTH_/RVSEEN_/RVQMOD_/THUMB_, 30일 지난 날짜 리뷰 글 캐시(RVTXT_/RVSIG_ RVMSGD_), 사흘 지난 MSGV_S_
+function propsCleanup_(runs) {
+  const props = PropertiesService.getScriptProperties(), tk = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
+  if (props.getProperty('PROPCLEAN_DAY') === tk) return 0;
+  const all = props.getProperties(), live = {};
+  (runs || readRuns_()).forEach(function (r) { const sid = String(r['시트ID'] || ''); if (sid) live[sid] = 1; });   // 진행목록에 남아 있는 명단 시트 것은 그대로
+  const old30 = Utilities.formatDate(new Date(Date.now() - 30 * 86400000), CONFIG.TIMEZONE, 'yyyyMMdd'), s3 = Date.now() - 3 * 86400000;
+  let n = 0;
+  Object.keys(all).forEach(function (k) {
+    let del = false, m;
+    if ((m = k.match(/^(?:LISTK_|LISTH_|RVSEEN_|RVQMOD_|THUMB_)([-\w]{25,})$/))) del = !live[m[1]];
+    else if ((m = k.match(/^(?:RVTXT_|RVSIG_)RVMSGD_[-\w]+_(\d{8})$/))) del = m[1] < old30;
+    else if (/^MSGV_S_/.test(k)) del = Number(all[k]) < s3;
+    if (del) { try { props.deleteProperty(k); n++; } catch (e) {} }
+  });
+  props.setProperty('PROPCLEAN_DAY', tk);
+  if (n) note_('✓ 속성 정리: 안 쓰는 캐시 ' + n + '개 지움');
+  return n;
+}
 function msgvPending_(st) { return st === '대기' || st === '방 못 찾음'; }
 // 메시지마다 체크한 시각: 속성 MSGV_S_<번호> 하나씩 (11/8: 여러 개를 빨리 체크하면 한 덩어리(MSGV_SENTAT)를 서로 덮어써서 체크한 게 바로 사라졌음). 예전 덩어리도 같이 읽음
 function msgvSentAt_(all) {
@@ -5223,7 +5245,7 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
   }
   try { sh.setRowHeights(1, n, 22); } catch (e) {}
   props.setProperty('MSGV_N_' + key, String(lines.length));
-  props.setProperty('MSGV_SIG_' + key, g.sig);
+  props.setProperty('MSGV_SIG_' + key, msgvSigHash_(g.sig));   // 글 전체 대신 지문만 (11/16 속성 용량 '데이터 용량 오류')
   props.setProperty('MSGV_AT_' + key, String(Date.now()));
 }
 // 보낼메시지 → 종류 탭들 다시 그리기 (바뀐 탭만). force = 바뀐 게 없어도, only = 그 탭만 (번호)
@@ -5286,7 +5308,7 @@ function msgViewBuild_(force, only) {
     try { if (sh.getName() !== g.name) sh.setName(g.name); } catch (e) {}
     try { ids[grp.key] = sh.getSheetId(); } catch (e) {}
     const tabFresh = fresh || made;
-    if (!force && !tabFresh && props.getProperty('MSGV_SIG_' + grp.key) === g.sig) return;
+    if (!force && !tabFresh && props.getProperty('MSGV_SIG_' + grp.key) === msgvSigHash_(g.sig)) return;
     msgvWriteTab_(sh, gi, g, tabFresh, props);
     wrote = true;
   });
