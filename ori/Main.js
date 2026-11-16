@@ -1878,7 +1878,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3446,6 +3446,7 @@ function checkFullInner_() {
   try { mungFix1_(); } catch (e) {}
   try { cableTak2_(); } catch (e) {}
   try { memoRec1_(); } catch (e) {}
+  try { talk70_(); } catch (e) {}
   try { upAcctOpen1_(); } catch (e) {}
   try { exp135_(); } catch (e) {}
   try { rvPhotoFix2_(); } catch (e) {}
@@ -8266,6 +8267,40 @@ function silsil1_() {
   } catch (e) { props.setProperty('SILSIL1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 // (11/16 한 번, 사용자: 문풍지 3명 + 풍선 1명 = 4명인데 방제·목표가 3) 11.17 진행 방제 끝 숫자 4(목표 4), 11.18 계획은 문풍지 2명·풍선 0명 = 2
+// (11/16 한 번) 수면공작소 톡딜: 70명 다 샀는데 폼 67개라 방제가 67로 줄고 11.17 구확3 진행이 생긴 것 → 70으로 되돌리고 11.17 진행 지움 (사용자 승인)
+function talk70_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('TALK70') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  const out = [];
+  try {
+    const OLD = '#11.16 수면공작소 톡딜 구확67', NEW = '#11.16 수면공작소 톡딜 구확70', NEXT = '#11.17 수면공작소 톡딜 구확3';
+    let runs = readRuns_();
+    const r16 = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === OLD || bareTitle_(x['명단 제목']) === NEW; })[0];
+    if (!r16) { props.setProperty('TALK70', st + ' 실패(11.16 진행 못 찾음)'); return; }
+    if (bareTitle_(r16['명단 제목']) === OLD) {
+      globalThis.__NO_FILE_RENAME = true;
+      try { out.push(renameRun_(r16, NEW, '사용자 11/16: 70명 다 채움') ? '방제 70' : '방제 안 바뀜'); } finally { globalThis.__NO_FILE_RENAME = false; }
+    }
+    runs = readRuns_();
+    const me = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === NEW; })[0];
+    if (me && Number(me['목표인원']) !== 70) setRun_(me.row, '목표인원', 70);
+    if (me) { props.deleteProperty(listShortKey_(me)); props.deleteProperty('NOLISTMSG_' + OLD.replace(/\s+/g, '')); }
+    // 보낼메시지: 명단 전달 글의 67 → 70, '[방제 바뀜] 70 → 67' 할 일(대기) 지움
+    const ob = outboxSheet_(), ol = ob.getLastRow();
+    if (ol >= 2) {
+      const v = ob.getRange(2, 1, ol - 1, 6).getValues();
+      for (let i = v.length - 1; i >= 0; i--) {
+        const body = String(v[i][4]);
+        if (v[i][2] === '할 일' && v[i][5] !== '보냄' && body.indexOf('[방제 바뀜] ' + NEW + ' → ' + OLD) === 0) { ob.deleteRow(i + 2); out.push('방제 바뀜 할 일 지움'); continue; }
+        if (v[i][2] === '명단 전달' && body.indexOf(OLD) >= 0) { obSet_(ob, v[i][0], 5, (me && v[i][5] === '대기') ? listMsgText_(me) : body.split(OLD).join(NEW)); out.push('명단 전달 글 70'); }
+      }
+    }
+    const r17 = readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']) === NEXT; })[0];
+    if (r17) out.push(deleteRun_(r17));
+    props.setProperty('TALK70', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + out.join(', '));
+    try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); }
+  } catch (e) { props.setProperty('TALK70', (st + ' 실패(' + (e && e.message || e) + ') ' + out.join(', ')).slice(-400)); }
+}
 // (11/16 한 번) 방제가 바뀌어 한눈에 O열에서 지워진 메모 되살림: 옛 방제로 저장된 메모 → 지금 방제 줄 (그 줄 O가 비었을 때만)
 function memoRec1_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('MEMOREC1') || '');
@@ -9003,11 +9038,13 @@ function autoNextDay_() {
     if (left <= 0) return;
     // 남은 건수가 오늘 안 산 사람 때문에만 생긴 거면 오후 2시 이후에 (늦게 사는 사람 기다림, 사용자 요청 10/20)
     const byTarget = c.total - c.runs.reduce(function (a, x) { return a + (x['진행일'] < today_() ? (Number(x['인원']) || 0) : (Number(x['목표인원']) || 0)); }, 0);
-    if (byTarget <= 0 && hour < SHORT_NEXT_HOUR) return;
+    // 목표대로는 다 찼는데 폼이 모자란 것(안 낸 사람)뿐이면: 방제·월급시트는 그대로 두고 할 일 알림만, 다음 날 진행도 안 만듦
+    //  (11/16 사용자: 톡딜 70명 다 샀는데 폼이 67개라 방제가 67로 바뀌고 다음 날 3명 진행이 생겼음. 방제는 한 번 만들면 안 바꿈)
+    if (byTarget <= 0) { if (hour >= SHORT_NEXT_HOUR && pastEnd_(last)) shortAlert_(last); return; }
     if (pastEnd_(last) && !(Number(last['인원']) > 0)) return;   // 오늘 인원이 0이면 세기가 잘못됐을 수 있어서 자동으로 안 만듦
     const daily = Number(c.runs[0]['목표인원']) || Number(last['목표인원']) || left;
     // 남는 건수가 일 건수의 절반보다 적으면 마지막 날에 같이 (총 50 / 일 7 → 마지막 날 8, 사용자 요청 10/20. 생성기 numDays와 같은 규칙)
-    const n = left > daily && left - daily < daily / 2 ? left : Math.min(daily, left);
+    const n = byTarget > daily && byTarget - daily < daily / 2 ? byTarget : Math.min(daily, byTarget);   // 모자란 폼 수는 안 더함 (11/16)
     // 오늘 모자란 옵션 (공지 (N명) - 산 수): 내일이 오늘 모자란 것만이면 내일 공지 옵션 인원으로, 명단방 글에도 (사용자 요청 10/27)
     const goal0 = Number(last['목표인원']) || 0, got0 = Number(last['인원']) || 0;
     let so = null;
@@ -9018,8 +9055,17 @@ function autoNextDay_() {
     // 오늘 진행은 실제 산 인원으로 방제·목표를 줄임 (# 10.20 고구마말랭이 10 → 8, 사용자 요청 10/20) + 카톡방 이름·명단 메시지 고치기 할 일
     // 위에서 다음 날 진행을 만들면 진행목록이 다시 정렬돼서 줄 번호가 바뀜 → 이 진행을 다시 읽어서 (옛 줄 번호로 다른 진행 이름을 고치던 것, 10/23)
     const cur = readRuns_().filter(function (x) { return String(x['명단 제목']) === String(last['명단 제목']) && String(x['시트ID']) === String(last['시트ID']); })[0];
-    if (cur) shrinkToGot_(cur, got0 < goal0 ? shortBlock_(goal0, got0, so) : '');
+    if (cur && pastEnd_(cur) && got0 < goal0) shortAlert_(cur);   // 방제는 안 줄임 (11/16 사용자), 알림만
   });
+}
+// 폼이 목표보다 모자랄 때 할 일 한 번 (방제·월급시트는 그대로)
+function shortAlert_(r) {
+  const got = Number(r['인원']) || 0, goal = Number(r['목표인원']) || 0;
+  if (!got || got >= goal) return;
+  const k = 'SHORTALERT_' + String(r['시트ID']).slice(-10) + '_' + (r['진행일'] instanceof Date ? Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'MMdd') : ''), pp = PropertiesService.getScriptProperties();
+  if (pp.getProperty(k)) return;
+  pp.setProperty(k, '1');
+  queueMsg_('내 할 일', '[폼 모자람] ' + bareTitle_(r['명단 제목']) + '\n목표 ' + goal + '명인데 폼은 ' + got + '개예요 (' + (goal - got) + '개 모자람)\n→ 산 사람 중 폼을 안 낸 분께 폼을 내 달라고 해 주세요. 방제·월급시트는 그대로 뒀어요.\n(진짜로 덜 샀으면 다음 날 진행은 폼수정 탭 \'추가 모집\'으로)', '할 일');
 }
 
 // 모자란 인원을 다음 날 같은 명단 시트(같은 폼)로 더 받기
