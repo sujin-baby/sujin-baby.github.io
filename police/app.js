@@ -2322,7 +2322,6 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     }
     var checkedGp = !!ckMap('gtp33')[n];
     if (!checkedGp && !confirm('G-POINT ' + n + '은 아직 체크하지 않은 진도예요.\n이 포인트 기출 ' + pool.length + '문제를 지금 볼까요?')) return;
-    if (!checkedGp) { ckMap('gtp33')[n] = todayStr(); save(); renderAll(); }
     var last = (S.gpLast || {})[n];
     var idx = 0;
     if (last) {

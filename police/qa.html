@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex">
+<title>QA 미리보기</title>
+<style>
+  html,body{margin:0;background:#1b1d22;font:12px/1.4 -apple-system,sans-serif;color:#bbb}
+  .bar{display:flex;gap:8px;padding:8px 10px;align-items:center}
+  .bar a{color:#9cc;text-decoration:none;border:1px solid #333;padding:3px 8px;border-radius:8px}
+  .bar a.on{background:#2a3550;color:#fff;border-color:#3a4a6a}
+  .stage{padding:0 10px 10px;display:flex;gap:12px;align-items:flex-start}
+  iframe{border:0;background:#000;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+</style>
+</head>
+<body>
+<div class="bar"><b>QA 미리보기(개발용)</b><a href="?w=360" id="l360">360</a><a href="?w=390" id="l390">390</a><span id="info"></span></div>
+<div class="stage" id="stage"></div>
+<script>
+  var q = new URLSearchParams(location.search);
+  var w = Number(q.get('w') || 360);
+  document.getElementById(w === 390 ? 'l390' : 'l360').className = 'on';
+  var f = document.createElement('iframe');
+  f.id = 'f'; f.width = w; f.height = Number(q.get('h') || 780);
+  f.src = 'index.html' + (q.get('q') ? '?' + q.get('q') : '');
+  document.getElementById('stage').appendChild(f);
+  document.getElementById('info').textContent = w + 'px';
+</script>
+</body>
+</html>
