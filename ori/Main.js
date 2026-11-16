@@ -1711,7 +1711,7 @@ function diag_(p) {
   } catch (e) { out.payErr = String(e); }
   // &resp=요청ID: 그 진행 명단 시트의 폼 응답 (시각, 닉네임, 수령인, 전화 뒤 4자리, 옵션) — 중복·두 번 낸 사람 찾기 (읽기만)
   if (p.resp) try {
-    const rr = runByRequest_(p.resp); out.resp = [];
+    const rr = runByRequest_(p.resp) || readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']).indexOf(String(p.resp)) >= 0 && x['시트ID']; })[0];   // 요청ID가 없는 진행은 방제 글자로 out.resp = [];
     if (rr) SpreadsheetApp.openById(rr['시트ID']).getSheets().filter(function (t) { return !!t.getFormUrl(); }).forEach(function (t) {
       const h = headers_(t).map(hk_), lr = t.getLastRow(); if (lr < 2) return;
       const ci = function (re, not) { return h.findIndex(function (x) { return re.test(x) && !(not && not.test(x)); }); };
