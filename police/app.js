@@ -159,10 +159,9 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   function isGP(c) { return !!(c && c.kind === 'gp'); }
   function uw(c) { return (c && c.unitWord) ? ' ' + c.unitWord : '강'; }
   function fmtDateDot(s) { return s ? String(s) : ''; }
-  function cafeLabel(src) {
-    var m = /^cafe-(\d{2})(\d{2})$/.exec(src || '');
-    if (!m) return '';
-    return '켈리 카페 ' + parseInt(m[1], 10) + '/' + parseInt(m[2], 10);
+  function srcLabel(q) {
+    if (q && q.src) return q.src;
+    return '';
   }
   function qLabel(q) {
     var s = SUBJ[q.s], c = COURSE[q.c];
@@ -170,11 +169,11 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     return s.name + ' · ' + (c.name ? c.name + ' · ' : '') + unitName(q.c, q.u);
   }
   function srcBadge(q) {
-    var cafe = cafeLabel(q.src);
-    if (cafe) return { k: 'cafe', t: '📘 ' + cafe };
+    var s = srcLabel(q);
+    if (s) return { k: (q.s === 'gtelp' ? 'cafe' : 'exam'), t: '📌 출처: ' + s };
     var c = COURSE[q.c];
     if (c && c.last && !isGP(c)) return { k: 'lec', t: '📅 최근 업로드 ' + c.last };
-    return { k: 'book', t: 'G-POINT 33 교재' };
+    return { k: 'book', t: '출처 미상' };
   }
 
   /* ---------- sound ---------- */
