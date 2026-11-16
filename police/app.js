@@ -50,7 +50,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     xp: 0, streak: { n: 0, last: '', best: 0 }, checked: {}, wrong: {},
     ans: 0, ok: 0, muted: false, subj: 'cri', course: {}, qlen: 10, mix: false, days: {},
     dday: DTARGET, ddayNote: '예상일', unit: {}, node: {}, qok: {}, gpSeeded: false, goal: { xp: 50, q: 10 }, bestCombo: 0,
-    planLog: {}, planSubj: ''
+    planLog: {}, planSubj: '', planPerDay: 2, speedBest: 0
   };
   try {
     var raw = localStorage.getItem(SKEY);
@@ -86,6 +86,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       }
     }
     /* 노베이스 시작: 이제 막 시작한 사람은 범죄학(박상민 올인원)부터 보이게 */
+    if (!S.planPerDay) S.planPerDay = 2;
+    if (!S.planLog) S.planLog = {};
     if (!S.planSubj) {
       S.planSubj = 'done';
       S.subj = 'cri';
@@ -392,17 +394,65 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     return ge < t ? t : ge;
   }
   function keyOf(it) { return it.cid + '#' + it.n; }
-  /* 오늘 몫은 그날 처음 열었을 때 정해 하루 동안 고정한다 (체크할수록 오늘 목표가 늘어나지 않게) */
+  /* 업로드 반영 배분: 이미 올라온 강의를 먼저 배치하고,
+     아직 안 올라온 강의는 미래인재 업로드 리듬(목·금, 회당 3강)에 맞춰 그 뒤 날짜로 미룬다. */
+  var PLAN_UP_PER_DAY = 3;
+  function uploadedCount(cid) {
+    var c = COURSE[cid]; if (!c) return 0;
+    var n = 0;
+    for (var i = 0; i < c.lec.length; i++) if (c.lec[i].up) n = i + 1;
+    return n;
+  }
+  function nextDow(iso, dow) {
+    var d = dOf(iso), i = 0;
+    while (d.getDay() !== dow && i < 8) { d.setDate(d.getDate() + 1); i++; }
+    return dstr(d);
+  }
+  function uploadEta(cid, n) {
+    var c = COURSE[cid], L = c && c.lec[n - 1];
+    if (L && L.up) return '';
+    var U = uploadedCount(cid), k = Math.max(1, n - U);
+    var per = PLAN_UP_PER_DAY;
+    var week = Math.floor((k - 1) / (per * 2));
+    var slot = Math.floor(((k - 1) % (per * 2)) / per);      // 0 = 목요일, 1 = 금요일
+    var thu = nextDow(todayStr(), 4);
+    var base = slot === 0 ? thu : addDays(thu, 1);
+    return addDays(base, week * 7);
+  }
+  /* 하루 1~2강(S.planPerDay)으로 날짜별 배분을 계산한다 (결정적 = 같은 날 같은 결과) */
+  function planDaily() {
+    var t = todayStr(), end = planEnd(), ge = gpEndDay();
+    var per = Math.max(1, Math.min(2, Number(S.planPerDay) || 2));
+    var map = {};
+    function place(items, days, cap) {
+      var rest = items.slice();
+      for (var di = 0; di < days.length; di++) {
+        if (!rest.length) break;
+        var d = days[di], slot = map[d] || [], keep = [];
+        for (var i = 0; i < rest.length; i++) {
+          var it = rest[i];
+          var eta = it.up ? '' : uploadEta(it.cid, it.n);
+          if (slot.length < cap && (!eta || eta <= d)) slot.push(it);
+          else keep.push(it);
+        }
+        rest = keep;
+        if (slot.length) map[d] = slot;
+      }
+      return rest.length;
+    }
+    var gpDays = ge ? dateList(t, ge) : [];
+    var gpLeft = planRemain('gp').length;
+    var gpCap = gpDays.length ? Math.min(2, Math.max(1, Math.ceil(gpLeft / gpDays.length))) : 0;
+    var gpRest = gpDays.length ? place(planRemain('gp'), gpDays, gpCap) : gpLeft;
+    var mainRest = place(planRemain('main'), dateList(t, end), per);
+    return { today: t, end: end, ge: ge, map: map, per: per, rest: gpRest + mainRest };
+  }
   function planTodaySet() {
     var t = todayStr();
     if (!S.planLog) S.planLog = {};
-    if (!S.planLog[t]) {
-      var keys = [], ge = gpEndDay();
-      var lanes = [spread(planRemain('gp'), ge ? dateList(t, ge) : []), spread(planRemain('main'), studyDays(t, planEnd()))];
-      lanes.forEach(function (src) {
-        (src[t] || []).forEach(function (it) { keys.push(keyOf(it)); });
-      });
-      S.planLog[t] = keys;
+    if (!S.planLog[t] || !S.planLog[t].length) {
+      var m = planDaily().map;
+      S.planLog[t] = (m[t] || []).map(keyOf);
       save();
     }
     return S.planLog[t];
@@ -414,34 +464,16 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     return out;
   }
   function planAssign() {
-    var t = todayStr(), target = targetDate(), end = planEnd(), ge = gpEndDay();
-    var todayKeys = planTodaySet();
-    var inToday = {};
-    todayKeys.forEach(function (k) { inToday[k] = 1; });
-    var todayItems = itemsByKey(todayKeys);
-    var gp = planRemain('gp').filter(function (it) { return !inToday[keyOf(it)]; });
-    var main = planRemain('main').filter(function (it) { return !inToday[keyOf(it)]; });
-    var futureDays = studyDays(addDays(t, 1), end);
-    var map = {};
-    if (todayItems.length) map[t] = todayItems;
-    function put(m) {
-      Object.keys(m).forEach(function (d) {
-        if (!map[d]) map[d] = [];
-        m[d].forEach(function (it) { map[d].push(it); });
-      });
-    }
-    if (ge && gp.length) {
-      var gDays = dateList(addDays(t, 1), ge);
-      if (!gDays.length) gDays = [t];
-      put(spread(gp, gDays));
-    }
-    if (main.length) put(spread(main, futureDays.length ? futureDays : [t]));
+    var daily = planDaily();
+    var t = daily.today, map = daily.map;
+    var todayItems = itemsByKey(planTodaySet());
+    if (todayItems.length) map[t] = todayItems; else delete map[t];
+    var futureDays = dateList(addDays(t, 1), daily.end);
     return {
-      today: t, target: target, end: end, map: map,
+      today: t, target: targetDate(), end: daily.end, map: map,
       gpN: planRemain('gp').length, mainN: planRemain('main').length,
-      days: futureDays.length, gpDays: ge ? dateList(t, ge).length : 0,
-      avg: futureDays.length ? main.length / futureDays.length : main.length,
-      left: dayDiff(t, target)
+      days: futureDays.length, gpDays: daily.ge ? dateList(t, daily.ge).length : 0,
+      avg: daily.per, per: daily.per, left: dayDiff(t, targetDate()), rest: daily.rest
     };
   }
   function groupByCourse(items) {
@@ -599,9 +631,12 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       var m = ckMap(b.cid);
       for (var n = 1; n <= b.to; n++) if (m[n]) done++;
     });
+    var rest = tot - done;
+    var note = '';
+    if (info.rest) note = ' · 하루 ' + info.per + '강으로는 시험 전에 다 못 넣는 강의 <b>' + info.rest + '개</b>';
     return '<div>계획 <b>' + tot + '</b>강 중 <b>' + done + '</b>강 완료 · 2차까지 <b>' + info.left + '일</b></div>' +
-      '<div class="ps-sub">남은 ' + (tot - done) + '강을 남은 ' + info.days + '일에 나눠 하루 <b>' + (info.avg ? info.avg.toFixed(1) : '0') + '강</b>' +
-      (info.gpN ? ' · 지텔프 ' + info.gpN + '포인트는 11/28까지' : '') + '</div>';
+      '<div class="ps-sub">남은 ' + rest + '강 · 하루 <b>' + info.per + '강</b>씩(지텔프 포인트는 별도) · 이미 올라온 강의 우선, 안 올라온 강의는 목·금 업로드에 맞춰 뒤로' +
+      (info.gpN ? ' · 지텔프 ' + info.gpN + '포인트는 11/28까지' : '') + note + '</div>';
   }
   function stageHtml(info) {
     var courses = planCourses(), cur = -1;
@@ -640,6 +675,10 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       '<button class="sheet-close" data-close="1">✕</button>' +
       '<div class="sheet-num">학습 계획표</div>' +
       '<div class="sheet-title">2027년 2차 시험까지 달력 계획</div>' +
+      '<div class="plan-rate"><b>하루 강의</b>' +
+      '<button class="rate-chip" data-per="1">1강</button>' +
+      '<button class="rate-chip" data-per="2">2강</button>' +
+      '<span class="pr-note">이미 올라온 강의만 오늘·내일 계획에 넣고, 아직 안 올라온 강의는 목·금 업로드(회당 3강)에 맞춰 뒤 날짜로 미뤄요.</span></div>' +
       '<div class="plan-sum" id="planSum"></div>' +
       '<div class="plan-tabs">' +
       '<button class="ptab on" id="ptabCal">📅 달력</button>' +
@@ -670,6 +709,16 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     $('#calToday').onclick = function () {
       PLAN.month = clampMonth(todayStr().slice(0, 7)); PLAN.sel = todayStr(); sfx('tap'); planPaint();
     };
+    $$('.rate-chip').forEach(function (b) {
+      b.onclick = function () {
+        var v = Number(b.getAttribute('data-per'));
+        if ((S.planPerDay || 2) === v) return;
+        S.planPerDay = v;
+        S.planLog[todayStr()] = [];
+        save(); sfx('tap'); planPaint();
+        toast('하루 ' + v + '강으로 다시 계산했어요');
+      };
+    });
     $('#planExp').onclick = function () { exportState(); };
     $('#planImp').onclick = function () { var f = $('#planFile'); if (f) f.click(); };
     $('#planFile').onchange = function () { if (this.files && this.files[0]) importState(this.files[0]); this.value = ''; };
@@ -704,6 +753,9 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     $('#calTitle').textContent = monthTitle(PLAN.month);
     $('#calDetail').innerHTML = detailHtml(PLAN.sel, info, dm);
     $('#planSum').innerHTML = sumHtml(info);
+    $$('.rate-chip').forEach(function (b) {
+      b.classList.toggle('on', Number(b.getAttribute('data-per')) === (S.planPerDay || 2));
+    });
     $('#calPrev').disabled = PLAN.month <= '2026-11';
     $('#calNext').disabled = PLAN.month >= planMonthMax();
     $$('#calGrid [data-day]').forEach(function (b) {
@@ -736,11 +788,17 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
 
   /* ---------- header / tabs ---------- */
+  function hexA(hex, a) {
+    var c = String(hex).replace('#', '');
+    if (c.length === 3) c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
+    var r = parseInt(c.substr(0, 2), 16), g = parseInt(c.substr(2, 2), 16), b = parseInt(c.substr(4, 2), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+  }
   function applyTheme() {
-    var s = SUBJ[S.subj];
-    document.documentElement.style.setProperty('--c', s.color);
-    document.documentElement.style.setProperty('--c-soft', s.accent);
-    document.documentElement.style.setProperty('--c-dark', shade(s.color, -0.22));
+    var s = SUBJ[S.subj], rt = document.documentElement.style;
+    rt.setProperty('--c', s.color);
+    rt.setProperty('--c-soft', hexA(s.color, 0.16));
+    rt.setProperty('--c-dark', shade(s.color, 0.22));
   }
   function shade(hex, amt) {
     var c = hex.replace('#', '');
@@ -1298,6 +1356,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       b.classList.toggle('on', Number(b.getAttribute('data-len')) === S.qlen);
     });
     $('#mixAll').checked = !!S.mix;
+    var sp = $('#mSpeedTxt');
+    if (sp) sp.textContent = (S.speedBest || 0) ? '최고 ' + S.speedBest + '문제 · 60초' : '60초 동안 최대한 많이';
   }
 
   /* ---------- stats ---------- */
@@ -1375,6 +1435,9 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     } else if (mode === 'wrong') {
       pool = poolWrong();
       title = '오답 집중 복습';
+    } else if (mode === 'speed') {
+      pool = S.mix ? D.questions.slice() : D.questions.filter(function (q) { return q.s === S.subj; });
+      title = '⏱ 1분 스피드';
     } else {
       pool = S.mix ? D.subjects.reduce(function (a, s) { return a.concat(poolForSubject(s.id, mode)); }, []) : poolForSubject(S.subj, mode);
       title = mode === 'today' ? '오늘 들은 강의' : '누적 랜덤 복습';
@@ -1388,18 +1451,49 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     }
     var n = mode === 'lecture' ? Math.min(pool.length, 6) : Math.min(pool.length, S.qlen);
     if (mode === 'ids') n = Math.min(pool.length, 20);
+    if (mode === 'speed') n = Math.min(pool.length, 60);
     var items = qs(pool, n).map(function (q) {
       var order = [0, 1, 2, 3];
       shuffle(order);
       return { q: q, order: order };
     });
     QS = { items: items, i: 0, ok: 0, combo: 0, maxCombo: 0, xp: 0, mode: mode, title: title, locked: false, sel: -1, opt: opt, wrongIds: [] };
+    // 🩹 오답 복수전은 XP 2배, ⏱ 스피드는 60초 제한
+    QS.xpMult = mode === 'wrong' ? 2 : 1;
+    if (mode === 'speed') { QS.speed = true; QS.end = Date.now() + 60000; }
     document.body.style.overflow = 'hidden';
+    document.body.classList.remove('fever');
     $('#quiz').classList.remove('hidden');
     $('#qCombo').innerHTML = '🔥 0';
     setCombo(0, 0);
-    $('#qTitle').textContent = title;
+    $('#qTitle').innerHTML = esc(title) + (QS.xpMult > 1 ? '<span class="revenge-chip">🩹 리벤지 XP ×2</span>' : '');
+    if (QS.speed) {
+      $('#qTitle').innerHTML = esc(title) + '<span class="revenge-chip">60초</span>';
+      speedStart();
+    }
     renderQ();
+  }
+
+  /* ---------- ⏱ 1분 스피드 타임어택 ---------- */
+  var speedTimer = null;
+  function speedStart() {
+    document.body.classList.add('speed');
+    var el = $('#qTimer');
+    if (el) el.textContent = '⏱ 60';
+    clearInterval(speedTimer);
+    speedTimer = setInterval(function () {
+      if (!QS || !QS.speed) { speedStop(); return; }
+      var left = Math.max(0, Math.ceil((QS.end - Date.now()) / 1000));
+      var tel = $('#qTimer');
+      if (tel) tel.textContent = '⏱ ' + left;
+      var bar = $('#qBar');
+      if (bar) bar.style.width = Math.min(100, (60 - left) / 60 * 100) + '%';
+      if (left <= 0) { speedStop(); if (QS) finish(); }
+    }, 200);
+  }
+  function speedStop() {
+    clearInterval(speedTimer); speedTimer = null;
+    document.body.classList.remove('speed', 'fever');
   }
 
   function renderQ() {
@@ -1478,14 +1572,18 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       else if (QS.combo === 3) bonus = 5;
       else if (QS.combo === 5) bonus = 10;
       else if (QS.combo > 5 && QS.combo % 5 === 0) bonus = 10;
-      var total = gain + bonus;
+      var total = (gain + bonus) * (QS.xpMult || 1);
       QS.xp += total; S.xp += total; day.xp = (day.xp || 0) + total;
       delete S.wrong[q.i];
       setCombo(QS.combo, bonus);
       sfx(bonus >= 10 ? 'combo5' : bonus >= 5 ? 'combo3' : QS.combo > 1 ? 'combo' : 'ok');
-      if (bonus) comboBanner(QS.combo + '연속 정답! +' + bonus + ' XP', QS.combo >= 5);
-      confetti(bonus ? 34 : 22);
-      fb(true, q, total, bonus);
+      if (QS.combo >= 3) {
+        document.body.classList.add('fever');
+        comboBanner('🔥 FEVER ' + QS.combo + '연속! +' + (bonus || 0) + ' XP', true);
+        sfx('crown');
+      } else if (bonus) comboBanner(QS.combo + '연속 정답! +' + bonus + ' XP', QS.combo >= 5);
+      if (!QS.speed) confetti(bonus ? 34 : 22);
+      if (!QS.speed) fb(true, q, total, bonus);
       var mk = isMastered(q.c, q.gp || 0);
       if (mk && bonus) sfx('crown');
     } else {
@@ -1495,11 +1593,17 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       S.wrong[q.i] = { c: (w.c || 0) + 1, d: todayStr() };
       if (QS.wrongIds.indexOf(q.i) < 0) QS.wrongIds.push(q.i);
       setCombo(0, 0);
+      document.body.classList.remove('fever');
       sfx('no');
-      var qb = $('#quiz'); qb.classList.add('shake'); setTimeout(function () { qb.classList.remove('shake'); }, 320);
-      fb(false, q, 3, 0);
+      if (!QS.speed) { var qb = $('#quiz'); qb.classList.add('shake'); setTimeout(function () { qb.classList.remove('shake'); }, 320); }
+      if (!QS.speed) fb(false, q, 3, 0);
     }
     touchStreak();
+    if (QS.speed) {
+      $('#qFb').classList.add('hidden');
+      clearTimeout(QS._t);
+      QS._t = setTimeout(function () { if (QS && QS.speed) nextQ(); }, 420);
+    }
     QS.best = Math.max(QS.best || 0, QS.combo);
     if (QS.combo > (S.bestCombo || 0)) { S.bestCombo = QS.combo; }
     save();
@@ -1526,6 +1630,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
 
   function finish() {
+    if (QS.speed) return finishSpeed();
+    document.body.classList.remove('fever');
     var tot = QS.items.length, ok = QS.ok, acc = Math.round(ok / tot * 100);
     var bonus = acc === 100 ? 20 : 10;
     S.xp += bonus;
@@ -1559,7 +1665,35 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     checkPromotion();
   }
 
+  function finishSpeed() {
+    speedStop();
+    var ok = QS.ok, best = Math.max(S.speedBest || 0, ok);
+    var isBest = ok > (S.speedBest || 0);
+    S.speedBest = best; save();
+    sfx('done'); confetti(60);
+    $('#qBar').style.width = '100%';
+    $('#qBody').innerHTML =
+      '<div class="summary">' +
+      '<img class="sum-mascot" src="assets/mascot-win.png" alt="">' +
+      '<h2>⚡ ' + ok + '문제!</h2><p>60초 동안 ' + ok + '문제를 맞혔어요' + (isBest ? ' — 최고 기록!' : '') + '</p>' +
+      '<div class="speed-score">⏱ 60초 · 최고 ' + best + '문제</div>' +
+      '<div class="rows"><div class="row"><span>최고 콤보</span><i>🔥 ' + QS.maxCombo + '연속</i></div>' +
+      '<div class="row"><span>얻은 XP</span><i>+' + QS.xp + ' XP</i></div></div>' +
+      '<button class="btn primary wide" id="qAgain">한 번 더</button>' +
+      '<button class="btn ghost wide" id="qSpeedWrong">틀린 ' + QS.wrongIds.length + '문제 복습</button>' +
+      '<button class="btn ghost wide" id="qHome">스테이지로</button></div>';
+    $('#qFb').classList.add('hidden');
+    var wrongNow = QS.wrongIds.slice();
+    var again = $('#qAgain'); if (again) again.onclick = function () { closeQuiz(); startSession('speed', {}); };
+    var sw = $('#qSpeedWrong'); if (sw) sw.onclick = function () { closeQuiz(); if (wrongNow.length) startSession('ids', { ids: wrongNow, title: '스피드 오답' }); };
+    var home = $('#qHome'); if (home) home.onclick = function () { closeQuiz(); renderAll(); };
+    renderHud(); renderReview(); renderStats(); renderQuest(); renderMascot(); renderChallenges(); renderPass(); renderDash();
+    checkPromotion();
+  }
+
   function closeQuiz() {
+    speedStop();
+    document.body.classList.remove('fever');
     document.body.style.overflow = '';
     $('#quiz').classList.add('hidden');
     $('#qBody').innerHTML = '';
@@ -1632,6 +1766,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     b.onclick = function () { S.qlen = Number(b.getAttribute('data-len')); save(); renderReview(); sfx('tap'); };
   });
   $('#mixAll').onchange = function () { S.mix = this.checked; save(); renderReview(); };
+  var _mSpeed = $('#mSpeed');
+  if (_mSpeed) _mSpeed.onclick = function () { sfx('tap'); startSession('speed', {}); };
   $('#qClose').onclick = function () { closeQuiz(); renderAll(); };
   $('#fbNext').onclick = nextQ;
   $('#stWrongGo').onclick = function () { startSession('wrong'); };
