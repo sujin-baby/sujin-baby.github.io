@@ -807,15 +807,53 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       ['8', '과거힌트 + for/since/before/until 과거', 'had been ~ing'],
       ['9', '현재힌트 + for/since', 'has/have been ~ing'],
       ['10', '미래힌트 + for/since 시간', 'will have been ~ing']
+    ] },
+    { g: '완료·대과거 11~12', tip: 'Unit 03 시제 마무리', rows: [
+      ['11', 'by+미래시점 / before ~ (진행 아닐 때)', 'will have pp (미래완료)'],
+      ['12', '과거 기준 + before/until/when 과거 (단발/상태)', 'had pp (과거완료)']
+    ] },
+    { g: '준동사 13~18', tip: 'Unit 04', rows: [
+      ['13', 'want, hope, expect, decide, plan, refuse, agree, promise', 'to + 동원'],
+      ['14', 'enjoy, finish, quit, give up, avoid, mind, suggest, consider', '~ing (동명사)'],
+      ['15', 'remember / forget / regret / try', '미래 to R / 과거·시험삼아 ~ing'],
+      ['16', '전치사 뒤 / look forward to, be used to, object to', '~ing'],
+      ['17', 'allow·ask·encourage + O / make·let·have + O', 'to R / 동원(수동 pp)'],
+      ['18', '감정·수식 분사', '하게 하면 ~ing / 느끼면·되면 pp']
+    ] },
+    { g: '관계사 19~22', tip: 'Unit 05', rows: [
+      ['19', '선행사 + 불완전절 (주어 없음)', '주격 who(사람) / which(사물)'],
+      ['20', '선행사 + S + V (목적어 없음)', '목적격 who(m) / which / that'],
+      ['21', '선행사 + [빈칸] + 명사 + 동사', '소유격 whose'],
+      ['22', '선행사 + 완전한 절', '관계부사 where/when/why/how (전치사+which)']
+    ] },
+    { g: '조동사 23~27', tip: 'Unit 06', rows: [
+      ['23', '추측 강도', 'must(확신) / may·might(약함) / cannot(~일 리가)'],
+      ['24', '의무·충고', 'should / ought to / had better + 동원'],
+      ['25', '과거 습관·후회', 'used to R(과거상태) / should have pp(후회)'],
+      ['26', '과거 추측', 'must have pp(확신) / may have pp(약함) / cannot have pp(부정)'],
+      ['27', '금지 vs 불필요', 'must not(금지) / don\'t have to(불필요)']
+    ] },
+    { g: '연결어 28~33', tip: 'Unit 07', rows: [
+      ['28', '역접 (문맥 반대)', 'however, nevertheless, on the other hand'],
+      ['29', '양보 (~이지만)', 'although/though + S+V / despite + 명사'],
+      ['30', '원인·결과', 'because + S+V / because of·due to + 명사 / therefore'],
+      ['31', '조건', 'unless(~않는 한), as long as, provided that'],
+      ['32', '시간 기간', 'while + S+V / during + 명사 / for + 숫자기간'],
+      ['33', '추가·예시·요약', 'moreover·in addition / for example / in summary']
     ] }
   ];
   function openGpSheet() {
     var h = '<button class="sheet-close" data-close="1">✕</button>' +
       '<div class="sheet-num">지텔프 켈리</div>' +
-      '<div class="sheet-title">G-POINT 1~10 요약 암기표</div>' +
-      '<div class="gp-note">조건(힌트)은 <b class="gp-cond">파랑</b>, 정답 공식은 <b class="gp-ans">노랑</b>으로 봐요.</div>';
-    GP_TABLE.forEach(function (grp) {
-      h += '<div class="gp-group"><div class="gp-group-h">' + esc(grp.g) + '</div>';
+      '<div class="sheet-title">G-POINT 1~33 요약 암기표</div>' +
+      '<div class="gp-note">조건(힌트)은 <b class="gp-cond">파랑</b>, 정답 공식은 <b class="gp-ans">노랑</b>으로 봐요.</div>' +
+      '<div class="gp-jump">';
+    GP_TABLE.forEach(function (grp, gi) {
+      h += '<button class="gp-jbtn" data-goto="' + gi + '">' + esc(grp.g) + '</button>';
+    });
+    h += '</div>';
+    GP_TABLE.forEach(function (grp, gi) {
+      h += '<div class="gp-group" id="gp-g' + gi + '"><div class="gp-group-h">' + esc(grp.g) + '</div>';
       grp.rows.forEach(function (r) {
         h += '<div class="gp-row">' +
           '<div class="gp-no">' + esc(r[0]) + '</div>' +
@@ -828,6 +866,14 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     h += '<button class="btn primary wide" data-close="1" style="margin-top:10px">확인</button>';
     $('#sheetIn').innerHTML = h;
     $('#sheet').classList.remove('hidden');
+    $$('.gp-jbtn').forEach(function (b) {
+      b.onclick = function () {
+        var t = $('#gp-g' + b.getAttribute('data-goto'));
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        $$('.gp-jbtn').forEach(function (x) { x.classList.toggle('on', x === b); });
+        sfx('tap');
+      };
+    });
   }
 
   /* ---------- header / tabs ---------- */
