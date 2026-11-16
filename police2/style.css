@@ -893,7 +893,9 @@ body.speed #qBar{background:linear-gradient(90deg,#ffd166,#ff8a3c)}
 .opt.gone{opacity:.28;text-decoration:line-through}
 .hint-note{margin:10px 0 0;font-size:11px;font-weight:800;color:var(--gold);background:rgba(255,194,75,.12);
   border:1px dashed rgba(255,194,75,.4);border-radius:11px;padding:8px 10px;line-height:1.5}
-body.boss .quiz{background:radial-gradient(circle at 50% 8%,rgba(248,113,113,.20),var(--bg) 58%)}
+body.boss .quiz{background:var(--bg)}
+body.boss .quiz::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(circle at 50% 6%,rgba(248,113,113,.18),transparent 52%)}
 .boss-head{display:flex;align-items:center;gap:9px;margin:2px 0 12px;padding:10px 12px;border-radius:14px;
   background:linear-gradient(100deg,rgba(248,113,113,.22),rgba(248,113,113,.05));
   border:1px solid rgba(248,113,113,.4)}

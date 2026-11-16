@@ -2764,14 +2764,6 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     return h;
   }
 
-  window.__QA = {
-    correct: function () { if (!QS) return 'no-session'; var q = QS.items[QS.i].q; var b = $('#qBody .opt[data-i="' + q.a + '"]'); if (b) b.click(); return 'ok'; },
-    wrong: function () { if (!QS) return 'no-session'; var q = QS.items[QS.i].q; var oi = -1; for (var k = 0; k < q.o.length; k++) if (k !== q.a) { oi = k; break; } var b = $('#qBody .opt[data-i="' + oi + '"]'); if (b) b.click(); return 'ok'; },
-    next: function () { var b = $('#fbNext'); if (b) b.click(); return 'ok'; },
-    state: function () { if (!QS) return 'none'; return { i: QS.i, n: QS.items.length, combo: QS.combo, bossDone: QS.bossDone, pending: !!QS.pendingBoss, isBoss: !!QS.items[QS.i].boss, bossPool: QS.bossPool ? QS.bossPool.length : 0 }; },
-    wrongN: function () { return Object.keys(S.wrong).length; },
-    subj: function () { return S.subj; }
-  };
   /* ---------- boot ---------- */
   $('#path')._scrolled = true;   // 첫 화면에서 D-Day·히어로가 가려지지 않게 자동 스크롤 생략
   renderAll();
