@@ -3365,7 +3365,7 @@ function checkFullInner_() {
   try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
   try { morningCheck_(); } catch (e) { note_('새벽 점검 실패: ' + e); }
   try { assignCleanDaily_(); } catch (e) { note_('배정 탭 정리 실패: ' + e); }
-  try { propsCleanup_(); } catch (e) { note_('속성 정리 실패: ' + e); }
+  if (!late_(150)) { try { propsCleanup_(); } catch (e) { note_('속성 정리 실패: ' + e); } }
   if (!props.getProperty('NPROD_CLEAN_V1')) try { props.setProperty('NPROD_CLEAN_V1', '1'); Object.keys(props.getProperties()).forEach(function (k) { if (/^NPROD_/.test(k) && k !== 'NPROD_CLEAN_V1') props.deleteProperty(k); }); } catch (e) {}   // 옛 공지 상품 기억(영구) 지움 → 6시간 캐시로 (표시 이름도 NPROD_로 시작해서 같이 지워지던 것 10/30)
   const runs = readRuns_(), times = {};
   step_('알림');
@@ -3577,7 +3577,7 @@ function checkFullInner_() {
   // 리뷰 사진 AI 분류가 남은 의뢰가 있으면 이어서 (10/31)
   if (props.getProperty('RVAI_Q') && !late_(200)) { step_('리뷰 사진 AI'); rvAiQueue_(); }
   if (geminiKey_()) { try { ensureInboxTrigger_(); } catch (e) {} }
-  try { subTime_('한눈에 명단 칸 확인', function () { dashListStale_(); }); } catch (e) { note_('한눈에 명단 칸 확인 실패: ' + e); }
+  if (!late_(200)) { try { subTime_('한눈에 명단 칸 확인', function () { dashListStale_(); }); } catch (e) { note_('한눈에 명단 칸 확인 실패: ' + e); } }
   if (geminiKey_() && !late_(200)) { try { subTime_('리뷰 사진 받는 곳', function () { rvInboxSort_(null); }); } catch (e) { note_('리뷰 사진 받는 곳 실패: ' + e); } }
   // 사용법 탭 글이 바뀌었으면 바로 (정리는 30분마다라 새 칸이 늦게 생김. 같으면 속성 하나만 보고 끝)
   try { ensureUsageTab_(); } catch (e) {}
@@ -4845,16 +4845,19 @@ function propsCleanup_(runs) {
   const all = props.getProperties(), live = {};
   (runs || readRuns_()).forEach(function (r) { const sid = String(r['시트ID'] || ''); if (sid) live[sid] = 1; });   // 진행목록에 남아 있는 명단 시트 것은 그대로
   const old30 = Utilities.formatDate(new Date(Date.now() - 30 * 86400000), CONFIG.TIMEZONE, 'yyyyMMdd'), s3 = Date.now() - 3 * 86400000;
-  let n = 0;
+  let n = 0, left = 0;
+  const t0 = Date.now();
   Object.keys(all).forEach(function (k) {
+    // 한 번에 조금씩 (11/16: 한꺼번에 지우다 15분 확인이 6분 제한에 걸려 끊김 → 보고·나머지 단계가 안 돎). 남으면 다음 확인에서 이어서
+    if (n >= 120 || Date.now() - t0 > 20000 || late_(200)) { left++; return; }
     let del = false, m;
     if ((m = k.match(/^(?:LISTK_|LISTH_|RVSEEN_|RVQMOD_|THUMB_)([-\w]{25,})$/))) del = !live[m[1]];
     else if ((m = k.match(/^(?:RVTXT_|RVSIG_)RVMSGD_[-\w]+_(\d{8})$/))) del = m[1] < old30;
     else if (/^MSGV_S_/.test(k)) del = Number(all[k]) < s3;
     if (del) { try { props.deleteProperty(k); n++; } catch (e) {} }
   });
-  props.setProperty('PROPCLEAN_DAY', tk);
-  if (n) note_('✓ 속성 정리: 안 쓰는 캐시 ' + n + '개 지움');
+  if (!left) props.setProperty('PROPCLEAN_DAY', tk);
+  if (n) note_('✓ 속성 정리: 안 쓰는 캐시 ' + n + '개 지움' + (left ? ' (남은 건 다음 확인에서)' : ''));
   return n;
 }
 function msgvPending_(st) { return st === '대기' || st === '방 못 찾음'; }
@@ -11557,14 +11560,16 @@ function dashListStale_(runs) {
   if (!sh || !blocks.length) return [];
   const byRow = {}; (runs || readRuns_()).forEach(function (r) { byRow[r.row] = r; });
   const out = [];
+  // A칸·경고 칸은 한 번에 읽음 (덩어리마다 읽으면 느려서 15분 확인이 6분을 넘김, 11/16)
+  const lr = sh.getLastRow(); if (lr < 2) return [];
+  const colA = sh.getRange(1, 1, lr, 1).getValues(), colW = sh.getRange(1, DASH_STALE_COL, lr, 1).getValues();
   blocks.forEach(function (b) {
     const r = byRow[b.row];
     if (!r || bareTitle_(r['명단 제목']) !== b.t) return;   // 진행목록 줄이 바뀌었으면 다음에 한눈에를 다시 그릴 때
     const want = Number(r['인원']) || 0, look = Math.max(b.n, want) + 2;
-    let shown = 0;
-    try { shown = sh.getRange(b.top + 2, 1, look, 1).getValues().filter(function (v) { return v[0] instanceof Date; }).length; } catch (e) { return; }
-    const wc = sh.getRange(b.top, DASH_STALE_COL);
-    if (shown >= want) { if (String(wc.getValue())) wc.clearContent(); return; }
+    const shown = colA.slice(b.top + 1, b.top + 1 + look).filter(function (v) { return v[0] instanceof Date; }).length;
+    const wc = sh.getRange(b.top, DASH_STALE_COL), had = String((colW[b.top - 1] || [''])[0] || '');
+    if (shown >= want) { if (had) wc.clearContent(); return; }
     // 다시 불러오기: IMPORTRANGE 범위 끝을 바꿔(같은 칸들) 구글이 새로 가져오게
     try {
       const fc = sh.getRange(b.top + 2, 1), f = fc.getFormula();
