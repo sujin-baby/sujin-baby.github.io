@@ -1437,9 +1437,10 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
   function poolWrong() {
     var ids = Object.keys(S.wrong);
+    if (!ids.length) return false;
     return D.questions.filter(function (q) {
-      if (!ids.length) return false;
       if (!S.wrong[q.i]) return false;
+      if (!inScope(q)) return false;
       if (S.mix) return true;
       return q.s === S.subj;
     });
@@ -1537,7 +1538,9 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       pool = D.questions.filter(function (q) { return opt.ids.indexOf(q.i) >= 0 && inScope(q); });
       title = opt.title || '틀린 문제 다시 풀기';
     } else if (mode === 'gp') {
-      pool = gpQuestions(opt.n);
+      pool = opt.ids && opt.ids.length
+        ? D.questions.filter(function (q) { return opt.ids.indexOf(q.i) >= 0; })
+        : gpQuestions(opt.n);
       title = opt.title || ('G-POINT ' + opt.n + ' · 켈리 기출');
     } else if (mode === 'wrong') {
       pool = poolWrong();
@@ -1562,7 +1565,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       else toast('아직 체크한 진도가 없어요. 스테이지에서 1강부터 체크해 주세요.');
       return;
     }
-    var n = mode === 'lecture' ? Math.min(pool.length, 6) : Math.min(pool.length, S.qlen);
+    var n = mode === 'lecture' ? Math.min(pool.length, 6) : mode === 'gp' ? 1 : Math.min(pool.length, S.qlen);
     if (mode === 'ids') n = Math.min(pool.length, 20);
     if (mode === 'speed') n = Math.min(pool.length, 60);
     var items = qs(pool, n).map(function (q) {
@@ -2284,9 +2287,9 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       h += '<div class="gp-group" id="gp-g' + gi + '"><div class="gp-group-h">' + esc(grp.g) + '</div>';
       grp.rows.forEach(function (r) {
         h += '<button class="gp-row" data-gp="' + esc(r[0]) + '">' +
-          '<div class="gp-no">' + esc(r[0]) + '</div>' +
-          '<div class="gp-body"><div class="gp-cond">' + esc(r[1]) + '</div>' +
-          '<div class="gp-ans">👉 ' + esc(r[2]) + '</div></div>' +
+          '<span class="gp-no">' + esc(r[0]) + '</span>' +
+          '<span class="gp-body"><span class="gp-cond">' + esc(r[1]) + '</span>' +
+          '<span class="gp-ans">👉 ' + esc(r[2]) + '</span></span>' +
           '<span class="gp-go">▶</span></button>';
       });
       if (grp.tip) h += '<div class="gp-tip">💡 ' + esc(grp.tip) + '</div>';
@@ -2390,7 +2393,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (g) { g._built = false; }
     if (l) { l._built = false; }
     if (p) { p._built = false; }
-    CF.deck = [];
+    var key = S.subj + '|' + scopeQPool(S.subj).length;
+    if (CF.key !== key) { CF.deck = []; CF.key = key; }
     if (!$('#view-memo').classList.contains('hidden')) renderMemo();
   }
 
