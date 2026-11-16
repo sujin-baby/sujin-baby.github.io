@@ -19,5 +19,24 @@ let err = ''; try { G('savePlan_(__D)'); } catch (e) { err = String(e.stack || e
 ok(!err, '오류 ' + err);
 const pr = env.__ss.sheets['일정'].rows[1] || [];
 ok(pr[4] === '#11.17 앨비나프레시 황금향 10' && pr[5] === '#11.17 앨비나프레시 황금향 10 (뽀짝오리)', '일정 계획 이름 ' + JSON.stringify([pr[4], pr[5]]));
+// (11/16) 이미 생긴 다음 일차: '#택11.17 과일쏙 못난이사과외 6' → 바로 앞 진행 '#택11.16 과일쏙 사과감귤 토스6' 따라
+{
+  const LH = G('LIST_HEADER'), mk = o => LH.map(h => o[h] !== undefined ? o[h] : '');
+  const t0 = new Date(); t0.setHours(0, 0, 0, 0); const day = n => new Date(t0.getTime() + n * 86400000);
+  env.__ss.sheets['진행목록'] = new H.Sheet('진행목록', [LH.slice(),
+    mk({ '진행일': day(-12), '명단 제목': '#택11.4 (업체명) 귤외 6 (뽀짝오리)', '시트ID': 'S9', '인원': 6, '진행 상태': '진행중' }),
+    mk({ '진행일': day(0), '명단 제목': '#택11.16 과일쏙 사과감귤 토스6 (뽀짝오리)', '카톡방': '#택11.16 과일쏙 사과감귤 토스6', '시트ID': 'S1', '인원': 6, '진행 상태': '진행중' }),
+    mk({ '진행일': day(1), '명단 제목': '#택11.17 과일쏙 못난이사과외 6 (뽀짝오리)', '카톡방': '#택11.17 과일쏙 못난이사과외 6', '시트ID': 'S1', '인원': 0, '목표인원': 6, '진행 상태': '진행예정', '요청ID': 'RQ7-2' }),
+    mk({ '진행일': day(1), '명단 제목': '#택11.17 오늘과일 귤외 6 (뽀짝오리)', '시트ID': 'S9', '인원': 0, '진행 상태': '진행예정' }),
+    mk({ '진행일': day(0), '명단 제목': '#택11.16 오늘과일 귤외 6 (뽀짝오리)', '시트ID': 'S9', '인원': 3, '진행 상태': '진행중' })]);
+  G("renameRunFiles_ = function () { globalThis.__RF = 1; return []; }; updatePay_ = function () {}; payRename_ = function () {};");
+  let e2 = ''; try { G('planNameFix1_()'); } catch (e) { e2 = String(e.stack || e); }
+  ok(!e2, '오류2 ' + e2);
+  const t = G('readRuns_()').map(r => G('bareTitle_')(r['명단 제목']));
+  ok(t.includes('#택11.17 과일쏙 사과감귤 토스6') && !t.includes('#택11.17 과일쏙 못난이사과외 6'), '내일 진행 이름 ' + JSON.stringify(t));
+  ok(t.includes('#택11.17 오늘과일 귤외 6'), '바로 앞 진행과 같은 이름은 그대로');
+  ok(G('typeof __RF === "undefined"'), '명단 시트·폼 파일 이름은 안 바꿈');
+  ok(/^✓/.test(env.__props.get('PLANNAME1')), '결과 ' + env.__props.get('PLANNAME1'));
+}
 console.log(fails.length ? 'XX 실 두 번·다음 일차 방제 시험 실패:\n- ' + fails.join('\n- ') : '✓ 실 두 번 안 붙음·다음 일차 방제는 1일차 따라 시험 통과');
 process.exit(fails.length ? 1 : 0);

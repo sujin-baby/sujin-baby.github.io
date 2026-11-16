@@ -1865,7 +1865,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3386,6 +3386,7 @@ function checkFullInner_() {
   try { rvPhotoFix3_(); } catch (e) {}
   try { rvPhotoFix4_(); } catch (e) {}
   try { albRename1_(); } catch (e) {}
+  try { planNameFix1_(); } catch (e) {}
   try { rvPhotoFix2_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
@@ -8149,6 +8150,41 @@ function albRename1_() {
     props.setProperty('ALBREN1', (ok ? '✓ ' : st + ' 실패(') + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '바꿀 것 없음') + (ok ? '' : ')'));
     if (ok && out.length) { try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); } }
   } catch (e) { props.setProperty('ALBREN1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/16 한 번, 사용자: '#택11.16 과일쏙 사과감귤 토스6 내일 거 왜 없어' → 내일 진행이 생성기 자동 이름 '#택11.17 과일쏙 못난이사과외 6'으로 만들어짐)
+//  모든 의뢰: 오늘·앞으로 진행과 일정 대기 계획 중 1일차(같은 명단 시트에서 가장 이른 진행)와 캠페인 이름이 다른 것 → 1일차 방제에서 날짜·끝 숫자만 바꾼 이름으로.
+//  방제만 (명단 시트·폼 파일 이름은 그대로, __NO_FILE_RENAME), 월급시트 이름도 같이
+function planNameFix1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('PLANNAME1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const runs = readRuns_(), t0 = today_().getTime(), out = [], iso = function (d) { return Utilities.formatDate(d, CONFIG.TIMEZONE, 'yyyy-MM-dd'); };
+    // 기준 = 같은 명단 시트에서 이 진행 바로 앞 진행 (중간에 이름을 바꾼 의뢰는 바뀐 이름 따라). 아직 아무도 안 낸(0명) 진행만
+    const prevOf = function (r) { return runs.filter(function (x) { return x.row !== r.row && String(x['시트ID']) === String(r['시트ID']) && x['진행일'] instanceof Date && x['진행일'] < r['진행일']; }).sort(function (a, b) { return b['진행일'] - a['진행일']; })[0]; };
+    const first = {};
+    runs.forEach(function (r) { const sid = String(r['시트ID'] || ''); if (!sid || !(r['진행일'] instanceof Date) || dayStart_(r['진행일']) > t0) return; if (!first[sid] || r['진행일'] > first[sid]['진행일']) first[sid] = r; });   // 일정 계획 기준 = 오늘까지 마지막 진행
+    runs.forEach(function (r) {
+      if (!r['시트ID'] || !(r['진행일'] instanceof Date) || dayStart_(r['진행일']) < t0 || r['진행 상태'] === '종료' || Number(r['인원']) > 0) return;
+      const d1 = prevOf(r);
+      if (!d1) return;
+      if (campKey_(r['명단 제목']) === campKey_(d1['명단 제목'])) return;
+      const nt = planDayTitle_(d1['명단 제목'], iso(r['진행일']), r['명단 제목']);
+      globalThis.__PAY_RENAME_ANY = true; globalThis.__NO_FILE_RENAME = true;
+      try { out.push(bareTitle_(r['명단 제목']) + ' → ' + (renameRun_(r, nt, '1일차 방제 따라 (사용자 11/16)') ? nt : nt + ' 안 바뀜')); } finally { globalThis.__PAY_RENAME_ANY = false; globalThis.__NO_FILE_RENAME = false; }
+    });
+    const ps = planSheet_(), pl = ps.getLastRow(), byReq = {};
+    readRuns_().forEach(function (r) { if (r['요청ID']) byReq[String(r['요청ID']).replace(/-\d+$/, '')] = byReq[String(r['요청ID']).replace(/-\d+$/, '')] || first[String(r['시트ID'])]; });
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x, i) {
+      if (x[8] !== '대기' || !(x[3] instanceof Date)) return;
+      const d1 = byReq[String(x[0]).replace(/-\d+$/, '')];
+      if (!d1 || campKey_(x[4]) === campKey_(d1['명단 제목'])) return;
+      const room = planDayTitle_(d1['카톡방'] || d1['명단 제목'], iso(x[3]), x[4]), title = planDayTitle_(d1['명단 제목'], iso(x[3]), x[5]) + ((String(x[5]).match(/\s*\([^)]*\)\s*$/) || [''])[0]);
+      ps.getRange(i + 2, 5, 1, 2).setValues([[room, title]]); out.push('(일정) ' + x[4] + ' → ' + room);
+    });
+    const ok = out.every(function (x) { return !/안 바뀜/.test(x); });
+    props.setProperty('PLANNAME1', (ok ? '✓ ' : st + ' 실패(') + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '바꿀 것 없음').slice(0, 1200) + (ok ? '' : ')'));
+    if (ok && out.length) { try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); } }
+  } catch (e) { props.setProperty('PLANNAME1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 // 의뢰서에 포토리뷰가 없는지 (RV_ kind 'text'이고 섞임·가이드에 포토/사진 말이 없음) (11/16)
 //  실배송 의뢰는 빼기: 물건을 실제로 받아 사진을 찍어 올리는 일이 많아서 AI 판단 그대로 (11/16: 하루비 백팩 6장을 텍스트로 옮겼다가 되돌림)
