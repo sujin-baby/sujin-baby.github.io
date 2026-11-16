@@ -789,6 +789,47 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     }).join(' · ');
   }
 
+
+  /* ---------- 📘 G-POINT 1~10 요약 암기표 ---------- */
+  var GP_TABLE = [
+    { g: '가정법 1~3', tip: '', rows: [
+      ['1', 'If 과거(-ed, were)', 'wcm + 동원'],
+      ['2', 'If had pp (= Had 주어 pp)', 'wcm + have pp'],
+      ['3', '주요명제결충 + that절', '(should) + 동원']
+    ] },
+    { g: '진행형 4~7', tip: '6~10번은 시제 힌트는 같고 for/since 유무로 been ~ing 구분', rows: [
+      ['4', '주절 과거 + while ~', 'while절 was/were ~ing'],
+      ['5', 'when 과거 + 주절 ~', '주절 was/were ~ing'],
+      ['6', '현재힌트(now, right now, at the moment)', 'am/are/is ~ing'],
+      ['7', '미래힌트(tomorrow, next~, by) / 시간·조건절 현재', 'will be ~ing']
+    ] },
+    { g: '완료진행 8~10', tip: '시제 힌트는 같고 for/since 유무로 been ~ing 구분', rows: [
+      ['8', '과거힌트 + for/since/before/until 과거', 'had been ~ing'],
+      ['9', '현재힌트 + for/since', 'has/have been ~ing'],
+      ['10', '미래힌트 + for/since 시간', 'will have been ~ing']
+    ] }
+  ];
+  function openGpSheet() {
+    var h = '<button class="sheet-close" data-close="1">✕</button>' +
+      '<div class="sheet-num">지텔프 켈리</div>' +
+      '<div class="sheet-title">G-POINT 1~10 요약 암기표</div>' +
+      '<div class="gp-note">조건(힌트)은 <b class="gp-cond">파랑</b>, 정답 공식은 <b class="gp-ans">노랑</b>으로 봐요.</div>';
+    GP_TABLE.forEach(function (grp) {
+      h += '<div class="gp-group"><div class="gp-group-h">' + esc(grp.g) + '</div>';
+      grp.rows.forEach(function (r) {
+        h += '<div class="gp-row">' +
+          '<div class="gp-no">' + esc(r[0]) + '</div>' +
+          '<div class="gp-body"><div class="gp-cond">' + esc(r[1]) + '</div>' +
+          '<div class="gp-ans">👉 ' + esc(r[2]) + '</div></div></div>';
+      });
+      if (grp.tip) h += '<div class="gp-tip">💡 ' + esc(grp.tip) + '</div>';
+      h += '</div>';
+    });
+    h += '<button class="btn primary wide" data-close="1" style="margin-top:10px">확인</button>';
+    $('#sheetIn').innerHTML = h;
+    $('#sheet').classList.remove('hidden');
+  }
+
   /* ---------- header / tabs ---------- */
   function hexA(hex, a) {
     var c = String(hex).replace('#', '');
@@ -1455,7 +1496,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (mode === 'ids') n = Math.min(pool.length, 20);
     if (mode === 'speed') n = Math.min(pool.length, 60);
     var items = qs(pool, n).map(function (q) {
-      var order = [0, 1, 2, 3];
+      var order = q.o.map(function (_, i) { return i; });   // OX(2지선다)도 지원
       shuffle(order);
       return { q: q, order: order };
     });
@@ -1725,6 +1766,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!S.muted) sfx('tap');
   };
   $('#planBtn').onclick = function () { sfx('tap'); openPlanSheet(); };
+  var _gpBtn = $('#gpBtn');
+  if (_gpBtn) _gpBtn.onclick = function () { sfx('tap'); openGpSheet(); };
   var _dashBar = $('#dashBar');
   if (_dashBar) _dashBar.onclick = function () { S.dashOpen = !S.dashOpen; save(); sfx('tap'); renderDash(); };
   $('#rankBadge').onclick = function () { sfx('tap'); openRankSheet(rankOf(S.xp || 0).r, false); };
