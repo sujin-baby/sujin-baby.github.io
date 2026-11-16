@@ -720,3 +720,23 @@ body.speed #qBar{background:linear-gradient(90deg,#ffd166,#ff8a3c)}
   .gp-row{padding:6px 7px;gap:6px}
   .gp-no{flex:0 0 18px}
 }
+
+/* 다크 테마 보정: 하단 탭바·퀘스트 칩·챌린지 */
+.tabbar{background:rgba(11,13,16,.94);border-top-color:var(--line)}
+.tab{color:var(--ink3)}
+.tab.on{color:var(--c)}
+.quest-item{background:var(--card3);color:var(--ink3)}
+.quest-item b{color:var(--ink2)}
+.quest-item.done{background:rgba(52,211,153,.16);color:#8ee8c4}
+.quest-item.done b{color:#8ee8c4}
+.ch-item{background:var(--card2)}
+.ch-item.done{background:rgba(52,211,153,.14);color:#8ee8c4}
+.ch-item.done .ch-n{color:#8ee8c4}
+.challenge,.pass-card,.dash-bar{background:var(--card)}
+.hud-chip,.rank-badge{background:var(--card)}
+.rank-badge{color:var(--ink)}
+.summary .row{background:var(--card2)}
+.cd-row{background:var(--card2)}
+.course-item,.node-date{background:var(--card2)}
+.empty{background:transparent}
+.toast{background:#E9EDF5;color:#0B0D10}
