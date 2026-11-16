@@ -47,5 +47,16 @@ ok(pr[4] === '#11.17 앨비나프레시 황금향 10' && pr[5] === '#11.17 앨�
   const t = G('readRuns_()').map(r => G('bareTitle_')(r['명단 제목']));
   ok(t[0] === '#11.17 실 에스지엠컴퍼니문풍지외3' && JSON.stringify(G('__RN')) === JSON.stringify(['# 실 실 에스지엠컴퍼니문풍지외', '# 실 에스지엠컴퍼니문풍지외']), '실 실 고침 ' + JSON.stringify([t, G('__RN')]));
 }
+// (11/16) 문풍지 3 + 풍선 1 = 4: 11.17 방제·목표 4, 11.18 계획 2 (풍선 0)
+{
+  const LH = G('LIST_HEADER'), mk = o => LH.map(h => o[h] !== undefined ? o[h] : '');
+  env.__ss.sheets['진행목록'] = new H.Sheet('진행목록', [LH.slice(), mk({ '진행일': new Date(2026, 10, 17), '명단 제목': '#11.17 실 실 에스지엠컴퍼니문풍지외3 (뽀짝오리)', '카톡방': '#11.17 실 실 에스지엠컴퍼니문풍지외3', '시트ID': 'S3', '목표인원': 3, '인원': 0, '요청ID': 'nd6', '실배송': 'Y' })]);
+  env.__ss.sheets['일정'] = new H.Sheet('일정', [G('PLAN_HEAD').slice(), ['nd6-2', 'x', 2, new Date(2026, 10, 18), '#11.18 실 문풍지 풍선 3', '#11.18 실 문풍지 풍선 3 (뽀짝오리)', 3, '[[2,1],[1,1]]', '대기', '{}']]);
+  G("renameRunFiles_ = function () { return []; }");
+  G('mungFix1_()');
+  const r = G('readRuns_()')[0], pr = env.__ss.sheets['일정'].rows[1];
+  ok(G('bareTitle_')(r['명단 제목']) === '#11.17 실 에스지엠컴퍼니문풍지외4' && Number(r['목표인원']) === 4, '11.17 방제·목표 ' + r['명단 제목'] + ' ' + r['목표인원']);
+  ok(pr[4] === '#11.18 실 에스지엠컴퍼니문풍지외2' && pr[6] === 2 && pr[7] === '[[2,1],[0,1]]', '11.18 계획 ' + JSON.stringify(pr.slice(4, 8)) + ' ' + env.__props.get('MUNGFIX1'));
+}
 console.log(fails.length ? 'XX 실 두 번·다음 일차 방제 시험 실패:\n- ' + fails.join('\n- ') : '✓ 실 두 번 안 붙음·다음 일차 방제는 1일차 따라 시험 통과');
 process.exit(fails.length ? 1 : 0);

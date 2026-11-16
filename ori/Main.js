@@ -1865,7 +1865,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -1961,6 +1961,13 @@ function createRunLocked_(d) {
       throw e;
     }
     const made = d.n ? runByRequest_(d.n) : null;
+    // 방제 끝 숫자와 공지 상품 머리 인원('쿠팡 (3명):')의 합이 다르면 바로 할 일 (11/16 문풍지 3명 + 풍선 1명인데 방제·목표 3)
+    try {
+      const heads = String(d.desc || '').match(/^[^\n]*\((\d+)\s*명\)\s*:\s*$/gm) || [], sum = heads.reduce(function (a2, l) { return a2 + Number((l.match(/\((\d+)\s*명\)/) || [])[1] || 0); }, 0);
+      const tn = Number((bareTitle_(d.title).match(/(\d+)\s*$/) || [])[1] || 0);
+      if (heads.length > 1 && sum && tn && sum !== tn && !/장바구니/.test(String(d.desc)) && d.platform !== '기대평')
+        queueMsg_('내 할 일', '⚠ 방제 인원 확인: ' + bareTitle_(d.title) + '\n공지 상품별 인원 합은 ' + sum + '명인데 방제 끝 숫자(목표)는 ' + tn + '명이에요. 맞는지 확인해 주세요 (틀리면 진행목록 방제 끝 숫자를 고치면 목표도 같이 바뀜)', '할 일');
+    } catch (e) {}
     res.assign = made ? autoAssign_(made, d.desc) : '';
     return res;
   }
@@ -3388,6 +3395,7 @@ function checkFullInner_() {
   try { albRename1_(); } catch (e) {}
   try { planNameFix1_(); } catch (e) {}
   try { silsil1_(); } catch (e) {}
+  try { mungFix1_(); } catch (e) {}
   try { rvPhotoFix2_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
@@ -8201,6 +8209,32 @@ function silsil1_() {
     props.setProperty('SILSIL1', (ok ? '✓ ' : st + ' 실패(') + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '진행 못 찾음') + (ok ? '' : ')'));
     if (ok) { try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); } }
   } catch (e) { props.setProperty('SILSIL1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/16 한 번, 사용자: 문풍지 3명 + 풍선 1명 = 4명인데 방제·목표가 3) 11.17 진행 방제 끝 숫자 4(목표 4), 11.18 계획은 문풍지 2명·풍선 0명 = 2
+function mungFix1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('MUNGFIX1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const out = [], key = '에스지엠컴퍼니문풍지외';
+    const r = readRuns_().filter(function (x) { return campKey_(x['명단 제목']) === key && dateTok_(x['명단 제목']) === '11.17'; })[0];
+    if (!r) { props.setProperty('MUNGFIX1', st + ' 실패(11.17 진행 못 찾음)'); return; }
+    if (Number(r['인원']) > 4) { props.setProperty('MUNGFIX1', st + ' 실패(이미 ' + r['인원'] + '명)'); return; }
+    const old = bareTitle_(r['명단 제목']), nt = old.replace(/^([#업택\s]*\d{1,2}\.\d{1,2}\s*)실\s+실\s+/, '$1실 ').replace(/\d+\s*$/, '4');
+    if (nt !== old) out.push(renameRun_(r, nt, '공지 인원 합 4명 (사용자 11/16)') ? nt : nt + ' 안 바뀜');
+    if (Number(readRuns_().filter(function (x) { return x.row === r.row; })[0]['목표인원']) !== 4) setRun_(r.row, '목표인원', 4);
+    const ps = planSheet_(), pl = ps.getLastRow(), base = bareTitle_(nt).replace(/\d+\s*$/, '');
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x, i) {
+      if (String(x[0]) !== String(r['요청ID']) + '-2' || x[8] !== '대기') return;
+      let c = []; try { c = JSON.parse(x[7] || '[]'); } catch (e) {}
+      if (Array.isArray(c) && c.length === 2) { if (Array.isArray(c[0])) { c[0][0] = 2; c[1][0] = 0; } else { c[0] = 2; c[1] = 0; } }
+      const room = base.replace(/\d{1,2}\.\d{1,2}/, '11.18') + '2';
+      ps.getRange(i + 2, 5, 1, 4).setValues([[room, room + ' (뽀짝오리)', 2, JSON.stringify(c)]]);
+      out.push('(일정 11.18) ' + room + ' ' + JSON.stringify(c));
+    });
+    const ok = out.every(function (x) { return !/안 바뀜/.test(x); });
+    props.setProperty('MUNGFIX1', (ok ? '✓ ' : st + ' 실패(') + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + out.join(', ') + (ok ? '' : ')'));
+    if (ok) { try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); } }
+  } catch (e) { props.setProperty('MUNGFIX1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 // 의뢰서에 포토리뷰가 없는지 (RV_ kind 'text'이고 섞임·가이드에 포토/사진 말이 없음) (11/16)
 //  실배송 의뢰는 빼기: 물건을 실제로 받아 사진을 찍어 올리는 일이 많아서 AI 판단 그대로 (11/16: 하루비 백팩 6장을 텍스트로 옮겼다가 되돌림)
