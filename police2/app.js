@@ -1976,7 +1976,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   var _libBtn = $('#libBtn');
   if (_libBtn) _libBtn.onclick = function () { sfx('tap'); MEMO.seg = 'lib'; openMemo('lib'); };
   $$('#memoSeg .seg-b').forEach(function (b) {
-    b.onclick = function () { sfx('tap'); MEMO.seg = b.getAttribute('data-seg'); renderMemo(); };
+    b.onclick = function () { sfx('tap'); MEMO.seg = b.getAttribute('data-seg'); CF.flipped = false; renderMemo(); };
   });
   var _fcard = $('#fcard');
   if (_fcard) _fcard.onclick = function () { CF.flipped = !CF.flipped; sfx('tap'); cfPaint(); };
@@ -2170,7 +2170,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         tag: SUBJ[q.s].name + ' · ' + clip(unitName(q.c, q.u) || '', 16),
         front: q.q,
         back: trivial ? clip(q.e, 120) : ans,
-        note: trivial ? ('정답 · ' + clip(ans, 40)) : clip(q.e, 110)
+        note: trivial ? '' : clip(q.e, 110)
       });
     });
     return { cards: out, beginner: sp.beginner };
@@ -2236,7 +2236,10 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var ss = expSentences(q.e);
     for (var i = 0; i < ss.length; i++) {
       var b2 = blankFromText(ss[i]);
-      if (b2) return { id: q.i, key: b2.key, text: b2.text, tag: tag, full: ss[i], note: '정답 · ' + clip(ans, 90), from: '해설' };
+      if (b2) {
+        var triv = /^[OX]\s*[(（]/.test(ans) || ans.length < 8;
+        return { id: q.i, key: b2.key, text: b2.text, tag: tag, full: ss[i], note: triv ? '' : ('정답 · ' + clip(ans, 90)), from: '해설' };
+      }
     }
     return null;
   }
