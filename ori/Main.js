@@ -3445,6 +3445,7 @@ function checkFullInner_() {
   try { silsil1_(); } catch (e) {}
   try { mungFix1_(); } catch (e) {}
   try { cableTak2_(); } catch (e) {}
+  try { memoRec1_(); } catch (e) {}
   try { upAcctOpen1_(); } catch (e) {}
   try { exp135_(); } catch (e) {}
   try { rvPhotoFix2_(); } catch (e) {}
@@ -8265,6 +8266,27 @@ function silsil1_() {
   } catch (e) { props.setProperty('SILSIL1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 // (11/16 한 번, 사용자: 문풍지 3명 + 풍선 1명 = 4명인데 방제·목표가 3) 11.17 진행 방제 끝 숫자 4(목표 4), 11.18 계획은 문풍지 2명·풍선 0명 = 2
+// (11/16 한 번) 방제가 바뀌어 한눈에 O열에서 지워진 메모 되살림: 옛 방제로 저장된 메모 → 지금 방제 줄 (그 줄 O가 비었을 때만)
+function memoRec1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('MEMOREC1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const mo = JSON.parse(props.getProperty('DASH_MEMOS') || '{}'), out = [];
+    const pairs = [['#11.17실/빈 김상사 케이블타이5', '#11.17택 실/빈 김상사 케이블타이5'], ['#11.17 앨비나프레시 제주황금10', '#11.17 앨비나프레시 황금향 10']];
+    const sh = adminSs_().getSheetByName(DASH_TAB), n = Math.min(sh.getLastRow() - 1, 60);
+    const bo = sh.getRange(2, 2, n, 14).getValues();
+    pairs.forEach(function (pq) {
+      if (!mo[pq[0]]) return;
+      const i = bo.findIndex(function (v) { return bareTitle_(String(v[0])) === pq[1]; });
+      if (i < 0) { out.push(pq[1] + ' 줄 없음'); return; }
+      if (String(bo[i][13] || '').trim()) { out.push(pq[1] + ' 이미 있음'); return; }
+      sh.getRange(i + 2, 15).setValue(mo[pq[0]]); mo[pq[1]] = mo[pq[0]]; delete mo[pq[0]];
+      out.push(pq[1] + ' ← ' + mo[pq[1]]);
+    });
+    props.setProperty('DASH_MEMOS', JSON.stringify(mo));
+    props.setProperty('MEMOREC1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '없음'));
+  } catch (e) { props.setProperty('MEMOREC1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
 // 김상사 케이블타이: 사용자가 방제를 '#11.1x택 실/빈 김상사 케이블타이5'로 직접 고친 뒤 택대가 꺼진 것을 다시 켬 (11/16 사용자: 택대 계속 켜져 있게). 방제·명단 시트 이름은 안 건드림
 function cableTak2_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('CABLETAK2') || '');
