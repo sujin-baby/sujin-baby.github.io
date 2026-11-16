@@ -1115,7 +1115,108 @@ SS: 38,800 / Q: 48,800원
   console.log('✓ 톡딜 택배대행 정상 판정 및 방제 동적 조합·키워드 예외 한정 시험 통과');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (30개 샘플 전원 일치)');
+// ==========================================
+// 11/17 v186: 다중 상품 일차 인원 합산(문풍지 3 + 풍선 1 = 4, 2일차 2)·일차 계획 방제 형식·택 경고/보정·이름에 날짜/끝 숫자 없음
+// ==========================================
+console.log('-- Test 31: 다중 상품 일차 인원 합산·일차 계획 방제 형식·택 경고/보정·이름 (11/17 v186)');
+{
+  const req = `#입금대행 실배 8900 3900
+
+1. 검색 키워드 : 문풍지
+2. 키워드 검색 시 현재 순위 : 1위
+3. 총 구매 건수 : 5건
+4. 하루 진행 건수 : 3-2
+5. 상품주소(URL) : https://www.coupang.com/vp/products/1111111111?vendorItemId=2222222222
+6. 구매옵션 : 백색 10매
+7. 포토제공 유 무 : 무
+8. 리뷰내용 가이드 : 자율
+9. 입금하실 입금자명 : 김수진
+10.택배대행 Y/N : N
+=================
+1. 검색 키워드 : 풍선
+2. 키워드 검색 시 현재 순위 : 3위
+3. 총 구매 건수 : 1건
+4. 하루 진행 건수 : 1
+5. 상품주소(URL) : https://www.coupang.com/vp/products/3333333333?vendorItemId=4444444444
+6. 구매옵션 : 레드 10개
+7. 포토제공 유 무 : 무
+8. 리뷰내용 가이드 : 자율
+9. 입금하실 입금자명 : 김수진
+10.택배대행 Y/N : N`;
+
+  const h = P.parseAll(req);
+  if (h.guides.length !== 2) throw new Error('Test 31 guides length should be 2, got: ' + h.guides.length);
+  const g0 = h.guides[0], g1 = h.guides[1];
+  if (!g0.days || g0.days.length !== 2 || g0.days[0].n !== '3' || g0.days[1].n !== '2') {
+    throw new Error('Test 31 문풍지 하루 3-2 파싱 실패: ' + JSON.stringify(g0.days));
+  }
+  if (String(g1.total) !== '1' || String(g1.daily) !== '1') {
+    throw new Error('Test 31 풍선 총 1·하루 1 파싱 실패: ' + JSON.stringify([g1.total, g1.daily]));
+  }
+
+  getElem('req').value = req;
+  P.setGuides(h.guides);
+  getElem('takdae').checked = false;
+  getElem('realship').checked = true;
+  getElem('fruit').checked = false;
+  getElem('t-up').checked = false;
+  getElem('t-ip').checked = true;
+  getElem('day').value = '1';
+  getElem('date').value = '2026-11-17';
+  getElem('o-room').value = '';
+
+  // ① 그날 인원 = 진행되는 상품별 인원 합 (1일차 문풍지 3 + 풍선 1 = 4, 2일차 2 + 0 = 2)
+  if (P.dayTotalOf(1) !== '4') throw new Error('Test 31 1일차 인원은 4여야 함: ' + P.dayTotalOf(1));
+  if (P.dayTotalOf(2) !== '2') throw new Error('Test 31 2일차 인원은 2여야 함: ' + P.dayTotalOf(2));
+  const room1 = P.makeRoom('11.17', P.dayTotalOf(1));
+  if (room1 !== '#11.17 실 문풍지 풍선 4') throw new Error('Test 31 1일차 방제 실패: ' + room1);
+
+  // ② 일차 계획: 인원은 그날 합계, 방제는 1일차 방제 형식 그대로
+  getElem('o-room').value = room1;
+  const plan = P.buildPlan();
+  if (plan.length !== 1) throw new Error('Test 31 2일차 계획이 1개여야 함: ' + JSON.stringify(plan));
+  if (Number(plan[0].n) !== 2) throw new Error('Test 31 2일차 계획 인원은 2여야 함: ' + plan[0].n + ' / ' + JSON.stringify(plan[0].c));
+  if (plan[0].room !== '#11.18 실 문풍지 풍선 2') throw new Error('Test 31 2일차 방제 실패: ' + plan[0].room);
+  if (P.planRoomFrom('#11.17 실 에스지엠컴퍼니문풍지외4', '11.18', '2') !== '#11.18 실 에스지엠컴퍼니문풍지외2') {
+    throw new Error('Test 31 업체명 들어간 1일차 형식 미준수: ' + P.planRoomFrom('#11.17 실 에스지엠컴퍼니문풍지외4', '11.18', '2'));
+  }
+
+  // ③ 명단 시트·폼·폴더 이름에는 날짜·끝 숫자가 없음
+  const cases = [
+    ['#11.17 실 에스지엠컴퍼니문풍지외4', '4', '# 실 에스지엠컴퍼니문풍지외'],
+    ['#택11.17 실 문풍지 풍선 4', '4', '#택 실 문풍지 풍선'],
+    ['#택11.16 과일쏙 못난이사과외6', '6', '#택 과일쏙 못난이사과외'],
+    ['#11.13 실 빌랑 흐착장난감 4', '4', '# 실 빌랑 흐착장난감']
+  ];
+  cases.forEach(([r0, c0, want]) => {
+    const got = P.sheetBaseName(r0, c0);
+    if (got !== want) throw new Error('Test 31 이름 실패: ' + r0 + ' → ' + got + ' (기대 ' + want + ')');
+    if (/\d{1,2}\.\d{1,2}/.test(got) || /\d$/.test(got)) throw new Error('Test 31 이름에 날짜·끝 숫자가 남음: ' + got);
+  });
+
+  // ④ 택: '#택11.17 …'·'#11.16택 …'은 택 포함으로 보고, 없으면 '#택…'으로 붙임
+  if (!P.roomHasTak('#택11.17 실 문풍지 4')) throw new Error('Test 31 #택11.17을 택 포함으로 못 봄');
+  if (!P.roomHasTak('#11.16택 실/빈 김상사 5')) throw new Error('Test 31 #11.16택을 택 포함으로 못 봄');
+  if (!P.roomHasTak('업)택11.16 에스지엠 3')) throw new Error('Test 31 업)택을 택 포함으로 못 봄');
+  if (P.roomHasTak('#11.17 실 문풍지 4')) throw new Error('Test 31 택 없는 방제를 택 있음으로 봄');
+  if (P.takFixRoom('#11.17 실 문풍지 4') !== '#택11.17 실 문풍지 4') throw new Error('Test 31 택 붙이기 실패: ' + P.takFixRoom('#11.17 실 문풍지 4'));
+  if (P.takFixRoom('업)11.16 에스지엠 3') !== '업)택11.16 에스지엠 3') throw new Error('Test 31 업)택 붙이기 실패: ' + P.takFixRoom('업)11.16 에스지엠 3'));
+  if (P.takFixRoom('#11.16실/빈 김상사 케일블타이5') !== '#택11.16실/빈 김상사 케일블타이5') throw new Error('Test 31 실/빈 택 붙이기 실패');
+  if (P.takFixRoom('#택11.17 실 문풍지 4') !== '#택11.17 실 문풍지 4') throw new Error('Test 31 이미 있는 택을 또 붙임');
+
+  // ⑤ 택대 Y인데 폼 만들 때 확인창: 실배송이면 안 물어보고, 택대면 한 번은 물어봄
+  getElem('takdae').checked = true;
+  getElem('realship').checked = false;
+  if (P.takAskNeeded('#11.17 문풍지 4') !== true) throw new Error('Test 31 택대인데 택이 없으면 확인창이 떠야 함');
+  if (P.takAskNeeded('#택11.17 문풍지 4') !== true) throw new Error('Test 31 택대면 확인 안 받기 전엔 한 번 물어봐야 함');
+  getElem('realship').checked = true;
+  if (P.takAskNeeded('#11.17 문풍지 4') !== false) throw new Error('Test 31 실배송이면 택 확인창이 뜨면 안 됨');
+  getElem('takdae').checked = false;
+
+  console.log('✓ 다중 상품 일차 인원 합산·일차 계획 방제 형식·택 경고/보정·이름 시험 통과');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (31개 샘플 전원 일치)');
 process.exit(0);
 
 
