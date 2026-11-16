@@ -1864,7 +1864,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3379,6 +3379,7 @@ function checkFullInner_() {
   try { cableTak1_(); } catch (e) {}
   try { cableRevert1_(); } catch (e) {}
   try { rvPhotoFix3_(); } catch (e) {}
+  try { rvPhotoFix4_(); } catch (e) {}
   try { rvPhotoFix2_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
@@ -8183,6 +8184,32 @@ function rvPhotoFix3_() {
     props.setProperty('RVPHOTOFIX3', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (moved.join(', ') || '되돌릴 것 없음'));
     if (moved.length) note_('✓ 포토 사진 되돌림: ' + moved.join(', '));
   } catch (e) { props.setProperty('RVPHOTOFIX3', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/16 한 번) 과일쏙 못난이사과외: 사용자가 손으로 포토 폴더에 넣은 사진(AI 설명 없음) 4장을 rvPhotoFix1_이 텍스트로 옮겼는데
+//  어느 것인지 표시가 없어서, 텍스트 폴더의 AI 설명 없는 사진을 리뷰이미지 맨 위로 꺼내 AI로 다시 나눔 (포토면 포토로)
+function rvPhotoFix4_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('RVPHOTOFIX4') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const runs = readRuns_(), sids = {};
+    runs.forEach(function (r) { if (campKey_(r['명단 제목']) === '과일쏙못난이사과외' && r['시트ID']) sids[String(r['시트ID'])] = 1; });
+    let n = 0;
+    const q = String(props.getProperty('RVAI_Q') || '').split(',').filter(Boolean);
+    Object.keys(sids).forEach(function (sid) {
+      const imgId = props.getProperty('RVIMG_' + sid); if (!imgId) return;
+      const img = DriveApp.getFolderById(imgId), it = img.getFolders();
+      let k = 0;
+      while (it.hasNext()) {
+        const f = it.next(); if (rvTypeOf_(f.getName()) !== '텍스트') continue;
+        const fi = f.getFiles();
+        const xs = []; while (fi.hasNext()) xs.push(fi.next());
+        xs.forEach(function (x) { if (!/^AI\s*\{/.test(String(x.getDescription() || '')) && /^image\//.test(x.getMimeType())) { x.moveTo(img); k++; } });
+      }
+      if (k) { n += k; if (q.indexOf(sid) < 0) q.push(sid); try { rvCountDirs_(img, rvCartOf_(sid)); } catch (e) {} }
+    });
+    if (n) { props.setProperty('RVAI_Q', q.join(',')); try { ensureAiQueueTrigger_(); } catch (e) {} }
+    props.setProperty('RVPHOTOFIX4', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 과일쏙 다시 나눌 사진 ' + n + '장');
+  } catch (e) { props.setProperty('RVPHOTOFIX4', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 // 읽은 결과 → 옮길 폴더 이름
 function rvAiDir_(o) {
