@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=20261116y">
+<link rel="stylesheet" href="style.css?v=20261117g">
 </head>
 <body>
 
@@ -22,6 +22,7 @@
   <div class="hud">
     <button id="rankBadge" class="rank-badge" aria-label="내 계급">👮 순경</button>
     <button id="planBtn" class="hud-btn" aria-label="학습 계획">🗺️</button>
+    <button id="gpBtn" class="hud-btn" aria-label="G-POINT 1~33 요약 암기표">📘</button>
     <button id="mute" class="hud-btn" aria-label="소리 켜기/끄기">🔊</button>
     <div class="hud-chip" title="연속 학습일"><span>🔥</span><b id="streakN">0</b></div>
     <div class="hud-chip" title="XP"><span>⚡</span><b id="xpN">0</b></div>
@@ -155,6 +156,11 @@
       <span class="mode-body"><b>오답 집중 복습</b><i id="mWrongTxt">-</i></span>
       <span class="mode-go">›</span>
     </button>
+    <button class="mode-card speed-btn" id="mSpeed">
+      <span class="mode-ico">⏱️</span>
+      <span class="mode-body"><b>1분 스피드 타임어택</b><i id="mSpeedTxt">-</i></span>
+      <span class="mode-go">›</span>
+    </button>
   </div>
 
   <h2 class="sec-title">문제 수</h2>
@@ -214,6 +220,7 @@
         <div class="q-title" id="qTitle">복습</div>
         <div class="combo" id="qCombo">🔥 0</div>
         <div class="q-count" id="qCount">1/10</div>
+        <div id="qTimer">⏱ 60</div>
       </div>
       <div class="q-prog" id="qProg"><i id="qBar"></i><span class="q-prog-gloss"></span></div>
     </div>
@@ -232,10 +239,11 @@
   <div class="sheet-in" id="sheetIn"></div>
 </div>
 
+<div class="fever-glow"></div>
 <div id="fx" class="fx"></div>
 <div id="toast" class="toast hidden"></div>
 
-<script src="data.js?v=20261117c"></script>
-<script src="app.js?v=20261117a"></script>
+<script src="data.js?v=20261117h"></script>
+<script src="app.js?v=20261117i"></script>
 </body>
 </html>
