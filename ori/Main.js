@@ -156,7 +156,7 @@ function setRun_(row, name, value) { ensureListSheet_().getRange(row, lc_(name))
 
 // 캠페인 이름: 명단 제목에서 닉네임, #택, 날짜, 끝 건수를 뺀 것 (#택10.14 모두의농수산옥광밤외12 → 모두의농수산옥광밤외)
 function campOf_(title) {
-  return String(title || '').replace(/\s*\([^)]*\)\s*$/, '').replace(/^[#업택\s]*\d{1,2}\.\d{1,2}\s*/, '').replace(/\s*\d+\s*$/, '').trim();
+  return String(title || '').replace(/\s*\([^)]*\)\s*$/, '').replace(/^[#업택)\s]*\d{1,2}\.\d{1,2}(택(?=\s|$))?\s*/, '').replace(/\s*\d+\s*$/, '').trim();   // '#11.16택 실/빈 …'처럼 날짜 뒤에 붙은 택도 뺌 (11/16 사용자 방제)
 }
 
 // 같은 캠페인인지 비교할 때 쓰는 키 (#택, 날짜, 끝 건수, 띄어쓰기 뺌)
@@ -186,8 +186,10 @@ function chainsOf_(runs) {
     list.forEach(function (r) {
       const total = Number(r['총건수']) || 0, sid = String(r['시트ID'] || '');
       let c = sid ? bySheet[sid] : null;
+      const fresh = Number(r['일차'] || 1) <= 1 && !/^(next|add)-/.test(String(r['요청ID'])) && String(r['요청ID'] || '') !== '';
+      // 다 끝난 의뢰의 명단 시트에 새 의뢰 1일차를 다시 만든 것(11/16 백발백중 기대평 2차 135건: 같은 시트에 탭만 나눔)은 새 묶음
+      if (c && fresh && c.total && c.done >= c.total) c = null;
       if (!c) {
-        const fresh = Number(r['일차'] || 1) <= 1 && !/^(next|add)-/.test(String(r['요청ID'])) && String(r['요청ID'] || '') !== '';
         c = (!cur || fresh || (cur.total && cur.done >= cur.total)) ? null : cur;
         if (!c) { c = { key: k, total: total, done: 0, runs: [] }; chains.push(c); }
       }
@@ -354,7 +356,12 @@ function renameTodo_(r, oldBare, newBare, fresh) {
 
 // 방제(명단 제목) 바꾸기: 진행목록 명단 제목·카톡방, 보낼 메시지함의 대기 중인 방 이름. 월급시트 캠페인명은 15분 갱신 때 같은 날짜·캠페인 줄을 찾아 바꿈
 // 방제 앞에 '택'이 있는지 (#택11.04 …, 업택11.04 …). 생성기가 택배대행이면 방제 앞에 '택'을 붙임
-function takTitle_(t) { return /^\s*[#업]?\s*택/.test(bareTitle_(String(t || ''))); }
+// 한눈에 메모를 진행별로 저장하는 열쇠: 명단 시트 + 진행일 (방제가 바뀌어도 같은 진행)
+function memoKey_(r) { const d = r['진행일'] instanceof Date ? Utilities.formatDate(r['진행일'], 'Asia/Seoul', 'MMdd') : String(r['진행일'] || '').slice(0, 10); return r['시트ID'] ? '@' + String(r['시트ID']).slice(-10) + d : ''; }
+//  '#11.16택 실/빈 …'(날짜 바로 뒤 택, 11/16 사용자가 직접 고친 방제)·'업)택11.12 …'도 택
+// 방제 앞에 '택' 붙이기: '#11.17 실 …' → '#택11.17 실 …', '업)11.12 …' → '업)택11.12 …'
+function addTak_(t) { t = String(t || ''); return /^[#업)\s]*택/.test(t) ? t : t.replace(/^([#업)]*)\s*/, '$1택'); }
+function takTitle_(t) { const b = bareTitle_(String(t || '')); return /^\s*[#업)]*\s*택/.test(b) || /^[#업)\s]*\d{1,2}\.\d{1,2}택(\s|$)/.test(b); }
 // 방제 앞에 '택'이 없어도 택대로 두는 캠페인 (11/16 사용자: 방제·명단 시트는 한 번 만들면 바꾸면 안 됨 → 김상사 케이블타이는 이름 그대로 택대). 속성 TAK_KEEP = 캠페인 키 목록
 function takKeep_(t) { let a = []; try { a = JSON.parse(PropertiesService.getScriptProperties().getProperty('TAK_KEEP') || '[]') || []; } catch (e) {} return a.indexOf(campKey_(t)) >= 0; }
 function renameRun_(r, title, why) {
@@ -381,6 +388,11 @@ function renameRun_(r, title, why) {
     [['TAKCUT_' + ns(bareTitle_(oldTitle)), 'TAKCUT_' + ns(title)], ['TAKLATE_' + ns(oldTitle), 'TAKLATE_' + ns(title + nick)], ['TAKLATE_P_' + ns(oldTitle), 'TAKLATE_P_' + ns(title + nick)]].forEach(function (k) {
       const v = pr.getProperty(k[0]); if (v != null && k[0] !== k[1]) { pr.setProperty(k[1], v); pr.deleteProperty(k[0]); }
     });
+  } catch (e) {}
+  // 한눈에 O열 메모도 새 방제로 (11/16: 방제를 바꾸면 메모가 옛 방제 이름에 남아 한눈에서 지워졌음)
+  try {
+    const pm = PropertiesService.getScriptProperties(), mo = JSON.parse(pm.getProperty('DASH_MEMOS') || '{}'), ok = bareTitle_(oldTitle);
+    if (mo[ok] && !mo[title]) { mo[title] = mo[ok]; delete mo[ok]; pm.setProperty('DASH_MEMOS', JSON.stringify(mo)); }
   } catch (e) {}
   // 월급시트 캠페인명도 바로 같이 (안 하면 새 이름 줄이 하나 더 생겨 같은 진행이 두 줄이 됨, 10/21 써니마켓)
   try { payRename_(bareTitle_(oldTitle), title); } catch (e) { note_('월급시트 이름 바꾸기 실패: ' + e); }
@@ -795,13 +807,13 @@ function syncList_(ss) {
   } finally { try { if (dl) dl.releaseLock(); } catch (e) {} }
 }
 function syncListBody_(ss, sh, props, id, tabs, sigK, sigNow) {
-  const heads = [], rows = [];
+  const heads = [], rows = [], from = Number(props.getProperty('LISTFROM_' + id)) || 0;   // 같은 시트에 명단 탭을 새로 나눈 의뢰(기대평 2차)는 그 뒤 응답만
   tabs.forEach(function (t) {
     const lr = t.getLastRow(), h = rawHead_(t).map(hk_);
     h.forEach(function (x) { if (x && heads.indexOf(x) === -1 && !MATCH.nick.test(x) && !MATCH.expSet.test(x)) heads.push(x); });
     if (lr < 2 || !h.length) return;
     t.getRange(2, 1, lr - 1, h.length).getValues().forEach(function (x) {
-      if (!(x[0] instanceof Date)) return;
+      if (!(x[0] instanceof Date) || x[0].getTime() < from) return;
       // 시각만 있고 답이 하나도 없는 줄은 사람이 아니라서 명단에 안 넣음 (10/21 마켓담온 귤 8행)
       if (!x.slice(1).some(function (v) { return v !== '' && v !== null; })) return;
       const o = {}; h.forEach(function (name, j) { o[name] = /전화|연락처|휴대폰|핸드폰/.test(name) ? phoneFmt_(x[j]) : x[j]; });
@@ -825,7 +837,8 @@ function syncListBody_(ss, sh, props, id, tabs, sigK, sigNow) {
     props.setProperty('LISTHIDE_' + id, '1');
     try {
       const h1 = sh.getRange(2, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(hk_), cols = [];
-      h1.forEach(function (h, i) { if (MATCH.account.test(h) || (real && MATCH.reviewFee.test(h))) cols.push(i + 1); });
+      const upPay = isUpPay_('', ssName_(ss));   // 업체입금(명단 시트 이름 앞 업)은 계좌를 열어 둠 (11/16 사용자)
+      h1.forEach(function (h, i) { if ((MATCH.account.test(h) && !upPay) || (real && MATCH.reviewFee.test(h))) cols.push(i + 1); });
       groupColumns_(sh, cols);
     } catch (e) { note_('명단 탭 계좌 칸 숨기기 실패: ' + e); }
   }
@@ -1865,7 +1878,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -1875,6 +1888,8 @@ function diag_(p) {
   } catch (e) { out.propsErr = String(e); }
   try { out.reports = JSON.parse(CacheService.getScriptCache().get('REPORT_LOG') || '[]'); } catch (e) { out.reportsErr = String(e); }
   try { out.obTrace = JSON.parse(CacheService.getScriptCache().get('OB_TRACE') || '[]'); } catch (e) {}
+  // 한눈에 O열 메모 점검 (11/16 메모 지워짐): 저장된 메모 전부 + 지금 한눈에 B·O
+  if (p.memos) try { out.memos = JSON.parse(PropertiesService.getScriptProperties().getProperty('DASH_MEMOS') || '{}'); const d = adminSs_().getSheetByName(DASH_TAB); out.memoRows = d.getRange(2, 2, Math.min(d.getLastRow() - 1, 120), 14).getValues().map(function (v, i) { return (i + 2) + ' ' + v[0] + ' | ' + v[13]; }).filter(function (x) { return !/^\d+ \| $/.test(x); }); } catch (e) { out.memosErr = String(e); }
   try { const d = adminSs_().getSheetByName(DASH_TAB); if (d) out.dashQ = d.getRange(1, 17, 13, 1).getValues().map(function (x) { return String(x[0]); }).filter(Boolean); } catch (e) {}
   return out;
 }
@@ -2053,6 +2068,9 @@ function templateFormFile_() {
 function createRunInner_(d) {
   // 실배송이면 방제·명단 제목(→ 명단 시트 이름)에 '실'
   if (d.realship) { d.title = withSil_(d.title); if (d.room) d.room = withSil_(d.room); if (d.fname) d.fname = withSil_(d.fname); }
+  // 의뢰서에 택대·택배대행 Y면 방제에 '택'이 꼭 있어야 함 (11/16 사용자: 김상사 케이블타이가 택 없이 만들어져 택대가 꺼졌음). 만들 때만 붙이고, 만든 뒤에는 안 바꿈
+  if (!d.takdae && (takTitle_(d.title) || takKeep_(d.title))) d.takdae = true;   // 방제에 택이 있으면 택대 (다음 일차 일정에 택대가 빠져 저장된 경우, 11/16 김상사 케이블타이)
+  if (d.takdae && !takTitle_(d.title) && !takKeep_(d.title)) { const t0 = d.title; d.title = addTak_(d.title); if (d.room && !takTitle_(d.room)) d.room = addTak_(d.room); if (d.fname && !/^[#업)\s]*택/.test(d.fname)) d.fname = addTak_(d.fname); if (d.title !== t0) note_('택대인데 방제에 택이 없어 붙임: ' + t0 + ' → ' + d.title); }
   if (!CONFIG.TEMPLATE_FORM_ID || CONFIG.TEMPLATE_FORM_ID.indexOf('여기에') === 0) {
     throw new Error('CONFIG의 TEMPLATE_FORM_ID를 먼저 넣어 주세요.');
   }
@@ -2569,9 +2587,9 @@ function formatResponseSheet_(ss, opts) {
   sh.setConditionalFormatRules([]);
 
   // 계좌, 예금주 열 숨기기(접힌 묶음, + 단추로 펼침). 실배송이면 리뷰비 열도 (10/19 사용자 재확인: 입금대행은 숨김이 맞음)
-  const hide = [];
+  const hide = [], upPay = isUpPay_(opts.type, ssName_(ss));
   head.forEach(function (h, i) {
-    if (MATCH.account.test(h)) hide.push(i + 1);
+    if (MATCH.account.test(h) && !upPay) hide.push(i + 1);   // 업체입금(방제 앞 업)은 계좌를 열어 둠 (11/16 사용자)
     if (opts.realship && MATCH.reviewFee.test(h)) hide.push(i + 1);
   });
   groupColumns_(sh, hide);
@@ -3096,6 +3114,35 @@ function parseAssign_(text, choices) {
 }
 
 // 열 전체 범위 ('H:K'). Range.getEntireColumn()은 구글이 없애서 11/4부터 '…is not a function' → 계좌 칸 묶기(+)가 다 실패하고 그냥 숨김(◀▶)이 됐음 (11/9)
+// 업체입금 진행인지: 유형 '업체입금' 또는 방제·명단 시트 이름 앞이 '업' (업)택11.12 …, 업11.12 …)
+function ssName_(ss) { try { return ss.getName(); } catch (e) { return ''; } }
+function isUpPay_(type, name) { return String(type || '') === '업체입금' || /^[#\s]*업/.test(String(name || '')); }
+// (11/16 한 번) 업체입금 진행 명단 시트에서 숨겨 둔 계좌 칸을 펼침 (사용자: 업체입금은 계좌를 숨기지 말고 열어 놓기)
+function upAcctOpen1_(rr) {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('UPACCT1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const out = [], seen = {};
+    (rr || readRuns_()).forEach(function (r) {
+      const sid = String(r['시트ID'] || '');
+      if (!sid || seen[sid] || r['진행 상태'] === '종료' || !isUpPay_(r['유형'], bareTitle_(r['명단 제목']))) return;
+      seen[sid] = 1;
+      const lss = SpreadsheetApp.openById(sid); let n = 0;
+      lss.getSheets().forEach(function (sh) {
+        const lc = sh.getLastColumn(); if (lc < 1 || sh.getLastRow() < 1) return;
+        const hv = sh.getRange(1, 1, Math.min(2, sh.getLastRow()), lc).getValues();
+        for (let c = 1; c <= lc; c++) {
+          if (!hv.some(function (row) { return MATCH.account.test(hk_(row[c - 1])); })) continue;
+          try { const g = sh.getColumnGroup(c, 1); if (g) g.expand(); } catch (e) {}
+          try { if (sh.isColumnHiddenByUser(c)) sh.showColumns(c); } catch (e) {}
+          n++;
+        }
+      });
+      out.push(bareTitle_(r['명단 제목']) + ' ' + n + '칸');
+    });
+    props.setProperty('UPACCT1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '업체입금 진행 없음'));
+  } catch (e) { props.setProperty('UPACCT1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
 function colsRange_(sheet, c1, c2) { return sheet.getRange(colLetter_(c1) + ':' + colLetter_(c2)); }
 function groupColumns_(sheet, cols) {
   if (!cols.length) return;
@@ -3121,6 +3168,7 @@ function groupColumns_(sheet, cols) {
 }
 // 명단 탭 계좌(실배송이면 리뷰비) 칸이 묶음 없이 숨겨져 있으면(◀▶) 펴고 다시 묶어 접음(+) (11/9 사용자: 원래 + 였는데 ◀▶)
 function listRegroup_(lss, real) {
+  if (isUpPay_('', ssName_(lss))) return false;   // 업체입금은 계좌를 열어 둠 (11/16)
   const sh = lss.getSheetByName(LIST_TAB);
   if (!sh || sh.getLastColumn() < 2) return false;
   const hd = sh.getRange(2, 1, 1, sh.getLastColumn()).getValues()[0].map(hk_), cols = [];
@@ -3396,6 +3444,9 @@ function checkFullInner_() {
   try { planNameFix1_(); } catch (e) {}
   try { silsil1_(); } catch (e) {}
   try { mungFix1_(); } catch (e) {}
+  try { cableTak2_(); } catch (e) {}
+  try { upAcctOpen1_(); } catch (e) {}
+  try { exp135_(); } catch (e) {}
   try { rvPhotoFix2_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
@@ -3664,11 +3715,11 @@ function listMsgText_(r) {
   let tail = '';
   try {
     const runs = readRuns_(), me = runs.filter(function (x) { return x.row === r.row; })[0] || r;
-    const sib = siblings_(runs, me), total = Number(me['총건수']) || sib.reduce(function (a, x) { return a + (Number(x['목표인원']) || 0); }, 0);
+    const sib = siblings_(runs, me).filter(function (x) { return !isExpect_(me) || expSameBatch_(x, me); }), total = Number(me['총건수']) || sib.reduce(function (a, x) { return a + (Number(x['목표인원']) || 0); }, 0);
     const got = sib.reduce(function (a, x) { return a + (Number(x['인원']) || 0); }, 0);
     if (total && sib.length && sib[sib.length - 1].row === me.row && got >= total) {
       const md = function (x) { return (x['진행일'].getMonth() + 1) + '.' + String(x['진행일'].getDate()).padStart(2, '0'); };
-      tail = sib.length === 1 ? '마지막' : md(sib[0]) + '~ ' + md(me) + '  ' + (isExpect_(me) ? EXP_LINKS.length * 15 + '건 작성완료' : total + '건 구매완료');
+      tail = sib.length === 1 ? '마지막' : md(sib[0]) + '~ ' + md(me) + '  ' + (isExpect_(me) ? expTotal_(me) + '건 작성완료' : total + '건 구매완료');
       let pc = []; try { pc = priceChangeLines_(me, sib, runs); } catch (e) {}
       if (pc.length) tail += '\n' + (sib.length === 1 ? '\n' : '') + pc.join('\n');
     } else {
@@ -8214,6 +8265,28 @@ function silsil1_() {
   } catch (e) { props.setProperty('SILSIL1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 // (11/16 한 번, 사용자: 문풍지 3명 + 풍선 1명 = 4명인데 방제·목표가 3) 11.17 진행 방제 끝 숫자 4(목표 4), 11.18 계획은 문풍지 2명·풍선 0명 = 2
+// 김상사 케이블타이: 사용자가 방제를 '#11.1x택 실/빈 김상사 케이블타이5'로 직접 고친 뒤 택대가 꺼진 것을 다시 켬 (11/16 사용자: 택대 계속 켜져 있게). 방제·명단 시트 이름은 안 건드림
+function cableTak2_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('CABLETAK2') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const out = [];
+    readRuns_().forEach(function (r) {
+      if (campKey_(r['명단 제목']) !== '김상사케이블타이' || r['진행 상태'] === '종료' || r['택대'] === 'Y') return;
+      setRun_(r.row, '택대', 'Y'); out.push(bareTitle_(r['명단 제목']));
+    });
+    // 아직 안 만든 다음 일차 일정도 택대로
+    try {
+      const ps = planSheet_(), pl = ps.getLastRow();
+      if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x, i) {
+        if (x[8] !== '대기' || campKey_(String(x[4])) !== '김상사케이블타이') return;
+        let dj = null; try { dj = JSON.parse(x[PLAN_HEAD.indexOf('설정')] || 'null'); } catch (e) {}
+        if (dj && typeof dj === 'object' && !dj.takdae) { dj.takdae = true; ps.getRange(i + 2, PLAN_HEAD.indexOf('설정') + 1).setValue(JSON.stringify(dj)); out.push('(일정) ' + x[4]); }
+      });
+    } catch (e) { out.push('일정 못 봄 ' + e); }
+    props.setProperty('CABLETAK2', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '이미 켜져 있음'));
+  } catch (e) { props.setProperty('CABLETAK2', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
 function mungFix1_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('MUNGFIX1') || '');
   if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
@@ -9086,8 +9159,8 @@ function withSil_(t) {
   t = String(t || '');
   t = t.replace(/\s+실(\s+\d+(?:\s*\([^)]*\))?\s*)$/, '$1');   // 끝 쪽 '실 7' → '7'
   // '실/빈'도, 날짜에 붙은 '#11.17실 …'도 이미 있는 걸로 (11/16 '#11.17 실 실 에스지엠컴퍼니문풍지외3': 생성기가 날짜에 붙여 보내 한 번 더 붙였음)
-  if (/^[#업택\s]*\d{1,2}\.\d{1,2}\s*실(\/빈)?(\s|$)/.test(t)) return t;
-  return /^[#업택\s]*\d{1,2}\.\d{1,2}/.test(t) ? t.replace(/^([#업택\s]*\d{1,2}\.\d{1,2})\s*/, '$1 실 ') : t;
+  if (/^[#업택)\s]*\d{1,2}\.\d{1,2}\s*(택\s*)?실(\/빈)?(\s|$)/.test(t)) return t;
+  return /^[#업택)\s]*\d{1,2}\.\d{1,2}/.test(t) ? t.replace(/^([#업택)\s]*\d{1,2}\.\d{1,2}(택(?=\s|$))?)\s*/, '$1 실 ') : t;
 }
 
 // 공지 모양 맞추기: '🐥포토 : 포토대기' → '🐥리뷰 : ★★★포토대기★★★', 과일은 구매 시간 줄을 '★★★자정 ~ 오전 7시까지 구매★★★'
@@ -10356,6 +10429,7 @@ function payRowSpec_(r, all) {
     //  업체명을 바꾼 의뢰((업체명)황금향외 → 오늘과일 황금향외)는 둘로 갈라져 남은이 안 맞았음). 다시 의뢰하면 명단 시트가 새로 생겨서 안 섞임
     mine = all.filter(function (x) { return String(x['시트ID'] || '') === sid && x['진행일'] <= r['진행일'] && !dead(x); })
       .sort(function (a, b) { return a['진행일'] - b['진행일']; });
+    if (isExpect_(r)) mine = mine.filter(function (x) { return expSameBatch_(x, r); });   // 기대평 2차(11/17~)는 같은 명단 시트라도 따로 (총액 135, 전월 0)
   } else {
     // 시트ID가 없는 예전 줄: 이름으로 묶고, 같은 상품이 다시 의뢰돼도 섞이지 않게 이 진행 직전의 '1일차'부터를 한 의뢰로 봄
     const k = keyOf(r);
@@ -10383,8 +10457,8 @@ function payRowSpec_(r, all) {
     const prevW = mine.filter(function (x) { return ym(x['진행일']) < ym(r['진행일']); }).reduce(function (a, x) { return a + gw(x); }, 0);
     const earlierW = mine.filter(function (x) { return x['진행일'] < r['진행일'] && ym(x['진행일']) === ym(r['진행일']); }).reduce(function (a, x) { return a + gw(x); }, 0);
     const exE = { store: pick('업체'), time: payTime_(runSlot_(r)), photo: '', earlier: earlierW, mult: expPer_(r), count: expCount_(r, Number(r['인원']) || 0, all) }, shE = siblings_(all, r).length > 1;
-    const sigE = sigOf([nameOf(r), EXP_LINKS.length * 15, prevW, shE, exE, String(r['시트ID']), String(r['진행일']), r['인원'], r['택대'], r['실배송'], r['일차']]);
-    return { name: nameOf(r), total: EXP_LINKS.length * 15, prev: prevW, shared: shE, ex: exE, sig: sigE };
+    const sigE = sigOf([nameOf(r), expTotal_(r), prevW, shE, exE, String(r['시트ID']), String(r['진행일']), r['인원'], r['택대'], r['실배송'], r['일차']]);
+    return { name: nameOf(r), total: expTotal_(r), prev: prevW, shared: shE, ex: exE, sig: sigE };
   }
   const cf = cartN_(r);   // 장바구니건은 물건 수로 (사람 × 상품 수, 사용자 요청 10/28)
   const exN = { store: pick('업체'), time: fruit ? '자정 ~ 오전 7시' : payTime_(runSlot_(r)), photo: pick('포토'), earlier: earlier * cf, mult: cf }, shN = siblings_(all, r).length > 1;
@@ -10834,14 +10908,18 @@ function buildDashboard_(force) {
   try { savedMemos = JSON.parse(props.getProperty('DASH_MEMOS') || '{}'); } catch (e) {}
   if (sh && sh.getLastRow() >= 2) {
     try {
-      const oldRows = Math.min(sh.getLastRow() - 1, 60);
+      // 진행 줄 수만큼 다 읽음 (11/16: 60줄까지만 읽어서 61줄 아래 진행에 적은 메모는 저장이 안 되고 다시 그릴 때 지워졌음)
+      const oldRows = Math.min(sh.getLastRow() - 1, Math.max(60, runs.length + 5));
       const oldData = sh.getRange(2, 2, oldRows, 14).getValues(); // B열(0) ~ O열(13)
-      oldData.forEach(function (row) {
+      oldData.forEach(function (row, oi) {
         const title = String(row[0]).replace(/\s*\([^)]*\)\s*$/, '').trim();
         const memo = String(row[13] || '').trim();
+        if (oi >= 60 && !runs.some(function (x) { return bareTitle_(x['명단 제목']) === title; })) return;   // 61줄 아래는 진행 줄만 (아래 명단 덩어리 칸은 메모가 아님)
         if (title && title.charAt(0) !== '■') {
-          if (memo) savedMemos[title] = memo;
-          else if (row[13] === '') delete savedMemos[title]; // 수진 님이 직접 지운 경우 반영
+          // 진행(명단 시트 + 진행일)으로도 저장: 방제가 바뀌어도 메모가 따라가게 (11/16 방제 바뀐 진행의 메모가 지워졌음)
+          const rx = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === title; })[0], mk = rx ? memoKey_(rx) : '';
+          if (memo) { savedMemos[title] = memo; if (mk) savedMemos[mk] = memo; }
+          else if (row[13] === '') { delete savedMemos[title]; if (mk) delete savedMemos[mk]; } // 수진 님이 직접 지운 경우 반영
         }
       });
       props.setProperty('DASH_MEMOS', JSON.stringify(savedMemos));
@@ -10921,7 +10999,7 @@ function buildDashboard_(force) {
     try { sh.getRange(rr, 1, 1, 15).clearDataValidations(); } catch (e) {}
     // 기대평은 건수로 (의뢰 총건수 405, 그날 목표·신청 = 사람 × 그 주 건수, 사용자 요청 10/24)
     const per = isExpect_(r) ? expPer_(r) : cartN_(r), mixDay = isExpect_(r) && !!EXP_MIX[dateTok_(r['명단 제목'])];   // A·B묶음 섞인 기대평 날은 건수를 직접 셈 (10/26)
-    sh.getRange(rr, 1, 1, 5).setValues([[r['진행일'], String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''), dashStatus_(r), isExpect_(r) ? EXP_LINKS.length * 15 : ((Number(r['총건수']) || 0) * per || ''), (mixDay ? expCount_(r, Number(r['목표인원']) || 0, allRuns) : (Number(r['목표인원']) || 0) * per) || r['목표인원']]]);
+    sh.getRange(rr, 1, 1, 5).setValues([[r['진행일'], String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''), dashStatus_(r), isExpect_(r) ? expTotal_(r) : ((Number(r['총건수']) || 0) * per || ''), (mixDay ? expCount_(r, Number(r['목표인원']) || 0, allRuns) : (Number(r['목표인원']) || 0) * per) || r['목표인원']]]);
     const w = windowOf_(allRuns, r);
     const ts = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A' + x.start + ':A') + ')';
     // 명단 시트 하나를 여러 날이 같이 쓰면 그날 몫(진행일 0시 ~ 다음 진행 0시)만 셈
@@ -10962,8 +11040,9 @@ function buildDashboard_(force) {
     else sh.getRange(rr, 14).clearContent();
     // O열 메모 복원: 수진 님이 입력한 메모 영구 보존
     const bTitle = String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, '').trim();
-    if (savedMemos[bTitle]) {
-      sh.getRange(rr, 15).setValue(savedMemos[bTitle]);
+    const memoV = savedMemos[bTitle] || savedMemos[memoKey_(r)];
+    if (memoV) {
+      sh.getRange(rr, 15).setValue(memoV);
     } else {
       sh.getRange(rr, 15).clearContent();
     }
@@ -11380,6 +11459,111 @@ function expAnswers_(r, runs) {
     });
   } catch (e) {}
   return out;
+}
+/* ---- 백발백중 기대평 2차 (11/16 사용자: 지난 540건 중 405건 했고 남은 135건) ----
+ * 짱 시험유형 1-1·2-1·3-1 × 예스24·알라딘·교보문고 = 링크 9개, 링크마다 15개 = 135건. 11.17~11.23 (주말 빼고 11.17·18·19·20·23), 하루 3명 × 9건
+ * 지난번과 같은 폼·같은 명단 시트(탭만 나눔: 예전 명단 탭은 '명단 (1차 10.26~11.06)'으로 가림). 리뷰비 9건 9,000원
+ */
+const EXP2_FROM = new Date(2026, 10, 17);
+const EXP2_LINKS = [
+  ['예스24', '짱 시험유형 1-1', 'https://www.yes24.com/product/goods/200928851'],
+  ['예스24', '짱 시험유형 2-1', 'https://www.yes24.com/product/goods/200929119'],
+  ['예스24', '짱 시험유형 3-1', 'https://www.yes24.com/product/goods/200929196'],
+  ['알라딘', '짱 시험유형 1-1', 'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=406848849'],
+  ['알라딘', '짱 시험유형 2-1', 'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=406855502'],
+  ['알라딘', '짱 시험유형 3-1', 'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=406855668'],
+  ['교보문고', '짱 시험유형 1-1', 'https://product.kyobobook.co.kr/detail/S000221974778'],
+  ['교보문고', '짱 시험유형 2-1', 'https://product.kyobobook.co.kr/detail/S000221974783'],
+  ['교보문고', '짱 시험유형 3-1', 'https://product.kyobobook.co.kr/detail/S000221974789']
+];
+const EXP2_DAYS = ['2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20', '2026-11-23'], EXP2_PER_DAY = 3;
+function expBatch_(r) { return r && r['진행일'] instanceof Date && dayStart_(r['진행일']) >= EXP2_FROM.getTime() ? 2 : 1; }
+function expSameBatch_(x, r) { return expBatch_(x) === expBatch_(r); }
+// 기대평 의뢰 전체 건수 (1차 27링크 × 15 = 405, 2차 9링크 × 15 = 135)
+function expTotal_(r) { return (expBatch_(r) === 2 ? EXP2_LINKS.length : EXP_LINKS.length) * 15; }
+function expFee2_() { const n = EXP2_LINKS.length; return '총 ' + n + '건, ' + (n * 1000).toLocaleString('en-US') + '원'; }
+function expNotice2_() {
+  const n = EXP2_LINKS.length;
+  const L = ['★★★자정 ~ 오전 8시 20분까지 작성★★★', '※구매 아님! 아래 링크 ' + n + '개에 기대평 댓글만 작성해주세요※', '',
+    '▶ 공백 제외 100~150자 정도, 긍정적인 기대평 (예스24는 한줄평이 50자까지만 써져서 50자 꽉 채워서)',
+    '▶ 알라딘은 100자평 말고 "마이리뷰"로 써 주세요',
+    '▶ "구매했다"는 내용 금지 금지 금지 !!!!! → 구매하고 싶다 or 기대된다는 내용으로 부탁드려요',
+    '▶ "1등", "최고", "최초" 같은 말이나 다른 교재와 비교하는 글 금지 금지 금지 !!!!!',
+    '▶ 짧은 기대평 or 복붙 같은 글 금지 금지 금지 !!!!! (교재마다 다르게)',
+    '▶ ' + n + '개 다 작성 후 캡처해서 [당일 바로] 카톡방에 올려주세요!',
+    '▶ 리뷰비는 ' + expFee2_() + ' 입니다.', '',
+    '☆★☆★ 양식 작성 폼 ☆★☆★', '(구글폼 링크)', '',
+    '🐥넣을 내용 (짱 시험유형)🐥',
+    '- 전국 중학교 시험지를 분석한 시험 대비 문제',
+    '- 변화하는 내신 경향을 반영한 유형 설계',
+    '- 개념 ▶ 유형 ▶ 기출 best 3단계 학습'];
+  ['예스24', '알라딘', '교보문고'].forEach(function (pl) {
+    const xs = EXP2_LINKS.filter(function (x) { return x[0] === pl; });
+    L.push('', '🐥' + pl + ({ 예스24: ' (한줄평 50자 꽉 채우기, 한두 줄 짧은 글은 안 돼요)', 알라딘: ' (100자평 말고 마이리뷰로)' }[pl] || ''));
+    xs.forEach(function (x, i) { L.push((i + 1) + '. ' + x[1] + ' ' + x[2]); });
+  });
+  return L.join('\n');
+}
+function expTitle2_(iso) { const m = iso.match(/-(\d{2})-(\d{2})$/); return Number(m[1]) + '.' + Number(m[2]) + ' 백발백중 도서 기대평 ' + (EXP2_PER_DAY * EXP2_LINKS.length); }
+// (한 번) 2차 만들기: 같은 명단 시트에 새 명단 탭(예전 탭은 이름 붙여 가림), 폼 질문(묶음 질문 빼고 리뷰비 9건), 11.17 진행 + 11.18~11.23 일정
+function exp135_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('EXP135') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  const out = [];
+  try {
+    const runs = readRuns_();
+    if (runs.some(function (r) { return String(r['요청ID']) === 'exp2-1'; })) { props.setProperty('EXP135', '✓ 이미 있음'); return; }
+    const old = runs.filter(function (r) { return isExpect_(r) && r['시트ID'] && r['폼ID'] && /백발백중/.test(String(r['명단 제목'])) && r['진행일'] instanceof Date; })
+      .sort(function (a, b) { return b['진행일'] - a['진행일']; })[0];
+    if (!old) { props.setProperty('EXP135', st + ' 실패(1차 진행 못 찾음)'); return; }
+    const sid = String(old['시트ID']);
+    // 1) 명단 시트: 예전 '명단' 탭 → '명단 (1차 10.26~11.06)' 가림, 새 '명단' 탭 (1·2행 머리 그대로, 총건수 15)
+    const lss = SpreadsheetApp.openById(sid), OLDN = '명단 (1차 10.26~11.06)';
+    let ot = lss.getSheetByName(OLDN), nt = lss.getSheetByName(LIST_TAB);
+    if (!ot) {
+      if (!nt) throw new Error('명단 탭 없음');
+      nt.setName(OLDN); ot = nt; nt = null;
+    }
+    if (!nt) {
+      nt = lss.insertSheet(LIST_TAB, 0);
+      const lc = Math.max(ot.getLastColumn(), 1);
+      ot.getRange(1, 1, 2, lc).copyTo(nt.getRange(1, 1));
+      for (let c = 1; c <= lc; c++) { try { nt.setColumnWidth(c, ot.getColumnWidth(c)); } catch (e) {} }
+      nt.setRowHeight(1, 26); nt.setRowHeight(2, 52); nt.setFrozenRows(2);
+      nt.getRange('B1').setValue(15);
+      try {
+        const h = nt.getRange(2, 1, 1, lc).getValues()[0].map(hk_), cols = [];
+        h.forEach(function (x, i) { if (MATCH.account.test(x)) cols.push(i + 1); });
+        groupColumns_(nt, cols);
+      } catch (e) { out.push('계좌 칸 접기 실패 ' + e); }
+      out.push('새 명단 탭');
+    }
+    try { ot.hideSheet(); } catch (e) {}
+    lss.setActiveSheet(nt); lss.moveActiveSheet(1);
+    props.setProperty('LISTFROM_' + sid, String(Date.now()));
+    props.deleteProperty('LISTSIG_' + sid);
+    // 2) 폼: 0시에 엶(지금은 닫음), '작성한 링크 묶음' 질문 빼고 리뷰비 보기 = 9건 9,000원
+    const fm = FormApp.openById(String(old['폼ID']));
+    fm.setAcceptingResponses(false);
+    fm.getItems().forEach(function (it) {
+      const t = it.getTitle();
+      if (t === EXP_SET_Q) { fm.deleteItem(it); out.push('묶음 질문 뺌'); return; }
+      if (/리뷰비/.test(t) && !/계좌/.test(t) && it.getType() === FormApp.ItemType.MULTIPLE_CHOICE) { it.asMultipleChoiceItem().setChoiceValues([expFee2_()]).setRequired(true); out.push('리뷰비 보기'); }
+    });
+    // 3) 진행 11.17 + 일정 11.18~11.23
+    const title = expTitle2_(EXP2_DAYS[0]);
+    const plan = EXP2_DAYS.slice(1).map(function (iso, i) { const t = expTitle2_(iso); return { k: i + 2, date: iso, room: t, title: t, n: EXP2_PER_DAY, c: [] }; });
+    const d = {
+      n: 'exp2-1', title: title, room: title, fname: title, camp: '백발백중 도서 기대평', day: 1, total: EXP2_PER_DAY * EXP2_DAYS.length, daily: String(EXP2_PER_DAY),
+      date: EXP2_DAYS[0], desc: expNotice2_(), type: '', takdae: false, realship: false, platform: '기대평', prices: String(EXP2_LINKS.length * 1000),
+      shop: String(old['업체'] || '백발백중'), slot: '자정 ~ 오전 8시 20분', reuse: old, sheetId: sid,
+      plan: Utilities.base64EncodeWebSafe(Utilities.newBlob(JSON.stringify(plan)).getBytes())
+    };
+    locked_(function () { createRunInner_(d); }, 60000);
+    // 만들 때 폼을 열었으면(진행일이 지났을 때만 엶) 그대로, 아니면 0시에 openStartingForms_가 엶
+    out.push(title + ' + 일정 ' + plan.map(function (x) { return x.date.slice(5); }).join(','));
+    props.setProperty('EXP135', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + out.join(', '));
+  } catch (e) { props.setProperty('EXP135', (st + ' 실패(' + (e && e.message || e) + ') ' + out.join(', ')).slice(-500)); }
 }
 // 방제 끝 숫자: 기대평은 사람 × 건수, 나머지는 사람 수 (월급시트 수량·총액도 기대평은 건수)
 function titleCount_(r, n) { return isExpect_(r) ? expCount_(r, n) : n * cartN_(r); }   // 장바구니건 방 제목 = 물건 수 (사람 × 상품 수, 사용자 10/28)
