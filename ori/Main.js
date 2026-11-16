@@ -355,6 +355,8 @@ function renameTodo_(r, oldBare, newBare, fresh) {
 // 방제(명단 제목) 바꾸기: 진행목록 명단 제목·카톡방, 보낼 메시지함의 대기 중인 방 이름. 월급시트 캠페인명은 15분 갱신 때 같은 날짜·캠페인 줄을 찾아 바꿈
 // 방제 앞에 '택'이 있는지 (#택11.04 …, 업택11.04 …). 생성기가 택배대행이면 방제 앞에 '택'을 붙임
 function takTitle_(t) { return /^\s*[#업]?\s*택/.test(bareTitle_(String(t || ''))); }
+// 방제 앞에 '택'이 없어도 택대로 두는 캠페인 (11/16 사용자: 방제·명단 시트는 한 번 만들면 바꾸면 안 됨 → 김상사 케이블타이는 이름 그대로 택대). 속성 TAK_KEEP = 캠페인 키 목록
+function takKeep_(t) { let a = []; try { a = JSON.parse(PropertiesService.getScriptProperties().getProperty('TAK_KEEP') || '[]') || []; } catch (e) {} return a.indexOf(campKey_(t)) >= 0; }
 function renameRun_(r, title, why) {
   title = bareTitle_(title);
   if (!title || title === bareTitle_(r['명단 제목'])) return false;
@@ -366,7 +368,7 @@ function renameRun_(r, title, why) {
   if (twin) { note_('⛔ 방제 안 바꿈: ' + bareTitle_(r['명단 제목']) + ' → ' + title + ' (같은 날짜 진행 ' + bareTitle_(twin['명단 제목']) + '이 아직 있어서)' + (why ? ' [' + why + ']' : '')); return false; }
   note_('방제 바꿈' + (why ? '(' + why + ')' : '') + ': ' + bareTitle_(r['명단 제목']) + ' → ' + title);
   // 방제 앞 '택'을 넣거나 빼면 택대도 같이 (11/3: '#11.04 엔라지맨 밀크텐정 5'가 택배건이 아닌데 한눈에 '택배 옮김' 체크칸이 떠 있었음)
-  { const tk = takTitle_(title) ? 'Y' : ''; if ((r['택대'] === 'Y' ? 'Y' : '') !== tk) { setRun_(r.row, '택대', tk); r['택대'] = tk; note_('택대 ' + (tk ? '켬' : '끔') + '(방제 앞 택 ' + (tk ? '있음' : '없음') + '): ' + title); } }
+  { const tk = takTitle_(title) || takKeep_(title) ? 'Y' : ''; if ((r['택대'] === 'Y' ? 'Y' : '') !== tk) { setRun_(r.row, '택대', tk); r['택대'] = tk; note_('택대 ' + (tk ? '켬' : '끔') + '(방제 앞 택 ' + (tk ? '있음' : '없음') + '): ' + title); } }
   const cm = title.match(/(\d+)\s*$/);
   if (cm && Number(cm[1]) > 0 && !isExpect_(r)) { const g = Math.round(Number(cm[1]) / cartN_(r)); setRun_(r.row, '목표인원', g); r['목표인원'] = g; }   // 장바구니건은 방제 끝이 물건 수(사람 × 상품 수)   // 기대평은 방제 끝이 건수(사람 × 27)
   const nick = (String(r['명단 제목']).match(/\s*\([^)]*\)\s*$/) || [''])[0];
@@ -1725,6 +1727,15 @@ function diag_(p) {
     });
     try { const ib = rvInbox_(), l2 = []; walk(ib, 0, l2, ''); out.rvtree['(리뷰 사진 받는 곳)'] = l2.slice(0, 200); } catch (e) { out.rvtree['(리뷰 사진 받는 곳)'] = ['오류 ' + e.message]; }
   } catch (e) { out.rvtreeErr = String(e); }
+  // &tmpl=1: 폼 만들기에 쓰는 원본 폼·오리컴퍼니 폴더·이번 달 폴더가 열리는지 (읽기만, 11/16 폼 만들기 실패)
+  if (p.tmpl) try {
+    const o = {};
+    try { const t = DriveApp.getFileById(CONFIG.TEMPLATE_FORM_ID); o.template = t.getName() + (t.isTrashed() ? ' (휴지통!)' : ' ok'); } catch (e) { o.template = '못 엶: ' + e.message; }
+    try { const f = DriveApp.getFolderById(CONFIG.FOLDER_ID); o.root = f.getName() + (f.isTrashed() ? ' (휴지통!)' : ' ok'); } catch (e) { o.root = CONFIG.FOLDER_ID ? '못 엶: ' + e.message : '(FOLDER_ID 없음)'; }
+    try { const d0 = new Date(), nm = d0.getFullYear() + '년 ' + (d0.getMonth() + 1) + '월', it = (CONFIG.FOLDER_ID ? DriveApp.getFolderById(CONFIG.FOLDER_ID) : DriveApp.getRootFolder()).getFoldersByName(nm); o.month = it.hasNext() ? nm + ' ok' : nm + ' 없음'; } catch (e) { o.month = '못 봄: ' + e.message; }
+    o.createErr = String(PropertiesService.getScriptProperties().getProperty('CREATE_ERR') || '');
+    out.tmpl = o;
+  } catch (e) { out.tmplErr = String(e); }
   // &folder=폴더ID: 그 폴더 이름·위 폴더·안 폴더(사진 수)·파일, 그 폴더를 리뷰이미지로 쓰는 진행 (읽기만, 11/15 리뷰이미지에 '포토' 폴더가 안 보임)
   if (p.folder) try {
     const fo = DriveApp.getFolderById(String(p.folder)), pr = PropertiesService.getScriptProperties().getProperties(), o = { name: fo.getName(), parents: [], dirs: [], files: [] };
@@ -1853,7 +1864,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -1938,7 +1949,13 @@ function createRunLocked_(d) {
       if (prev.assign || empty) { try { prev.notice = refreshNotice_(run, d) || prev.notice; if (empty) note_('✓ 빈 공지 채움: ' + bareTitle_(run['명단 제목'])); } catch (e) { note_('공지 다시 넣기 실패: ' + e); } }
       return prev;
     }
-    const res = createRunInner_(d);
+    let res;
+    try { res = createRunInner_(d); }
+    catch (e) {
+      // 폼 만들기 실패 기록 (11/16 '입력한 ID에 해당하는 항목이 없습니다' 원인 찾기): 점검 props CREATE_ERR
+      try { PropertiesService.getScriptProperties().setProperty('CREATE_ERR', (Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + String(d.title || '') + ' 일차' + String(d.day || '') + ' reuse=' + (d.reuse ? 1 : 0) + ' sheetId=' + String(d.sheetId || '').slice(-6) + ' | ' + (e && e.message || e) + ' | ' + String(e && e.stack || '').split('\n').slice(0, 6).join(' / ')).slice(0, 1500)); } catch (x) {}
+      throw e;
+    }
     const made = d.n ? runByRequest_(d.n) : null;
     res.assign = made ? autoAssign_(made, d.desc) : '';
     return res;
@@ -3332,6 +3349,7 @@ function checkFullInner_() {
   try { geochiDel1_(); } catch (e) {}
   try { rvPhotoFix1_(); } catch (e) {}
   try { cableTak1_(); } catch (e) {}
+  try { cableRevert1_(); } catch (e) {}
   try { rvPhotoFix2_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
@@ -4171,7 +4189,8 @@ function moveCampFoldersOnce_() {
 }
 function archivedRuns_() { try { const a = adminSs_().getSheetByName('보관'); if (!a || a.getLastRow() < 2) return []; const h = a.getRange(1, 1, 1, a.getLastColumn()).getValues()[0].map(String), iL = h.indexOf('폴더 링크'), iD = h.indexOf('진행일'); if (iL < 0 || iD < 0) return []; return a.getRange(2, 1, a.getLastRow() - 1, a.getLastColumn()).getValues().map(function (v) { return { '폴더 링크': v[iL], '진행일': v[iD] }; }); } catch (e) { return []; } }
 function rootFolder_() {
-  if (CONFIG.FOLDER_ID) return DriveApp.getFolderById(CONFIG.FOLDER_ID);
+  // 지정 폴더를 못 열면(지웠거나 권한) 이름으로 찾음 (11/16 폼 만들기 '입력한 ID에 해당하는 항목이 없습니다')
+  if (CONFIG.FOLDER_ID) { try { const f0 = DriveApp.getFolderById(CONFIG.FOLDER_ID); if (!f0.isTrashed()) return f0; } catch (e) { note_('⚠ 오리컴퍼니 폴더(FOLDER_ID)를 못 열어 이름으로 찾음: ' + e.message); } }
   const it = DriveApp.getRootFolder().getFoldersByName(CONFIG.ROOT_FOLDER_NAME);
   if (it.hasNext()) return it.next();
   const f = DriveApp.getRootFolder().createFolder(CONFIG.ROOT_FOLDER_NAME);
@@ -8020,6 +8039,33 @@ function cableTak1_() {
     if (ok) { try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); } }
   } catch (e) { props.setProperty('CABLETAK1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
+// (11/16 한 번, 사용자: 방제랑 명단 시트는 한 번 만들면 바꾸면 안 돼, 원래대로 돌려놔) cableTak1_이 바꾼 '#택11.1x실/빈 김상사케이블타이5'를
+//  원래 '#11.1x실/빈 김상사 케이블타이5'로 (명단 시트·폼·폴더 이름도 renameRun_으로 같이). 택대는 그대로 Y (TAK_KEEP), 일정 계획 이름도 되돌림
+function cableRevert1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('CABLEREV1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const key = '김상사케이블타이', out = [];
+    let keep = []; try { keep = JSON.parse(props.getProperty('TAK_KEEP') || '[]') || []; } catch (e) {}
+    if (keep.indexOf(key) < 0) { keep.push(key); props.setProperty('TAK_KEEP', JSON.stringify(keep)); }
+    const back = function (t) { return String(t).replace(/^#택/, '#').replace(/김상사케이블타이/, '김상사 케이블타이'); };
+    readRuns_().filter(function (r) { return campKey_(r['명단 제목']) === key && /^#택/.test(bareTitle_(r['명단 제목'])); }).forEach(function (r) {
+      const nt = back(bareTitle_(r['명단 제목']));
+      const ok = renameRun_(r, nt, '원래 방제로 (사용자 11/16)');
+      if (r['택대'] !== 'Y') { setRun_(r.row, '택대', 'Y'); r['택대'] = 'Y'; }
+      out.push(ok ? nt : nt + ' 안 바뀜');
+    });
+    const ps = planSheet_(), pl = ps.getLastRow();
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x, i) {
+      if (x[8] !== '대기' || campKey_(x[4]) !== key || !/^#택/.test(String(x[4]))) return;
+      ps.getRange(i + 2, 5, 1, 2).setValues([[back(x[4]), back(x[5])]]);
+      out.push('(일정) ' + back(x[4]));
+    });
+    const ok = out.every(function (x) { return !/안 바뀜/.test(x); });
+    props.setProperty('CABLEREV1', (ok ? '✓ ' : st + ' 실패(') + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '바꿀 것 없음') + (ok ? '' : ')'));
+    if (ok && out.length) { try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); } }
+  } catch (e) { props.setProperty('CABLEREV1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
 // 의뢰서에 포토리뷰가 없는지 (RV_ kind 'text'이고 섞임·가이드에 포토/사진 말이 없음) (11/16)
 //  실배송 의뢰는 빼기: 물건을 실제로 받아 사진을 찍어 올리는 일이 많아서 AI 판단 그대로 (11/16: 하루비 백팩 6장을 텍스트로 옮겼다가 되돌림)
 function rvNoPhoto_(sid, props, runs) {
@@ -10660,7 +10706,7 @@ function buildDashboard_(force) {
       if (pu) sh.getRange(rr, 11).setFormula('=HYPERLINK(' + q(pu) + ',' + q(pl || '상품') + ')'); else if (pl) sh.getRange(rr, 11).setValue(pl); }
     // 택대면 '택배 옮김' 체크 (명단을 택배시트에 옮겨 적었으면 체크, 2시 전까지). 체크하면 진행목록에도 저장
     // 택대인데 방제 앞에 '택'이 없으면(방제를 고친 것) 방제를 믿고 택대를 끔 (11/3 엔라지맨 밀크텐정)
-    if (r['택대'] === 'Y' && !takTitle_(r['명단 제목'])) { try { setRun_(r.row, '택대', ''); note_('택대 끔(방제 앞에 택 없음): ' + bareTitle_(r['명단 제목'])); } catch (e) {} r['택대'] = ''; }
+    if (r['택대'] === 'Y' && !takTitle_(r['명단 제목']) && !takKeep_(r['명단 제목'])) { try { setRun_(r.row, '택대', ''); note_('택대 끔(방제 앞에 택 없음): ' + bareTitle_(r['명단 제목'])); } catch (e) {} r['택대'] = ''; }
     if (r['택대'] === 'Y') sh.getRange(rr, 13).insertCheckboxes().setValue(r['택배 옮김'] === true);
     // 오류가 없어지면 칸도 비움 (10/31: 다시 그릴 때 시트를 통째로 안 지워서 옛 오류가 몇 시간 남아 있었음)
     if (errs[r['명단 제목']]) sh.getRange(rr, 14).setValue('⚠ ' + errs[r['명단 제목']]).setFontColor('#b91c1c');
