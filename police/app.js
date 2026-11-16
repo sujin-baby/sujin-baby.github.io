@@ -88,6 +88,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     /* 노베이스 시작: 이제 막 시작한 사람은 범죄학(박상민 올인원)부터 보이게 */
     if (!S.planPerDay) S.planPerDay = 2;
     if (!S.planLog) S.planLog = {};
+    // 배분 방식이 바뀌면(업로드 반영·하루 1~2강) 예전에 저장된 오늘 몫을 버리고 다시 계산한다
+    if (S.planVer !== 2) { S.planLog = {}; S.planVer = 2; }
     if (!S.planSubj) {
       S.planSubj = 'done';
       S.subj = 'cri';
