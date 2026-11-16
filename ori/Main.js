@@ -4067,6 +4067,8 @@ function rvInboxTick_() {
   // 명단 시트 리뷰 확인 체크 → 5분 안에 취완·리뷰비·페이백 요청 (11/8 사용자: 시온스 발마사지기 다 체크했는데 리뷰비 요청이 너무 늦게 뜸)
   try { if (!late_(150)) rvQuickCheck_(); } catch (e) { try { if (!(e && e.yieldLock)) note_('리뷰 확인(5분) 실패: ' + e); } catch (e2) {} }
   try { if (!late_(170)) rvZipSoon_(); } catch (e) { try { if (!(e && e.yieldLock)) note_('리뷰 보고 글(5분) 실패: ' + e); } catch (e2) {} }
+  // 리뷰이미지에 바로 올린 사진 확인도 5분마다 (15분 확인이 길면 끝까지 못 가서 안 돌았음, 11/16)
+  try { if (!late_(160)) rvLooseCheck_(readRuns_()); } catch (e) {}
   // AI 분류 대기열도 이어서 (1분 연쇄 트리거도 이 길로 들어옴, 11/7)
   try { if (PropertiesService.getScriptProperties().getProperty('RVAI_Q') && !late_(200)) rvAiQueue_(); } catch (e) { try { note_('리뷰 사진 AI(연쇄) 실패: ' + e); } catch (e2) {} }
   finally { lock.releaseLock(); }
@@ -8486,7 +8488,8 @@ function rvLooseCheck_(runs) {
     if (looked >= 15 || late_(200)) return;
     const mine = bySid[sid];
     if (!mine.some(function (r) { return r['마감 시각'] instanceof Date; }) || !mine.some(function (r) { return r['진행일'].getTime() >= cut; })) return;
-    if (q.indexOf(sid) >= 0 || props.getProperty('RVRPT_' + sid) || rvSentAny_(mine)) return;   // 이미 대기열 / 리뷰 다 끝남(rvZip_이 나눔) / 업체에 보냄
+    // 리뷰가 다 끝났거나 업체에 보낸 의뢰도 나눔 (11/16 과일쏙: 보고를 보낸 뒤 올린 사진은 rvZip_이 AI를 안 돌려 그대로 남음)
+    if (q.indexOf(sid) >= 0) return;
     const imgId = props.getProperty('RVIMG_' + sid);
     if (!imgId || now - Number(at[sid] || 0) < 3600000) return;
     let kind = ''; try { kind = (JSON.parse(props.getProperty('RV_' + sid) || '{}') || {}).kind || ''; } catch (e) {}
