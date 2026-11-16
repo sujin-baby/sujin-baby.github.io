@@ -30,5 +30,11 @@ ok(ch.length === 2 && ch[1].runs.length === 1 && ch[1].total === 15, '새 묶음
   const msg = typeof m === 'string' ? m : (m && m.msg) || JSON.stringify(m);
   ok(/향이 은은한 점 언급해 주세요/.test(msg) && /참고: 사진 1장 꼭 넣어 주세요/.test(msg) && !/하단 내용 참고하셔서/.test(msg), '직접 가이드 그대로 ' + msg.slice(0, 300));
 }
+// (11/17) 방 공지 중 리뷰내용 가이드는 ⭐리뷰가이드 탭, 구매 공지는 🐥방공지 탭
+{
+  const gi = x => G('MSGV_GROUPS[msgvGi_(' + J(x) + ', (function(){var k={};MSGV_GROUPS.forEach(function(g,i){g.k.forEach(function(q){k[q]=i;});});return k;})(), 0)].base');
+  ok(gi(['a', '', '방 공지', '#11.17 귤 5', '🐥리뷰내용 가이드🐥\n\n텍스트리뷰(5명) : 가']) === '⭐리뷰가이드', '리뷰 가이드 탭');
+  ok(gi(['b', '', '방 공지', '#11.17 귤 5', '★★★자정 ~ 오전 7시까지 구매★★★\n공지']) === '🐥방공지', '구매 공지 탭');
+}
 if (fails.length) { console.log('✗ ' + fails.join('\n✗ ')); process.exit(1); }
 console.log('✓ 택 방제·업체입금·기대평 2차 시험 통과');

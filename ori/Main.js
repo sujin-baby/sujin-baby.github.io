@@ -1878,7 +1878,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3455,6 +3455,7 @@ function checkFullInner_() {
   try { cableTak2_(); } catch (e) {}
   try { memoRec1_(); } catch (e) {}
   try { talk70_(); } catch (e) {}
+  try { noticeClear1_(); } catch (e) {}
   try { upAcctOpen1_(); } catch (e) {}
   try { exp135_(); } catch (e) {}
   try { rvPhotoFix2_(); } catch (e) {}
@@ -4785,7 +4786,7 @@ function todayItems_(runs) {
     const due = x[1] instanceof Date ? dayStart_(x[1]) : null;
     if (due !== null && due > t0) { out.later++; return; }   // 앞으로 보낼 것은 그날에
     const kind = String(x[2]);
-    let gi = known[kind] != null ? known[kind] : other;
+    let gi = msgvGi_(x, known, other);
     if (MSGV_GROUPS[gi].merged) gi = Math.max(0, MSGV_GROUPS.map(function (g) { return g.key; }).indexOf(MSGV_GROUPS[gi].merged));
     let copy = String(x[4]);
     if (kind === '리뷰 독촉') copy = String((copy.match(/아직 리뷰 확인이 안 된 분\s*:\s*([^\n]*)/) || [])[1] || copy).trim();
@@ -4806,7 +4807,7 @@ function todayItems_(runs) {
 /* ---------------- 처음 붙여넣은 의뢰서 원문 (11/8 사용자 요청: 리뷰 가이드 더블체크용) ----------------
  *  생성기가 [새 진행 만들기]를 누를 때 의뢰서를 600자 조각으로 나눠 ?p=reqraw&n=요청ID&i=&of=&t= 로 보냄 (주소 길이 한도)
  *  조각은 캐시에 모았다가 다 오면 드라이브 '의뢰서 원문 (자동)' 폴더에 '요청ID.txt'로 저장, 속성 RQF_요청ID = 파일 번호
- *  메시지 탭(📸포토가이드·📦리뷰취합·⏰리뷰독촉) F칸에 리뷰 부분, 칸 메모에 전체 */
+ *  메시지 탭(⭐리뷰가이드·📦리뷰취합·⏰리뷰독촉) F칸에 리뷰 부분, 칸 메모에 전체 */
 function reqRawSave_(p) {
   const n = String(p.n || ''), i = Number(p.i), of = Number(p.of), t = String(p.t || '');
   if (!/^[A-Za-z0-9_-]{4,40}$/.test(n) || !(of >= 1 && of <= 20) || !(i >= 0 && i < of) || t.length > 1500) return 'bad';
@@ -4885,12 +4886,12 @@ function msgvLinks_(x, ctx) {
  *  - 보낼메시지가 바뀌면 실행이 끝날 때 바뀐 탭만 다시 그림. 다시 그린 지 20초 안에 누른 칸이 다른 메시지로 밀렸으면 체크를 되돌리고 알림
  */
 const MSGV_CHWAN_COL = 3;   // 리뷰비 탭 취완 체크칸 (C, 보냄 B 바로 옆. 11/16 전엔 L)
-const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '12', MSGV_COLS = 5;   // 11: 리뷰비 탭 취완 체크 C칸으로, L칸 리뷰이미지 (11/16)   // 10: 리뷰독촉 탭 리뷰이미지 링크 칸, 페이백 글 한 줄 띄움·줄 높이 (11/15)   // 9: 리뷰비 탭 L칸에 걸린 취완은 취완 탭에서 뺌, 페이백 줄 E~K 합침 (11/15)   // 8: 명단전달 F열 '비고'(가격 틀리게 산 사람) 및 할일 탭 중복 제외 (11/11)   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
+const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '13', MSGV_COLS = 5;   // 11: 리뷰비 탭 취완 체크 C칸으로, L칸 리뷰이미지 (11/16)   // 10: 리뷰독촉 탭 리뷰이미지 링크 칸, 페이백 글 한 줄 띄움·줄 높이 (11/15)   // 9: 리뷰비 탭 L칸에 걸린 취완은 취완 탭에서 뺌, 페이백 줄 E~K 합침 (11/15)   // 8: 명단전달 F열 '비고'(가격 틀리게 산 사람) 및 할일 탭 중복 제외 (11/11)   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
 const MSGV_GROUPS = [
   { key: 'notice', base: '🐥방공지', t: '🐥 방 공지', k: ['방 공지'], bg: '#eee6f7', tab: '#b48fd9' },
   { key: 'list', base: '📋명단전달', t: '📋 명단 전달 (오리명단방)', k: ['명단 전달', '업체 명단'], bg: '#d9ead2', tab: '#7fbf6a' },
   { key: 'todo', base: '📝할일', t: '📝 내 할 일 · 사장님', k: ['할 일'], other: true, bg: '#fff1cc', tab: '#f2c94c' },
-  { key: 'photo', base: '📸포토가이드', t: '📸 포토 가이드 · 리뷰 안내', k: ['포토 가이드', '리뷰'], bg: '#cfe1f3', tab: '#6fa8dc', req: true },
+  { key: 'photo', base: '⭐리뷰가이드', t: '⭐ 리뷰 가이드 · 포토 가이드', k: ['포토 가이드', '리뷰'], bg: '#cfe1f3', tab: '#6fa8dc', req: true },
   { key: 'report', base: '📦리뷰취합', t: '📦 리뷰 취합 보고 (사장님께)', k: ['리뷰 보고'], bg: '#d0dfe2', tab: '#76a5af', req: true },
   { key: 'nag', base: '⏰리뷰독촉', t: '⏰ 리뷰 독촉 · 안 산 사람', k: ['리뷰 독촉', '안 산 사람'], bg: '#fbe4cd', tab: '#f6a35b', req: true, links: [[7, 'list', '명단'], [8, 'img', '리뷰이미지']] },   // 리뷰이미지 링크 (11/15 사용자)
   { key: 'pay', base: '💰리뷰비', t: '💰 리뷰비 · 페이백 요청', k: ['리뷰비 요청', '페이백 요청'], bg: '#ead1dc', tab: '#d36f9a', fee: true, links: [[12, 'img', '리뷰이미지']] },   // L칸 리뷰이미지 (11/16 사용자 승인)
@@ -4957,6 +4958,12 @@ function isNoticeReview_(msg) {
   return /리뷰내용\s*가이드|포토\s*대기|⭐️포토|원고\s*및\s*사진\s*제공/i.test(s);
 }
 // 탭 이름 → 몇 번째 종류 탭인지 (이름 = 종류 또는 '종류 숫자'). 아니면 -1
+// 메시지가 들어갈 종류 탭: 방 공지 중 리뷰내용 가이드·포토대기는 ⭐리뷰가이드 탭으로 (11/17 사용자: 방공지 탭에 섞여 안 보였음)
+function msgvGi_(x, known, other) {
+  const kind = String(x[2]);
+  if (kind === '방 공지' && isNoticeReview_(x[4])) { const pi = MSGV_GROUPS.map(function (g) { return g.key; }).indexOf('photo'); if (pi >= 0) return pi; }
+  return known[kind] != null ? known[kind] : other;
+}
 function msgvGroupOfName_(name) {
   const n = String(name || '');
   for (let i = 0; i < MSGV_GROUPS.length; i++) { const b = MSGV_GROUPS[i].base; if (n === b || (n.indexOf(b + ' ') === 0 && /^\d+$/.test(n.slice(b.length + 1)))) return i; }
@@ -5020,7 +5027,7 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
       const first = String(x[4]).split('\n')[0].replace(/^\[결제금액 확인\]\s*/, '').trim();
       if (first && listAt.some(function (l) { return sameCamp(l.c, first) && (l.pend || xi > l.i); })) return;
     }
-    buckets[known[String(x[2])] != null ? known[String(x[2])] : otherAt].push(x);
+    buckets[msgvGi_(x, known, otherAt)].push(x);
   });
   // 리뷰비 탭 L칸에 걸린 취완은 ✅취완 탭에서 뺌: 한 곳에서만 체크 (11/15 사용자: 두 탭에 같은 취완이 있어 헷갈림).
   //  리뷰비·페이백 줄이 아직 없는 취완(여러 날 의뢰 중 먼저 끝난 방 등)은 취완 탭에 그대로
@@ -8310,6 +8317,22 @@ function talk70_() {
     try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); }
   } catch (e) { props.setProperty('TALK70', (st + ' 실패(' + (e && e.message || e) + ') ' + out.join(', ')).slice(-400)); }
 }
+// (11/17 한 번, 사용자: '방공지탭 다 지워줘 체크를 못했는데 너무 많이 쌓였어') 오늘까지 날짜의 대기 중인 방 공지(구매 공지)를 '보냄'으로. 리뷰 가이드·포토대기는 ⭐리뷰가이드 탭으로 옮겨 그대로, 내일 이후 공지도 그대로
+function noticeClear1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('NOTICECLR1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const ob = outboxSheet_(), ol = ob.getLastRow(), t1 = dayStart_(today_()) + 86400000;
+    let n = 0, keepRv = 0, keepLater = 0;
+    if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
+      if (String(v[2]) !== '방 공지' || v[5] !== '대기' || !v[0]) return;
+      if (isNoticeReview_(v[4])) { keepRv++; return; }
+      if (v[1] instanceof Date && v[1].getTime() >= t1) { keepLater++; return; }
+      obSet_(ob, v[0], 6, '보냄'); n++;
+    });
+    props.setProperty('NOTICECLR1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 보냄 처리 ' + n + '개, 리뷰가이드 탭으로 ' + keepRv + '개, 내일 이후 ' + keepLater + '개 그대로');
+  } catch (e) { props.setProperty('NOTICECLR1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
 // (11/16 한 번) 방제가 바뀌어 한눈에 O열에서 지워진 메모 되살림: 옛 방제로 저장된 메모 → 지금 방제 줄 (그 줄 O가 비었을 때만)
 function memoRec1_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('MEMOREC1') || '');
@@ -8825,7 +8848,7 @@ const USAGE_ROWS = [
   ['■ 탭', ''],
   ['한눈에', '오늘·앞으로·지난 진행 현황과 날마다 명단. 휴대폰에서는 표 아래 "휴대폰: ▶ 진행 도우미" 링크(홈 화면에 추가)로 보기'],
   ['블랙리스트', '받으면 안 되는 사람. 이름만 아래에 추가. 배정·폼 응답에 있으면 ⛔로 알려 줌'],
-  ['메시지 탭 (🐥방공지 📋명단전달 📝할일 📸포토가이드 📦리뷰취합 ⏰리뷰독촉 💰리뷰비 ✅취완)', '카톡에 보낼 글을 종류마다 탭 하나씩. 탭 이름 뒤 숫자 = 안 보낸 개수. 메시지 칸 글을 복사 → 카톡방에 붙여넣고 보내기 → 왼쪽 "보냄" 체크(바로 저장). 체크한 건 회색으로 이틀 남았다가 사라짐 (잘못 눌렀으면 그동안 다시 풀기). 빨간 날짜 = 날짜 지난 것. 원본 "보낼메시지" 탭은 프로그램이 쓰는 칸이라 숨겨 둠 (지우면 안 돼요)'],
+  ['메시지 탭 (🐥방공지 📋명단전달 📝할일 ⭐리뷰가이드 📦리뷰취합 ⏰리뷰독촉 💰리뷰비 ✅취완)', '카톡에 보낼 글을 종류마다 탭 하나씩. 탭 이름 뒤 숫자 = 안 보낸 개수. 메시지 칸 글을 복사 → 카톡방에 붙여넣고 보내기 → 왼쪽 "보냄" 체크(바로 저장). 체크한 건 회색으로 이틀 남았다가 사라짐 (잘못 눌렀으면 그동안 다시 풀기). 빨간 날짜 = 날짜 지난 것. 원본 "보낼메시지" 탭은 프로그램이 쓰는 칸이라 숨겨 둠 (지우면 안 돼요)'],
   ['진행목록', '모든 진행 기록. "진행일" 칸을 고치면 그 진행 날짜가 옮겨짐 (아래 "날짜 바꾸기")'],
   ['폼수정', 'B1에서 진행 고르기 → E2 공지 붙여넣기(배정) / 응답 체크 후 삭제 실행 / I2에 숫자 = 추가 모집'],
   ['배정', '누가 어떤 옵션을 사기로 했는지 (공지 이름에서 자동). 한눈에 탭 "안 산 사람"·"옵션 확인"이 이걸로 나옴. 지우지 마세요 (중복 확인은 배정과 상관없이 한눈에 명단에서 빨간 글씨)'],

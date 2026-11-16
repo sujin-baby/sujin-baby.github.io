@@ -44,7 +44,7 @@ const rowOf = id => where(id)[1];
 const cellOf = (id, c) => { const [b, r] = where(id); return T[b].rows[r - 1][c]; };
 const outSt = id => env.__ss.sheets['보낼메시지'].rows.find(r => r[0] === id)[5];
 // 종류마다 맞는 탭에
-const expect = { m1: '🐥방공지', m2: '🐥방공지', m3: '🐥방공지', m5: '📸포토가이드', m6: '📝할일', m7: '💰리뷰비', m8: '📝할일', m10: '📋명단전달', m11: '📦리뷰취합', n0: '📝할일', n29: '📝할일' };
+const expect = { m1: '🐥방공지', m2: '🐥방공지', m3: '🐥방공지', m5: '⭐리뷰가이드', m6: '📝할일', m7: '💰리뷰비', m8: '📝할일', m10: '📋명단전달', m11: '📦리뷰취합', n0: '📝할일', n29: '📝할일' };
 Object.keys(expect).forEach(id => ok(where(id)[0] === expect[id], id + ' → ' + where(id)[0] + ' (기대 ' + expect[id] + ')'));
 ['m3b', 'm4', 'm9'].forEach(id => ok(rowOf(id) === 0, id + ' 보이면 안 됨'));
 ok(T['🐥방공지'].name === '🐥방공지 2', '탭 이름 개수 ' + T['🐥방공지'].name);
