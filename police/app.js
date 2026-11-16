@@ -41,7 +41,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   var CHALLENGES = [
     { id: 'c10', t: '오늘 10문제 풀기', need: 10 },
     { id: 'combo', t: '5연속 정답 만들기', need: 5 },
-    { id: 'xp', t: 'XP 100 모으기', need: 100 },
+    { id: 'xp', t: 'P 100 모으기', need: 100 },
     { id: 'lec', t: '강의 2개 체크하기', need: 2 }
   ];
 
@@ -50,7 +50,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     xp: 0, streak: { n: 0, last: '', best: 0 }, checked: {}, wrong: {},
     ans: 0, ok: 0, muted: false, subj: 'cri', course: {}, qlen: 10, mix: false, days: {},
     dday: DTARGET, ddayNote: '예상일', unit: {}, node: {}, qok: {}, gpSeeded: false, goal: { xp: 50, q: 10 }, bestCombo: 0,
-    planLog: {}, planSubj: '', planPerDay: 2, speedBest: 0
+    planLog: {}, planSubj: '', planPerDay: 2, speedBest: 0,
+    xpSpent: 0, shields: {}, cards: {}, rewardData: {}, gpLast: {}, bossWins: 0
   };
   try {
     var raw = localStorage.getItem(SKEY);
@@ -88,6 +89,11 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     /* 노베이스 시작: 이제 막 시작한 사람은 범죄학(박상민 올인원)부터 보이게 */
     if (!S.planPerDay) S.planPerDay = 2;
     if (!S.planLog) S.planLog = {};
+    if (typeof S.xpSpent !== 'number') S.xpSpent = 0;
+    if (!S.shields) S.shields = {};
+    if (!S.cards) S.cards = {};
+    if (!S.rewardData) S.rewardData = {};
+    if (!S.gpLast) S.gpLast = {};
     // 배분 방식이 바뀌면(업로드 반영·하루 1~2강) 예전에 저장된 오늘 몫을 버리고 다시 계산한다
     if (S.planVer !== 3) { S.planLog = {}; S.planVer = 3; }
     if (!S.planSubj) {
@@ -99,6 +105,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   normalizeState();
 
   function save() {
+    scopeCache = null;
     try { localStorage.setItem(SKEY, JSON.stringify(S)); } catch (e) {}
     flashSaved();
   }
@@ -248,7 +255,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var iso = S.dday || DTARGET;
     $('#ddayNum').textContent = ddayLabel(iso).replace(/^D-/, '');
     $('#ddayTitle').textContent = '2027년 2차 순경 필기';
-    $('#ddaySub').textContent = iso + ' (' + weekday(iso) + ') · ' + (S.ddayNote || '예상일') + ' (1월 공고 시 수정 가능)';
+    $('#ddaySub').textContent = iso + ' (' + weekday(iso) + ') · ' + (S.ddayNote || '예상일');
     var g = daysTo(GTELP);
     $('#gtChipTxt').textContent = '지텔프 ' + (g > 0 ? 'D-' + g : g === 0 ? 'D-DAY' : 'D+' + (-g));
     $('#ddayLeft').textContent = daysTo(iso) >= 0 ? daysTo(iso) + '일 남음' : Math.abs(daysTo(iso)) + '일 지남';
@@ -846,31 +853,16 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var h = '<button class="sheet-close" data-close="1">✕</button>' +
       '<div class="sheet-num">지텔프 켈리</div>' +
       '<div class="sheet-title">G-POINT 1~33 요약 암기표</div>' +
-      '<div class="gp-note">조건(힌트)은 <b class="gp-cond">파랑</b>, 정답 공식은 <b class="gp-ans">노랑</b>으로 봐요.</div>' +
-      '<div class="gp-jump">';
-    GP_TABLE.forEach(function (grp, gi) {
-      h += '<button class="gp-jbtn" data-goto="' + gi + '">' + esc(grp.g) + '</button>';
-    });
-    h += '</div>';
-    GP_TABLE.forEach(function (grp, gi) {
-      h += '<div class="gp-group" id="gp-g' + gi + '"><div class="gp-group-h">' + esc(grp.g) + '</div>';
-      grp.rows.forEach(function (r) {
-        h += '<div class="gp-row">' +
-          '<div class="gp-no">' + esc(r[0]) + '</div>' +
-          '<div class="gp-body"><div class="gp-cond">' + esc(r[1]) + '</div>' +
-          '<div class="gp-ans">👉 ' + esc(r[2]) + '</div></div></div>';
-      });
-      if (grp.tip) h += '<div class="gp-tip">💡 ' + esc(grp.tip) + '</div>';
-      h += '</div>';
-    });
-    h += '<button class="btn primary wide" data-close="1" style="margin-top:10px">확인</button>';
+      gpTableHtml(false) +
+      '<button class="btn primary wide" data-close="1" style="margin-top:10px">확인</button>';
     $('#sheetIn').innerHTML = h;
     $('#sheet').classList.remove('hidden');
-    $$('.gp-jbtn').forEach(function (b) {
+    bindGpRows($('#sheetIn'));
+    $$('#sheetIn .gp-jbtn').forEach(function (b) {
       b.onclick = function () {
         var t = $('#gp-g' + b.getAttribute('data-goto'));
         if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        $$('.gp-jbtn').forEach(function (x) { x.classList.toggle('on', x === b); });
+        $$('#sheetIn .gp-jbtn').forEach(function (x) { x.classList.toggle('on', x === b); });
         sfx('tap');
       };
     });
@@ -902,11 +894,13 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
   function renderHud() {
     $('#streakN').textContent = S.streak.n || 0;
-    $('#xpN').textContent = S.xp || 0;
+    $('#xpN').textContent = xpAvail();
+    var chip = $('#xpN') && $('#xpN').parentNode;
+    if (chip) chip.title = '쓸 수 있는 P ' + xpAvail() + ' · 누적 ' + (S.xp || 0) + ' P';
     $('#mute').textContent = S.muted ? '🔇' : '🔊';
     var rk = rankOf(S.xp || 0);
     $('#rankBadge').innerHTML = '<span>' + rk.r.e + '</span>' + rk.r.n;
-    $('#rankBadge').title = rk.next ? (rk.next.n + '까지 ' + (rk.next.xp - (S.xp || 0)) + ' XP') : '최고 계급';
+    $('#rankBadge').title = rk.next ? (rk.next.n + '까지 ' + (rk.next.xp - (S.xp || 0)) + ' P') : '최고 계급';
   }
   function checkPromotion() {
     var now = rankOf(S.xp || 0);
@@ -917,24 +911,33 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       openRankSheet(now.r, true);
     } else if (now.i < S.rankIdx) { S.rankIdx = now.i; save(); }
   }
-  function openRankSheet(rank, promoted) {
+  function rankSheetHtml(rank, promoted) {
     var rk = rankOf(S.xp || 0);
-    var html = '<button class="sheet-close" data-close="1">✕</button>' ;
-    if (promoted) {
+    var html = '<button class="sheet-close" data-close="1">✕</button>';
+    if (promoted && rank) {
       html += '<div class="promo"><div class="promo-emoji">' + rank.e + '</div>' +
-        '<h2>' + rank.n + ' 승진!</h2><p>축하합니다! XP ' + (S.xp || 0) + '로 <b>' + rank.n + '</b>이 되었어요.</p></div>';
+        '<h2>' + rank.n + ' 승진!</h2><p>축하합니다! ' + (S.xp || 0) + ' P로 <b>' + rank.n + '</b>이 되었어요.</p></div>';
     } else {
       html += '<div class="sheet-num">나의 계급</div><div class="sheet-title">' + rk.r.e + ' ' + rk.r.n + '</div>' +
-        '<div class="sheet-meta">XP ' + (S.xp || 0) + (rk.next ? ' · 다음 계급 ' + rk.next.n + '까지 ' + (rk.next.xp - (S.xp || 0)) + ' XP' : ' · 최고 계급') + '</div>';
+        '<div class="sheet-meta">누적 ' + (S.xp || 0) + ' P' + (rk.next ? ' · 다음 계급 ' + rk.next.n + '까지 ' + (rk.next.xp - (S.xp || 0)) + ' P' : ' · 최고 계급') + '</div>';
     }
     html += '<div class="rank-list">';
     RANKS.forEach(function (r, i) {
       var cls = 'rank-item' + (i <= rk.i ? ' got' : '');
-      html += '<div class="' + cls + '"><span>' + r.e + '</span><b>' + r.n + '</b><i>' + r.xp + ' XP</i></div>';
+      html += '<div class="' + cls + '"><span>' + r.e + '</span><b>' + r.n + '</b><i>' + r.xp + ' P</i></div>';
     });
-    html += '</div><button class="btn primary" data-close="1">확인</button>';
-    $('#sheetIn').innerHTML = html;
+    html += '</div>' + rewardHtml();
+    html += '<button class="btn primary" data-close="1" style="margin-top:12px">확인</button>';
+    return html;
+  }
+  function bindRankSheet() {
+    $$('#sheetIn .rank-item').forEach(function () {});
+    bindRewards($('#sheetIn'));
+  }
+  function openRankSheet(rank, promoted) {
+    $('#sheetIn').innerHTML = rankSheetHtml(rank, promoted);
     $('#sheet').classList.remove('hidden');
+    bindRankSheet();
   }
   function renderSubtabs() {
     var el = $('#subtabs'); el.innerHTML = '';
@@ -979,7 +982,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var pctQ = Math.min(100, Math.round((d.ans || 0) / S.goal.q * 100));
     $('#goalXpBar').style.width = pctXp + '%';
     $('#goalQBar').style.width = pctQ + '%';
-    $('#goalXpTxt').textContent = (d.xp || 0) + ' / ' + S.goal.xp + ' XP';
+    $('#goalXpTxt').textContent = (d.xp || 0) + ' / ' + S.goal.xp + ' P';
     $('#goalQTxt').textContent = (d.ans || 0) + ' / ' + S.goal.q + '문제';
     var lecN = todayLectureCount();
     $('#goalLecTxt').textContent = lecN + '강 (목표 1강)';
@@ -1098,14 +1101,21 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
 
   /* ---------- mascot ---------- */
+  var MOT = {
+    done: ['오늘 몫 다 했어요. 이 정도면 충분해요.', '목표 완료. 남은 건 내일 해도 돼요.', '꾸준함이 제일이에요. 오늘도 해냈어요.'],
+    none: ['시작이 제일 어려워요. 한 문제만 풀어 봐요.', '오늘은 짧게, 대신 꼭 한 문제.', '5분만 해도 오늘은 이긴 거예요.', '지금 이 한 문제가 쌓여서 시험이 돼요.'],
+    mid: ['좋아요, 흐름 탔어요. 한 문제 더 가요.', '콤보 이어 가면 보너스가 붙어요.', '틀린 문제가 제일 좋은 선생님이에요.', '여기까지 온 것만으로도 잘하고 있어요.']
+  };
   function renderMascot() {
     var d = dayRec();
-    var left = Math.max(0, S.goal.q - (d.ans || 0));
-    var msg;
-    if ((d.ans || 0) >= S.goal.q && (d.xp || 0) >= S.goal.xp) msg = '오늘 목표 완료! 이대로만 가자 🎉';
-    else if (!(d.ans || 0)) msg = '오늘 목표는 ' + S.goal.q + '문제 · ' + S.goal.xp + ' XP야. 가볍게 시작해 볼까?';
-    else msg = '목표까지 ' + left + '문제 남았어. 콤보 이어가면 보너스 XP도 쌓여!';
-    $('#homeBubble').textContent = msg;
+    var lead = $('#homeBubble');
+    if (lead) {
+      var key = ((d.ans || 0) >= S.goal.q && (d.xp || 0) >= S.goal.xp) ? 'done' : (!(d.ans || 0) ? 'none' : 'mid');
+      var arr = MOT[key];
+      lead.textContent = arr[seedOf(todayStr() + key) % arr.length];
+    }
+    var memo = $('#bubMemo');
+    if (memo) memo.textContent = memoLine();
   }
 
   /* ---------- stage ---------- */
@@ -1157,7 +1167,12 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     $('#heroNote').textContent = note;
     $('#ctaAll').onclick = function () { startSession('all'); };
     $('#ctaWrong').onclick = function () { startSession('wrong'); };
+    var _tc = $('#ctaCards');
+    if (_tc) _tc.onclick = function () { sfx('tap'); MEMO.seg = 'card'; cfStart(); openMemo('card'); };
+    var _tb = $('#ctaBlank');
+    if (_tb) _tb.onclick = function () { sfx('tap'); startBlank(); };
     $('#courseBtn').onclick = openCourseSheet;
+    renderTiles();
     renderPath(c);
   }
   function fmtNums(a, c) {
@@ -1422,9 +1437,10 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
   function poolWrong() {
     var ids = Object.keys(S.wrong);
+    if (!ids.length) return false;
     return D.questions.filter(function (q) {
-      if (!ids.length) return false;
       if (!S.wrong[q.i]) return false;
+      if (!inScope(q)) return false;
       if (S.mix) return true;
       return q.s === S.subj;
     });
@@ -1519,26 +1535,37 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       pool = poolForLecture(opt.cid, opt.n);
       title = COURSE[opt.cid].name + ' ' + opt.n + (isGP(COURSE[opt.cid]) ? ' 포인트' : '강');
     } else if (mode === 'ids') {
-      pool = D.questions.filter(function (q) { return opt.ids.indexOf(q.i) >= 0; });
+      pool = D.questions.filter(function (q) { return opt.ids.indexOf(q.i) >= 0 && inScope(q); });
       title = opt.title || '틀린 문제 다시 풀기';
+    } else if (mode === 'gp') {
+      pool = opt.ids && opt.ids.length
+        ? D.questions.filter(function (q) { return opt.ids.indexOf(q.i) >= 0; })
+        : gpQuestions(opt.n);
+      title = opt.title || ('G-POINT ' + opt.n + ' · 켈리 기출');
     } else if (mode === 'wrong') {
       pool = poolWrong();
       title = '오답 집중 복습';
     } else if (mode === 'speed') {
-      pool = S.mix ? D.questions.slice() : D.questions.filter(function (q) { return q.s === S.subj; });
+      pool = S.mix ? allScopePool() : scopeQPool(S.subj);
       title = '⏱ 1분 스피드';
     } else {
       pool = S.mix ? D.subjects.reduce(function (a, s) { return a.concat(poolForSubject(s.id, mode)); }, []) : poolForSubject(S.subj, mode);
       title = mode === 'today' ? '오늘 들은 강의' : '누적 랜덤 복습';
     }
+    /* 체크한 진도가 0인 과목은 미수강 단원을 섞지 않고 '1강 입문' 범위만 */
+    if (!pool.length && (mode === 'all' || mode === 'speed' || mode === 'today')) {
+      pool = beginnerPool(S.mix ? null : S.subj);
+      if (pool.length) title = title + ' · 1강 입문';
+    }
     if (!pool.length) {
       if (mode === 'wrong') toast('아직 오답이 없어요. 먼저 문제를 풀어 주세요.');
       else if (mode === 'lecture') toast('이 강의 문제가 아직 없어요. 다른 강의를 체크해 보세요.');
       else if (mode === 'ids') toast('다시 풀 문제가 없어요.');
-      else toast('먼저 스테이지에서 들은 강의를 체크해 주세요.');
+      else if (mode === 'gp') toast('이 포인트의 켈리 기출이 아직 없어요.');
+      else toast('아직 체크한 진도가 없어요. 스테이지에서 1강부터 체크해 주세요.');
       return;
     }
-    var n = mode === 'lecture' ? Math.min(pool.length, 6) : Math.min(pool.length, S.qlen);
+    var n = mode === 'lecture' ? Math.min(pool.length, 6) : mode === 'gp' ? 1 : Math.min(pool.length, S.qlen);
     if (mode === 'ids') n = Math.min(pool.length, 20);
     if (mode === 'speed') n = Math.min(pool.length, 60);
     var items = qs(pool, n).map(function (q) {
@@ -1547,7 +1574,11 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       return { q: q, order: order };
     });
     QS = { items: items, i: 0, ok: 0, combo: 0, maxCombo: 0, xp: 0, mode: mode, title: title, locked: false, sel: -1, opt: opt, wrongIds: [] };
-    // 🩹 오답 복수전은 XP 2배, ⏱ 스피드는 60초 제한
+    // 👾 보스 문제: 이번 세션에 없는, 배운 범위의 어려운 문항
+    QS.bossPool = bossPool(items.map(function (it) { return it.q.i; }));
+    QS.bossDone = false;
+    QS.pendingBoss = null;
+    // 🩹 오답 복수전은 P 2배, ⏱ 스피드는 60초 제한
     QS.xpMult = mode === 'wrong' ? 2 : 1;
     if (mode === 'speed') { QS.speed = true; QS.end = Date.now() + 60000; }
     document.body.style.overflow = 'hidden';
@@ -1555,7 +1586,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     $('#quiz').classList.remove('hidden');
     $('#qCombo').innerHTML = '🔥 0';
     setCombo(0, 0);
-    $('#qTitle').innerHTML = esc(title) + (QS.xpMult > 1 ? '<span class="revenge-chip">🩹 리벤지 XP ×2</span>' : '');
+    $('#qTitle').innerHTML = esc(title) + (QS.xpMult > 1 ? '<span class="revenge-chip">🩹 리벤지 P ×2</span>' : '');
     if (QS.speed) {
       $('#qTitle').innerHTML = esc(title) + '<span class="revenge-chip">60초</span>';
       speedStart();
@@ -1587,7 +1618,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
 
   function renderQ() {
     var it = QS.items[QS.i], q = it.q;
-    QS.locked = false; QS.sel = -1;
+    QS.locked = false; QS.sel = -1; QS.hintUsed = false; QS.hintGone = -1;
+    document.body.classList.toggle('boss', !!it.boss);
     $('#qBar').style.width = (QS.i / QS.items.length * 100) + '%';
     $('#qCount').textContent = (QS.i + 1) + '/' + QS.items.length;
     var pb = $('#qProg');
@@ -1595,23 +1627,56 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var tag = qLabel(q);
     var badge = srcBadge(q);
     var keys = ['A', 'B', 'C', 'D'];
-    var h = '<div class="q-tags"><span class="q-tag">' + esc(tag) + '</span><span class="q-src ' + badge.k + '">' + esc(badge.t) + '</span></div>' +
+    var h = '';
+    if (it.boss) h += '<div class="boss-head"><span class="bh-ico">👾</span><span><b>오늘의 보스 문제</b><i>3연속 정답 기념 · 맞히면 +' + BOSS_BONUS + ' P</i></span></div>';
+    h += '<div class="q-tags"><span class="q-tag">' + esc(tag) + '</span><span class="q-src ' + badge.k + '">' + esc(badge.t) + '</span>' +
+      '<button class="hint-btn" id="qHint">🎟️ 힌트 -' + HINT_COST + ' P</button></div>' +
       '<h2 class="q-text">' + esc(q.q) + '</h2><div class="opts">';
     it.order.forEach(function (oi, idx) {
       h += '<button class="opt" data-i="' + oi + '"><span class="k">' + keys[idx] + '</span><span>' + esc(q.o[oi]) + '</span></button>';
     });
-    h += '</div>';
+    h += '</div><div id="hintBox"></div>';
     $('#qBody').innerHTML = h;
     $('#qBody').scrollTop = 0;
     $('#qFb').classList.add('hidden');
     $$('#qBody .opt').forEach(function (b) {
       b.onclick = function () { answer(Number(b.getAttribute('data-i')), b); };
     });
+    var hb = $('#qHint');
+    if (hb) hb.onclick = useHint;
+  }
+
+  /* 🎟️ 오답 힌트권 (30 P): 4지선다 오답 보기 1개 지우기 / OX는 핵심 키워드 */
+  function useHint() {
+    if (!QS || QS.locked || QS.hintUsed) return;
+    var it = QS.items[QS.i], q = it.q;
+    if (xpAvail() < HINT_COST) { toast('힌트권에는 ' + HINT_COST + ' P가 필요해요 · 지금 ' + xpAvail() + ' P'); return; }
+    if (!spendXp(HINT_COST)) return;
+    QS.hintUsed = true;
+    var box = $('#hintBox');
+    if (q.o.length > 2) {
+      var cands = it.order.filter(function (oi) { return oi !== q.a; });
+      var pick = cands[Math.floor(Math.random() * cands.length)];
+      QS.hintGone = pick;
+      var b = $('#qBody .opt[data-i="' + pick + '"]');
+      if (b) { b.classList.add('gone'); b.disabled = true; }
+      if (box) box.innerHTML = '<p class="hint-note">🎟️ 힌트권 사용 · 오답 보기 1개를 지웠어요 (−' + HINT_COST + ' P)</p>';
+      toast('힌트권 사용 · 오답 보기 1개를 지웠어요');
+    } else {
+      var toks = String(q.o[q.a] || '').split(/\s+/);
+      var ki = keyTokenIdx(toks, q.e);
+      var kw = ki >= 0 ? toks[ki].replace(/[.,;:!?'"”’)\]】·]+$/g, '') : '';
+      if (box) box.innerHTML = '<p class="hint-note">🎟️ 힌트권 사용 (−' + HINT_COST + ' P) · 핵심 키워드 <b>' + esc(kw || (unitName(q.c, q.u) || '해설의 밑줄 부분')) + '</b>를 먼저 확인해 보세요</p>';
+      toast('핵심 키워드 힌트를 봤어요');
+    }
+    sfx('tap');
+    var hb = $('#qHint');
+    if (hb) { hb.disabled = true; hb.textContent = '🎟️ 사용됨'; }
   }
 
   function setCombo(n, bonus) {
     var el = $('#qCombo'); if (!el) return;
-    el.innerHTML = '🔥 <b>' + n + '</b> COMBO' + (bonus ? ' <i>+' + bonus + 'XP</i>' : '');
+    el.innerHTML = '🔥 <b>' + n + '</b> COMBO' + (bonus ? ' <i>+' + bonus + 'P</i>' : '');
     el.className = 'combo' + (n >= 5 ? ' lv3' : n >= 3 ? ' lv2' : n >= 2 ? ' lv1' : '');
     if (n > 1) {
       el.classList.add('hot');
@@ -1668,9 +1733,19 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       sfx(bonus >= 10 ? 'combo5' : bonus >= 5 ? 'combo3' : QS.combo > 1 ? 'combo' : 'ok');
       if (QS.combo >= 3) {
         document.body.classList.add('fever');
-        comboBanner('🔥 FEVER ' + QS.combo + '연속! +' + (bonus || 0) + ' XP', true);
+        comboBanner('🔥 FEVER ' + QS.combo + '연속! +' + (bonus || 0) + ' P', true);
         sfx('crown');
-      } else if (bonus) comboBanner(QS.combo + '연속 정답! +' + bonus + ' XP', QS.combo >= 5);
+      } else if (bonus) comboBanner(QS.combo + '연속 정답! +' + bonus + ' P', QS.combo >= 5);
+      if (it.boss) {
+        total += BOSS_BONUS; QS.xp += BOSS_BONUS; S.xp += BOSS_BONUS; day.xp = (day.xp || 0) + BOSS_BONUS;
+        S.bossWins = (S.bossWins || 0) + 1;
+        comboBanner('👾 보스 격파! +' + BOSS_BONUS + ' P', true);
+        sfx('crown'); if (!QS.speed) confetti(70);
+      } else if (QS.combo === 3 && !QS.bossDone && QS.bossPool && QS.bossPool.length) {
+        QS.bossDone = true;
+        QS.pendingBoss = QS.bossPool[0];
+        comboBanner('👾 보스 등장!', true);
+      }
       if (!QS.speed) confetti(bonus ? 34 : 22);
       if (!QS.speed) fb(true, q, total, bonus);
       var mk = isMastered(q.c, q.gp || 0);
@@ -1706,7 +1781,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     el.classList.add(ok ? 'ok' : 'no');
     el.querySelector('.fb-head').innerHTML = '<img class="fb-mascot" src="assets/' + (ok ? 'mascot-happy.png' : 'mascot-happy.png') + '" alt="">' +
       '<span>' + (ok ? '정답이에요!' + (bonus ? ' 콤보 보너스 🎉' : ' 🎉') : '아쉬워요 😢') + '</span>' +
-      '<span class="fb-xp">+' + gain + ' XP</span>';
+      '<span class="fb-xp">+' + gain + ' P</span>';
     el.querySelector('.fb-text').innerHTML = '<b>해설</b> · ' + esc(q.e);
     var b = $('#fbNext');
     b.textContent = QS.i + 1 >= QS.items.length ? '결과 보기' : '다음 문제';
@@ -1714,6 +1789,14 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
 
   function nextQ() {
     $('#qFb').classList.add('hidden');
+    document.body.classList.remove('boss');
+    if (QS.pendingBoss) {
+      var bq = QS.pendingBoss;
+      QS.pendingBoss = null;
+      var order = bq.o.map(function (_, i) { return i; });
+      shuffle(order);
+      QS.items.splice(QS.i + 1, 0, { q: bq, order: order, boss: true });
+    }
     if (QS.i + 1 >= QS.items.length) return finish();
     QS.i++; renderQ();
   }
@@ -1737,7 +1820,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       '<div class="streak-pop"><span>🔥</span><b>' + (S.streak.n || 0) + '일 연속</b><i>최고 ' + (S.streak.best || 0) + '일</i></div>' +
       '<div class="rows"><div class="row"><span>정답률</span><i>' + acc + '%</i></div>' +
       '<div class="row"><span>최고 콤보</span><i>🔥 ' + QS.maxCombo + '연속</i></div>' +
-      '<div class="row"><span>얻은 XP</span><i>+' + (QS.xp + bonus) + ' XP</i></div>' +
+      '<div class="row"><span>얻은 P</span><i>+' + (QS.xp + bonus) + ' P</i></div>' +
       '<div class="row"><span>오늘 목표</span><i>' + (dayRec().ans || 0) + '/' + S.goal.q + '문제</i></div></div>' +
       (QS.wrongIds.length ? '<button class="btn ghost wide" id="qRetryWrong">🩹 틀린 ' + QS.wrongIds.length + '문제 바로 복습</button>' : '') +
       '<button class="btn primary wide" id="qAgain">한 번 더</button>' +
@@ -1767,7 +1850,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       '<h2>⚡ ' + ok + '문제!</h2><p>60초 동안 ' + ok + '문제를 맞혔어요' + (isBest ? ' — 최고 기록!' : '') + '</p>' +
       '<div class="speed-score">⏱ 60초 · 최고 ' + best + '문제</div>' +
       '<div class="rows"><div class="row"><span>최고 콤보</span><i>🔥 ' + QS.maxCombo + '연속</i></div>' +
-      '<div class="row"><span>얻은 XP</span><i>+' + QS.xp + ' XP</i></div></div>' +
+      '<div class="row"><span>얻은 P</span><i>+' + QS.xp + ' P</i></div></div>' +
       '<button class="btn primary wide" id="qAgain">한 번 더</button>' +
       '<button class="btn ghost wide" id="qSpeedWrong">틀린 ' + QS.wrongIds.length + '문제 복습</button>' +
       '<button class="btn ghost wide" id="qHome">스테이지로</button></div>';
@@ -1782,7 +1865,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
 
   function closeQuiz() {
     speedStop();
-    document.body.classList.remove('fever');
+    document.body.classList.remove('fever', 'boss');
     document.body.style.overflow = '';
     $('#quiz').classList.add('hidden');
     $('#qBody').innerHTML = '';
@@ -1793,9 +1876,12 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   function touchStreak() {
     var t = todayStr(), st = S.streak;
     if (st.last === t) return;
-    st.n = st.last === ydayStr() ? (st.n || 0) + 1 : 1;
+    var gap = st.last ? dayDiff(st.last, t) : 99;
+    var bridged = !!(S.shields && S.shields[ydayStr()]);
+    st.n = (gap === 1 || (gap === 2 && bridged)) ? (st.n || 0) + 1 : 1;
     st.last = t;
     st.best = Math.max(st.best || 0, st.n);
+    renderShield();
   }
   function touchDay() { dayRec(); }
 
@@ -1803,7 +1889,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   function renderAll() {
     applyTheme(); renderHud(); renderSubtabs(); renderDday(); renderQuest(); renderMascot();
     renderChallenges(); renderPass(); renderDash(); renderWeek(); renderStage(); renderReview(); renderStats();
-    renderTodayPlan();
+    renderTodayPlan(); renderShield(); rebuildMemo();
+    if (!$('#view-memo').classList.contains('hidden')) renderMemo();
   }
 
   /* ---------- events ---------- */
@@ -1834,19 +1921,21 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   if (_tpRow) _tpRow.onclick = function () { sfx('tap'); openPlanSheet(); };
   var _saveBadge = $('#saveBadge');
   if (_saveBadge) _saveBadge.onclick = function () {
-    toast('체크·XP·오답이 이 기기 브라우저에 자동 저장돼요 · 🗺️ 학습 계획에서 파일로 내보낼 수 있어요');
+    toast('체크·P·오답이 이 기기 브라우저에 자동 저장돼요 · 🗺️ 학습 계획에서 파일로 내보낼 수 있어요');
   };
   $$('.tab').forEach(function (b) {
     b.onclick = function () {
       $$('.tab').forEach(function (x) { x.classList.remove('on'); });
       b.classList.add('on');
       var v = b.getAttribute('data-view');
-      ['stage', 'review', 'stats'].forEach(function (k) {
-        $('#view-' + k).classList.toggle('hidden', k !== v);
+      ['stage', 'review', 'memo', 'stats'].forEach(function (k) {
+        var el = $('#view-' + k);
+        if (el) el.classList.toggle('hidden', k !== v);
       });
       window.scrollTo({ top: 0 });
       if (v === 'stage') { $('#path')._scrolled = false; renderStage(); }
       if (v === 'review') renderReview();
+      if (v === 'memo') renderMemo();
       if (v === 'stats') renderStats();
     };
   });
@@ -1864,13 +1953,15 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   $('#stWrongGo').onclick = function () { startSession('wrong'); };
   $('#sheet').addEventListener('click', closeSheetIfBg);
   $('#reset').onclick = function () {
-    if (!confirm('학습 기록(진도·XP·스트릭·오답)을 모두 지울까요? 지텔프 G-POINT 1~8 기본 체크도 다시 적용됩니다.')) return;
+    if (!confirm('학습 기록(진도·P·스트릭·오답)을 모두 지울까요? 지텔프 G-POINT 1~8 기본 체크도 다시 적용됩니다.')) return;
     S = {
       xp: 0, streak: { n: 0, last: '', best: 0 }, checked: {}, wrong: {}, ans: 0, ok: 0,
       muted: S.muted, subj: S.subj, course: {}, qlen: 10, mix: false, days: {},
       dday: DTARGET, ddayNote: '예상일', unit: {}, node: {}, qok: {}, gpSeeded: true, goal: { xp: 50, q: 10 },
-      planLog: {}, planSubj: 'done'
+      planLog: {}, planSubj: 'done', xpSpent: 0, shields: {}, cards: {}, rewardData: {}, gpLast: {}, bossWins: 0
     };
+    scopeCache = null;
+    CF.deck = []; BQ = null;
     D.subjects.forEach(function (s) { S.course[s.id] = s.defaultCourse || s.courses[0].id; });
     var seed = {};
     for (var gi = 1; gi <= 8; gi++) seed[gi] = todayStr();
@@ -1880,9 +1971,798 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   $('#installTip').onclick = function () {
     toast('사파리 하단 공유(⬆️) → "홈 화면에 추가"');
   };
+
+  /* ---------- 새 기능 바인딩 ---------- */
+  var _libBtn = $('#libBtn');
+  if (_libBtn) _libBtn.onclick = function () { sfx('tap'); MEMO.seg = 'lib'; openMemo('lib'); };
+  $$('#memoSeg .seg-b').forEach(function (b) {
+    b.onclick = function () { sfx('tap'); MEMO.seg = b.getAttribute('data-seg'); CF.flipped = false; renderMemo(); };
+  });
+  var _fcard = $('#fcard');
+  if (_fcard) _fcard.onclick = function () { CF.flipped = !CF.flipped; sfx('tap'); cfPaint(); };
+  var _fcKnown = $('#fcKnown');
+  if (_fcKnown) _fcKnown.onclick = function () { cfAnswer(true); };
+  var _fcHard = $('#fcHard');
+  if (_fcHard) _fcHard.onclick = function () { cfAnswer(false); };
+  var _cfRestart = $('#cfRestart');
+  if (_cfRestart) _cfRestart.onclick = function () { sfx('tap'); CF.deck = []; cfStart(); toast('새 순서로 다시 시작해요'); };
+  var _goBlank = $('#goBlank');
+  if (_goBlank) _goBlank.onclick = function () { sfx('tap'); startBlank(); };
+  var _shieldBar = $('#shieldBar');
+  if (_shieldBar) _shieldBar.onclick = function () { buyShield(); };
+  var _bClose = $('#bClose');
+  if (_bClose) _bClose.onclick = function () { closeBlank(); renderAll(); };
   window.addEventListener('resize', function () {
     if (!$('#view-stage').classList.contains('hidden')) renderStage();
   });
+
+
+  /* ---------- 📂 미래인재경찰 자료실 (구글 드라이브 jinleeda1) ---------- */
+  var LIB = [
+    { sub: '범죄학 · 박상민', rows: [
+      { t: '1강 보충자료 01', k: '문제+해설', s: '26.11.12 · 박상민 범죄학 기본이론 1강', u: 'https://drive.google.com/file/d/1WnoUATIwOrAXde-lKQ-lh6KApwA41MvS/view' },
+      { t: '범죄학 일반', k: '문제', s: '초시생존 범죄학 일반론', u: 'https://drive.google.com/file/d/1CPtZvY_FFZ43O5MJ8Ygrz3DLPDoKNjGe/view' },
+      { t: '범죄학 일반', k: '해설', s: '초시생존 범죄학 일반론', u: 'https://drive.google.com/file/d/1nWRJ-XL9nVJDMx9sj7AVXVGHYQBdOmYt/view' },
+    ] },
+    { sub: '형사법 · 신광은', rows: [
+      { t: '각론', k: '문제', s: '신광은 초시생 기초다지기', u: 'https://drive.google.com/file/d/1Nmje3RTBa7tikMel4k95rTvQFyaplTqC/view' },
+      { t: '각론', k: '해설', s: '신광은 초시생 기초다지기', u: 'https://drive.google.com/file/d/1qHuqa5inrYdCuonDc_dSmQlHVn8cc0Dr/view' },
+      { t: '수사', k: '문제', s: '신광은 초시생 기초다지기', u: 'https://drive.google.com/file/d/1DVYva1VgTArolrpe_7oeKeFQen4-ehuS/view' },
+      { t: '수사', k: '해설', s: '신광은 초시생 기초다지기', u: 'https://drive.google.com/file/d/1aAkstnzu1pvZcRVBtycIr83cuupcoJ-Q/view' },
+      { t: '증거', k: '문제', s: '신광은 초시생 기초다지기', u: 'https://drive.google.com/file/d/1RSC2dHtYuexYQ7K86ZNGmEoHYs-S-PSB/view' },
+      { t: '증거', k: '해설', s: '신광은 초시생 기초다지기', u: 'https://drive.google.com/file/d/1KHMy9osqJ66-_acFGfkj0SPkTakEa_Sj/view' },
+      { t: '총론', k: '문제', s: '신광은 초시생 기초다지기', u: 'https://drive.google.com/file/d/1gCkIXUjctQo0aS4PTEk1s_I7oDKhl0X/view' },
+      { t: '총론', k: '해설', s: '신광은 초시생 기초다지기', u: 'https://drive.google.com/file/d/1yIdhn2tB9dks8w_6Tqs9XOGa1nLlxMIZ/view' },
+    ] },
+    { sub: '경찰학 · 장정훈', rows: [
+      { t: '경찰학의 기초이론', k: '문제', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1Ah90hszEWxQeDv_NlWhAdq-Lof6XRqsM/view' },
+      { t: '경찰학의 기초이론', k: '해설', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1xVtaZsOkVJ-PnusRhKqudZgGZqQQhASZ/view' },
+      { t: '경찰행정법', k: '문제', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1Cj3-FzbtESgLyIUWrZhnbTPLXoHaF9bF/view' },
+      { t: '경찰행정법', k: '해설', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1ERVvHflVHrQh5KJ_cEm9LI5Z4augHZQT/view' },
+      { t: '경찰행정학', k: '문제', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/18PyPuXb3_pMICOlHxRouOEa-aN7wuV2p/view' },
+      { t: '경찰행정학', k: '해설', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1tgjCGtqyVlA2dWWIqcbBLggRlwFQbsV3/view' },
+      { t: '분야별 경찰활동', k: '문제', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1rcmktHAaTTaBpuZQwEsVQxo_rbNjMXMm/view' },
+      { t: '분야별 경찰활동', k: '해설', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1VDBFCCyj5_EXd1ZMJ8xsYJZspOiyYq5-/view' },
+      { t: '한국경찰의 역사와 비교경찰', k: '문제', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1djNOYxe7ANZzZ7NMk9rNL_xvDvzpBXlO/view' },
+      { t: '한국경찰의 역사와 비교경찰', k: '해설', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1gl_-Bg1lBmbOpFyfqwHebQtbbXXcFs7a/view' },
+    ] },
+    { sub: '헌법 · 강성민 (참고)', rows: [
+      { t: '기본권', k: '문제', s: '강성민 초시생 기초다지기', u: 'https://drive.google.com/file/d/1C2w2LvakHrHGgEVV25zw5tvehU8gKi9U/view' },
+      { t: '기본권', k: '해설', s: '강성민 초시생 기초다지기', u: 'https://drive.google.com/file/d/1hRgdpSh-6OXG9nz2Is3rorP2eKa64jDf/view' },
+      { t: '헌법총론', k: '문제', s: '강성민 초시생 기초다지기', u: 'https://drive.google.com/file/d/1RVwJZQl6Qj3pVuL9v3wKiAHl1qubh7fV/view' },
+      { t: '헌법총론', k: '해설', s: '강성민 초시생 기초다지기', u: 'https://drive.google.com/file/d/1LPUS_yHYDuDFE21X78YcjQfnHbGt8s-b/view' },
+    ] },
+  ];
+
+  /* ============================================================
+     2026-11-17 개편 모듈
+     · P 사용처(힌트권·출석 방패·보상 게이지)
+     · '내가 배운 진도까지만' 출제 필터 통일
+     · 10초 암기 카드 · 핵심 빈칸 채우기 · 보스 문제
+     · 암기·자료 탭 (카드 / G-POINT 표 / 자료실)
+     ============================================================ */
+  var HINT_COST = 30, SHIELD_COST = 80, BOSS_BONUS = 30;
+  var REWARD_DEFS = ['야식 한 끼', '휴식 타임 30분', '카페 음료 한 잔', '하루 편하게 쉬기'];
+
+  function xpAvail() { return Math.max(0, (S.xp || 0) - (S.xpSpent || 0)); }
+  function spendXp(n) {
+    if (xpAvail() < n) return false;
+    S.xpSpent = (S.xpSpent || 0) + n;
+    save(); renderHud();
+    return true;
+  }
+
+  /* ---------- 진도 범위 판정: 체크한 강의·G-POINT가 덮는 문제은행만 ---------- */
+  var scopeCache = null;
+  function scopeKeys() {
+    if (scopeCache) return scopeCache;
+    var set = {};
+    D.subjects.forEach(function (s) {
+      s.courses.forEach(function (c) {
+        var nums = checkedNums(c.id);
+        if (!nums.length) return;
+        if (isGP(c)) {
+          nums.forEach(function (n) { set['g:' + c.id + ':' + n] = 1; });
+          return;
+        }
+        nums.forEach(function (n) {
+          var ui = unitIndex(c.id, n);
+          if (ui < 0) return;
+          var banks = c.units[ui].bs || [[c.id, ui]];
+          banks.forEach(function (b) { set['b:' + b[0] + ':' + b[1]] = 1; });
+        });
+      });
+    });
+    scopeCache = set;
+    return set;
+  }
+  function inScope(q) {
+    if (!q) return false;
+    var set = scopeKeys();
+    if (q.gp) return !!set['g:' + q.c + ':' + q.gp];
+    return !!set['b:' + q.c + ':' + q.u];
+  }
+  function scopeQPool(sid) {
+    return D.questions.filter(function (q) { return (!sid || q.s === sid) && inScope(q); });
+  }
+  function allScopePool() { return scopeQPool(null); }
+  /* 체크한 진도가 0인 과목의 예외: 그 강좌 첫 단원(1강 입문) 문제만 */
+  function beginnerPool(sid) {
+    var out = [];
+    (sid ? [SUBJ[sid]] : D.subjects).forEach(function (s) {
+      var c = COURSE[S.course[s.id]] || s.courses[0];
+      if (!c || isGP(c)) return;
+      poolForUnit(c.id, 0).forEach(function (q) { if (q.s === s.id) out.push(q); });
+    });
+    return out;
+  }
+  function subjectPool(sid) {
+    var p = scopeQPool(sid);
+    if (p.length) return { pool: p, beginner: false };
+    return { pool: beginnerPool(sid), beginner: true };
+  }
+
+  /* ---------- 오늘의 암기 한 줄 ---------- */
+  function gpRowOf(n) {
+    for (var i = 0; i < GP_TABLE.length; i++) {
+      var rows = GP_TABLE[i].rows;
+      for (var j = 0; j < rows.length; j++) if (Number(rows[j][0]) === n) return { g: GP_TABLE[i].g, r: rows[j] };
+    }
+    return null;
+  }
+  function clip(s, n) {
+    s = String(s || '').replace(/\s+/g, ' ').trim();
+    return s.length > n ? s.slice(0, n - 1) + '…' : s;
+  }
+  function seedOf(str) {
+    var h = 7;
+    for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) % 99991;
+    return h;
+  }
+  function memoLine() {
+    var t = todayStr(), sid = S.subj, s = SUBJ[sid];
+    if (!s) return '';
+    if (sid === 'gtelp') {
+      var rows = [];
+      checkedNums('gtp33').sort(function (a, b) { return a - b; }).forEach(function (n) {
+        var g = gpRowOf(n);
+        if (g) rows.push('G-POINT ' + n + ' · ' + g.r[2]);
+      });
+      if (!rows.length) return 'G-POINT를 체크하면 오늘 외울 공식이 여기 나와요.';
+      return rows[seedOf(t + sid) % rows.length];
+    }
+    var sp = subjectPool(sid);
+    if (!sp.pool.length) return '강의를 체크하면 오늘 외울 한 줄이 여기 나와요.';
+    var start = seedOf(t + sid) % sp.pool.length;
+    var q = null, b = null;
+    for (var k = 0; k < sp.pool.length && k < 12; k++) {
+      var cand = sp.pool[(start + k) % sp.pool.length];
+      var cb = blankOf(cand);
+      if (cb && cb.key) { q = cand; b = cb; break; }
+    }
+    if (!q) {
+      q = sp.pool[start];
+      var un0 = clip(unitName(q.c, q.u) || s.name, 14);
+      return '『' + un0 + '』 ' + clip(String(q.e || q.q).replace(/^\[?[^\]]*\]?\s*/, ''), 44);
+    }
+    var un = clip(unitName(q.c, q.u) || s.name, 14);
+    return '『' + un + '』 ' + b.key;
+  }
+
+  /* ---------- 카드/빈칸 재료 ---------- */
+  function cardDeck() {
+    var sid = S.subj, out = [], sp = subjectPool(sid);
+    if (sid === 'gtelp') {
+      var nums = checkedNums('gtp33').sort(function (a, b) { return a - b; });
+      if (!nums.length) nums = [1];
+      nums.forEach(function (n) {
+        var g = gpRowOf(n);
+        if (!g) return;
+        out.push({ id: 'gp' + n, tag: '지텔프 · G-POINT ' + n, front: g.r[1], back: g.r[2], note: g.tip || '' });
+      });
+      return { cards: out, beginner: false };
+    }
+    sp.pool.forEach(function (q) {
+      var ans = String(q.o[q.a] || '');
+      var trivial = /^[OX]\s*[(（]/.test(ans) || ans.length < 8;
+      out.push({
+        id: 'q-' + q.i,
+        tag: SUBJ[q.s].name + ' · ' + clip(unitName(q.c, q.u) || '', 16),
+        front: q.q,
+        back: trivial ? clip(q.e, 120) : ans,
+        note: trivial ? '' : clip(q.e, 110)
+      });
+    });
+    return { cards: out, beginner: sp.beginner };
+  }
+
+  var BLANK_STOP = {
+    '한다': 1, '된다': 1, '이다': 1, '있다': 1, '없다': 1, '하다': 1, '것이다': 1, '대한': 1, '위한': 1,
+    '관한': 1, '따라': 1, '경우': 1, '때문': 1, '그리고': 1, '또는': 1, '및': 1, '등': 1, '수': 1,
+    '것': 1, '자': 1, '바': 1, '때': 1, '위해': 1, '하여': 1, '되어': 1, '하지': 1, '있는': 1, '없는': 1,
+    '같은': 1, '다른': 1, '모든': 1, '대하여': 1, '대해': 1, '그': 1, '이': 1, '저': 1, '더': 1
+  };
+  /* 빈칸 핵심어: '명사'로 끝나는 말만 채택 (동사·부사·조사형은 버린다) */
+  var STRONG_END = /(성|권|죄|법|규|칙|관|계|원|청|부|처|소|장|론|책|임|벌|범|형|질|설|제|국|표|안|금|액|율|항|조|절|령|적|자|비|력|투|칙|령|원칙|주의|제도|행위|개념|의무|책임|관계|자유|평등|비례|신뢰|조서|증서|문서|규범|법령|질서)$/;
+  var BAD_END2 = /(이다|한다|된다|있다|없다|하다|라고|하고자|고자|하면서|하며|하고|되고|되어|하여|으로서|로서|로써|에서|부터|까지|보다|처럼|대로|만큼)$/;
+  function keyTokenIdx(toks, explain) {
+    var best = -1, bs = 0, ex = String(explain || '');
+    toks.forEach(function (w, i) {
+      var c = w.replace(/^[「『(\[]+/, '').replace(/[.,;:!?'"”’)\]}】]+$/g, '');
+      if (c.length < 3 || c.length > 12) return;
+      if (!/^[가-힣]/.test(c)) return;
+      if (/[「」『』()（）\[\]{}"'“”]/.test(c)) return;
+      if (BLANK_STOP[c]) return;
+      if (BAD_END2.test(c)) return;
+      if (/(은|는|이|가|을|를|의|에|로|와|과|도|만|서|써|께)$/.test(c)) return;
+      var strong = STRONG_END.test(c) || c.indexOf('·') >= 0;
+      var inEx = ex && ex.indexOf(c) >= 0;
+      if (!strong) return;
+      var sc = c.length + (inEx ? 5 : 0) + (c.indexOf('·') >= 0 ? 2 : 0);
+      if (sc > bs) { bs = sc; best = i; }
+    });
+    return bs >= 4 ? best : -1;
+  }
+  function blankFromText(src) {
+    var toks = String(src || '').split(/\s+/).filter(Boolean);
+    if (toks.length < 4) return null;
+    var bi = keyTokenIdx(toks, '');
+    if (bi < 0) return null;
+    var key = toks[bi].replace(/^[「『(\\[]+/, '').replace(/[.,;:!?'"”’)\]}】]+$/g, '');
+    if (key.length < 3) return null;
+    var from = Math.max(0, bi - 9), to = Math.min(toks.length, bi + 10);
+    var text = (from ? '… ' : '') + toks.slice(from, bi).join(' ') + ' ( ____ )';
+    var tail = toks.slice(bi + 1, to).join(' ');
+    if (tail) text += ' ' + tail;
+    if (to < toks.length) text += ' …';
+    return { text: text.trim(), key: key };
+  }
+  function expSentences(e) {
+    var raw = String(e || '').replace(/\s+/g, ' ');
+    raw = raw.replace(/다\.\s/g, '다.|').replace(/[.。]\s/g, '.|');
+    return raw.split('|').map(function (x) { return x.trim(); }).filter(function (x) {
+      if (x.length < 12 || x.length > 220) return false;
+      if (/(적중모의고사|모의고사|난이도|켈리 카페|해설\s*:|출처|저작권)/.test(x)) return false;
+      var digits = (x.match(/[0-9]/g) || []).length;
+      if (digits / x.length > 0.22) return false;
+      return true;
+    });
+  }
+  function blankOf(q) {
+    var tag = SUBJ[q.s].name + ' · ' + clip(unitName(q.c, q.u) || '', 14);
+    var ans = String(q.o[q.a] || '');
+    var b = blankFromText(ans);
+    if (b) return { id: q.i, key: b.key, text: b.text, tag: tag, full: ans, note: clip(q.e, 110), from: '정답 지문' };
+    var ss = expSentences(q.e);
+    for (var i = 0; i < ss.length; i++) {
+      var b2 = blankFromText(ss[i]);
+      if (b2) {
+        var triv = /^[OX]\s*[(（]/.test(ans) || ans.length < 8;
+        return { id: q.i, key: b2.key, text: b2.text, tag: tag, full: ss[i], note: triv ? '' : ('정답 · ' + clip(ans, 90)), from: '해설' };
+      }
+    }
+    return null;
+  }
+  function blankDeck() {
+    var sid = S.subj, out = [], sp = subjectPool(sid);
+    if (sid === 'gtelp') {
+      var nums = checkedNums('gtp33').sort(function (a, b) { return a - b; });
+      if (!nums.length) nums = [1];
+      nums.forEach(function (n) {
+        var g = gpRowOf(n);
+        if (!g) return;
+        out.push({ id: 'gp' + n, key: g.r[2], text: 'G-POINT ' + n + ' · ' + g.r[1] + ' → ( ____ )', tag: '지텔프 · G-POINT ' + n, full: g.r[1] + ' → ' + g.r[2], note: g.tip || '' });
+      });
+      return { blanks: out, beginner: false };
+    }
+    var seen = {};
+    sp.pool.forEach(function (q) {
+      var b = blankOf(q);
+      if (!b || seen[b.text]) return;
+      seen[b.text] = 1;
+      out.push(b);
+    });
+    return { blanks: out, beginner: sp.beginner };
+  }
+
+  /* ---------- 보스 문제 ---------- */
+  function bossPool(excludeIds) {
+    var p = scopeQPool(S.subj).filter(function (q) { return excludeIds.indexOf(q.i) < 0; });
+    if (!p.length) p = beginnerPool(S.subj).filter(function (q) { return excludeIds.indexOf(q.i) < 0; });
+    p.sort(function (a, b) {
+      var wa = (S.wrong[a.i] || {}).c || 0, wb = (S.wrong[b.i] || {}).c || 0;
+      var oa = S.qok[a.i] || 0, ob = S.qok[b.i] || 0;
+      if (wb !== wa) return wb - wa;
+      return oa - ob;
+    });
+    return p;
+  }
+
+  /* ---------- 자주 쓰는 라벨(이름 바꾸기 쉽게 상수화) ---------- */
+  var XP_LABEL = 'P';
+
+  /* ---------- G-POINT 표 (모달·탭 공용) ---------- */
+  function gpTableHtml(inline) {
+    var h = inline ? '<div class="gp-note">조건(힌트)은 <b class="gp-cond">파랑</b>, 정답 공식은 <b class="gp-ans">노랑</b>. 항목을 누르면 그 포인트 켈리 기출이 나와요.</div>' : '';
+    if (!inline) {
+      h += '<div class="gp-jump">';
+      GP_TABLE.forEach(function (grp, gi) {
+        h += '<button class="gp-jbtn" data-goto="' + gi + '">' + esc(grp.g) + '</button>';
+      });
+      h += '</div>';
+    }
+    GP_TABLE.forEach(function (grp, gi) {
+      h += '<div class="gp-group" id="gp-g' + gi + '"><div class="gp-group-h">' + esc(grp.g) + '</div>';
+      grp.rows.forEach(function (r) {
+        h += '<button class="gp-row" data-gp="' + esc(r[0]) + '">' +
+          '<span class="gp-no">' + esc(r[0]) + '</span>' +
+          '<span class="gp-body"><span class="gp-cond">' + esc(r[1]) + '</span>' +
+          '<span class="gp-ans">👉 ' + esc(r[2]) + '</span></span>' +
+          '<span class="gp-go">▶</span></button>';
+      });
+      if (grp.tip) h += '<div class="gp-tip">💡 ' + esc(grp.tip) + '</div>';
+      h += '</div>';
+    });
+    return h;
+  }
+  function bindGpRows(root) {
+    $$('.gp-row', root || document).forEach(function (b) {
+      b.onclick = function () { sfx('tap'); startGp(Number(b.getAttribute('data-gp'))); };
+    });
+  }
+  function gpQuestions(n) {
+    return D.questions.filter(function (q) { return q.s === 'gtelp' && Number(q.gp) === Number(n); });
+  }
+  /* 표에서 G-POINT를 누르면 그 포인트 켈리 기출을 한 문제씩(직전 문제와 안 겹치게) */
+  function startGp(n) {
+    var pool = gpQuestions(n);
+    if (!pool.length) {
+      toast('G-POINT ' + n + '에 연결된 켈리 기출이 아직 없어요 · 같은 단원 문항으로 대신할 수는 있지만, 새 문제를 지어내지는 않아요');
+      return;
+    }
+    var checkedGp = !!ckMap('gtp33')[n];
+    if (!checkedGp && !confirm('G-POINT ' + n + '은 아직 체크하지 않은 진도예요.\n이 포인트 기출 ' + pool.length + '문제를 지금 볼까요?')) return;
+    if (!checkedGp) { ckMap('gtp33')[n] = todayStr(); save(); renderAll(); }
+    var last = (S.gpLast || {})[n];
+    var idx = 0;
+    if (last) {
+      var li = -1;
+      pool.forEach(function (q, i) { if (q.i === last) li = i; });
+      idx = li >= 0 ? (li + 1) % pool.length : Math.floor(new Date().getTime() / 1000) % pool.length;
+    } else {
+      idx = seedOf(todayStr() + 'gp' + n) % pool.length;
+    }
+    S.gpLast = S.gpLast || {};
+    S.gpLast[n] = pool[idx].i;
+    save();
+    if ($('#sheet') && !$('#sheet').classList.contains('hidden')) closeSheet();
+    startSession('gp', { n: n, ids: [pool[idx].i], title: 'G-POINT ' + n + ' · 켈리 기출' });
+  }
+
+  /* ---------- 📂 자료실 ---------- */
+  var LIB_FOLDER = 'https://drive.google.com/drive/folders/1ZqFiCt3iMlGTnpZAA6pOQrAGL3-Ntatk';
+  function libRow(it) {
+    var kc = it.k === '해설' ? 'a' : 'q';
+    return '<a class="lib-row" href="' + it.u + '" target="_blank" rel="noopener">' +
+      '<span class="lw-tag ' + kc + '">' + it.k + '</span>' +
+      '<span class="lw-body"><b>' + esc(it.t) + '</b><i>' + esc(it.s) + '</i></span>' +
+      '<span class="lw-go">↗</span></a>';
+  }
+  function libHtml() {
+    var h = '<a class="lib-all" href="' + LIB_FOLDER + '" target="_blank" rel="noopener">' +
+      '<b>📂 구글 드라이브 폴더 전체 열기</b><i>미래인재경찰 자료실 ↗</i></a>' +
+      '<p class="lib-sub">내 드라이브(jinleeda1@gmail.com)에만 있는 파일이라, 폰의 구글 계정이 같아야 바로 열려요.</p>';
+    LIB.forEach(function (g) {
+      h += '<div class="lib-group"><div class="lib-gh">' + esc(g.sub) + ' <span>' + g.rows.length + '개</span></div>';
+      g.rows.forEach(function (r) { h += libRow(r); });
+      h += '</div>';
+    });
+    h += '<p class="lib-sub" style="margin-top:10px">원본은 학원 교재 자료라 공개 저장소에는 올리지 않았어요.</p>';
+    return h;
+  }
+
+  /* ---------- 암기·자료 탭 ---------- */
+  var MEMO = { seg: 'card' };
+  function openMemo(seg) {
+    if (seg) MEMO.seg = seg;
+    $$('.tab').forEach(function (x) { x.classList.toggle('on', x.getAttribute('data-view') === 'memo'); });
+    ['stage', 'review', 'memo', 'stats'].forEach(function (k) {
+      var el = $('#view-' + k);
+      if (el) el.classList.toggle('hidden', k !== 'memo');
+    });
+    renderMemo();
+    window.scrollTo({ top: 0 });
+  }
+  function renderMemo() {
+    $$('#memoSeg .seg-b').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-seg') === MEMO.seg); });
+    ['Card', 'Gp', 'Lib', 'Phys'].forEach(function (k) {
+      var el = $('#seg' + k);
+      if (el) el.classList.toggle('hidden', MEMO.seg !== k.toLowerCase());
+    });
+    var s = SUBJ[S.subj];
+    var sp = subjectPool(S.subj);
+    $('#memoSub').textContent = s.name + ' · ' + (sp.beginner ? '아직 체크한 진도가 없어 1강 입문 범위로 보여줘요' : '체크한 진도 ' + sp.pool.length + '문제 안에서만 나와요');
+    if (MEMO.seg === 'gp') {
+      var g = $('#segGp');
+      if (!g._built) { g.innerHTML = gpTableHtml(true); g._built = true; bindGpRows(g); }
+    }
+    if (MEMO.seg === 'lib') {
+      var l = $('#segLib');
+      if (!l._built) { l.innerHTML = libHtml(); l._built = true; }
+    }
+    if (MEMO.seg === 'phys') {
+      var p = $('#segPhys');
+      if (!p._built) { p.innerHTML = physHtml(); p._built = true; }
+    }
+    if (MEMO.seg === 'card') cfPaint();
+  }
+  function rebuildMemo() {
+    var g = $('#segGp'), l = $('#segLib'), p = $('#segPhys');
+    if (g) { g._built = false; }
+    if (l) { l._built = false; }
+    if (p) { p._built = false; }
+    var key = S.subj + '|' + scopeQPool(S.subj).length;
+    if (CF.key !== key) { CF.deck = []; CF.key = key; }
+    if (!$('#view-memo').classList.contains('hidden')) renderMemo();
+  }
+
+  /* ---------- 🃏 10초 암기 카드 ---------- */
+  var CF = { deck: [], i: 0, flipped: false, hard: [] };
+  function cfStart(deck) {
+    if (!deck) {
+      var d = cardDeck();
+      var cards = d.cards.slice();
+      cards.sort(function (a, b) {
+        var sa = (S.cards || {})[a.id] === 'hard' ? 0 : 1;
+        var sb = (S.cards || {})[b.id] === 'hard' ? 0 : 1;
+        return sa - sb;
+      });
+      deck = shuffle(cards);
+    }
+    CF.deck = deck; CF.i = 0; CF.flipped = false; CF.hard = [];
+    cfPaint();
+  }
+  function cfPaint() {
+    if (!$('#fcard')) return;
+    if (!CF.deck.length) cfStart();
+    if (!CF.deck.length) {
+      $('#cfMeta').textContent = '카드 0장';
+      $('#fcTag').textContent = '준비 중';
+      $('#fcFront').textContent = '체크한 진도에 카드가 아직 없어요. 강의를 체크해 주세요.';
+      $('#fcBack').textContent = '';
+      $('#fcard').classList.remove('flipped');
+      $('#fcKnown').disabled = true; $('#fcHard').disabled = true;
+      return;
+    }
+    $('#fcKnown').disabled = false; $('#fcHard').disabled = false;
+    var card = CF.deck[CF.i];
+    $('#cfMeta').textContent = (CF.i + 1) + ' / ' + CF.deck.length + '장';
+    $('#fcTag').textContent = card.tag;
+    $('#fcFront').textContent = card.front;
+    $('#fcBack').innerHTML = esc(card.back) + (card.note ? '<span class="fc-note">' + esc(card.note) + '</span>' : '');
+    $('#fcard').classList.toggle('flipped', CF.flipped);
+  }
+  function cfAnswer(known) {
+    var card = CF.deck[CF.i];
+    if (!card) return;
+    S.cards = S.cards || {};
+    S.cards[card.id] = known ? 'ok' : 'hard';
+    if (!known) CF.hard.push(card);
+    save();
+    sfx(known ? 'tap' : 'no');
+    CF.i++; CF.flipped = false;
+    if (CF.i >= CF.deck.length) {
+      if (CF.hard.length) {
+        var again = CF.hard.slice();
+        CF.deck = shuffle(again); CF.i = 0; CF.hard = [];
+        toast('헷갈린 ' + again.length + '장만 다시 돌아와요');
+      } else {
+        CF.deck = []; cfStart();
+        toast('한 바퀴 다 봤어요 · 새 순서로 다시!');
+        return;
+      }
+    }
+    cfPaint();
+  }
+
+  /* ---------- 🧩 핵심 빈칸 채우기 ---------- */
+  var BQ = null;
+  function startBlank() {
+    var d = blankDeck(), items = d.blanks.slice();
+    if (!items.length) {
+      toast(d.beginner ? '아직 빈칸으로 만들 문항이 없어요. 강의를 체크해 주세요.' : '배운 진도에 빈칸 문항이 아직 없어요.');
+      return;
+    }
+    var keys = [];
+    items.forEach(function (it) { if (keys.indexOf(it.key) < 0) keys.push(it.key); });
+    var deck = shuffle(items).slice(0, Math.min(8, items.length));
+    deck.forEach(function (it) {
+      var others = keys.filter(function (k) { return k !== it.key; });
+      var ch = shuffle(others).slice(0, 3);
+      it.choices = shuffle(ch.concat([it.key]));
+    });
+    BQ = { items: deck, i: 0, ok: 0, locked: false, xp: 0, answered: false };
+    document.body.style.overflow = 'hidden';
+    $('#blank').classList.remove('hidden');
+    paintBlank();
+  }
+  function paintBlank() {
+    var it = BQ.items[BQ.i];
+    BQ.locked = false; BQ.answered = false;
+    $('#bTitle').textContent = '🧩 빈칸 채우기 · ' + it.tag;
+    $('#bCount').textContent = (BQ.i + 1) + '/' + BQ.items.length;
+    $('#bBar').style.width = (BQ.i / BQ.items.length * 100) + '%';
+    var h = '<div class="q-tag">빈칸에 들어갈 말을 골라 주세요</div>';
+    h += '<p class="blank-text">' + esc(it.text).replace('( ____ )', '<b class="blk">( ____ )</b>') + '</p>';
+    h += '<div class="blank-choices">';
+    it.choices.forEach(function (c, i) {
+      h += '<button class="blank-c" data-c="' + i + '">' + esc(c) + '</button>';
+    });
+    h += '</div><div id="bFb" class="blank-fb hidden"></div>';
+    $('#bBody').innerHTML = h;
+    $('#bBody').scrollTop = 0;
+    $$('#bBody .blank-c').forEach(function (b) {
+      b.onclick = function () { blankAnswer(b.getAttribute('data-c'), b); };
+    });
+  }
+  function blankAnswer(ci, btn) {
+    if (!BQ || BQ.answered) return;
+    BQ.answered = true;
+    var it = BQ.items[BQ.i];
+    var pick = it.choices[Number(ci)];
+    var ok = pick === it.key;
+    $$('#bBody .blank-c').forEach(function (b) {
+      b.disabled = true;
+      var v = it.choices[Number(b.getAttribute('data-c'))];
+      if (v === it.key) b.classList.add('ok');
+    });
+    if (!ok) btn.classList.add('no');
+    touchStreak();
+    var gain = ok ? 8 : 2;
+    BQ.xp += gain; S.xp += gain;
+    if (S.days[todayStr()]) S.days[todayStr()].xp = (S.days[todayStr()].xp || 0) + gain;
+    if (ok) BQ.ok++;
+    sfx(ok ? 'ok' : 'no');
+    save(); renderHud(); renderQuest(); renderMascot(); renderChallenges(); renderDash();
+    var fb = $('#bFb');
+    fb.className = 'blank-fb ' + (ok ? 'ok' : 'no');
+    fb.innerHTML = '<b>' + (ok ? '정답이에요!' : '아쉬워요 · 정답: ' + esc(it.key)) + '</b>' +
+      '<i>원문 · ' + esc(it.full) + '</i>' +
+      (it.note ? '<em>' + esc(it.note) + '</em>' : '') +
+      '<button class="btn primary wide" id="bNext">' + (BQ.i + 1 >= BQ.items.length ? '결과 보기' : '다음') + '</button>';
+    $('#bNext').onclick = function () {
+      if (BQ.i + 1 >= BQ.items.length) return finishBlank();
+      BQ.i++; paintBlank();
+    };
+  }
+  function finishBlank() {
+    var tot = BQ.items.length, ok = BQ.ok, xp = BQ.xp;
+    $('#bBar').style.width = '100%';
+    $('#bBody').innerHTML = '<div class="summary"><div class="big">🧩</div>' +
+      '<h2>' + ok + ' / ' + tot + ' 정답</h2><p>빈칸으로 꺼내 보면 훨씬 오래 남아요</p>' +
+      '<div class="rows"><div class="row"><span>얻은 P</span><i>+' + xp + ' ' + XP_LABEL + '</i></div></div>' +
+      '<button class="btn primary wide" id="bAgain">한 번 더</button>' +
+      '<button class="btn ghost wide" id="bHome">닫기</button></div>';
+    $('#bAgain').onclick = function () { closeBlank(); startBlank(); };
+    $('#bHome').onclick = function () { closeBlank(); renderAll(); };
+  }
+  function closeBlank() {
+    $('#blank').classList.add('hidden');
+    $('#bBody').innerHTML = '';
+    document.body.style.overflow = '';
+    BQ = null;
+  }
+
+  /* ---------- 계급 · 보상 게이지 ---------- */
+  function rewardHtml() {
+    var xp = S.xp || 0, step = 500, earned = Math.floor(xp / step);
+    var h = '<div class="rw-sec"><div class="rw-h"><b>🎁 코코 응원 쿠폰</b><i>500 ' + XP_LABEL + '마다 한 장 · 다음까지 ' + (step - xp % step) + '</i></div>' +
+      '<div class="rw-bar"><i style="width:' + ((xp % step) / step * 100) + '%"></i></div>';
+    var max = Math.max(4, Math.min(earned + 1, 12));
+    for (var i = 1; i <= max; i++) {
+      var need = i * step, got = i <= earned;
+      var rd = (S.rewardData || {})[i] || {};
+      var lab = rd.label || REWARD_DEFS[(i - 1) % REWARD_DEFS.length];
+      h += '<div class="rw-row' + (got ? '' : ' dim') + (rd.done ? ' done' : '') + '">' +
+        '<span class="rw-xp">' + need + '</span>' +
+        '<span class="rw-lab" data-edit="' + i + '">' + esc(lab) + '</span>' +
+        '<button class="rw-btn" data-rw="' + i + '"' + (got ? '' : ' disabled') + '>' +
+        (rd.done ? '받음 ✓' : (got ? '받기' : '잠금')) + '</button></div>';
+    }
+    h += '<div class="xp-use"><span>🎟️ 힌트권 · ' + HINT_COST + ' ' + XP_LABEL + '</span><span>🛡️ 출석 방패 · ' + SHIELD_COST + ' ' + XP_LABEL + '</span></div>' +
+      '<div class="sheet-note" style="margin-top:8px">쓸 수 있는 ' + XP_LABEL + ' ' + xpAvail() + ' · 누적 ' + xp + ' (계급은 누적으로 올라가요)</div></div>';
+    return h;
+  }
+  function bindRewards(root) {
+    $$('.rw-btn', root).forEach(function (b) {
+      b.onclick = function () {
+        var i = Number(b.getAttribute('data-rw'));
+        var need = i * 500;
+        if ((S.xp || 0) < need) { toast(need + ' ' + XP_LABEL + '까지 ' + (need - (S.xp || 0)) + ' 남았어요'); return; }
+        S.rewardData = S.rewardData || {};
+        var rd = S.rewardData[i] || (S.rewardData[i] = {});
+        rd.done = !rd.done;
+        save(); sfx(rd.done ? 'ok' : 'tap');
+        if (rd.done) confetti(40);
+        var nx = rankOf(S.xp || 0);
+        $('#sheetIn').innerHTML = rankSheetHtml(nx.r, false);
+        bindRankSheet();
+      };
+    });
+    $$('.rw-lab', root).forEach(function (b) {
+      b.onclick = function () {
+        var i = Number(b.getAttribute('data-edit'));
+        S.rewardData = S.rewardData || {};
+        var rd = S.rewardData[i] || (S.rewardData[i] = {});
+        var cur = rd.label || REWARD_DEFS[(i - 1) % REWARD_DEFS.length];
+        var v = window.prompt('이 보상을 무엇으로 할까요? (예: 야식 한 끼, 휴식 30분)', cur);
+        if (!v) return;
+        rd.label = String(v).slice(0, 24);
+        save();
+        var nx = rankOf(S.xp || 0);
+        $('#sheetIn').innerHTML = rankSheetHtml(null, false);
+        bindRankSheet();
+      };
+    });
+  }
+
+  /* ---------- 첫 화면 타일 · 방패 ---------- */
+  function renderTiles() {
+    var sp = subjectPool(S.subj);
+    var t1 = $('#tileAllSub'); if (t1) t1.textContent = (sp.beginner ? '1강 입문 ' : '배운 진도 ') + sp.pool.length + '문제';
+    var wn = poolWrong().length;
+    var t2 = $('#tileWrongSub'); if (t2) t2.textContent = wn ? '오답 ' + wn + '문제' : '오답 없음';
+    var cd = cardDeck().cards.length;
+    var t3 = $('#tileCardSub'); if (t3) t3.textContent = cd ? '카드 ' + cd + '장' : '카드 준비 중';
+    var bd = blankDeck().blanks.length;
+    var t4 = $('#tileBlankSub'); if (t4) t4.textContent = bd ? '빈칸 ' + bd + '문제' : '빈칸 준비 중';
+  }
+  function shieldGap() {
+    var st = S.streak || {}, t = todayStr();
+    if (!st.last || st.last === t) return 0;
+    return dayDiff(st.last, t);
+  }
+  function canShield() {
+    if (shieldGap() !== 2) return false;
+    return !((S.shields || {})[ydayStr()]);
+  }
+  function renderShield() {
+    var el = $('#shieldBar');
+    if (!el) return;
+    el.classList.toggle('hidden', !canShield());
+  }
+  function buyShield() {
+    if (!canShield()) return;
+    if (xpAvail() < SHIELD_COST) { toast('🛡️ 방패에는 ' + SHIELD_COST + ' ' + XP_LABEL + '가 필요해요 · 지금 ' + xpAvail() + ' ' + XP_LABEL); return; }
+    if (!spendXp(SHIELD_COST)) return;
+    S.shields[ydayStr()] = 1;
+    save(); sfx('crown'); confetti(40);
+    toast('🛡️ 어제 불꽃을 지켰어요 · 오늘 한 문제만 풀면 연속이 이어져요');
+    renderShield(); renderWeek(); renderHud();
+  }
+
+  /* ---------- 💪 경찰 순환식 체력검사 기준표 + 일상 대비 루틴 ---------- */
+  function svgRun() {
+    return '<svg viewBox="0 0 96 64" class="ex-svg ex-run" aria-hidden="true">' +
+      '<line class="ex-ground" x1="4" y1="56" x2="92" y2="56"/>' +
+      '<g class="ex-hurdle"><rect x="56" y="36" width="13" height="2.6" rx="1"/><line x1="58" y1="38" x2="58" y2="56"/><line x1="67" y1="38" x2="67" y2="56"/></g>' +
+      '<g class="ex-runner"><circle cx="24" cy="21" r="4.6"/>' +
+      '<line x1="24" y1="26" x2="24" y2="40"/>' +
+      '<line class="ex-legA" x1="24" y1="40" x2="18" y2="53"/><line class="ex-legB" x1="24" y1="40" x2="31" y2="53"/>' +
+      '<line class="ex-armA" x1="24" y1="30" x2="17" y2="36"/><line class="ex-armB" x1="24" y1="30" x2="31" y2="36"/></g>' +
+      '</svg>';
+  }
+  function svgHurdle() {
+    return '<svg viewBox="0 0 96 64" class="ex-svg ex-hurdle2" aria-hidden="true">' +
+      '<line class="ex-ground" x1="4" y1="56" x2="92" y2="56"/>' +
+      '<line class="ex-bar" x1="30" y1="34" x2="66" y2="34"/>' +
+      '<line class="ex-bar" x1="32" y1="34" x2="32" y2="56"/><line class="ex-bar" x1="64" y1="34" x2="64" y2="56"/>' +
+      '<g class="ex-jump"><g class="ex-figure"><circle cx="18" cy="20" r="4.4"/>' +
+      '<line class="ex-torso" x1="18" y1="25" x2="18" y2="40"/>' +
+      '<line class="ex-lim" x1="18" y1="29" x2="11" y2="34"/><line class="ex-lim" x1="18" y1="29" x2="25" y2="34"/>' +
+      '<line class="ex-lim" x1="18" y1="40" x2="12" y2="52"/><line class="ex-lim" x1="18" y1="40" x2="24" y2="52"/></g></g>' +
+      '</svg>';
+  }
+  function svgPull() {
+    return '<svg viewBox="0 0 96 64" class="ex-svg ex-pull" aria-hidden="true">' +
+      '<path class="ex-arc" d="M 26 50 A 22 22 0 0 1 70 50" fill="none"/>' +
+      '<circle class="ex-pivot" cx="48" cy="50" r="2.6"/>' +
+      '<g class="ex-lever"><line x1="48" y1="50" x2="48" y2="26"/>' +
+      '<circle class="ex-knob" cx="48" cy="24" r="5"/></g>' +
+      '<text class="ex-cap" x="16" y="62">당기기</text><text class="ex-cap" x="60" y="62">밀기</text>' +
+      '</svg>';
+  }
+  function svgRescue() {
+    return '<svg viewBox="0 0 96 64" class="ex-svg ex-rescue" aria-hidden="true">' +
+      '<line class="ex-ground" x1="6" y1="52" x2="90" y2="52"/>' +
+      '<line class="ex-dist" x1="18" y1="58" x2="78" y2="58"/>' +
+      '<text class="ex-cap" x="34" y="63">10.7m</text>' +
+      '<g class="ex-doll"><rect x="16" y="44" width="22" height="7" rx="3.5"/>' +
+      '<circle cx="20" cy="47.5" r="3.6"/></g>' +
+      '<g class="ex-puller"><circle cx="76" cy="28" r="4.2"/>' +
+      '<line x1="76" y1="33" x2="72" y2="47"/><line x1="72" y1="47" x2="67" y2="52"/>' +
+      '<line x1="72" y1="47" x2="78" y2="52"/><line x1="76" y1="36" x2="64" y2="42"/></g>' +
+      '</svg>';
+  }
+  function svgTrigger() {
+    return '<svg viewBox="0 0 96 64" class="ex-svg ex-trigger" aria-hidden="true">' +
+      '<circle class="ex-ring" cx="48" cy="34" r="20"/>' +
+      '<circle class="ex-dot" cx="48" cy="34" r="4"/>' +
+      '<g class="ex-finger"><rect x="45" y="8" width="6" height="16" rx="3"/>' +
+      '<line class="ex-armline" x1="48" y1="8" x2="48" y2="2"/></g>' +
+      '<text class="ex-cap" x="30" y="62">16 + 15회</text>' +
+      '</svg>';
+  }
+  function svgStairs() {
+    return '<svg viewBox="0 0 64 64" class="ex-svg ex-stairs" aria-hidden="true">' +
+      '<path class="ex-step" d="M8 54 h14 v-12 h14 v-12 h14 v-12" fill="none"/>' +
+      '<g class="ex-foot"><rect x="6" y="48" width="9" height="4" rx="2"/></g></svg>';
+  }
+  function svgBurpee() {
+    return '<svg viewBox="0 0 64 64" class="ex-svg ex-burpee" aria-hidden="true">' +
+      '<line class="ex-ground" x1="6" y1="54" x2="58" y2="54"/>' +
+      '<g class="ex-fold"><circle cx="32" cy="16" r="4"/>' +
+      '<line x1="32" y1="20" x2="32" y2="36"/><line x1="32" y1="36" x2="24" y2="52"/>' +
+      '<line x1="32" y1="36" x2="40" y2="52"/><line x1="32" y1="25" x2="24" y2="32"/>' +
+      '<line x1="32" y1="25" x2="40" y2="32"/></g></svg>';
+  }
+  function svgPush() {
+    return '<svg viewBox="0 0 64 64" class="ex-svg ex-push" aria-hidden="true">' +
+      '<line class="ex-ground" x1="6" y1="54" x2="58" y2="54"/>' +
+      '<g class="ex-pushg"><circle cx="20" cy="34" r="4"/>' +
+      '<line x1="24" y1="36" x2="46" y2="44"/><line x1="46" y1="44" x2="52" y2="54"/>' +
+      '<line class="ex-arm" x1="22" y1="38" x2="26" y2="52"/></g></svg>';
+  }
+  function svgSquat() {
+    return '<svg viewBox="0 0 64 64" class="ex-svg ex-squat" aria-hidden="true">' +
+      '<line class="ex-ground" x1="6" y1="54" x2="58" y2="54"/>' +
+      '<g class="ex-sq"><circle cx="32" cy="16" r="4.4"/>' +
+      '<line x1="32" y1="21" x2="32" y2="34"/>' +
+      '<line class="ex-thigh" x1="32" y1="34" x2="24" y2="44"/><line x1="24" y1="44" x2="26" y2="54"/>' +
+      '<line class="ex-thigh" x1="32" y1="34" x2="40" y2="44"/><line x1="40" y1="44" x2="38" y2="54"/>' +
+      '<line class="ex-arm" x1="32" y1="25" x2="32" y2="36"/></g></svg>';
+  }
+  function svgReach() {
+    return '<svg viewBox="0 0 64 64" class="ex-svg ex-reach" aria-hidden="true">' +
+      '<circle class="ex-ring" cx="42" cy="26" r="13"/>' +
+      '<g class="ex-armg"><line class="ex-myarm" x1="10" y1="38" x2="38" y2="28"/>' +
+      '<rect class="ex-hand" x="36" y="24" width="7" height="7" rx="3"/></g>' +
+      '<circle class="ex-pulse" cx="42" cy="26" r="4"/></svg>';
+  }
+  var PHYS_COURSES = [
+    { n: 1, t: '장애물 달리기', s: '매트(1.5m) → 5단 계단 → 허들(0.6m) · 6바퀴', d: '2바퀴째에 1.5m 장벽 넘기 1회 포함', svg: svgRun },
+    { n: 2, t: '장대 허들 넘기', s: '엎드려 넘기 ↔ 누워 넘기', d: '엎드려: 가슴·앞허벅지 닿기 / 누워: 등·엉덩이 닿기', svg: svgHurdle },
+    { n: 3, t: '당기기·밀기', s: '32kg 저항 · 반원(180°) 각 3회', d: '당기며 반원 → 밀며 반원, 좌우 3회씩', svg: svgPull },
+    { n: 4, t: '구조하기', s: '72kg 모형 인형 · 왕복 10.7m', d: '두 손으로 당겨 끌기', svg: svgRescue },
+    { n: 5, t: '방아쇠 당기기', s: '지름 23cm 원 안 · 팔꿈치 편 채', d: '주손 16회 + 반대손 15회 격발', svg: svgTrigger }
+  ];
+  var PHYS_ROUTINE = [
+    { t: '계단·장애물', s: '계단 2칸씩 오르기 3세트, 버피 10개', svg: svgStairs },
+    { t: '버피', s: '엎드렸다 일어나기 10개 × 3세트', svg: svgBurpee },
+    { t: '밀기·당기기', s: '푸시업 10개 + 문틀 로우(밴드 당기기) 10개', svg: svgPush },
+    { t: '뒤로 끌기·스쿼트', s: '무거운 가방 10m 끌기, 스쿼트 15개', svg: svgSquat },
+    { t: '팔 뻗고 방아쇠', s: '물병 들고 팔 뻗어 30초, 악력기 20회', svg: svgReach }
+  ];
+  function physHtml() {
+    var h = '<div class="ph-top"><b>경찰 순환식 체력검사</b><i>2026년부터 전 채용 적용 · 남녀 동일 기준</i></div>';
+    h += '<div class="ph-pass"><span class="pp-k">합격 기준</span>' +
+      '<div class="pp-rows"><div><b>4.2kg</b><i>조끼 착용</i></div><div><b>5개 코스</b><i>연속 수행</i></div><div class="hot"><b>4분 40초</b><i>이하 완주</i></div></div></div>';
+    h += '<div class="ph-list">';
+    PHYS_COURSES.forEach(function (c) {
+      h += '<div class="ph-item" data-ph="' + c.n + '">' +
+        '<span class="ph-anim">' + c.svg() + '</span>' +
+        '<span class="ph-body"><b>' + c.n + '. ' + esc(c.t) + '</b><i>' + esc(c.s) + '</i><em>' + esc(c.d) + '</em></span></div>';
+    });
+    h += '</div>';
+    h += '<div class="ph-sub">🧍 일상에서 그대로 따라 하는 연습 <span>제안</span></div>';
+    h += '<div class="ph-rt">';
+    PHYS_ROUTINE.forEach(function (r) {
+      h += '<div class="ph-rt-item"><span class="rt-anim">' + r.svg() + '</span>' +
+        '<b>' + esc(r.t) + '</b><i>' + esc(r.s) + '</i></div>';
+    });
+    h += '</div><p class="lib-sub" style="margin-top:10px">· 기준(4분 40초·4.2kg·32kg·72kg·23cm·16/15회)은 경찰청 발표 자료 기준이고, 루틴은 그 코스를 겨냥한 연습 제안이에요.</p>';
+    return h;
+  }
 
   /* ---------- boot ---------- */
   $('#path')._scrolled = true;   // 첫 화면에서 D-Day·히어로가 가려지지 않게 자동 스크롤 생략

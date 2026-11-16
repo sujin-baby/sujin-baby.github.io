@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=20261117g">
+<link rel="stylesheet" href="style.css?v=1794847474">
 </head>
 <body>
 
@@ -23,22 +23,22 @@
     <button id="rankBadge" class="rank-badge" aria-label="내 계급">👮 순경</button>
     <button id="planBtn" class="hud-btn" aria-label="학습 계획">🗺️</button>
     <button id="gpBtn" class="hud-btn" aria-label="G-POINT 1~33 요약 암기표">📘</button>
+    <button id="libBtn" class="hud-btn" aria-label="자료실 · 미래인재경찰 PDF">📂</button>
     <button id="mute" class="hud-btn" aria-label="소리 켜기/끄기">🔊</button>
     <div class="hud-chip" title="연속 학습일"><span>🔥</span><b id="streakN">0</b></div>
-    <div class="hud-chip" title="XP"><span>⚡</span><b id="xpN">0</b></div>
+    <div class="hud-chip" title="P"><span>⚡</span><b id="xpN">0</b></div>
   </div>
 </header>
 
 <nav class="subtabs" id="subtabs"></nav>
 
 <main id="view-stage" class="view">
-  <section class="dday" id="ddayCard">
+  <section class="dday slim" id="ddayCard">
     <div class="dday-main">
       <div class="dday-badge"><span>D-</span><b id="ddayNum">0</b></div>
       <div class="dday-info">
-        <b id="ddayTitle">2027년 2차 순경 필기</b>
-        <i id="ddaySub">2027-08-21 (토) · 예상일 (1월 공고 시 수정 가능)</i>
-        <em id="ddayLeft">0일 남음</em>
+        <div class="dday-t"><b id="ddayTitle">2027년 2차 순경 필기</b><em id="ddayLeft">0일 남음</em></div>
+        <i id="ddaySub">2027-08-21 (토) · 예상일</i>
       </div>
       <button class="dday-edit" id="ddayEdit">변경</button>
     </div>
@@ -57,7 +57,10 @@
   <section class="hero" id="hero">
     <div class="mascot-row">
       <img class="mascot" src="assets/mascot-happy.png" alt="경찰 오리 마스코트">
-      <div class="bubble" id="homeBubble">오늘 목표를 향해 가 볼까?</div>
+      <div class="bubble">
+        <p class="bub-lead" id="homeBubble">오늘도 한 걸음, 같이 가요.</p>
+        <div class="bub-memo"><span class="bm-k">오늘의 암기</span><b id="bubMemo">—</b></div>
+      </div>
     </div>
     <div class="hero-head">
       <div>
@@ -72,12 +75,20 @@
       <div class="prog-txt" id="progTxt">0 / 0강</div>
     </div>
     <button class="btn primary" id="ctaToday">오늘 들은 강의 문제 풀기</button>
-    <div class="cta-row">
-      <button class="btn ghost" id="ctaAll">누적 랜덤 복습</button>
-      <button class="btn ghost" id="ctaWrong">오답 집중</button>
+    <div class="tile-grid">
+      <button class="tile" id="ctaAll"><span class="t-ico">🌀</span><b>누적 랜덤 복습</b><i id="tileAllSub">배운 진도까지</i></button>
+      <button class="tile" id="ctaWrong"><span class="t-ico">🩹</span><b>오답 집중</b><i id="tileWrongSub">오답 없음</i></button>
+      <button class="tile" id="ctaCards"><span class="t-ico">🃏</span><b>10초 암기 카드</b><i id="tileCardSub">배운 진도</i></button>
+      <button class="tile" id="ctaBlank"><span class="t-ico">🧩</span><b>빈칸 채우기</b><i id="tileBlankSub">배운 진도</i></button>
     </div>
     <p class="hero-note" id="heroNote"></p>
   </section>
+
+  <button class="shield-bar hidden" id="shieldBar">
+    <span class="sb-ico">🛡️</span>
+    <span class="sb-body"><b>어제 하루가 비었어요</b><i>80 P로 연속 불꽃을 지킬 수 있어요</i></span>
+    <span class="sb-go" id="shieldGo">지키기</span>
+  </button>
 
   <section class="dash" id="dash">
     <button class="dash-bar" id="dashBar" aria-expanded="false" aria-controls="dashPanel">
@@ -97,9 +108,9 @@
   <section class="quest" id="questCard">
     <div class="quest-head"><b>오늘의 목표</b><span id="questPct">0/3 완료</span></div>
     <div class="quest-line">
-      <span class="ql-label">⚡ XP</span>
+      <span class="ql-label">⚡ P</span>
       <div class="bar"><i id="goalXpBar"></i></div>
-      <span class="ql-val" id="goalXpTxt">0 / 50 XP</span>
+      <span class="ql-val" id="goalXpTxt">0 / 50 P</span>
     </div>
     <div class="quest-line">
       <span class="ql-label">✏️ 문제</span>
@@ -108,7 +119,7 @@
     </div>
     <div class="quest-items">
       <span class="quest-item" id="questLec">📚 강의 체크 <b id="goalLecTxt">0 / 1강</b></span>
-      <span class="quest-item" id="questXp">⚡ 50 XP</span>
+      <span class="quest-item" id="questXp">⚡ 50 P</span>
       <span class="quest-item" id="questQ">✏️ 10문제</span>
     </div>
   </section>
@@ -177,11 +188,44 @@
   </label>
 </main>
 
+<main id="view-memo" class="view hidden">
+  <h1 class="page-title">암기 · 자료</h1>
+  <p class="page-sub" id="memoSub">체크한 진도 안에서만 나와요.</p>
+  <div class="seg" id="memoSeg">
+    <button class="seg-b on" data-seg="card">🃏 카드</button>
+    <button class="seg-b" data-seg="gp">📘 G-POINT</button>
+    <button class="seg-b" data-seg="lib">📂 자료실</button>
+    <button class="seg-b" data-seg="phys">💪 체력</button>
+  </div>
+
+  <section id="segCard">
+    <div class="card-stat">
+      <span id="cfMeta">카드 0장</span>
+      <button class="mini" id="cfRestart">🔄 처음부터</button>
+    </div>
+    <button class="fcard" id="fcard" aria-label="카드를 눌러 정답 보기">
+      <span class="fc-tag" id="fcTag">-</span>
+      <span class="fc-face fc-front" id="fcFront">카드를 눌러 주세요</span>
+      <span class="fc-face fc-back" id="fcBack"></span>
+      <span class="fc-hint">탭하면 뒤집혀요</span>
+    </button>
+    <div class="fc-actions">
+      <button class="btn ghost" id="fcHard">🤔 헷갈림</button>
+      <button class="btn primary" id="fcKnown">✅ 외웠음</button>
+    </div>
+    <button class="btn ghost wide" id="goBlank" style="margin-top:12px">🧩 핵심 빈칸 채우기</button>
+  </section>
+
+  <section id="segGp" class="hidden"></section>
+  <section id="segLib" class="hidden"></section>
+  <section id="segPhys" class="hidden"></section>
+</main>
+
 <main id="view-stats" class="view hidden">
   <h1 class="page-title">기록</h1>
   <div class="stat-grid">
     <div class="stat"><b id="stStreak">0</b><span>연속 학습일</span></div>
-    <div class="stat"><b id="stXp">0</b><span>XP</span></div>
+    <div class="stat"><b id="stXp">0</b><span>P</span></div>
     <div class="stat"><b id="stAcc">-</b><span>정답률</span></div>
     <div class="stat"><b id="stAns">0</b><span>푼 문제</span></div>
     <div class="stat wide"><b id="stToday">0</b><span>오늘 체크한 강의·G-POINT</span></div>
@@ -209,6 +253,7 @@
 <nav class="tabbar">
   <button class="tab on" data-view="stage"><span>🗺️</span><i>스테이지</i></button>
   <button class="tab" data-view="review"><span>🔁</span><i>복습</i></button>
+  <button class="tab" data-view="memo"><span>🗂️</span><i>암기·자료</i></button>
   <button class="tab" data-view="stats"><span>📊</span><i>기록</i></button>
 </nav>
 
@@ -234,6 +279,20 @@
   <div id="comboBanner" class="combo-banner hidden">2연속 정답!</div>
 </div>
 
+<div id="blank" class="quiz hidden">
+  <div class="quiz-top">
+    <button id="bClose" class="q-close" aria-label="닫기">✕</button>
+    <div class="q-top-mid">
+      <div class="q-top-row">
+        <div class="q-title" id="bTitle">🧩 빈칸 채우기</div>
+        <div class="q-count" id="bCount">1/10</div>
+      </div>
+      <div class="q-prog" id="bProg"><i id="bBar"></i><span class="q-prog-gloss"></span></div>
+    </div>
+  </div>
+  <div class="quiz-body" id="bBody"></div>
+</div>
+
 <div id="sheet" class="sheet hidden">
   <div class="sheet-bg" data-close="1"></div>
   <div class="sheet-in" id="sheetIn"></div>
@@ -243,7 +302,7 @@
 <div id="fx" class="fx"></div>
 <div id="toast" class="toast hidden"></div>
 
-<script src="data.js?v=20261117h"></script>
-<script src="app.js?v=20261117i"></script>
+<script src="data.js?v=1794847474"></script>
+<script src="app.js?v=1794847474"></script>
 </body>
 </html>
