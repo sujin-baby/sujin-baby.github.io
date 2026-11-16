@@ -2133,17 +2133,20 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     }
     var sp = subjectPool(sid);
     if (!sp.pool.length) return '강의를 체크하면 오늘 외울 한 줄이 여기 나와요.';
-    var q = sp.pool[seedOf(t + sid) % sp.pool.length];
-    var un = clip(unitName(q.c, q.u) || s.name, 14);
-    var b = blankOf(q);
-    var key = b ? b.key : '';
-    if (!key) {
-      var ans = String(q.o[q.a] || '');
-      var cut = ans.slice(0, 30);
-      cut = cut.slice(0, Math.max(6, cut.lastIndexOf(' ')));
-      key = cut + '…';
+    var start = seedOf(t + sid) % sp.pool.length;
+    var q = null, b = null;
+    for (var k = 0; k < sp.pool.length && k < 12; k++) {
+      var cand = sp.pool[(start + k) % sp.pool.length];
+      var cb = blankOf(cand);
+      if (cb && cb.key) { q = cand; b = cb; break; }
     }
-    return '『' + un + '』 ' + key;
+    if (!q) {
+      q = sp.pool[start];
+      var un0 = clip(unitName(q.c, q.u) || s.name, 14);
+      return '『' + un0 + '』 ' + clip(String(q.e || q.q).replace(/^\[?[^\]]*\]?\s*/, ''), 44);
+    }
+    var un = clip(unitName(q.c, q.u) || s.name, 14);
+    return '『' + un + '』 ' + b.key;
   }
 
   /* ---------- 카드/빈칸 재료 ---------- */
@@ -2160,12 +2163,14 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       return { cards: out, beginner: false };
     }
     sp.pool.forEach(function (q) {
+      var ans = String(q.o[q.a] || '');
+      var trivial = /^[OX]\s*[(（]/.test(ans) || ans.length < 8;
       out.push({
         id: 'q-' + q.i,
         tag: SUBJ[q.s].name + ' · ' + clip(unitName(q.c, q.u) || '', 16),
         front: q.q,
-        back: q.o[q.a],
-        note: clip(q.e, 110)
+        back: trivial ? clip(q.e, 120) : ans,
+        note: trivial ? ('정답 · ' + clip(ans, 40)) : clip(q.e, 110)
       });
     });
     return { cards: out, beginner: sp.beginner };
