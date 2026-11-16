@@ -1878,7 +1878,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3457,6 +3457,7 @@ function checkFullInner_() {
   try { talk70_(); } catch (e) {}
   try { noticeClear1_(); } catch (e) {}
   try { noticeClear2_(); } catch (e) {}
+  try { noticeClear3_(); } catch (e) {}
   try { upAcctOpen1_(); } catch (e) {}
   try { exp135_(); } catch (e) {}
   try { rvPhotoFix2_(); } catch (e) {}
@@ -4956,6 +4957,8 @@ function msgvListCamp_(text) {
 // 방 공지 글 중 리뷰내용 가이드(또는 포토대기)인지 구매 가이드인지 구분 (11/10 사용자 요청)
 function isNoticeReview_(msg) {
   const s = String(msg || '');
+  // 첫 줄이 구매 시간 줄(★★★자정 ~ … 구매★★★, ★★★바로구매★★★)이면 구매 공지 (11/17: 본문에 '포토 대기'·'사진 제공' 말이 있는 구매 공지가 리뷰 가이드로 분류됐음)
+  if (/^\s*★+[^\n]*(구매|작성)[^\n]*★+/.test(s)) return false;
   return /리뷰내용\s*가이드|포토\s*대기|⭐️포토|원고\s*및\s*사진\s*제공/i.test(s);
 }
 // 탭 이름 → 몇 번째 종류 탭인지 (이름 = 종류 또는 '종류 숫자'). 아니면 -1
@@ -8339,6 +8342,26 @@ function noticeClear2_() {
     }); }, 120000);
     props.setProperty('NOTICECLR2', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 보냄 처리 ' + n + '개, 리뷰가이드 탭 ' + keepRv + '개 그대로');
   } catch (e) { props.setProperty('NOTICECLR2', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/17 3차) 본문에 포토 대기 말이 있어 리뷰 가이드로 잘못 분류돼 남은 옛 구매 공지(오늘까지 날짜)도 보냄
+function noticeClear3_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('NOTICECLR3') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5 || !/^✓/.test(String(props.getProperty('NOTICECLR2') || ''))) return;
+  try {
+    let n = 0;
+    locked_(function () { withObWrite_(function () {
+      const ob = outboxSheet_(), ol = ob.getLastRow(), t1 = dayStart_(today_()) + 86400000;
+      if (ol < 2) return;
+      const v = ob.getRange(2, 1, ol - 1, 6).getValues(), stc = v.map(function (x) { return [x[5]]; });
+      v.forEach(function (x, i) {
+        if (String(x[2]) !== '방 공지' || x[5] !== '대기' || !x[0] || isNoticeReview_(x[4])) return;
+        if (x[1] instanceof Date && x[1].getTime() >= t1) return;
+        stc[i][0] = '보냄'; n++;
+      });
+      if (n) ob.getRange(2, 6, ol - 1, 1).setValues(stc);
+    }); }, 120000);
+    props.setProperty('NOTICECLR3', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 보냄 처리 ' + n + '개');
+  } catch (e) { props.setProperty('NOTICECLR3', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 function noticeClear1_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('NOTICECLR1') || '');
