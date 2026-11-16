@@ -1864,7 +1864,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -2012,6 +2012,24 @@ function againResult_(r) {
   return { again: true, notice: notice, formUrl: r['폼 링크'], sheetUrl: r['시트 링크'], folderUrl: r['폴더 링크'] };
 }
 
+// 폼 원본: CONFIG.TEMPLATE_FORM_ID를 못 열면(지웠거나 휴지통·권한) 가장 최근 진행 폼을 본으로 (11/16 폼 만들기가 '입력한 ID에 해당하는 항목이 없습니다'로 막힘)
+//  질문은 같고, 제목·옵션·설명은 만들 때 새로 넣음. 응답은 복사되지 않음. 쓴 본은 TEMPLATE_FB에 기억
+function templateFormFile_() {
+  try { const t = DriveApp.getFileById(CONFIG.TEMPLATE_FORM_ID); if (!t.isTrashed()) return t; } catch (e) {}
+  const props = PropertiesService.getScriptProperties(), fb = props.getProperty('TEMPLATE_FB');
+  if (fb) { try { const t = DriveApp.getFileById(fb); if (!t.isTrashed()) return t; } catch (e) {} }
+  const runs = readRuns_().filter(function (r) { return r['폼ID'] && r['진행일'] instanceof Date; }).sort(function (a, b) { return b['진행일'] - a['진행일']; });
+  for (let i = 0; i < runs.length && i < 30; i++) {
+    try {
+      const f = DriveApp.getFileById(String(runs[i]['폼ID']));
+      if (f.isTrashed()) continue;
+      props.setProperty('TEMPLATE_FB', f.getId());
+      note_('⚠ 원본 폼(TEMPLATE_FORM_ID)을 못 열어 최근 진행 폼을 본으로 씀: ' + f.getName());
+      return f;
+    } catch (e) {}
+  }
+  throw new Error('원본 폼을 못 열어요 (지웠거나 권한이 없어요). 드라이브 휴지통에서 원본 폼을 복원해 주세요.');
+}
 function createRunInner_(d) {
   // 실배송이면 방제·명단 제목(→ 명단 시트 이름)에 '실'
   if (d.realship) { d.title = withSil_(d.title); if (d.room) d.room = withSil_(d.room); if (d.fname) d.fname = withSil_(d.fname); }
@@ -2041,8 +2059,9 @@ function createRunInner_(d) {
     const fname = sheetName_(d.fname || d.title);
     let mf; try { mf = monthFolder_(/^\d{4}-\d{2}-\d{2}$/.test(String(d.date || '')) ? new Date(d.date + 'T00:00:00') : dayFromTitle_(d.title)); } catch (e) { mf = rootFolder_(); }
     folder = mf.createFolder(fname);
-    const formFile = DriveApp.getFileById(CONFIG.TEMPLATE_FORM_ID).makeCopy(fname, folder);
+    const formFile = templateFormFile_().makeCopy(fname, folder);
     form = FormApp.openById(formFile.getId());
+    try { if (form.getResponses().length) form.deleteAllResponses(); } catch (e) {}   // 최근 진행 폼을 본으로 썼을 때 응답이 따라오면 비움 (새 폼만)
     form.setTitle(fname);
     // 새 구글폼은 복사본이 '게시 안 됨' 상태라 먼저 게시
     if (typeof form.setPublished === 'function') form.setPublished(true);
