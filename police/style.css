@@ -740,3 +740,7 @@ body.speed #qBar{background:linear-gradient(90deg,#ffd166,#ff8a3c)}
 .course-item,.node-date{background:var(--card2)}
 .empty{background:transparent}
 .toast{background:#E9EDF5;color:#0B0D10}
+/* 다크 보정 2: 저장 배지·오늘의 계획 줄 */
+.dday-chip.save{background:rgba(52,211,153,.14);border-color:rgba(52,211,153,.35);color:#8ee8c4}
+.dday-chip.save.on{background:rgba(52,211,153,.9);border-color:transparent;color:#08110d}
+.today-plan{background:var(--card2);border-color:var(--line);color:var(--ink)}
