@@ -1864,7 +1864,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3378,6 +3378,7 @@ function checkFullInner_() {
   try { rvPhotoFix1_(); } catch (e) {}
   try { cableTak1_(); } catch (e) {}
   try { cableRevert1_(); } catch (e) {}
+  try { rvPhotoFix3_(); } catch (e) {}
   try { rvPhotoFix2_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
@@ -8153,6 +8154,36 @@ function rvPhotoFix1_() {
     if (moved.length) note_('✓ 포토리뷰 없는 의뢰의 포토 폴더 사진 → 텍스트로: ' + moved.join(', '));
   } catch (e) { props.setProperty('RVPHOTOFIX1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
+// 포토 다시 묻기: 참여자가 리뷰에 직접 붙인 사진이 있는지만 (상품명 옆 작은 대표 썸네일은 빼고). 모르면 null
+function geminiPhotoAgain_(blob) {
+  const t = geminiAsk_([{ text: '쇼핑몰 리뷰 캡처예요. 리뷰 작성자가 리뷰에 직접 첨부한 사진(본문 위아래나 별점 아래의 사진 타일, 보통 1장 이상 크게 보임)이 있나요? 화면 맨 위 상품명 옆에 있는 작은 상품 대표 썸네일 하나는 첨부 사진이 아니에요. JSON 하나로만 답하세요: {"attached": true 또는 false}' }, { inline_data: { mime_type: String(blob.getContentType() || 'image/jpeg'), data: Utilities.base64Encode(blob.getBytes()) } }], true);
+  const m = String(t).match(/"attached"\s*:\s*(true|false)/);
+  return m ? m[1] === 'true' : null;
+}
+// (11/16 한 번) rvPhotoFix1_이 옮긴 것 중 사용자가 아니라고 한 것 되돌림 (과일쏙 못난이사과외 포토리뷰가 텍스트로 감):
+//  더호 차량용 거치대(사용자 확인: 썸네일 오인)만 빼고, AI가 포토라고 봤던 사진을 텍스트 → 포토로. 업체에 안 보낸 의뢰만
+function rvPhotoFix3_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('RVPHOTOFIX3') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const runs = readRuns_(), by = {}, moved = [];
+    runs.forEach(function (r) { const sid = String(r['시트ID'] || ''); if (sid) (by[sid] = by[sid] || []).push(r); });
+    Object.keys(by).forEach(function (sid) {
+      const imgId = props.getProperty('RVIMG_' + sid);
+      if (!imgId || rvSentAny_(by[sid]) || campKey_(by[sid][0]['명단 제목']) === '더호차량용거치대' || !rvNoPhoto_(sid, props, runs)) return;
+      const img = DriveApp.getFolderById(imgId), it = img.getFolders(), dirs = [];
+      while (it.hasNext()) { const f = it.next(); if (rvTypeOf_(f.getName()) === '텍스트') dirs.push(f); }
+      let n = 0;
+      dirs.forEach(function (f) {
+        const fi = f.getFiles();
+        while (fi.hasNext()) { const x = fi.next(); let o = {}; try { o = JSON.parse(String(x.getDescription() || '').replace(/^AI\s*/, '')) || {}; } catch (e) {} if (o.photo === true) { x.moveTo(rvSubDir_(img, '포토')); n++; } }
+      });
+      if (n) { try { rvCountDirs_(img, rvCartOf_(sid)); } catch (e) {} moved.push(campOf_(by[sid][0]['명단 제목']) + ' ' + n + '장'); }
+    });
+    props.setProperty('RVPHOTOFIX3', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (moved.join(', ') || '되돌릴 것 없음'));
+    if (moved.length) note_('✓ 포토 사진 되돌림: ' + moved.join(', '));
+  } catch (e) { props.setProperty('RVPHOTOFIX3', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
 // 읽은 결과 → 옮길 폴더 이름
 function rvAiDir_(o) {
   if (o.kind === 'review') return o.photo ? '포토' : o.text ? '텍스트' : '별점';
@@ -8228,8 +8259,10 @@ function rvAiSort_(f, sid, props) {
       if (/키가 안 맞아요|키 없음/.test(String(e && e.message))) break;
       continue;
     }
-    // 의뢰서에 포토리뷰가 없는 의뢰(전체 텍스트·별점)는 AI가 포토라고 해도 포토 폴더에 안 넣음 (11/16: 더호 차량용 거치대 상품 썸네일을 포토로 봄)
-    const d = rvAiDir_(noPhoto && o.kind === 'review' && o.photo ? Object.assign({}, o, { photo: false }) : o);
+    // 의뢰서에 포토리뷰가 없는 의뢰에서 AI가 포토라고 하면 한 번 더 물어봄 (상품 썸네일을 첨부 사진으로 잘못 보는 일, 11/16 더호 차량용 거치대).
+    //  무조건 텍스트로 보내지 않음: 의뢰서에 없어도 참여자가 사진을 붙이는 일이 있음 (11/16 과일쏙 못난이사과외 포토리뷰가 텍스트로 감)
+    if (noPhoto && o.kind === 'review' && o.photo) { try { if (geminiPhotoAgain_(x.getBlob()) === false) o.photo = false; } catch (e) {} }
+    const d = rvAiDir_(o);
     try { x.setDescription('AI ' + JSON.stringify(o)); } catch (e) {}
     x.moveTo(dirOf(d));
     moved[d] = (moved[d] || 0) + 1; done++;
