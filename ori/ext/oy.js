@@ -520,27 +520,29 @@
     alert("쿠팡 접속 차단('사용권한이 없습니다') 화면이에요.\n공지에 차단 문구가 들어가지 않도록 중단합니다.");
     return;
   }
-  const txt = document.body.innerText;
-  let seller = "";
-  /* 판매처: 첫 후보가 '가입', '다를 수 있습니다' 같은 엉터리면 버리고 다음 후보로 (11/01 판매처 오류 해결).
-     조사로 시작하거나 안내/배송 문장은 판매자가 아님 */
   const BAD_SELLER = /가입|보러가기|평가|정보|^특가|로켓|할인|쿠폰|무료|배송|와우|입점|다를\s*수|있습니다|없습니다|합니다|바랍니다|드립니다|확인|주의|안내|참고|동일|상이|기준|경우|제외|배지|인증/;
-  const okSeller = s => !!s && s.length <= 30 && !/^[는은]\s/.test(s) && !BAD_SELLER.test(s);
-  for (const e of document.querySelectorAll('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]')) {
-    const t = (e.textContent || "").replace(/\s+/g, " ").trim();
-    if (okSeller(t)) { seller = t; break; }
-  }
-  if (!seller) {
+  const okSeller = s => !!s && s.length <= 30 && !/^[는은이가의를와과,\s]/.test(s) && !BAD_SELLER.test(s);
+  const readCoupangSeller = () => {
+    for (const e of document.querySelectorAll('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]')) {
+      const t = (e.textContent || "").replace(/\s+/g, " ").trim();
+      if (okSeller(t)) return t;
+    }
+    const tnow = document.body.innerText || "";
     const re = /판매자\s*[:：]?\s*([^\n]{1,60})/g;
     let sm;
-    while ((sm = re.exec(txt))) {
+    while ((sm = re.exec(tnow))) {
       const t = sm[1].replace(/\s*(판매자\s*)?(상품\s*)?보러\s*가기.*$/, "").replace(/\s*판매자\s*평가.*$/, "").trim();
-      if (okSeller(t)) { seller = t; break; }
+      if (okSeller(t)) return t;
     }
-  }
-  /* '판매자 특가', '판매자로켓' 같은 배지 글자는 판매처가 아님 → 페이지 데이터의 판매자 이름 */
-  if (!seller) { const vn = (String(document.documentElement.innerHTML).match(/\\?"(?:vendorName|sellerName)\\?"\s*:\s*\\?"([^"\\]{2,60})/) || [])[1] || ""; if (okSeller(vn)) seller = vn; }
-  if (!seller) { const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/); if (s2 && okSeller(s2[1].trim())) seller = s2[1].trim(); }
+    const vn = (String(document.documentElement.innerHTML).match(/\\?"(?:vendorName|sellerName)\\?"\s*:\s*\\?"([^"\\]{2,60})/) || [])[1] || "";
+    if (okSeller(vn)) return vn;
+    const s2 = tnow.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/);
+    if (s2 && okSeller(s2[1].trim())) return s2[1].trim();
+    return "";
+  };
+  let seller = readCoupangSeller();
+  for (let i = 0; i < 8 && !seller; i++) { await new Promise(r => setTimeout(r, 500)); seller = readCoupangSeller(); }
+  const txt = document.body.innerText;
   if (seller) {
     seller = seller.replace(/[>]\s*(?:브랜드\s*샵|브랜드샵|공식\s*몰|공식몰|공식\s*스토어|공식스토어|스토어|샵).*$/i, "").replace(/\s*(?:브랜드\s*샵|브랜드샵|공식\s*몰|공식몰|공식\s*스토어|공식스토어)\s*$/i, "").replace(/\s+(?:스토어|샵)\s*$/i, "").trim();
   }
