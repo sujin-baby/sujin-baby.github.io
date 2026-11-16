@@ -360,7 +360,7 @@ function renameTodo_(r, oldBare, newBare, fresh) {
 function memoKey_(r) { const d = r['진행일'] instanceof Date ? Utilities.formatDate(r['진행일'], 'Asia/Seoul', 'MMdd') : String(r['진행일'] || '').slice(0, 10); return r['시트ID'] ? '@' + String(r['시트ID']).slice(-10) + d : ''; }
 //  '#11.16택 실/빈 …'(날짜 바로 뒤 택, 11/16 사용자가 직접 고친 방제)·'업)택11.12 …'도 택
 // 방제 앞에 '택' 붙이기: '#11.17 실 …' → '#택11.17 실 …', '업)11.12 …' → '업)택11.12 …'
-function addTak_(t) { t = String(t || ''); return /^[#업)\s]*택/.test(t) ? t : t.replace(/^([#업)]*)\s*/, '$1택'); }
+function addTak_(t) { t = String(t || ''); if (/^[#업)\s]*택/.test(t)) return t; return /^[#업)]*\s*\d{1,2}\.\d{1,2}/.test(t) ? t.replace(/^([#업)]*)\s*/, '$1택') : t.replace(/^([#업)]*)\s*/, '$1택 '); }   // 날짜 없는 명단 시트 이름('# 실 …', 생성기 v186)은 '#택 실 …'
 function takTitle_(t) { const b = bareTitle_(String(t || '')); return /^\s*[#업)]*\s*택/.test(b) || /^[#업)\s]*\d{1,2}\.\d{1,2}택(\s|$)/.test(b); }
 // 방제 앞에 '택'이 없어도 택대로 두는 캠페인 (11/16 사용자: 방제·명단 시트는 한 번 만들면 바꾸면 안 됨 → 김상사 케이블타이는 이름 그대로 택대). 속성 TAK_KEEP = 캠페인 키 목록
 function takKeep_(t) { let a = []; try { a = JSON.parse(PropertiesService.getScriptProperties().getProperty('TAK_KEEP') || '[]') || []; } catch (e) {} return a.indexOf(campKey_(t)) >= 0; }
@@ -9228,7 +9228,10 @@ function withSil_(t) {
   t = t.replace(/\s+실(\s+\d+(?:\s*\([^)]*\))?\s*)$/, '$1');   // 끝 쪽 '실 7' → '7'
   // '실/빈'도, 날짜에 붙은 '#11.17실 …'도 이미 있는 걸로 (11/16 '#11.17 실 실 에스지엠컴퍼니문풍지외3': 생성기가 날짜에 붙여 보내 한 번 더 붙였음)
   if (/^[#업택)\s]*\d{1,2}\.\d{1,2}\s*(택\s*)?실(\/빈)?(\s|$)/.test(t)) return t;
-  return /^[#업택)\s]*\d{1,2}\.\d{1,2}/.test(t) ? t.replace(/^([#업택)\s]*\d{1,2}\.\d{1,2}(택(?=\s|$))?)\s*/, '$1 실 ') : t;
+  if (/^[#업택)\s]*\d{1,2}\.\d{1,2}/.test(t)) return t.replace(/^([#업택)\s]*\d{1,2}\.\d{1,2}(택(?=\s|$))?)\s*/, '$1 실 ');
+  // 날짜 없는 이름(생성기 v186이 보내는 명단 시트 이름 '# 문풍지외', '#택 귤외'): 앞머리 뒤에 실
+  if (/^[#업택)]+\s*실(\/빈)?(\s|$)/.test(t)) return t;
+  return /^[#업)]/.test(t) ? t.replace(/^([#업택)]+)\s*/, '$1 실 ') : t;
 }
 
 // 공지 모양 맞추기: '🐥포토 : 포토대기' → '🐥리뷰 : ★★★포토대기★★★', 과일은 구매 시간 줄을 '★★★자정 ~ 오전 7시까지 구매★★★'
