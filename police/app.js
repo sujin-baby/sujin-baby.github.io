@@ -430,11 +430,11 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       var rest = items.slice();
       for (var di = 0; di < days.length; di++) {
         if (!rest.length) break;
-        var d = days[di], slot = map[d] || [], keep = [];
+        var d = days[di], slot = map[d] || [], keep = [], used = 0;   // 지텔프·본강의는 각자 하루 몫
         for (var i = 0; i < rest.length; i++) {
           var it = rest[i];
           var eta = it.up ? '' : uploadEta(it.cid, it.n);
-          if (slot.length < cap && (!eta || eta <= d)) slot.push(it);
+          if (used < cap && (!eta || eta <= d)) { slot.push(it); used++; }
           else keep.push(it);
         }
         rest = keep;
