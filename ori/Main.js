@@ -1865,7 +1865,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3387,6 +3387,7 @@ function checkFullInner_() {
   try { rvPhotoFix4_(); } catch (e) {}
   try { albRename1_(); } catch (e) {}
   try { planNameFix1_(); } catch (e) {}
+  try { silsil1_(); } catch (e) {}
   try { rvPhotoFix2_(); } catch (e) {}
   try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
   try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
@@ -8185,6 +8186,21 @@ function planNameFix1_() {
     props.setProperty('PLANNAME1', (ok ? '✓ ' : st + ' 실패(') + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '바꿀 것 없음').slice(0, 1200) + (ok ? '' : ')'));
     if (ok && out.length) { try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); } }
   } catch (e) { props.setProperty('PLANNAME1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/16 한 번, 사용자 승인: '#11.17 실 실 에스지엠컴퍼니문풍지외3' 고쳐, 명단 시트도 '# 실 에스지엠컴퍼니문풍지외'로) 방제·카톡방·명단 시트·폼·폴더 이름
+function silsil1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SILSIL1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const out = [];
+    readRuns_().filter(function (r) { return /^[#업택\s]*\d{1,2}\.\d{1,2}\s*실\s+실\s/.test(bareTitle_(r['명단 제목'])); }).forEach(function (r) {
+      const old = bareTitle_(r['명단 제목']), nt = old.replace(/^([#업택\s]*\d{1,2}\.\d{1,2}\s*)실\s+실\s+/, '$1실 ');
+      out.push(renameRun_(r, nt, '실 두 번 고침 (사용자 11/16)') ? nt : nt + ' 안 바뀜');
+    });
+    const ok = out.length && out.every(function (x) { return !/안 바뀜/.test(x); });
+    props.setProperty('SILSIL1', (ok ? '✓ ' : st + ' 실패(') + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '진행 못 찾음') + (ok ? '' : ')'));
+    if (ok) { try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); } }
+  } catch (e) { props.setProperty('SILSIL1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 // 의뢰서에 포토리뷰가 없는지 (RV_ kind 'text'이고 섞임·가이드에 포토/사진 말이 없음) (11/16)
 //  실배송 의뢰는 빼기: 물건을 실제로 받아 사진을 찍어 올리는 일이 많아서 AI 판단 그대로 (11/16: 하루비 백팩 6장을 텍스트로 옮겼다가 되돌림)

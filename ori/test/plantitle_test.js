@@ -38,5 +38,14 @@ ok(pr[4] === '#11.17 앨비나프레시 황금향 10' && pr[5] === '#11.17 앨�
   ok(G('typeof __RF === "undefined"'), '명단 시트·폼 파일 이름은 안 바꿈');
   ok(/^✓/.test(env.__props.get('PLANNAME1')), '결과 ' + env.__props.get('PLANNAME1'));
 }
+// (11/16 사용자 승인) '#11.17 실 실 …' → '#11.17 실 …', 명단 시트 이름도
+{
+  const LH = G('LIST_HEADER'), mk = o => LH.map(h => o[h] !== undefined ? o[h] : '');
+  env.__ss.sheets['진행목록'] = new H.Sheet('진행목록', [LH.slice(), mk({ '진행일': new Date(), '명단 제목': '#11.17 실 실 에스지엠컴퍼니문풍지외3 (뽀짝오리)', '카톡방': '#11.17 실 실 에스지엠컴퍼니문풍지외3', '시트ID': 'S3', '실배송': 'Y' })]);
+  G("renameRunFiles_ = function (r, o, n) { globalThis.__RN = [o, n]; return []; }");
+  G('silsil1_()');
+  const t = G('readRuns_()').map(r => G('bareTitle_')(r['명단 제목']));
+  ok(t[0] === '#11.17 실 에스지엠컴퍼니문풍지외3' && JSON.stringify(G('__RN')) === JSON.stringify(['# 실 실 에스지엠컴퍼니문풍지외', '# 실 에스지엠컴퍼니문풍지외']), '실 실 고침 ' + JSON.stringify([t, G('__RN')]));
+}
 console.log(fails.length ? 'XX 실 두 번·다음 일차 방제 시험 실패:\n- ' + fails.join('\n- ') : '✓ 실 두 번 안 붙음·다음 일차 방제는 1일차 따라 시험 통과');
 process.exit(fails.length ? 1 : 0);
