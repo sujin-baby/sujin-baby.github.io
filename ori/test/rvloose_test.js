@@ -24,10 +24,10 @@ ok(at.SA && at.SB && !at.SC && !at.SE, '본 시각 ' + JSON.stringify(Object.key
 env.__props.set('RVAI_Q', '');
 G('rvLooseCheck_(__RUNS)');
 ok(!String(env.__props.get('RVAI_Q') || ''), '1시간 안에 다시 안 봄 ' + env.__props.get('RVAI_Q'));
-// 업체에 보낸 의뢰도 리뷰이미지에 남은 사진은 나눔 (11/16 과일쏙)
+// 업체에 보낸 의뢰는 안 건드림 (11/16 사용자)
 env.__props.set('RVLOOSE_AT', '{}');
 runs[0]['업체 전송'] = new Date();
 G('rvLooseCheck_(__RUNS)');
-ok(String(env.__props.get('RVAI_Q') || '').split(',').indexOf('SA') >= 0, '업체에 보낸 의뢰도 남은 사진은 나눔 (11/16)');
+ok(String(env.__props.get('RVAI_Q') || '').split(',').indexOf('SA') < 0, '업체에 보낸 의뢰는 안 건드림 (11/16 사용자)');
 console.log(fails.length ? 'XX 진행 중 리뷰 사진 대기열 시험 실패:\n- ' + fails.join('\n- ') : '✓ 진행 중 리뷰 사진 AI 대기열 시험 통과');
 process.exit(fails.length ? 1 : 0);

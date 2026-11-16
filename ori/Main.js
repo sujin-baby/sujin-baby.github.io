@@ -8488,8 +8488,8 @@ function rvLooseCheck_(runs) {
     if (looked >= 15 || late_(200)) return;
     const mine = bySid[sid];
     if (!mine.some(function (r) { return r['마감 시각'] instanceof Date; }) || !mine.some(function (r) { return r['진행일'].getTime() >= cut; })) return;
-    // 리뷰가 다 끝났거나 업체에 보낸 의뢰도 나눔 (11/16 과일쏙: 보고를 보낸 뒤 올린 사진은 rvZip_이 AI를 안 돌려 그대로 남음)
-    if (q.indexOf(sid) >= 0) return;
+    // 리뷰가 다 끝난 의뢰도 나눔 (11/16 과일쏙). 업체에 보낸 의뢰는 절대 안 건드림 (11/16 사용자)
+    if (q.indexOf(sid) >= 0 || rvSentAny_(mine)) return;
     const imgId = props.getProperty('RVIMG_' + sid);
     if (!imgId || now - Number(at[sid] || 0) < 3600000) return;
     let kind = ''; try { kind = (JSON.parse(props.getProperty('RV_' + sid) || '{}') || {}).kind || ''; } catch (e) {}
@@ -9920,6 +9920,8 @@ function updatePay_(resumable) {
   // 스토어 왼쪽에 '진행일' 칸 (사용자 요청 10/19). 탭마다 한 번 (있으면 그대로)
   try { fixPaySunnyOnce_(); } catch (e) { note_('월급시트 써니마켓 정리 실패: ' + e); }
   try { payTabsNow_().forEach(payDateCol_); } catch (e) { note_('월급시트 진행일 칸 만들기 실패: ' + e); }
+  // 캠페인 색·여분 줄은 매번 먼저 (11/16 사용자: 또 다 연두색, 여분 줄 한 줄. 맨 끝 단계라 줄 쓰기가 길면 며칠씩 못 갔음). 둘 다 가벼움
+  try { payTabsNow_().forEach(function (sh) { payColors_(sh); paySpareRows_(sh); }); } catch (e) { note_('월급시트 색·여분 줄 실패: ' + e); }
   const nameOf = payNameOf_;
   // 캠페인명은 있는데 남은 칸 수식이 없는 줄(테두리·총액·남은·완료·상태가 빠진 줄) → 위 줄 모양·수식 복사, 그 줄은 이번에 다시 씀 (11/10 사용자)
   if (!prog || !prog.done.length) {
@@ -10175,7 +10177,8 @@ function payRowNow_(r, runs) {
   if (!CONFIG.PAY_SHEET_ID || r['진행 상태'] === '종료' || !r['시트ID'] || !(r['진행일'] instanceof Date)) return;
   const all = runs.filter(function (x) { return x['시트ID'] && x['진행일'] instanceof Date; });
   const sp = payRowSpec_(r, all);
-  writePayRow_(r, sp.name, sp.total, sp.prev, sp.shared, sp.ex, all);
+  const wr = writePayRow_(r, sp.name, sp.total, sp.prev, sp.shared, sp.ex, all);
+  try { if (wr && wr.sh) { payColors_(wr.sh); paySpareRows_(wr.sh); } } catch (e) {}   // 새 줄도 바로 캠페인 색·여분 줄 (11/16)
   const props = PropertiesService.getScriptProperties();
   let rowSig = {}; try { rowSig = JSON.parse(props.getProperty('PAY_ROWSIG') || '{}'); } catch (e) {}
   rowSig[r.row + '|' + payNameOf_(r)] = { s: sp.sig, t: Date.now() };
