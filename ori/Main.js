@@ -2023,9 +2023,18 @@ function templateFormFile_() {
     try {
       const f = DriveApp.getFileById(String(runs[i]['폼ID']));
       if (f.isTrashed()) continue;
-      props.setProperty('TEMPLATE_FB', f.getId());
-      note_('⚠ 원본 폼(TEMPLATE_FORM_ID)을 못 열어 최근 진행 폼을 본으로 씀: ' + f.getName());
-      return f;
+      // 최근 진행 폼을 복사해 새 원본을 하나 만들어 둠 (진행 폼이 나중에 지워져도 계속 쓰게, 11/16 사용자: 휴지통에도 원본이 없음)
+      let nf = f;
+      try {
+        nf = f.makeCopy('체험단 폼 원본 (자동, 지우지 마세요)', rootFolder_());
+        const fm = FormApp.openById(nf.getId());
+        try { fm.removeDestination(); } catch (e) {}
+        try { if (fm.getResponses().length) fm.deleteAllResponses(); } catch (e) {}
+        try { fm.setDescription(''); fm.setTitle('체험단 폼 원본 (자동)'); fm.setAcceptingResponses(false); } catch (e) {}
+      } catch (e) { nf = f; }
+      props.setProperty('TEMPLATE_FB', nf.getId());
+      note_('⚠ 원본 폼(TEMPLATE_FORM_ID)을 못 열어 새 원본을 만듦 (' + f.getName() + ' 복사) → ' + nf.getName());
+      return nf;
     } catch (e) {}
   }
   throw new Error('원본 폼을 못 열어요 (지웠거나 권한이 없어요). 드라이브 휴지통에서 원본 폼을 복원해 주세요.');
