@@ -19,5 +19,15 @@ ok(rr.filter(r => /택11\.1[67]/.test(r['명단 제목'])).every(r => r['택대'
 const pl = env.__ss.sheets['일정'].rows[1];
 ok(pl[4] === '#택11.18실/빈 김상사케이블타이5' && JSON.parse(pl[9]).takdae === true, '일정 계획 ' + JSON.stringify([pl[4], pl[9]]));
 ok(/^✓/.test(env.__props.get('CABLETAK1')), '결과 ' + env.__props.get('CABLETAK1'));
+// (11/16) 사용자: 방제·명단 시트는 바꾸면 안 됨 → 원래 이름으로, 택대는 그대로
+let err2 = ''; try { G('cableRevert1_()'); } catch (e) { err2 = String(e.stack || e); }
+ok(!err2, '오류2 ' + err2);
+const rr2 = G('readRuns_()'), t2 = rr2.map(r => G('bareTitle_')(r['명단 제목']));
+ok(t2.includes('#11.16실/빈 김상사 케이블타이5') && t2.includes('#11.17실/빈 김상사 케이블타이5') && !t2.some(x => /택/.test(x)), '원래 방제 ' + JSON.stringify(t2));
+ok(rr2.filter(r => /11\.1[67]/.test(r['명단 제목'])).every(r => r['택대'] === 'Y'), '택대 그대로 Y');
+const pl2 = env.__ss.sheets['일정'].rows[1];
+ok(pl2[4] === '#11.18실/빈 김상사 케이블타이5' && JSON.parse(pl2[9]).takdae === true, '일정 원래 이름·택대 ' + JSON.stringify([pl2[4], pl2[9]]));
+ok(G("takKeep_('#11.16실/빈 김상사 케이블타이5')") === true && G("takKeep_('#11.16 다른상품 5')") === false, 'TAK_KEEP');
+ok(/^✓/.test(env.__props.get('CABLEREV1')), '결과 ' + env.__props.get('CABLEREV1'));
 console.log(fails.length ? 'XX 케이블타이 택대 시험 실패:\n- ' + fails.join('\n- ') : '✓ 김상사 케이블타이 오늘부터 택대 시험 통과');
 process.exit(fails.length ? 1 : 0);
