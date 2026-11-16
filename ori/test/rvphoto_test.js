@@ -44,6 +44,15 @@ G('rvPhotoFix2_()');
 ok(live(img3).map(d => d.name).sort().join('|') === '텍스트 (1개)|포토 (1개)', '실배송 포토 되돌림 ' + live(img3).map(d => d.name).join('|') + ' ' + env.__props.get('RVPHOTOFIX2'));
 ok(live(img).map(d => d.name).join('|') === '텍스트 (9개)', '거치대는 그대로');
 const src = require('fs').readFileSync(process.argv[2], 'utf8');
-ok(/noPhoto && o\.kind === 'review' && o\.photo \? Object\.assign\(\{\}, o, \{ photo: false \}\)/.test(src), 'AI 나눌 때도 포토 안 넣음');
+ok(/noPhoto && o\.kind === 'review' && o\.photo\) \{ try \{ if \(geminiPhotoAgain_\(x\.getBlob\(\)\) === false\) o\.photo = false/.test(src), 'AI가 포토라 하면 한 번 더 묻기 (무조건 텍스트 아님)');
+// (11/16) 과일쏙 포토리뷰가 텍스트로 감 → 거치대만 빼고 되돌림
+const img4 = folder('리뷰이미지4'), tx4 = img4.createFolder('텍스트 (3개)');
+file('g1.png', 'AI {"kind":"review","text":true,"photo":true}', tx4); file('g2.png', 'AI {"kind":"review","text":true,"photo":true}', tx4); file('g3.png', 'AI {"kind":"review","text":true,"photo":false}', tx4);
+const DB = env.DriveApp.getFolderById; env.DriveApp = { getFolderById: id => id === 'IMG4' ? img4 : DB(id) };
+env.__ss.sheets['진행목록'].rows.push(mk({ '진행일': new Date(), '명단 제목': '#택11.4 과일쏙 못난이사과외 10 (뽀짝오리)', '시트ID': 'S4', '진행 상태': '진행중' }));
+[['RVIMG_S4', 'IMG4'], ['RV_S4', '{"kind":"text","mix":"","guide":"대표님을 믿습니다."}']].forEach(([k, v]) => env.__props.set(k, v));
+G('rvPhotoFix3_()');
+ok(live(img4).map(d => d.name).sort().join('|') === '텍스트 (1개)|포토 (2개)', '과일쏙 포토 되돌림 ' + live(img4).map(d => d.name).join('|') + ' ' + env.__props.get('RVPHOTOFIX3'));
+ok(live(img).map(d => d.name).join('|') === '텍스트 (9개)', '거치대는 그대로 (사용자 확인)');
 console.log(fails.length ? 'XX 포토 없는 의뢰 포토 폴더 시험 실패:\n- ' + fails.join('\n- ') : '✓ 포토 없는 의뢰는 포토 폴더에 안 넣음 시험 통과');
 process.exit(fails.length ? 1 : 0);
