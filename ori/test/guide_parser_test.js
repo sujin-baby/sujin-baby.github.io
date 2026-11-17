@@ -1422,9 +1422,10 @@ console.log('-- Test 34: 실·빈 혼합(실5 텍5 구확10=20건) 한 방·공�
 }
 
 // ==========================================
-console.log('-- Test 35: 20자 방제에서 업체명 빼고 상품명 살리기·뒤쪽 품목 명사 보존 (11/17 v192)');
+console.log('-- Test 35: 20자 방제에서 업체명(판매처) 먼저 살리고 상품 키워드를 대표 키워드로 줄이기 (11/17 v193)');
 {
-  // 오리 팀룸 #73 수진 님: "여성겨울이아니라 겨울모자 여성모자 방한모자 이런식으로나와야된다고"
+  // 오리 팀룸 #73 수진 님: "업체명이중요하다고 그린코코 겨울모자4 이런식으로 대표키워드랑업체명이들어가게하라고"
+  //  (v192에서는 업체명을 빼고 '#11.17실/빈 여성겨울모자 4'였음 → v193은 업체명을 살리고 상품 키워드를 줄임)
   const req73 = `#입금대행 실5 텍5 구확10 14900
 
 1. 검색 키워드(미노출시 저희가 키워드땁니다): 여성겨울모자
@@ -1456,11 +1457,13 @@ console.log('-- Test 35: 20자 방제에서 업체명 빼고 상품명 살리기
   };
   const PNAME73 = '그린코코 니트 털방울 올인원 겨울모자 여성모자 방한모자';
 
-  // ① #73 실제 조건: 업체명(그린코코)을 빼면 상품명이 온전히 들어가므로 상품명을 자르지 않음
+  // ① #73 실제 조건: 업체명(그린코코)은 그대로 두고, 검색 키워드(여성겨울모자)만 짧은 대표 키워드(겨울모자)로 줄임
   const r73 = run73('여성겨울모자', '여성겨울모자', '그린코코', PNAME73, '4');
-  if (r73 !== '#11.17실/빈 여성겨울모자 4') throw new Error('Test 35 #73 방제 실패: ' + r73 + ' (' + r73.length + '자)');
+  if (r73 !== '#11.17실/빈 그린코코 겨울모자4') throw new Error('Test 35 #73 방제 실패: ' + r73 + ' (' + r73.length + '자)');
+  if (r73.length > 20) throw new Error('Test 35 #73 방제 20자 초과: ' + r73 + ' (' + r73.length + '자)');
+  if (!/그린코코/.test(r73)) throw new Error('Test 35 #73 방제에 업체명이 없음: ' + r73);
   if (/여성겨울4|여성겨울$/.test(r73)) throw new Error('Test 35 상품명 꼬리(모자)가 잘림: ' + r73);
-  // 판매처가 비어 있어도 같은 모양
+  // 판매처가 비어 있으면 업체명 없이 온전한 키워드 그대로
   const r73b = run73('여성겨울모자', '여성겨울모자', '', PNAME73, '4');
   if (r73b !== '#11.17실/빈 여성겨울모자 4') throw new Error('Test 35 판매처 없음 방제 실패: ' + r73b);
 
@@ -1468,6 +1471,7 @@ console.log('-- Test 35: 20자 방제에서 업체명 빼고 상품명 살리기
   //    (예전 v191: '#11.17실/빈 그린코코 여성겨울4' 20자 — 품목 '모자'가 잘렸음)
   const rLong = run73('초특가겨울여성방한모자', '초특가겨울여성방한모자', '그린코코', PNAME73, '20');
   if (rLong.length > 20) throw new Error('Test 35 20자 초과: ' + rLong + ' (' + rLong.length + '자)');
+  if (!/그린코코/.test(rLong)) throw new Error('Test 35 업체명이 빠짐: ' + rLong);
   if (!/모자\s*20$/.test(rLong)) throw new Error('Test 35 뒤쪽 품목 명사(모자)가 잘림: ' + rLong);
   if (/초특가/.test(rLong)) throw new Error('Test 35 앞 수식어만 남음: ' + rLong);
 
@@ -1475,19 +1479,21 @@ console.log('-- Test 35: 20자 방제에서 업체명 빼고 상품명 살리기
   const rGlue = run73('니트털방울올인원겨울모자여성모자방한모자', '니트털방울올인원겨울모자여성모자방한모자', '그린코코', PNAME73, '4');
   if (rGlue.length > 20) throw new Error('Test 35 20자 초과: ' + rGlue);
   if (!/겨울모자\s*4$|겨울모자4$/.test(rGlue)) throw new Error('Test 35 짧은 품목 명사(겨울모자)가 안 남음: ' + rGlue);
-  if (/니트|털방물|올인원/.test(rGlue)) throw new Error('Test 35 수식어가 품목처럼 남음: ' + rGlue);
+  if (!/그린코코/.test(rGlue)) throw new Error('Test 35 업체명이 빠짐: ' + rGlue);
+  if (/니트|털방울|올인원/.test(rGlue)) throw new Error('Test 35 수식어가 품목처럼 남음: ' + rGlue);
 
   // ④ 상품명이 없어 낱말 후보도 없을 때: 글자를 줄여도 뒤쪽(모자)을 남기고 앞을 줄임
   const rTail = run73('초특가프리미엄여성겨울방한모자', '초특가프리미엄여성겨울방한모자', '그린코코', '', '20');
   if (rTail.length > 20) throw new Error('Test 35 20자 초과: ' + rTail);
   if (!/모자\s*20$|모자20$/.test(rTail)) throw new Error('Test 35 글자를 줄여도 뒤쪽 품목(모자)이 안 남음: ' + rTail);
   if (/^#택?\S*\s+초특가/.test(rTail)) throw new Error('Test 35 앞쪽부터 잘라 품목이 잘림: ' + rTail);
+  if (/여성겨울|방한모/.test(rTail.replace(/^#\S+\s+(\S+\s+)?/, ''))) throw new Error('Test 35 품목이 잘린 조각이 남음: ' + rTail);
 
   // ⑤ 회귀: 20자 안에 다 들어가는 짧은 건은 그대로 (업체명 + 띄어쓰기)
   const rShort = run73('흐착장난감', '흐착장난감', '빌랑', '빌랑 흐착장난감', '4');
   if (rShort !== '#11.17실/빈 빌랑 흐착장난감 4') throw new Error('Test 35 짧은 방제 회귀(실·빈): ' + rShort);
 
-  console.log('✓ 업체명 빼고 상품명 살리기·뒤쪽 품목 명사 보존 시험 통과 (' + r73 + ' / ' + rLong + ')');
+  console.log('✓ 업체명 살리고 대표 키워드로 줄이기 시험 통과 (' + r73 + ' / ' + rLong + ')');
 }
 
 console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (35개 샘플 전원 일치)');
