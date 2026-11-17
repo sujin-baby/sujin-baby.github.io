@@ -361,6 +361,9 @@ function memoKey_(r) { const d = r['진행일'] instanceof Date ? Utilities.form
 //  '#11.16택 실/빈 …'(날짜 바로 뒤 택, 11/16 사용자가 직접 고친 방제)·'업)택11.12 …'도 택
 // 방제 앞에 '택' 붙이기: '#11.17 실 …' → '#택11.17 실 …', '업)11.12 …' → '업)택11.12 …'
 function addTak_(t) { t = String(t || ''); if (/^[#업)\s]*택/.test(t)) return t; return /^[#업)]*\s*\d{1,2}\.\d{1,2}/.test(t) ? t.replace(/^([#업)]*)\s*/, '$1택') : t.replace(/^([#업)]*)\s*/, '$1택 '); }   // 날짜 없는 명단 시트 이름('# 실 …', 생성기 v186)은 '#택 실 …'
+// 방제 끝 숫자를 몇으로 나눠 목표 인원으로 볼지: 장바구니건은 상품 수(방제 = 물건 수), 단 TITLE_PEOPLE에 든 캠페인은 방제 = 사람 수 (11/17 지니네농수산 돌게외: 방제 20 = 20명)
+function titlePeople_(r) { let a = []; try { a = JSON.parse(PropertiesService.getScriptProperties().getProperty('TITLE_PEOPLE') || '[]') || []; } catch (e) {} return a.indexOf(campKey_(r['명단 제목'])) >= 0; }
+function titleDiv_(r) { return titlePeople_(r) ? 1 : cartN_(r); }
 function takTitle_(t) { const b = bareTitle_(String(t || '')); return /^\s*[#업)]*\s*택/.test(b) || /^[#업)\s]*\d{1,2}\.\d{1,2}택(\s|$)/.test(b); }
 // 방제 앞에 '택'이 없어도 택대로 두는 캠페인 (11/16 사용자: 방제·명단 시트는 한 번 만들면 바꾸면 안 됨 → 김상사 케이블타이는 이름 그대로 택대). 속성 TAK_KEEP = 캠페인 키 목록
 function takKeep_(t) { let a = []; try { a = JSON.parse(PropertiesService.getScriptProperties().getProperty('TAK_KEEP') || '[]') || []; } catch (e) {} return a.indexOf(campKey_(t)) >= 0; }
@@ -377,7 +380,7 @@ function renameRun_(r, title, why) {
   // 방제 앞 '택'을 넣거나 빼면 택대도 같이 (11/3: '#11.04 엔라지맨 밀크텐정 5'가 택배건이 아닌데 한눈에 '택배 옮김' 체크칸이 떠 있었음)
   { const tk = takTitle_(title) || takKeep_(title) ? 'Y' : ''; if ((r['택대'] === 'Y' ? 'Y' : '') !== tk) { setRun_(r.row, '택대', tk); r['택대'] = tk; note_('택대 ' + (tk ? '켬' : '끔') + '(방제 앞 택 ' + (tk ? '있음' : '없음') + '): ' + title); } }
   const cm = title.match(/(\d+)\s*$/);
-  if (cm && Number(cm[1]) > 0 && !isExpect_(r)) { const g = Math.round(Number(cm[1]) / cartN_(r)); setRun_(r.row, '목표인원', g); r['목표인원'] = g; }   // 장바구니건은 방제 끝이 물건 수(사람 × 상품 수)   // 기대평은 방제 끝이 건수(사람 × 27)
+  if (cm && Number(cm[1]) > 0 && !isExpect_(r)) { const g = Math.round(Number(cm[1]) / titleDiv_(r)); setRun_(r.row, '목표인원', g); r['목표인원'] = g; }   // 장바구니건은 방제 끝이 물건 수(사람 × 상품 수)   // 기대평은 방제 끝이 건수(사람 × 27)
   const nick = (String(r['명단 제목']).match(/\s*\([^)]*\)\s*$/) || [''])[0];
   const oldRoom = String(r['카톡방'] || bareTitle_(r['명단 제목']));
   const oldTitle = String(r['명단 제목']);
@@ -1296,7 +1299,7 @@ function normalizeRuns_() {
     if (!String(r['캠페인']).trim() && r['명단 제목']) { r['캠페인'] = campOf_(r['명단 제목']); setRun_(r.row, '캠페인', r['캠페인']); }
     // 방제 끝 숫자 = 그날 목표 인원 (끝 숫자를 고치면 목표도 같이. 다 찼으면 조용히 마감 표시)
     const tm = bareTitle_(r['명단 제목']).match(/(\d+)\s*$/);
-    const tmN = tm ? Math.round(Number(tm[1]) / cartN_(r)) : 0;   // 장바구니건은 방제 끝이 물건 수 → 사람 수로
+    const tmN = tm ? Math.round(Number(tm[1]) / titleDiv_(r)) : 0;   // 장바구니건은 방제 끝이 물건 수 → 사람 수로 (TITLE_PEOPLE 진행은 사람 수 그대로)
     if (tm && tmN > 0 && Number(r['목표인원']) !== tmN && r['진행 상태'] !== '종료' && !isExpect_(r)) {   // 기대평은 방제 끝이 건수
       r['목표인원'] = tmN; setRun_(r.row, '목표인원', r['목표인원']);
       if (!r['마감 시각'] && Number(r['인원']) >= r['목표인원'] && pastEnd_(r)) setRun_(r.row, '마감 시각', new Date());
@@ -1891,7 +1894,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -8393,6 +8396,8 @@ function dolge20_() {
     let runs = readRuns_();
     const r17 = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === '업)택11.17지니네농수산 돌게외20'; })[0];
     if (!r17) { props.setProperty('DOLGE20', st + ' 실패(11.17 진행 못 찾음)'); return; }
+    // 방제 '돌게외20' = 20명 (장바구니라 방제를 물건 수로 보고 목표를 10으로 되돌리지 않게)
+    { let tp = []; try { tp = JSON.parse(props.getProperty('TITLE_PEOPLE') || '[]') || []; } catch (e) {} const ck = campKey_(r17['명단 제목']); if (tp.indexOf(ck) < 0) { tp.push(ck); props.setProperty('TITLE_PEOPLE', JSON.stringify(tp)); out.push('방제 숫자 = 사람 수'); } }
     if (Number(r17['목표인원']) !== 20) { setRun_(r17.row, '목표인원', 20); out.push('11.17 목표 20'); }
     if (Number(r17['인원']) < 20 && r17['마감 시각']) { setRun_(r17.row, '마감 시각', ''); out.push('마감 시각 비움'); }
     runs = readRuns_();

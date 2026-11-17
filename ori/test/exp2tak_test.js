@@ -36,5 +36,14 @@ ok(ch.length === 2 && ch[1].runs.length === 1 && ch[1].total === 15, '새 묶음
   ok(gi(['a', '', '방 공지', '#11.17 귤 5', '🐥리뷰내용 가이드🐥\n\n텍스트리뷰(5명) : 가']) === '⭐리뷰가이드', '리뷰 가이드 탭');
   ok(gi(['b', '', '방 공지', '#11.17 귤 5', '★★★자정 ~ 오전 7시까지 구매★★★\n공지']) === '🐥방공지', '구매 공지 탭');
 }
+// (11/17) 장바구니건 방제 끝 숫자: 기본은 물건 수(÷상품 수), TITLE_PEOPLE에 든 캠페인은 사람 수
+{
+  env.__props.set('CART_SC1', '2'); G('globalThis.__CARTMAP = null');
+  const r = { '명단 제목': '업)택11.17지니네농수산 돌게외20 (뽀짝오리)', '시트ID': 'SC1' };
+  env.__R1 = r;
+  ok(G('titleDiv_(__R1)') === 2, '장바구니 기본 ÷2');
+  env.__props.set('TITLE_PEOPLE', JSON.stringify(['지니네농수산돌게외']));
+  ok(G('titleDiv_(__R1)') === 1, 'TITLE_PEOPLE면 ÷1');
+}
 if (fails.length) { console.log('✗ ' + fails.join('\n✗ ')); process.exit(1); }
 console.log('✓ 택 방제·업체입금·기대평 2차 시험 통과');
