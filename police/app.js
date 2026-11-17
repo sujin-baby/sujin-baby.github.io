@@ -179,6 +179,18 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (q.gp && c) return s.name + ' · G-POINT ' + q.gp + ' ' + (c.lec[q.gp - 1] ? c.lec[q.gp - 1].t : '');
     return s.name + ' · ' + (c.name ? c.name + ' · ' : '') + unitName(q.c, q.u);
   }
+  /* 문제를 푸는 동안 보이는 배지: 지텔프는 G-POINT 번호·공식명을 숨긴다(스포일러 방지) */
+  function qTag(q) {
+    var s = SUBJ[q.s];
+    if (!s) return '';
+    if (q.gp) return s.name + ' · 문법 기출';
+    return qLabel(q);
+  }
+  function gpHead(q) {
+    var c = COURSE[q.c];
+    var t = c && c.lec && c.lec[q.gp - 1] ? c.lec[q.gp - 1].t : '';
+    return '📘 G-POINT ' + q.gp + (t ? ' · ' + t : '');
+  }
   function srcBadge(q) {
     var s = srcLabel(q);
     if (s) return { k: (q.s === 'gtelp' ? 'cafe' : 'exam'), t: '📌 출처: ' + s };
@@ -1541,7 +1553,12 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       pool = opt.ids && opt.ids.length
         ? D.questions.filter(function (q) { return opt.ids.indexOf(q.i) >= 0; })
         : gpQuestions(opt.n);
-      title = opt.title || ('G-POINT ' + opt.n + ' · 켈리 기출');
+      if (opt.ids && opt.ids.length) {   /* 넘긴 순서(직전 문제 뒤로) 그대로 */
+        var byId = {};
+        pool.forEach(function (q) { byId[q.i] = q; });
+        pool = opt.ids.map(function (i) { return byId[i]; }).filter(Boolean);
+      }
+      title = opt.title || '지텔프 문법 · 켈리 카페 기출';
     } else if (mode === 'wrong') {
       pool = poolWrong();
       title = '오답 집중 복습';
@@ -1565,10 +1582,12 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       else toast('아직 체크한 진도가 없어요. 스테이지에서 1강부터 체크해 주세요.');
       return;
     }
-    var n = mode === 'lecture' ? Math.min(pool.length, 6) : mode === 'gp' ? 1 : Math.min(pool.length, S.qlen);
+    /* G-POINT를 누르면 그 포인트 기출을 한 문제씩이 아니라 전부 이어서 푼다 */
+    var n = mode === 'lecture' ? Math.min(pool.length, 6) : mode === 'gp' ? pool.length : Math.min(pool.length, S.qlen);
     if (mode === 'ids') n = Math.min(pool.length, 20);
     if (mode === 'speed') n = Math.min(pool.length, 60);
-    var items = qs(pool, n).map(function (q) {
+    var pick = mode === 'gp' ? pool.slice() : qs(pool, n);
+    var items = pick.map(function (q) {
       var order = q.o.map(function (_, i) { return i; });   // OX(2지선다)도 지원
       shuffle(order);
       return { q: q, order: order };
@@ -1624,7 +1643,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     $('#qCount').textContent = (QS.i + 1) + '/' + QS.items.length;
     var pb = $('#qProg');
     if (pb) { pb.classList.remove('pop'); void pb.offsetWidth; pb.classList.add('pop'); }
-    var tag = qLabel(q);
+    var tag = qTag(q);
     var badge = srcBadge(q);
     var keys = ['A', 'B', 'C', 'D'];
     var h = '';
@@ -1782,7 +1801,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     el.querySelector('.fb-head').innerHTML = '<img class="fb-mascot" src="assets/' + (ok ? 'mascot-happy.png' : 'mascot-happy.png') + '" alt="">' +
       '<span>' + (ok ? '정답이에요!' + (bonus ? ' 콤보 보너스 🎉' : ' 🎉') : '아쉬워요 😢') + '</span>' +
       '<span class="fb-xp">+' + gain + ' P</span>';
-    el.querySelector('.fb-text').innerHTML = '<b>해설</b> · ' + esc(q.e);
+    var gpLead = q.gp ? '<span class="fb-gp">' + esc(gpHead(q)) + '</span>' : '';
+    el.querySelector('.fb-text').innerHTML = gpLead + '<b>해설</b> · ' + esc(q.e);
     var b = $('#fbNext');
     b.textContent = QS.i + 1 >= QS.items.length ? '결과 보기' : '다음 문제';
   }
@@ -2026,13 +2046,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       { t: '한국경찰의 역사와 비교경찰', k: '문제', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1djNOYxe7ANZzZ7NMk9rNL_xvDvzpBXlO/view' },
       { t: '한국경찰의 역사와 비교경찰', k: '해설', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1gl_-Bg1lBmbOpFyfqwHebQtbbXXcFs7a/view' },
     ] },
-    { sub: '헌법 · 강성민 (참고)', rows: [
-      { t: '기본권', k: '문제', s: '강성민 초시생 기초다지기', u: 'https://drive.google.com/file/d/1C2w2LvakHrHGgEVV25zw5tvehU8gKi9U/view' },
-      { t: '기본권', k: '해설', s: '강성민 초시생 기초다지기', u: 'https://drive.google.com/file/d/1hRgdpSh-6OXG9nz2Is3rorP2eKa64jDf/view' },
-      { t: '헌법총론', k: '문제', s: '강성민 초시생 기초다지기', u: 'https://drive.google.com/file/d/1RVwJZQl6Qj3pVuL9v3wKiAHl1qubh7fV/view' },
-      { t: '헌법총론', k: '해설', s: '강성민 초시생 기초다지기', u: 'https://drive.google.com/file/d/1LPUS_yHYDuDFE21X78YcjQfnHbGt8s-b/view' },
-    ] },
-  ];
+  ];   /* 헌법 자료는 뺐다 · 자료실은 지금 고른 과목 것만 보여준다 */
 
   /* ============================================================
      2026-11-17 개편 모듈
@@ -2150,6 +2164,64 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
 
   /* ---------- 카드/빈칸 재료 ---------- */
+  /* 경찰 과목 암기카드: 15줄짜리 4지선다 지문을 통째로 넣지 않고
+     OX 판례문장 · 조문·판례 핵심문장(빈칸) · ㄱㄴㄷㄹ 항목별 요지를 짧게 꺼낸다 */
+  var MARK_RE = /[㉠-㉩](?=\s)/g;
+  function stripBoiler(s) {
+    return String(s || '').replace(/\(다툼이 있는 경우[^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+  }
+  function clipSent(s, n) {
+    s = stripBoiler(s);
+    if (s.length <= n) return s;
+    var cut = s.slice(0, n);
+    var m = cut.match(/^[\s\S]*[.!?]\s*/);
+    if (m && m[0].trim().length >= n * 0.45) return m[0].trim();
+    return cut.replace(/[\s,·ㆍ.!?\-]+$/, '') + '…';
+  }
+  function cardFront(s) { return String(s || '').replace(/^…\s*/, '').replace(/\s+/g, ' ').trim(); }
+  function splitByMarker(s) {
+    var str = String(s || ''), out = [], last = null, from = 0, m;
+    MARK_RE.lastIndex = 0;
+    while ((m = MARK_RE.exec(str))) {
+      if (last) out.push({ m: last, t: str.slice(from + 1, m.index).trim() });
+      last = m[0]; from = m.index;
+    }
+    if (last) out.push({ m: last, t: str.slice(from + 1).trim() });
+    return out.filter(function (x) { return x.t.length > 12; });
+  }
+  function policeCards(q) {
+    var out = [], tag = SUBJ[q.s].name + ' · ' + clip(unitName(q.c, q.u) || SUBJ[q.s].name, 14);
+    var ans = String(q.o[q.a] || '').trim();
+    if (q.o.length === 2) {           /* OX 판례·조문 문장 */
+      var v = /^O/.test(ans) ? '⭕ O (옳다)' : /^X/.test(ans) ? '❌ X (옳지 않다)' : '';
+      var st = clipSent(q.q, 104);
+      if (st) out.push({ id: 'q-' + q.i, tag: tag, front: '⭕/❌ ' + cardFront(st), back: v || clipSent(q.e, 96) });
+      return out;
+    }
+    var items = splitByMarker(q.q);
+    if (items.length >= 2) {          /* ㄱ, ㄴ, ㄷ, ㄹ 항목별 카드 */
+      var segs = {};
+      splitByMarker(q.e).forEach(function (s) { if (!segs[s.m]) segs[s.m] = s.t; });
+      items.forEach(function (it) {
+        var ex = segs[it.m] || '';
+        var mm = ex.match(/\(([OX])\)/);
+        var back = (mm ? (mm[1] === 'O' ? '⭕ O · ' : '❌ X · ') : '') + clipSent(ex.replace(/\([OX]\)/g, ''), 96);
+        out.push({
+          id: 'q-' + q.i + it.m, tag: tag,
+          front: it.m + ' ' + cardFront(clipSent(it.t, 96)),
+          back: back || clipSent(q.e, 96)
+        });
+      });
+      return out;
+    }
+    var b = blankOf(q);              /* 판례·조문 핵심문장 빈칸 카드 */
+    if (b) {
+      out.push({ id: 'q-' + q.i, tag: tag, front: cardFront(clipSent(b.text, 104)), back: (b.key || '') + (b.note ? ' · ' + clipSent(b.note, 80) : '') });
+      return out;
+    }
+    out.push({ id: 'q-' + q.i, tag: tag, front: cardFront(clipSent(q.q, 104)), back: clipSent(ans || q.e, 96) });
+    return out;
+  }
   function cardDeck() {
     var sid = S.subj, out = [], sp = subjectPool(sid);
     if (sid === 'gtelp') {
@@ -2162,15 +2234,12 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       });
       return { cards: out, beginner: false };
     }
+    var seen = {};
     sp.pool.forEach(function (q) {
-      var ans = String(q.o[q.a] || '');
-      var trivial = /^[OX]\s*[(（]/.test(ans) || ans.length < 8;
-      out.push({
-        id: 'q-' + q.i,
-        tag: SUBJ[q.s].name + ' · ' + clip(unitName(q.c, q.u) || '', 16),
-        front: q.q,
-        back: trivial ? clip(q.e, 120) : ans,
-        note: trivial ? '' : clip(q.e, 110)
+      policeCards(q).forEach(function (c) {
+        if (seen[c.front]) return;
+        seen[c.front] = 1;
+        out.push(c);
       });
     });
     return { cards: out, beginner: sp.beginner };
@@ -2322,24 +2391,32 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     }
     var checkedGp = !!ckMap('gtp33')[n];
     if (!checkedGp && !confirm('G-POINT ' + n + '은 아직 체크하지 않은 진도예요.\n이 포인트 기출 ' + pool.length + '문제를 지금 볼까요?')) return;
+    /* 직전에 푼 문제는 맨 뒤로 보내고, 나머지 문제를 이어서 전부 출제 */
     var last = (S.gpLast || {})[n];
-    var idx = 0;
+    var order = pool.slice();
     if (last) {
       var li = -1;
-      pool.forEach(function (q, i) { if (q.i === last) li = i; });
-      idx = li >= 0 ? (li + 1) % pool.length : Math.floor(new Date().getTime() / 1000) % pool.length;
+      order.forEach(function (q, i) { if (q.i === last) li = i; });
+      if (li >= 0) order = order.slice(li + 1).concat(order.slice(0, li + 1));
     } else {
-      idx = seedOf(todayStr() + 'gp' + n) % pool.length;
+      var st = seedOf(todayStr() + 'gp' + n) % pool.length;
+      order = order.slice(st).concat(order.slice(0, st));
     }
     S.gpLast = S.gpLast || {};
-    S.gpLast[n] = pool[idx].i;
+    S.gpLast[n] = order[order.length - 1].i;
     save();
     if ($('#sheet') && !$('#sheet').classList.contains('hidden')) closeSheet();
-    startSession('gp', { n: n, ids: [pool[idx].i], title: 'G-POINT ' + n + ' · 켈리 기출' });
+    var ids = order.map(function (q) { return q.i; });
+    startSession('gp', { n: n, ids: ids, title: '지텔프 문법 · 켈리 카페 기출 ' + ids.length + '문제' });
   }
 
   /* ---------- 📂 자료실 ---------- */
   var LIB_FOLDER = 'https://drive.google.com/drive/folders/1ZqFiCt3iMlGTnpZAA6pOQrAGL3-Ntatk';
+  /* 고른 과목(형사법·경찰학·범죄학) 자료만 */
+  function libGroups() {
+    var nm = SUBJ[S.subj] ? SUBJ[S.subj].name : '';
+    return LIB.filter(function (g) { return nm && g.sub.indexOf(nm) === 0; });
+  }
   function libRow(it) {
     var kc = it.k === '해설' ? 'a' : 'q';
     return '<a class="lib-row" href="' + it.u + '" target="_blank" rel="noopener">' +
@@ -2348,15 +2425,24 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       '<span class="lw-go">↗</span></a>';
   }
   function libHtml() {
+    var s = SUBJ[S.subj];
+    var groups = libGroups();
     var h = '<a class="lib-all" href="' + LIB_FOLDER + '" target="_blank" rel="noopener">' +
       '<b>📂 구글 드라이브 폴더 전체 열기</b><i>미래인재경찰 자료실 ↗</i></a>' +
       '<p class="lib-sub">내 드라이브(jinleeda1@gmail.com)에만 있는 파일이라, 폰의 구글 계정이 같아야 바로 열려요.</p>';
-    LIB.forEach(function (g) {
+    if (!groups.length) {
+      h += '<div class="lib-group"><div class="lib-gh">' + esc(s ? s.name : '') + ' <span>0개</span></div>' +
+        '<p class="lib-sub">' + esc(s ? s.name : '지금 과목') + ' 자료는 아직 없어요. 자료실은 형사법·경찰학·범죄학 강의 자료만 모아 둬요.</p></div>';
+      return h;
+    }
+    var tot = 0;
+    groups.forEach(function (g) {
+      tot += g.rows.length;
       h += '<div class="lib-group"><div class="lib-gh">' + esc(g.sub) + ' <span>' + g.rows.length + '개</span></div>';
       g.rows.forEach(function (r) { h += libRow(r); });
       h += '</div>';
     });
-    h += '<p class="lib-sub" style="margin-top:10px">원본은 학원 교재 자료라 공개 저장소에는 올리지 않았어요.</p>';
+    h += '<p class="lib-sub" style="margin-top:10px">' + esc(s ? s.name : '') + ' 자료 ' + tot + '개 · 원본은 학원 교재 자료라 공개 저장소에는 올리지 않았어요.</p>';
     return h;
   }
 
@@ -2373,6 +2459,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     window.scrollTo({ top: 0 });
   }
   function renderMemo() {
+    syncMemoSegs();
     $$('#memoSeg .seg-b').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-seg') === MEMO.seg); });
     ['Card', 'Gp', 'Lib', 'Phys'].forEach(function (k) {
       var el = $('#seg' + k);
@@ -2387,7 +2474,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     }
     if (MEMO.seg === 'lib') {
       var l = $('#segLib');
-      if (!l._built) { l.innerHTML = libHtml(); l._built = true; }
+      l.innerHTML = libHtml(); l._built = true;
     }
     if (MEMO.seg === 'phys') {
       var p = $('#segPhys');
@@ -2395,11 +2482,26 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     }
     if (MEMO.seg === 'card') cfPaint();
   }
+  /* 서브탭은 과목에 따라 보인다: G-POINT는 지텔프만, 자료실은 경찰 과목만 */
+  function syncMemoSegs() {
+    var gp = S.subj === 'gtelp';
+    $$('#memoSeg .seg-b').forEach(function (b) {
+      var seg = b.getAttribute('data-seg');
+      var show = seg === 'gp' ? gp : seg === 'lib' ? !gp : true;
+      b.classList.toggle('hidden', !show);
+    });
+    if (MEMO.seg === 'gp' && !gp) MEMO.seg = 'card';
+    if (MEMO.seg === 'lib' && gp) MEMO.seg = 'card';
+    var gb = $('#gpBtn'), lb = $('#libBtn');
+    if (gb) gb.classList.toggle('hidden', !gp);
+    if (lb) lb.classList.toggle('hidden', gp);
+  }
   function rebuildMemo() {
     var g = $('#segGp'), l = $('#segLib'), p = $('#segPhys');
     if (g) { g._built = false; }
     if (l) { l._built = false; }
     if (p) { p._built = false; }
+    syncMemoSegs();
     var key = S.subj + '|' + scopeQPool(S.subj).length;
     if (CF.key !== key) { CF.deck = []; CF.key = key; }
     if (!$('#view-memo').classList.contains('hidden')) renderMemo();

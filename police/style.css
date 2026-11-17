@@ -844,21 +844,29 @@ body.speed #qBar{background:linear-gradient(90deg,#ffd166,#ff8a3c)}
 .card-stat span{font-size:11.5px;font-weight:800;color:var(--ink2)}
 .card-stat .mini{padding:5px 9px;font-size:10.5px;border-radius:9px}
 
-.fcard{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
-  width:100%;min-height:210px;padding:20px 18px;border-radius:20px;text-align:center;
+.fcard{position:relative;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:8px;
+  width:100%;min-height:210px;max-height:min(58vh,430px);padding:11px 15px 26px;border-radius:20px;text-align:center;
   background:linear-gradient(160deg,var(--card2),var(--card3));border:1px solid var(--line2);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 12px 26px -22px #000;transition:transform .12s}
 .fcard:active{transform:scale(.99)}
-.fcard .fc-tag{position:absolute;left:12px;top:11px;font-size:9.5px;font-weight:900;color:var(--c-dark);
-  background:var(--c-soft);border-radius:99px;padding:3px 8px;max-width:calc(100% - 24px);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 상단 배지는 흐름 안에 두어 본문과 절대 겹치지 않게 */
+.fcard .fc-tag{position:static;align-self:flex-start;flex:0 0 auto;display:block;text-align:left;
+  font-size:9.5px;font-weight:900;color:var(--c-dark);background:var(--c-soft);border-radius:99px;
+  padding:3px 8px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 본문은 배지 아래 자기 영역에서만 스크롤 */
+.fcard .fc-scroll{display:flex;flex:1 1 auto;align-items:center;justify-content:center;min-height:0;width:100%;
+  overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:2px 1px}
 .fcard .fc-face{display:block;width:100%;word-break:keep-all;overflow-wrap:anywhere}
-.fcard .fc-front{font-size:14.5px;font-weight:900;line-height:1.55;color:var(--ink);letter-spacing:-.2px}
+.fcard .fc-front{font-size:15px;font-weight:900;line-height:1.55;color:var(--ink);letter-spacing:-.2px}
 .fcard .fc-back{display:none;font-size:14px;font-weight:900;line-height:1.6;color:var(--gold)}
+.fcard .fc-back .fc-note{display:block;margin-top:8px;font-size:11.5px;font-weight:700;color:var(--ink3)}
 .fcard.flipped .fc-front{display:none}
 .fcard.flipped .fc-back{display:block;animation:fade .18s ease}
-.fcard .fc-hint{position:absolute;bottom:9px;left:0;right:0;font-size:9.5px;font-weight:800;color:var(--ink3)}
+.fcard .fc-hint{position:absolute;bottom:9px;left:0;right:0;font-size:9.5px;font-weight:800;color:var(--ink3);pointer-events:none}
 .fcard.flipped .fc-hint{opacity:0}
+/* 해설 영역에서만 G-POINT 번호·공식명 노출 */
+.fb-gp{display:block;width:fit-content;font-size:11.5px;font-weight:900;color:var(--c-dark);background:var(--c-soft);
+  border-radius:8px;padding:4px 9px;margin:0 0 7px;text-align:left}
 .fc-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
 .fc-actions .btn{padding:13px 10px;font-size:14px}
 .fc-empty{background:var(--card2);border:1px dashed var(--line2);border-radius:16px;padding:18px;text-align:center;
