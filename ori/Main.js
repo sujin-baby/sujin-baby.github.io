@@ -4533,7 +4533,7 @@ function sortOutbox_(sh) {
     if (x[1] === '포토전달대기') return 2;   // 사진 도착 대기
     return 3;
   };
-  const sorted = v.slice().sort(function (a, b) {
+  let sorted = v.slice().sort(function (a, b) {
     const pa = prio(a), pb = prio(b);
     if (pa !== pb) return pa - pb;
     if (pa === 1) return (tm(a) - tm(b)) || (dk(a) - dk(b));   // 오늘·앞으로: 이른 날짜 먼저
@@ -4542,6 +4542,12 @@ function sortOutbox_(sh) {
     return tm(b) - tm(a);                                       // 보냄: 최근 것 먼저
   });
   if (sorted.some(function (x, i) { return x[0] !== v[i][0]; })) {
+    // 쓰기 직전에 다시 읽어 번호마다 지금 값으로 (11/17: 읽은 뒤 쓰기 전에 사람이 체크한 '보냄'이 옛 값 '대기'로 덮여 체크가 풀렸음 — 돌게외 명단 전달·방 공지 정리 23개)
+    const fresh = sh.getRange(2, 1, last - 1, 6).getValues();
+    if (sh.getLastRow() !== last || fresh.length !== v.length) return;   // 그 사이 줄이 늘거나 줄었으면 이번엔 정렬 안 함 (다음에)
+    const byId = {}; fresh.forEach(function (x) { if (x[0]) byId[String(x[0])] = x; });
+    if (Object.keys(byId).length !== fresh.filter(function (x) { return x[0]; }).length) return;   // 번호가 겹치면 안 건드림
+    sorted = sorted.map(function (x) { return x[0] && byId[String(x[0])] ? byId[String(x[0])] : x; });
     rg.setValues(sorted);
     // (10/24 원인 찾기) 쓴 값과 다시 읽은 값이 다른 보낼 날짜 칸
     try {
