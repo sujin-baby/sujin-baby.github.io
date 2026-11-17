@@ -1733,7 +1733,7 @@ function diag_(p) {
     out.feesheet = [];
     while (it.hasNext() && out.feesheet.length < 3) {
       const f = it.next(), fs = SpreadsheetApp.openById(f.getId()), o = { name: f.getName(), tabs: fs.getSheets().map(function (t) { return t.getName(); }).slice(0, 12) };
-      const sh0 = fs.getSheets().filter(function (t) { return /리뷰비/.test(t.getName()); })[0] || fs.getSheets()[0];
+      const sh0 = (p.feetab && fs.getSheetByName(String(p.feetab))) || fs.getSheets().filter(function (t) { return /리뷰비/.test(t.getName()); })[0] || fs.getSheets()[0];
       o.tab = sh0.getName();
       const rg = sh0.getRange(3, 2, 9, 8);
       o.head = sh0.getRange(3, 2, 1, 8).getDisplayValues()[0];
