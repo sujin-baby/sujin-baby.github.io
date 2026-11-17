@@ -7478,6 +7478,8 @@ function onRunSubmit_(e) {
       if (!tm[sid]) { try { tm[sid] = allRespTimes_(sid, formId, ft); } catch (err) { tm[sid] = ft; } }
       const n = runCount_(runs, r, tm[sid]);
       if (Number(r['인원']) !== n) setRun_(r.row, '인원', n);
+      // 카톡 닉네임 빈칸 채우기도 폼이 들어올 때 바로 (11/18: 15분 확인이 폼 제출 때문에 계속 양보해서 08:17에야 채워짐 → 그동안 한눈에 '안 산 사람'·'닉네임 확인'이 틀리게 보임)
+      if (r['진행일'] instanceof Date && dayStart_(r['진행일']) === today_().getTime()) { try { const fb = fillBlankNicks_(r, windowOf_(runs, r)); if (fb) note_('✓ ' + bareTitle_(r['명단 제목']) + ' 카톡 닉네임 빈칸 채움: ' + fb); } catch (e2) {} }
       if (r['목표인원'] && !r['마감 시각'] && n >= Number(r['목표인원'])) {
         full = true;
         // 즉시 마감 패스트트랙: 목표 인원이 찬 순간 즉시 마감 시각 기록 & 명단 시트 먼저 100% 채운 뒤 보낼메시지에 투입
@@ -9429,6 +9431,12 @@ function shortAlert_(r) {
   const k = 'SHORTALERT_' + String(r['시트ID']).slice(-10) + '_' + (r['진행일'] instanceof Date ? Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'MMdd') : ''), pp = PropertiesService.getScriptProperties();
   if (pp.getProperty(k)) return;
   pp.setProperty(k, '1');
+  // 마감·명단 전달도 같이 (11/18: 알림만 하게 바꾼 뒤 모자란 진행은 마감·명단 전달이 안 생겼음 — 예전엔 방제를 줄이면서 했음). 폼 낸 사람까지로
+  try {
+    if (!(r['마감 시각'] instanceof Date)) { setRun_(r.row, '마감 시각', new Date()); r['마감 시각'] = new Date(); }
+    if (!pendingListMsg_(r)) { queueListMsgs_(r, true); note_('✓ 명단 전달 메시지 넣음(폼 ' + got + '/' + goal + '): ' + bareTitle_(r['명단 제목'])); }
+    try { ensureReviewGuideMsgs_(readRuns_()); } catch (e) {}
+  } catch (e) { note_('모자란 진행 마감 실패: ' + e); }
   queueMsg_('내 할 일', '[폼 모자람] ' + bareTitle_(r['명단 제목']) + '\n목표 ' + goal + '명인데 폼은 ' + got + '개예요 (' + (goal - got) + '개 모자람)\n→ 산 사람 중 폼을 안 낸 분께 폼을 내 달라고 해 주세요. 방제·월급시트는 그대로 뒀어요.\n(진짜로 덜 샀으면 다음 날 진행은 폼수정 탭 \'추가 모집\'으로)', '할 일');
 }
 
