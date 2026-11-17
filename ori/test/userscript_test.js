@@ -32,6 +32,29 @@ ok(!!body && us.indexOf(body) >= 0, '유저스크립트가 북마크 코드 본�
 let synErr = '';
 try { new vm.Script(us, { filename: 'product-helper.user.js' }); } catch (e) { synErr = e.message; }
 ok(!synErr, '유저스크립트 문법 통과' + (synErr ? ' — ' + synErr : ''));
+
+// --- 3-1) 단추를 화면에 실제로 붙이는지 (가짜 DOM 으로 유저스크립트를 그대로 실행 — 쿠팡에 접속하지 않음)
+{
+  const mkEl = tag => ({
+    tagName: (tag || 'div').toUpperCase(), id: '', textContent: '', style: {}, dataset: {}, children: [],
+    appendChild(c) { this.children.push(c); return c; }, addEventListener() {}, setAttribute() {}, removeAttribute() {}, remove() {},
+    getAttribute() { return ''; }, querySelector() { return null; }, querySelectorAll() { return []; }
+  });
+  const body = mkEl('body');
+  const doc = { readyState: 'complete', body, documentElement: mkEl('html'), createElement: mkEl, getElementById: () => null, addEventListener() {}, querySelectorAll: () => [] };
+  const ctx = { document: doc, navigator: { userAgent: 'Mozilla/5.0 (iPhone) Safari', clipboard: { writeText: () => Promise.resolve() } },
+    location: { href: 'https://www.coupang.com/vp/products/1', hostname: 'www.coupang.com', hash: '', pathname: '/vp/products/1', search: '' },
+    alert() {}, setTimeout, clearTimeout, console, Promise, JSON, String, Number, Math, Date, Object, Array, RegExp, Boolean,
+    encodeURIComponent, decodeURIComponent, DOMParser: function () {}, URLSearchParams, localStorage: { getItem: () => null, setItem() {} } };
+  ctx.window = ctx; ctx.globalThis = ctx; ctx.self = ctx; ctx.screen = { width: 390 };
+  let err = '';
+  try { vm.createContext(ctx); vm.runInContext(us, ctx, { filename: 'product-helper.user.js(실행)' }); } catch (e) { err = e.message; }
+  const bar = body.children.filter(c => c && c.id === 'ori-helper-bar')[0];
+  const labels = bar ? bar.children.map(b => b.textContent) : [];
+  ok(!err, '유저스크립트 실행 시 오류 없음' + (err ? ' — ' + err : ''));
+  ok(!!bar, '화면(body)에 플로팅 단추 상자를 붙임');
+  ok(labels.indexOf('📋 상품정보 가져오기') >= 0 && labels.indexOf('🔍 위치 찾기') >= 0, '단추 두 개가 실제로 만들어짐 (' + labels.join(' / ') + ')');
+}
 ['coupang.com', 'naver.com', 'toss.shopping', 'oliveyoung.co.kr'].forEach(h => {
   ok(new RegExp('// @match\\s+\\*://\\*\\.' + h.replace(/\./g, '\\.') + '/\\*|// @match\\s+\\*://' + h.replace(/\./g, '\\.') + '/\\*').test(us), '유저스크립트 @match 에 ' + h);
 });
