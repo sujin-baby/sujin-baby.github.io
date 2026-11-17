@@ -2217,7 +2217,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       var tn = c && c.lec && c.lec[q.gp - 1] ? String(c.lec[q.gp - 1].t || '') : '';
       chip = 'G-POINT ' + q.gp + (tn ? ' · ' + tn.replace(/^.*?·\s*/, '') : '');
     }
-    var src = '', sm = raw.match(/\(([^()]*(?:켈리 카페|난이도)[^()]*)\)\s*$/);
+    var src = '', sm = raw.match(/\(([^()]*(?:켈리 카페|난이도|합격의법학원|적중모의고사|해설|기출문제|순경|경행경채)[^()]*)\)\s*$/);
     if (sm) { src = sm[1].trim(); raw = raw.slice(0, sm.index).trim(); }
     var tr = '', tm = raw.match(/\(([^()]{12,})\)\s*$/);
     if (tm && /[가-힣]/.test(tm[1]) && /다[.)]?\s*$/.test(tm[1].trim())) { tr = tm[1].trim(); raw = raw.slice(0, tm.index).trim(); }
