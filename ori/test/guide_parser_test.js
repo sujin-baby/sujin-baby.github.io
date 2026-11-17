@@ -1329,7 +1329,99 @@ console.log('-- Test 33: 과일 다중 방제(사과단감)·하위권 1p 오인
   console.log('✓ 과일 다중 방제(사과단감)·하위권 1p 차단·쿠팡 가격문구 시험 통과 (' + rA + ')');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (33개 샘플 전원 일치)');
+// ==========================================
+console.log('-- Test 34: 실·빈 혼합(실5 텍5 구확10=20건) 한 방·공지 리뷰 가이드 제외 (11/17 v191)');
+{
+  // 오리 팀룸 #68 제보 원문: 구확10 + 리뷰10 = 20건, 하루 4건, 실·빈 혼합
+  const req68 = `#입금대행 실5 텍5 구확10 14900
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 여성겨울모자
+2. 키워드 검색 시 현재 순위 :모르시면 비워두세요
+3. 총 결제하신 건수 : 구확10건 리뷰 10건
+4. 하루 구매하는건수 (어뷰징 피하기위해 
+조금씩 변동될수 있습니다 : 4건
+5. 상품주소(URL) : https://www.coupang.com/vp/products/2332028624
+6. 구매옵션 : 
+7. 포토제공 (몇명)  /포토없음  선택: 포토(5명)/5 ->포토는 각 색깔별로 1개씩이고 나머지 포토없음 5건과 구확 10건은 다 핑크로 해주세요 
+8. 리뷰 가이드 :  자율 
+9. 입금하실 입금자명 : 장수정
+10.택배대행 Y/N: N`;
+
+  // 총 건수: 항목별 건수는 합산, 이미 적힌 합계는 그대로 (11/17 v191)
+  const totals = [
+    ['구확10건 리뷰 10건', '20'],
+    ['구확10건 리뷰10건', '20'],
+    ['실5 텍5 구확10', '20'],
+    ['총 20건 (구확10 리뷰10)', '20'],
+    ['20건(10+10)', '20'],
+    ['30건 중 구확10 리뷰20', '30'],
+    ['10건', '10'],
+    ['', '']
+  ];
+  totals.forEach(([s, want]) => {
+    const got = String(P.totalCount(s));
+    if (got !== want) throw new Error('Test 34 총건수 합산 실패 [' + s + ']: ' + got + ' (기대 ' + want + ')');
+  });
+
+  const h68 = P.parseAll(req68);
+  if (!h68.silbin) throw new Error('Test 34 실·빈 혼합(silbin) 인식 실패: #입금대행 실5 텍5 구확10');
+  if (h68.realship) throw new Error('Test 34 실·빈 혼합은 실배송 단독이 아님(realship=false)이어야 함');
+  if (h68.guides.length !== 1) throw new Error('Test 34 실·빈 혼합은 한 방(가이드 1개)이어야 함, got: ' + h68.guides.length);
+  const g68 = h68.guides[0];
+  if (String(g68.total) !== '20') throw new Error('Test 34 총건수는 구확10+리뷰10=20이어야 함, got: ' + g68.total);
+  if (String(g68.daily) !== '4') throw new Error('Test 34 하루 건수는 4여야 함, got: ' + g68.daily);
+
+  // 방제: #11.17실/빈 … 4 (한 방, 택 없음)
+  getElem('req').value = req68;
+  getElem('t-ip').checked = true;
+  getElem('t-up').checked = false;
+  getElem('takdae').checked = false;
+  getElem('realship').checked = false;
+  getElem('fruit').checked = false;
+  getElem('cart').checked = false;
+  getElem('day').value = '1';
+  getElem('date').value = '2026-11-17';
+  getElem('slot').value = 'midnight';
+  const gg68 = Object.assign({}, g68, { seller: '', price: '14900', pname: '여성 겨울 니트 모자', platform: '쿠팡' });
+  P.setGuides([gg68]);
+  ['keyword', 'guide', 'daily', 'total', 'price', 'ship', 'platform', 'seller', 'option', 'pname', 'url', 'pno', 'short', 'page', 'pageM', 'similar', 'photo', 'thumb'].forEach(k => { getElem(k).value = String(gg68[k] === undefined ? '' : gg68[k]); });
+  getElem('platform').value = '쿠팡';
+  getElem('option').value = '핑크';
+  getElem('photo').value = gg68.photo;
+  const room68 = P.makeRoom('11.17', '4');
+  if (room68 !== '#11.17실/빈 여성겨울모자 4') throw new Error('Test 34 방제가 실/빈 한 방이 아님: ' + room68);
+  if (P.dayTotalOf(1) !== '4') throw new Error('Test 34 1일차 인원은 4여야 함: ' + P.dayTotalOf(1));
+
+  // 공지: 리뷰 배분·리뷰 가이드·구확 안내가 들어가면 안 됨 (다 사고 배정한 뒤 알려줌)
+  P.render();
+  const notice68 = String(getElem('o-notice').value || '');
+  if (!/여성겨울모자/.test(notice68)) throw new Error('Test 34 공지에 키워드가 안 들어감');
+  if (/🐥리뷰/.test(notice68)) throw new Error('Test 34 실·빈 혼합 공지에 리뷰 배분 줄이 들어감');
+  if (/포토리뷰\s*\d|텍스트리뷰\s*\d|리뷰배정|구확건|빈박스/.test(notice68)) throw new Error('Test 34 실·빈 혼합 공지에 리뷰 가이드·구확 안내가 들어감');
+  if (/자율/.test(notice68)) throw new Error('Test 34 실·빈 혼합 공지에 리뷰 가이드(자율)가 들어감');
+
+  // 회귀: 실배송 단독 의뢰서(구확 안내 줄만 있음)는 실·빈 혼합이 아님
+  const reqReal = `#입금대행 실배 9800
+
+1. 검색 키워드 : 미니 텀블러
+2. 키워드 검색 시 현재 순위 : 2p
+3. 총 구매 건수 : 10건
+4. 일 진행 건수 : 5건
+5. 상품주소(URL) : https://www.coupang.com/vp/products/1111222233
+6. 구매옵션 : 블랙
+7. 포토제공 유 무 : 유
+8. 리뷰내용 가이드 : 구매확정 후 작성
+9. 입금하실 입금자명 : 김수진
+10.택배대행 Y/N : N`;
+  const hr = P.parseAll(reqReal);
+  if (hr.silbin) throw new Error('Test 34 실배송 단독 의뢰서를 실·빈 혼합으로 오인식');
+  if (!hr.realship) throw new Error('Test 34 실배송 단독은 realship=true여야 함');
+  if (String(hr.guides[0].total) !== '10') throw new Error('Test 34 실배송 단독 총건수 회귀: ' + hr.guides[0].total);
+
+  console.log('✓ 실·빈 혼합 한 방·구확+리뷰 합산·공지 리뷰 가이드 제외 시험 통과 (' + room68 + ')');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (34개 샘플 전원 일치)');
 process.exit(0);
 
 
