@@ -1421,7 +1421,76 @@ console.log('-- Test 34: 실·빈 혼합(실5 텍5 구확10=20건) 한 방·공�
   console.log('✓ 실·빈 혼합 한 방·구확+리뷰 합산·공지 리뷰 가이드 제외 시험 통과 (' + room68 + ')');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (34개 샘플 전원 일치)');
+// ==========================================
+console.log('-- Test 35: 20자 방제에서 업체명 빼고 상품명 살리기·뒤쪽 품목 명사 보존 (11/17 v192)');
+{
+  // 오리 팀룸 #73 수진 님: "여성겨울이아니라 겨울모자 여성모자 방한모자 이런식으로나와야된다고"
+  const req73 = `#입금대행 실5 텍5 구확10 14900
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 여성겨울모자
+2. 키워드 검색 시 현재 순위 :모르시면 비워두세요
+3. 총 결제하신 건수 : 구확10건 리뷰 10건
+4. 하루 구매하는건수 (어뷰징 피하기위해 
+조금씩 변동될수 있습니다 : 4건
+5. 상품주소(URL) : https://www.coupang.com/vp/products/2332028624
+6. 구매옵션 : 
+7. 포토제공 (몇명)  /포토없음  선택: 포토(5명)/5
+8. 리뷰 가이드 :  자율 
+9. 입금하실 입금자명 : 장수정
+10.택배대행 Y/N: N`;
+  const h73 = P.parseAll(req73);
+  getElem('req').value = req73;
+  getElem('takdae').checked = false;
+  getElem('realship').checked = false;
+  getElem('fruit').checked = false;
+  getElem('cart').checked = false;
+  getElem('t-up').checked = false;
+  getElem('t-ip').checked = true;
+  getElem('day').value = '1';
+  getElem('date').value = '2026-11-17';
+  const run73 = (kw, guide, seller, pname, cnt) => {
+    const g = Object.assign({}, h73.guides[0], { keyword: kw, guide: guide, seller: seller, pname: pname, platform: '쿠팡', total: '20', daily: '4', price: '14900' });
+    P.setGuides([g]);
+    ['keyword', 'guide', 'pname', 'seller', 'platform', 'total', 'daily', 'price'].forEach(k => { getElem(k).value = String(g[k] === undefined ? '' : g[k]); });
+    return P.makeRoom('11.17', cnt);
+  };
+  const PNAME73 = '그린코코 니트 털방울 올인원 겨울모자 여성모자 방한모자';
+
+  // ① #73 실제 조건: 업체명(그린코코)을 빼면 상품명이 온전히 들어가므로 상품명을 자르지 않음
+  const r73 = run73('여성겨울모자', '여성겨울모자', '그린코코', PNAME73, '4');
+  if (r73 !== '#11.17실/빈 여성겨울모자 4') throw new Error('Test 35 #73 방제 실패: ' + r73 + ' (' + r73.length + '자)');
+  if (/여성겨울4|여성겨울$/.test(r73)) throw new Error('Test 35 상품명 꼬리(모자)가 잘림: ' + r73);
+  // 판매처가 비어 있어도 같은 모양
+  const r73b = run73('여성겨울모자', '여성겨울모자', '', PNAME73, '4');
+  if (r73b !== '#11.17실/빈 여성겨울모자 4') throw new Error('Test 35 판매처 없음 방제 실패: ' + r73b);
+
+  // ② 상품명이 20자를 넘어 상품명을 줄여야 하면 뒤쪽 품목 명사가 남아야 함
+  //    (예전 v191: '#11.17실/빈 그린코코 여성겨울4' 20자 — 품목 '모자'가 잘렸음)
+  const rLong = run73('초특가겨울여성방한모자', '초특가겨울여성방한모자', '그린코코', PNAME73, '20');
+  if (rLong.length > 20) throw new Error('Test 35 20자 초과: ' + rLong + ' (' + rLong.length + '자)');
+  if (!/모자\s*20$/.test(rLong)) throw new Error('Test 35 뒤쪽 품목 명사(모자)가 잘림: ' + rLong);
+  if (/초특가/.test(rLong)) throw new Error('Test 35 앞 수식어만 남음: ' + rLong);
+
+  // ③ 상품명 낱말을 다 붙인 검색 키워드: 상품명 전체가 안 들어가면 상품명 안의 짧은 품목 명사(겨울모자)를 씀
+  const rGlue = run73('니트털방울올인원겨울모자여성모자방한모자', '니트털방울올인원겨울모자여성모자방한모자', '그린코코', PNAME73, '4');
+  if (rGlue.length > 20) throw new Error('Test 35 20자 초과: ' + rGlue);
+  if (!/겨울모자\s*4$|겨울모자4$/.test(rGlue)) throw new Error('Test 35 짧은 품목 명사(겨울모자)가 안 남음: ' + rGlue);
+  if (/니트|털방물|올인원/.test(rGlue)) throw new Error('Test 35 수식어가 품목처럼 남음: ' + rGlue);
+
+  // ④ 상품명이 없어 낱말 후보도 없을 때: 글자를 줄여도 뒤쪽(모자)을 남기고 앞을 줄임
+  const rTail = run73('초특가프리미엄여성겨울방한모자', '초특가프리미엄여성겨울방한모자', '그린코코', '', '20');
+  if (rTail.length > 20) throw new Error('Test 35 20자 초과: ' + rTail);
+  if (!/모자\s*20$|모자20$/.test(rTail)) throw new Error('Test 35 글자를 줄여도 뒤쪽 품목(모자)이 안 남음: ' + rTail);
+  if (/^#택?\S*\s+초특가/.test(rTail)) throw new Error('Test 35 앞쪽부터 잘라 품목이 잘림: ' + rTail);
+
+  // ⑤ 회귀: 20자 안에 다 들어가는 짧은 건은 그대로 (업체명 + 띄어쓰기)
+  const rShort = run73('흐착장난감', '흐착장난감', '빌랑', '빌랑 흐착장난감', '4');
+  if (rShort !== '#11.17실/빈 빌랑 흐착장난감 4') throw new Error('Test 35 짧은 방제 회귀(실·빈): ' + rShort);
+
+  console.log('✓ 업체명 빼고 상품명 살리기·뒤쪽 품목 명사 보존 시험 통과 (' + r73 + ' / ' + rLong + ')');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (35개 샘플 전원 일치)');
 process.exit(0);
 
 
