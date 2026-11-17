@@ -1216,7 +1216,70 @@ console.log('-- Test 31: 다중 상품 일차 인원 합산·일차 계획 방�
   console.log('✓ 다중 상품 일차 인원 합산·일차 계획 방제 형식·택 경고/보정·이름 시험 통과');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (31개 샘플 전원 일치)');
+// ==========================================
+// 11/17 v189: 일차 인원 표기 보강 — 화살표(->, =>, →)·범위, '첫째날/둘째날(첫날)', '명' 단위
+// ==========================================
+console.log('-- Test 32: 일차 인원 표기 보강 — 화살표·첫째날·명 단위 (11/17 v189)');
+{
+  // 실제 의뢰서 형태(탄탄상점 레깅스): 총 50건, 하루 '20건 -> 30건' → 1일차 20 · 2일차 30
+  const mk = dv => `#입금대행 실배 9800
+
+1. 검색 키워드 : 여자 기모 레깅스
+2. 키워드 검색 시 현재 순위 : 2p
+3. 총 결제하신 건수 : 50건
+4. 하루 구매하는건수 : ${dv}
+5. 상품주소(URL) : https://www.coupang.com/vp/products/9794265189?vendorItemId=8888888888
+6. 구매옵션 : 블랙블랙 유발
+7. 포토제공 유 무 : 무
+8. 리뷰내용 가이드 : 자율
+9. 입금하실 입금자명 : 김수진
+10.택배대행 Y/N : N`;
+
+  const cases = [
+    ['20건 -> 30건', ['20', '30']],
+    ['20명->30명', ['20', '30']],
+    ['20건 => 30건', ['20', '30']],
+    ['20 → 30', ['20', '30']],
+    ['첫째날 20명 둘째날 30명', ['20', '30']],
+    ['첫날 20명 둘째날 30명', ['20', '30']],
+    ['첫째날은 20명, 둘째날은 30명', ['20', '30']],
+    ['1일차 20명 2일차 30명', ['20', '30']],
+    ['1일차 20건 2일차 30건', ['20', '30']]
+  ];
+  cases.forEach(([dv, want]) => {
+    const h = P.parseAll(mk(dv));
+    if (h.guides.length !== 1) throw new Error('Test 32 guides length should be 1 for [' + dv + '], got: ' + h.guides.length);
+    const g = h.guides[0];
+    const got = (g.days || []).map(d => String(d.n));
+    if (got.join(',') !== want.join(',')) {
+      throw new Error('Test 32 일차 파싱 실패 [' + dv + ']: ' + JSON.stringify(got) + ' (기대 ' + want.join(',') + ')');
+    }
+    if (String(g.total) !== '50') throw new Error('Test 32 총건수 50 파싱 실패 [' + dv + ']: ' + g.total);
+    if (String(g.daily) !== '20') throw new Error('Test 32 1일차 인원은 20이어야 함 [' + dv + ']: ' + g.daily);
+  });
+
+  // 화살표 표기가 방제 인원(dayTotalOf)까지 그대로 이어지는지
+  const hv = P.parseAll(mk('20건 -> 30건'));
+  getElem('req').value = mk('20건 -> 30건');
+  P.setGuides(hv.guides);
+  if (P.dayTotalOf(1) !== '20') throw new Error('Test 32 1일차 인원(화살표)은 20이어야 함: ' + P.dayTotalOf(1));
+  if (P.dayTotalOf(2) !== '30') throw new Error('Test 32 2일차 인원(화살표)은 30이어야 함: ' + P.dayTotalOf(2));
+
+  // '명' 단위 날짜 표기(20일 20명 21일 30명)
+  const hd = P.parseAll(mk('20일 20명 21일 30명'));
+  const gd = hd.guides[0];
+  const gdd = (gd.days || []).map(d => String(d.n));
+  if (gdd.join(',') !== '20,30') throw new Error('Test 32 명 단위 날짜 파싱 실패: ' + JSON.stringify(gd.days));
+
+  // 기존 표기 회귀 없음: '3-2'는 적은 순서 그대로 [3,2] (v184 규칙 유지)
+  const hr = P.parseAll(mk('3-2'));
+  const gr = hr.guides[0];
+  if (String(gr.daily) !== '3') throw new Error('Test 32 3-2의 1일차는 3이어야 함: ' + gr.daily);
+
+  console.log('✓ 일차 인원 표기 보강(화살표·첫째날·명 단위) 시험 통과');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (32개 샘플 전원 일치)');
 process.exit(0);
 
 
