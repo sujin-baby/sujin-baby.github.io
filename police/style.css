@@ -174,8 +174,10 @@ button{font-family:inherit;font-size:inherit;color:inherit;border:0;background:n
 .quiz.shake{animation:shake .3s}
 
 /* 해설 패널은 화면 위에 떠 있지 않고 퀴즈 화면의 한 칸(flow)으로 들어간다 → 보기 C·D를 덮지 않음 */
-.feedback{position:relative;flex:0 0 auto;display:flex;flex-direction:column;margin-top:8px;background:#fff;border-top:1px solid var(--line);border-radius:22px 22px 0 0;padding:14px 16px calc(12px + var(--safe-b));box-shadow:0 -10px 30px -18px #101828;animation:slideUp .18s ease;max-height:46vh}
-.fb-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;max-width:560px;width:100%;margin:0 auto;padding-bottom:2px}
+.feedback{position:relative;flex:0 0 auto;display:flex;flex-direction:column;margin-top:8px;background:#fff;border-top:1px solid var(--line);border-radius:22px 22px 0 0;padding:14px 16px calc(12px + var(--safe-b));box-shadow:0 -10px 30px -18px #101828;animation:slideUp .18s ease;max-height:50vh}
+.fb-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;max-width:560px;width:100%;margin:0 auto;padding-bottom:2px;-webkit-overflow-scrolling:touch}
+/* 해설이 패널보다 길면 아래쪽을 흐리게 해 '더 있다'는 걸 보이게 */
+.feedback.more .fb-scroll{-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 18px),rgba(0,0,0,.05));mask-image:linear-gradient(180deg,#000 calc(100% - 18px),rgba(0,0,0,.05))}
 .fb-foot{flex:0 0 auto;max-width:560px;width:100%;margin:0 auto;padding-top:10px}
 .feedback.ok{background:#f1fdf5;border-top-color:#bbf7d0}
 .feedback.no{background:#fff5f5;border-top-color:#fecaca}

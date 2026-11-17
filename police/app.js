@@ -1890,6 +1890,11 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     el.querySelector('.fb-text').innerHTML = gpLead + '<b>해설</b> · ' + esc(q.e);
     var b = $('#fbNext');
     b.textContent = QS.i + 1 >= QS.items.length ? '결과 보기' : '다음 문제';
+    /* 해설이 패널에 다 안 들어가면 스크롤 안내(아래 흐림) 표시 */
+    requestAnimationFrame(function () {
+      var sc = $('#qFb .fb-scroll');
+      if (sc) el.classList.toggle('more', sc.scrollHeight > sc.clientHeight + 4);
+    });
     /* 해설 패널이 보기 아래를 덮지 않게 바뀌었으니, 정답 보기가 화면 안에 들어오도록만 맞춘다 */
     revealAnswerOpt();
     revealAnswerOpt(true);
