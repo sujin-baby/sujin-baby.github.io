@@ -9,7 +9,8 @@ const s1 = G("saveRoomLink_('#10.31 실 거치대 온습도계 10 (뽀짝오리)
 t('오픈채팅 링크 저장 (앞뒤 글자 빼고)', s1.ok && s1.link === 'https://open.kakao.com/o/gAbC123');
 t('오픈채팅 링크가 아니면 안 받음', !G("saveRoomLink_('#10.31 실 거치대', 'https://naver.com')").ok);
 const ob = G('outboxSheet_()');
-ob.rows = [['ID', '보낼 날짜', '종류', '방', '메시지', '상태'], ['m1', new Date(), '방 공지', '#10.31 실 거치대 온습도계 8', '공지', '대기'], ['m2', new Date(), '명단 전달', '오리명단방', '명단', '대기']];
+const now0 = new Date();   // 두 줄 같은 시각 (따로 new Date() 하면 1ms 차이로 보낼 날짜 정렬 순서가 바뀌어 가끔 실패, 11/17 CI)
+ob.rows = [['ID', '보낼 날짜', '종류', '방', '메시지', '상태'], ['m1', now0, '방 공지', '#10.31 실 거치대 온습도계 8', '공지', '대기'], ['m2', now0, '명단 전달', '오리명단방', '명단', '대기']];
 const it = G('outboxItems_()');
 t('방제 숫자가 바뀌어도(10→8) 같은 방 링크', it[0].link === 'https://open.kakao.com/o/gAbC123');
 t('방 공지 옆 썸네일', it[0].img === 'https://thumbnail.coupangcdn.com/x.jpg');
