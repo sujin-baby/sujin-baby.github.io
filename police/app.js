@@ -1023,11 +1023,11 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!el) return;
     var d = dayRec(), goal = S.dayGoal || 30, n = d.ans || 0;
     var pct = Math.min(100, Math.round(n / goal * 100));
+    var done = n >= goal;
     var txt = $('#gbText'), pe = $('#gbPct'), fill = $('#gbFill');
-    if (txt) txt.textContent = n + ' / ' + goal + '문제';
+    if (txt) txt.textContent = done ? (n + '문제 · 목표 ' + goal + ' 달성') : (n + ' / ' + goal + '문제');
     if (pe) pe.textContent = pct + '%';
     if (fill) fill.style.width = pct + '%';
-    var done = n >= goal;
     el.classList.toggle('done', done);
     var dn = $('#gbDone'); if (dn) dn.classList.toggle('hidden', !done);
     var st = $('#gbSet'); if (st) st.textContent = goal + '문제 ▾';
