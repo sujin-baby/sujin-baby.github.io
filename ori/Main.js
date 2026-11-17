@@ -1719,6 +1719,14 @@ function diag_(p) {
       out.rq = { nonce: nonce, cart: pr0.getProperty('CART_' + rr['시트ID']), rv: String(pr0.getProperty('RV_' + rr['시트ID']) || '').slice(0, 1500), raw: String(reqRawOf_(nonce) || '').slice(0, 6000),
         runs: mine.map(function (x) { return bareTitle_(x['명단 제목']) + ' 목표' + x['목표인원'] + ' 총' + x['총건수'] + ' 인원' + x['인원'] + ' 일차' + x['일차'] + ' ' + x['요청ID']; }) }; }
   } catch (e) { out.rqErr = String(e); }
+  // &mfold=1: 이번 달 폴더 안 같은 이름 폴더가 여럿인 것 (이름, 폴더마다 파일·하위 폴더 수, 만든 때) (읽기만, 11/17 전기면도기 폴더 (1)~(10))
+  if (p.mfold) try {
+    const mf = monthFolder_(new Date()), it = mf.getFolders(), by = {};
+    while (it.hasNext()) { const f = it.next(); (by[f.getName()] = by[f.getName()] || []).push(f); }
+    out.mfold = Object.keys(by).filter(function (k) { return by[k].length > 1; }).map(function (k) {
+      return { name: k, n: by[k].length, items: by[k].map(function (f) { let nf = 0, nd = 0; const a = f.getFiles(); while (a.hasNext() && nf < 50) { a.next(); nf++; } const b2 = f.getFolders(); while (b2.hasNext() && nd < 50) { b2.next(); nd++; } return '…' + f.getId().slice(-6) + ' 파일' + nf + ' 폴더' + nd + ' ' + Utilities.formatDate(f.getDateCreated(), CONFIG.TIMEZONE, 'MM-dd HH:mm'); }) };
+    });
+  } catch (e) { out.mfoldErr = String(e); }
   // &ltab=방제 글자: 그 진행 명단 시트의 '명단' 탭 1~2행·줄 수·D1 (읽기만, 11/17 진행건수 0 확인)
   if (p.ltab) try {
     const rr = readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']).indexOf(String(p.ltab)) >= 0 && x['시트ID']; })[0];
@@ -2112,7 +2120,10 @@ function createRunInner_(d) {
     // 이름 규칙: 방제에서 날짜 뺀 것. 오리컴퍼니 폴더 안에 의뢰마다 같은 이름의 하위 폴더
     const fname = sheetName_(d.fname || d.title);
     let mf; try { mf = monthFolder_(/^\d{4}-\d{2}-\d{2}$/.test(String(d.date || '')) ? new Date(d.date + 'T00:00:00') : dayFromTitle_(d.title)); } catch (e) { mf = rootFolder_(); }
-    folder = mf.createFolder(fname);
+    // 같은 이름의 빈 폴더(만들다 실패한 진행이 남긴 것)가 있으면 그걸 씀 (11/17: 전기면도기 폼 만들기가 실패할 때마다 빈 폴더가 하나씩 쌓여 '(1)~(10)'이 생겼음)
+    folder = null;
+    try { const ex = mf.getFoldersByName(fname); while (ex.hasNext() && !folder) { const f0 = ex.next(); if (!f0.getFiles().hasNext() && !f0.getFolders().hasNext()) folder = f0; } } catch (e) {}
+    if (!folder) folder = mf.createFolder(fname);
     const formFile = templateFormFile_().makeCopy(fname, folder);
     form = FormApp.openById(formFile.getId());
     try { if (form.getResponses().length) form.deleteAllResponses(); } catch (e) {}   // 최근 진행 폼을 본으로 썼을 때 응답이 따라오면 비움 (새 폼만)
