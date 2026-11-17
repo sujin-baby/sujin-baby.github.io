@@ -1709,6 +1709,13 @@ function diag_(p) {
     }); });
     try { (p.paym ? [payTab_(Number(p.paym), true)].filter(Boolean) : payTabsNow_()).forEach(function (sh) { out.payMax = (out.payMax || []).concat([sh.getName() + ' 마지막 ' + sh.getLastRow() + ' / 최대 ' + sh.getMaxRows()]); }); } catch (e) {}
   } catch (e) { out.payErr = String(e); }
+  // &rq=방제 글자: 그 진행의 처음 의뢰서 원문(생성기가 보낸 것)·장바구니 상품 수·RV (읽기만, 11/17 장바구니건 하루 건수 확인)
+  if (p.rq) try {
+    const all0 = readRuns_(), rr = all0.filter(function (x) { return bareTitle_(x['명단 제목']).indexOf(String(p.rq)) >= 0 && x['시트ID']; })[0];
+    if (rr) { const mine = all0.filter(function (x) { return String(x['시트ID']) === String(rr['시트ID']); }), nonce = runNonceOf_(mine), pr0 = PropertiesService.getScriptProperties();
+      out.rq = { nonce: nonce, cart: pr0.getProperty('CART_' + rr['시트ID']), rv: String(pr0.getProperty('RV_' + rr['시트ID']) || '').slice(0, 1500), raw: String(reqRawOf_(nonce) || '').slice(0, 6000),
+        runs: mine.map(function (x) { return bareTitle_(x['명단 제목']) + ' 목표' + x['목표인원'] + ' 총' + x['총건수'] + ' 인원' + x['인원'] + ' 일차' + x['일차'] + ' ' + x['요청ID']; }) }; }
+  } catch (e) { out.rqErr = String(e); }
   // &ltab=방제 글자: 그 진행 명단 시트의 '명단' 탭 1~2행·줄 수·D1 (읽기만, 11/17 진행건수 0 확인)
   if (p.ltab) try {
     const rr = readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']).indexOf(String(p.ltab)) >= 0 && x['시트ID']; })[0];
