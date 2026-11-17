@@ -1884,7 +1884,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3467,6 +3467,7 @@ function checkFullInner_() {
   try { noticeClear3_(); } catch (e) {}
   try { seolResume1_(); } catch (e) {}
   try { seolSlot1_(); } catch (e) {}
+  try { dolge20_(); } catch (e) {}
   try { upAcctOpen1_(); } catch (e) {}
   try { exp135_(); } catch (e) {}
   try { rvPhotoFix2_(); } catch (e) {}
@@ -8376,6 +8377,24 @@ function noticeClear3_() {
 // (11/17 한 번, 사용자) 오늘과일 설향딸기외(11.9 시작, 의뢰서 120건): 토스는 끝, 쿠팡 남은 81건(설향딸기 41 + 황금향 40)을 같은 명단 시트·폼으로 이어서.
 //  11.17 바로구매 21명(설향 11·황금향 10) 바로 만들고, 11.18·19·20 자정 ~ 오전 7시 20명씩 일정. 공지·리뷰 배정 줄은 예전 일정(38b3hmrt-2~5)의 쿠팡 몫 그대로, 토스 상품은 0명(공지·폼 보기에서 빠짐)
 // (11/17 한 번) 설향딸기외 11.17 방 공지 첫 줄이 과일 규칙으로 '자정 ~ 오전 7시'가 된 것 → '★★★바로구매★★★' (사용자: 오늘 거는 바로구매)
+// (11/17 한 번, 사용자: '오늘 하루 20명') 업)택11.17지니네농수산 돌게외20: 목표 10 → 20 (오늘 이미 18명), 마감 시각 비움(20명 차면 다시 마감), 11.18 진행(0명) 지움
+function dolge20_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('DOLGE20') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  const out = [];
+  try {
+    let runs = readRuns_();
+    const r17 = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === '업)택11.17지니네농수산 돌게외20'; })[0];
+    if (!r17) { props.setProperty('DOLGE20', st + ' 실패(11.17 진행 못 찾음)'); return; }
+    if (Number(r17['목표인원']) !== 20) { setRun_(r17.row, '목표인원', 20); out.push('11.17 목표 20'); }
+    if (Number(r17['인원']) < 20 && r17['마감 시각']) { setRun_(r17.row, '마감 시각', ''); out.push('마감 시각 비움'); }
+    runs = readRuns_();
+    const r18 = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === '업)택11.18지니네농수산 돌게외20' && String(x['시트ID']) === String(r17['시트ID']); })[0];
+    if (r18) out.push(deleteRun_(r18));
+    props.setProperty('DOLGE20', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '이미 됨'));
+    try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); }
+  } catch (e) { props.setProperty('DOLGE20', (st + ' 실패(' + (e && e.message || e) + ') ' + out.join(', ')).slice(-400)); }
+}
 function seolSlot1_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SEOLSLOT1') || '');
   if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5 || !/^✓/.test(String(props.getProperty('SEOLRESUME1') || ''))) return;
