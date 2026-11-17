@@ -1551,6 +1551,8 @@ console.log('-- Test 36: 6번 구매옵션이 비고 7번에 색상 이야기가
   if (P.optForGuide(hintG, '단', hintG.option).value !== '각 색상별 1개씩 / 핑크') throw new Error('Test 36 타이핑 중 조각(단)이 색상 안내를 덮음');
   if (P.optForGuide(hintG, '핑크 × 1개', hintG.option).value !== '각 색상별 1개씩 / 핑크') throw new Error('Test 36 고른 한 옵션이 색상 안내를 덮음');
   if (P.optForGuide(hintG, '블랙, 화이트', hintG.option).value !== '블랙, 화이트') throw new Error('Test 36 콤마로 된 색상 목록은 받아야 함');
+  // 목록을 타이핑하는 중간 조각(앞부분)은 뒤에 온 완전한 목록으로 바뀌어야 함
+  if (P.optForGuide(hintG, '블랙 / 아이보리 / 핑크', '블랙 / 아').value !== '블랙 / 아이보리 / 핑크') throw new Error('Test 36 타이핑 중 색상 목록 조각이 완전한 목록으로 안 바뀜');
   // 회귀: 색상 이야기가 없는 의뢰서는 예전 그대로 — 진짜 단일옵션 상품은 단일옵션, 페이지 옵션은 빈칸일 때만
   const plainG = { optBase: [], option: '' };
   if (P.optForGuide(plainG, '단일옵션', '').value !== '단일옵션') throw new Error('Test 36 회귀: 보통 의뢰서의 단일옵션이 사라짐');
