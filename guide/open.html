@@ -19,6 +19,9 @@
     .guide-steps li { margin-bottom: 6px; }
     .btn { display: block; width: 100%; box-sizing: border-box; background: #ff5fa8; color: white; padding: 13px; border-radius: 12px; text-decoration: none; font-weight: 900; font-size: 15px; border: 2px solid #3a2230; box-shadow: 2px 2px 0 #3a2230; cursor: pointer; margin-bottom: 10px; text-align: center; }
     .btn.sub { background: #fff; color: #3a2230; font-size: 13px; padding: 10px; }
+    /* 🚀 1탭 바로 열기 (v195) */
+    .btn.open-safari { background: linear-gradient(135deg, #ff5fa8, #8b5cf6); font-size: 16.5px; padding: 16px 13px; border-width: 2.5px; margin-bottom: 6px; }
+    .open-note { font-size: 11.5px; color: #6c757d; margin: 0 0 12px; line-height: 1.45; word-break: keep-all; }
     .btn.ghost { background: #f8f9fa; color: #6c757d; font-size: 12px; padding: 8px; border-color: #adb5bd; box-shadow: none; }
     .btn:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 #3a2230; }
   </style>
@@ -33,18 +36,19 @@
       <div class="kw-val" id="kw-val"></div>
     </div>
 
-    <button type="button" class="btn" id="copy-safari-btn">📋 사파리 주소 복사하기 (키워드 포함)</button>
+    <a class="btn open-safari" id="open-safari-btn" href="#" target="_blank" rel="noreferrer noopener">🚀 사파리에서 바로 열기</a>
+    <div class="open-note" id="open-note">한 번만 누르면 열려요. 쿠팡 앱으로 넘어가거나 403 화면이 나오면 아래 <b>[주소 복사]</b> 방법을 쓰세요.</div>
+    <button type="button" class="btn sub" id="copy-safari-btn">📋 사파리 주소 복사하기 (키워드 포함)</button>
     <button type="button" class="btn sub" id="copy-kw-btn" style="display:none;">🔑 키워드만 복사하기</button>
 
     <div class="guide-box">
-      <b>💡 아이폰 사파리에서 위치 찾는 방법:</b>
-      <div style="font-size:12px; color:#666; margin:4px 0 8px;">쿠팡 보안 정책(외부 링크 403 차단) 때문에 링크를 직접 누르면 열리지 않습니다. 아래 순서대로 해 주세요:</div>
+      <b>💡 아이폰 사파리에서 열고 위치 찾기:</b>
       <ol class="guide-steps">
-        <li>위 <b>[📋 사파리 주소 복사하기]</b> 탭 (페이지 열릴 때 이미 복사됨)</li>
-        <li>사파리 <b>주소창 탭 → [붙여넣기 및 이동]</b></li>
-        <li>상품 화면이 열리면 <b>[북마크 상품위치 찾기]</b> 탭!</li>
+        <li>맨 위 <b>[🚀 사파리에서 바로 열기]</b>를 누르고 쿠팡 상품 화면이 열리는지 보기 (대부분 이걸로 돼요)</li>
+        <li>쿠팡 앱으로 튕기거나 <b>403</b>이 뜨면: <b>[📋 사파리 주소 복사하기]</b> → 사파리 <b>주소창 탭 → [붙여넣기 및 이동]</b></li>
+        <li>상품 화면이 열리면 화면 오른쪽 아래 <b>[📋 상품정보 가져오기]</b> (북마크만 있으면 <b>[북마크 상품위치 찾기]</b>) 탭!</li>
       </ol>
-      <div style="font-size:11.5px; color:#d63384; margin-top:8px;">👉 복사된 주소에 의뢰서 키워드가 포함되어 있어 북마크가 정확한 키워드로 위치를 100% 찾아줍니다.</div>
+      <div style="font-size:11.5px; color:#d63384; margin-top:8px;">👉 복사된 주소에 의뢰서 키워드가 포함되어 있어 위치를 정확한 키워드로 찾아 줍니다.</div>
     </div>
   </div>
   <script>
@@ -95,6 +99,22 @@
     const copyKwBtn = document.getElementById("copy-kw-btn");
     const cpSt = document.getElementById("cp-st");
     const copySafariBtn = document.getElementById("copy-safari-btn");
+    const openBtn = document.getElementById("open-safari-btn");
+    const openNote = document.getElementById("open-note");
+
+    /* 🚀 1탭 바로 열기 (v195): 주소에 붙은 #kw= 해시를 그대로 들고 새 탭으로 */
+    const goTarget = fullTarget || cleanTarget;
+    if (openBtn) {
+      if (goTarget) {
+        openBtn.href = goTarget;
+        openBtn.addEventListener("click", () => {
+          cpSt.textContent = "🚀 사파리에서 여는 중… 안 열리면 아래 [주소 복사] 방법";
+        });
+      } else {
+        openBtn.style.display = "none";
+        if (openNote) openNote.style.display = "none";
+      }
+    }
 
     if (k0) {
       kwCard.style.display = "block";

@@ -1160,3 +1160,18 @@
 
 
 
+
+### 2026-11-17 밤 생성기 v195 — 모바일 편의 UI + 아이폰 사파리 자동 실행(Userscripts) (피클)
+
+- **수진 님 요청**: "모바일에서 생성기 쓰기 편하게", "아이폰 사파리에서 쿠팡 열면 자동으로 실행"(v195).
+- **모바일(880px 이하)에서만 보이는 UI** — PC 화면은 그대로:
+  1) `[📋 의뢰서 붙여넣기 & 분석]`(#paste-req-btn), `[📋 결과 바로 붙여넣기]`(#paste-cp-big) — `navigator.clipboard.readText()`로 읽어 넣고 `input` 이벤트로 즉시 반영, 권한 거부 시 토스트.
+  2) 하단 고정 바 `#m-bar` — `분석`·`결과붙여넣기`·`공지복사`·`폼생성`이 기존 단추(`#parse`, `pasteCp`, `[data-copy="o-notice"]`, `#make-run`)를 `.click()`으로 눌러 줌. `body`에 아래 여백을 줘 내용을 가리지 않음.
+- **`guide/open.html`**: 맨 위에 `[🚀 사파리에서 바로 열기]`(`rel="noreferrer noopener"`, `fullTarget` = `#kw=`·`#pr=`·`#fn=` 해시 유지) 추가. 안 열리거나 쿠팡 앱으로 튕길 때만 주소 복사 방법을 쓰도록 안내 순서를 바꿈.
+- **아이폰 사파리 자동 실행(Userscripts)**: `ori/product-helper.user.js` 신설.
+  - `@match` = coupang.com · naver.com · toss.shopping · oliveyoung.co.kr, `@grant none`, `@noframes`.
+  - **북마크 코드(`<script id="bm-src">`) 본문을 그대로 담아** 우측 아래 플로팅 단추 `📋 상품정보 가져오기`(전체)·`🔍 위치 찾기`(위치 줄만)로 실행. → 읽기 규칙은 여전히 한 벌.
+  - 그래서 `bm-src` 겉포장을 `(async (oriMode) => { … })();`로 바꾸고, `const out` → `let out` + `oriMode === "pos"`면 위치 줄만 남김, 검색 화면에서 상품번호 입력 팝업은 유저스크립트에서 띄우지 않음(안내 문구로 대체) — 북마크릿 동작은 그대로(`oriMode` 없음).
+  - **`ori/product-helper.user.js`는 손으로 고치지 말 것**: `node ori/tools/build_userscript.js` 가 `bm-src`에서 이 파일과 생성기 안 `<script id="us-src">`(다운로드·복사용)를 함께 다시 만듦. 어긋나면 `ori/test/userscript_test.js`(CI 포함)가 멈춤.
+- **설치 안내**: `⚙️ PC 확장 / 북마크 / 아이폰 사파리 설치 안내` 안에 `📱 아이폰 사파리 자동 실행 (Userscripts)` 3줄(App Store 설치 → 설정 → Safari → 확장 프로그램에서 켜기 → `[📥 저장]`/`[📋 코드 복사]`).
+- **검증**: `run_ci.sh` 전 구간 통과(userscript_test 추가). 라이브 PC 1280px·모바일 390px 확인 결과는 배포 후 보고.
