@@ -205,7 +205,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v192 (방제 20자: 업체명 빼고 상품명·품목명 살리기)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v193 (방제 20자: 업체명 먼저 살리고 대표 키워드로 줄이기)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -384,7 +384,7 @@ details.help-box summary {
             <span style="font-weight: 900; font-size: 14px; color: var(--pink-deep, #ff5fa8); display:flex; align-items:center; gap:5px;">
               <span>💬 AI 다이렉트 대화 · 공지 수정 요청</span>
             </span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v192</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v193</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 10px;">
             공지가 이상하게 나왔거나 수정이 필요한가요? 여기서 메시지를 보내면 <b>피클(생성기)</b>과 <b>클로드(시트)</b>에게 실시간으로 전달돼요!
@@ -2255,6 +2255,8 @@ details.help-box summary {
   //      온티오 착붙는 차량용 휴대폰거치대 360도 회전 대시보드 핸드폰거치대 → 휴대폰거치대 / 핸드폰거치대 (서브: 차량용 휴대폰거치대 …)
   const KW_STOP = /^(탈부착식|탈부착|착붙는|세라믹|코팅|프리미엄|고급|대용량|소용량|회전|포함|정품|국내산|수입산|신상|신상품|인기|추천|최신|업그레이드|스마트|터치|겨울|여름|봄|가을|방한|보온보냉|보온|보냉|세척솔|대시보드|특가|증정|무료배송|1\+1|세트|단품|미니|슬림|휴대용|접이식|산지직송|직송|농장직송|당일수확|당일발송|새벽배송|고당도|꿀당도|당도선별|당도보장|brix|브릭스|꿀brix|명품|특품|가정용|선물용|제수용|파격특가|초특가|한정특가|선착순|마감임박|한정|수선|보호|잘라서쓰는|만능|두피|승모근|바디|지압|전신|붓기제거|뷰티|홈케어|원스텝|닫힘방지|데일리|초박형|입문용|초보자용|초보자|부드러운|가벼운|편안한|필기감|착용감|사용감|그립감|청량감|보온감)$/i;
   // force: 의뢰서 대표 키워드 (있으면 그걸 대표로 두고 서브만 상품명에서, 10/21 실링팬)
+  /* 품목 명사 사전 (방제 20자 축약용, 11/17 v193): suggestKeywords 안 목록과 같은 것 + 정리·타이류 */
+  const PROD_NOUN = /(정|환|캡슐|스틱|분말|가루|원액|즙|차|오일|세럼|크림|로션|샴푸|패치|패드|거치대|매트|선풍기|텀블러|청소기|마사지기|괄사|문어괄사|괄사마사지기|워시|토너|앰플|마스크|비누|티슈|세제|치약|칫솔|홀더|걸이|선반|트레이|보틀|쿠션|방석|베개|슬리퍼|양말|장갑|모자|밴드|스토퍼|도어스토퍼|말굽|도어체크|도어락|고정기|가드|보냉백|보온백|런치백|도시락가방|가방|파우치|보냉가방|쿨러백|쇼퍼백|에코백|토트백|크로스백|백팩|손잡이백|보냉팩|보온팩|만년필|볼펜|샤프|연필|형광펜|마카|노트|다이어리|수첩|필통|지우개|오메가3|루테인|유산균|콜라겐|비타민|밀크씨슬|프로폴리스|마그네슘|칼슘|아연|철분|나주배|햇배|(?:^배$)|사과|부유단감|단감|대봉감|(?:^감$)|감귤|(?:^귤$)|황금향|레드향|한라봉|천혜향|샤인머스캣|포도|머루포도|거봉|복숭아|자두|살구|딸기|참외|수박|멜론|메론|토마토|방울토마토|키위|참다래|무화과|감홍사과|부사|아오리|홍옥|사과대추|대추|옥광밤|군밤|햇밤|(?:^밤$)|호두|(?:^잣$)|땅콩|과일|고구마|호박고구마|꿀고구마|감자|수미감자|옥수수|초당옥수수|양파|자색양파|마늘|의성마늘|생강|고추|청양고추|당근|열무|총각무|(?:^무$)|배추|절임배추|김치|갓김치|파김치|열무김치|쌀|백미|현미|잡곡|찹쌀|보리|귀리|서리태|(?:^콩$)|(?:^팥$)|견과|말랭이|고구마말랭이|곶감|반건시|건나물|나물|시금치|상추|깻잎|버섯|표고버섯|송이버섯|느타리버섯|팽이버섯|새송이버섯|타이|케이블타이|선정리기|전선정리|정리기|스트랩|클립|와이어|고정클립|고정기|정리함)$/;
   function suggestKeywords(pname, given, force) {
     const raw = String(pname || "").replace(/\(.*$/, "");
     const dash = raw.split(/\s+-\s+/);
@@ -3195,50 +3197,45 @@ details.help-box summary {
       return [head, sil, platTag, (names[0] || "") + "외", cnt].filter(Boolean).join(" ");
     }
     // 20자 안 넘으면 앞에 업체명도 넣기 (11/10 v170 사용자: '20자 안 넘으면 앞에 업체명도 넣으라고')
-    // 11/17 v192 (#73 수진 님: "여성겨울이아니라 겨울모자 여성모자 방한모자 이런식으로나와야된다고"):
-    //  업체명을 넣은 조합을 다 시도하고 → 업체명을 뺀 조합도 다 시도한 뒤에야 상품명을 줄임.
-    //  (업체명만 빼면 온전한 상품명이 20자에 들어가는데도 업체명을 쥔 채 상품명 꼬리를 잘라 버리던 것을 고침)
+    // 11/17 v193 (#73 수진 님: "업체명이중요하다고 그린코코 겨울모자4 이런식으로 대표키워드랑업체명이들어가게하라고"):
+    //  업체명(판매처)을 먼저 살리고 20자를 넘으면 상품명/키워드를 줄임 — 업체명을 빼는 건 업체명을 넣고는 도저히 못 맞출 때만.
+    //  한 업체명 안에서 ① 온전한 키워드/상품명 → ② 상품명 안의 짧은 대표 키워드(그린코코 여성겨울모자 → 그린코코 겨울모자)
+    //  → ③ 앞 수식어를 지우고 품목 명사만(여성겨울모자 → 모자)까지 다 시도한 뒤에야 다음 차례(업체명 없음)로 넘어감
     const tryShops = (!fruitRoom && seller0) ? [seller0, ""] : [shop];
+    const w1 = pick(1).join("");
+    // ② 후보: 상품명의 대표 키워드 먼저, 그다음 상품명 낱말 중 품목 명사로 끝나는 것(니트·털방울·올인원 같은 수식어는 제외)
+    const cands = [];
+    const addCand = x => { x = String(x || "").replace(/\s+/g, ""); if (x.length >= 2 && x !== w1 && cands.indexOf(x) === -1) cands.push(x); };
+    const tail2 = w1.slice(-2);
+    if (String(g1.pname || "").trim()) {
+      const sug = g1.kwSug || suggestKeywords(g1.pname, g1.kwAlts || []);
+      if (tail2 && String(sug.main || "").slice(-2) === tail2) addCand(sug.main);
+      (sug.alts || []).filter(x => String(x || "").slice(-2) === tail2).forEach(addCand);
+      const pw = String(g1.pname).replace(/[\[\]()]/g, " ").split(/[\s,]+/)
+        .filter(w => /^[가-힣]{2,}$/.test(w) && !KW_STOP.test(w) && w !== seller0)
+        .filter(w => PROD_NOUN.test(w) || (w1.length > w.length && w1.slice(w1.length - w.length) === w));
+      pw.filter(w => w1.slice(w1.length - w.length) === w).forEach(addCand);
+      pw.slice().sort((a, b) => b.length - a.length).forEach(addCand);
+    }
+    const withBody = (sh, body) => [head, sil, sh, body].filter(Boolean).join(" ");
     for (const sh of tryShops) {
+      // ① 온전한 키워드/상품명 그대로: 띄어쓰기 → 반붙임 → 완전붙임
       const spaced = n => [head, sil, sh, pick(n).join(" ") + multi, cnt].filter(Boolean).join(" ");
       for (let n = toks.length; n >= 1; n--) if (spaced(n).length <= 20) return spaced(n);
       const semi = n => [head, sil, sh, pick(n).join(" ") + multi + cnt].filter(Boolean).join(" ");
       for (let n = toks.length; n >= 1; n--) if (semi(n).length <= 20) return semi(n);
       const tight = n => head + " " + (sil ? "실 " : "") + (sh ? sh + " " : "") + pick(n).join("") + multi + cnt;
       for (let n = toks.length; n >= 1; n--) if (tight(n).length <= 20) return tight(n);
-    }
-    // 여기까지 왔으면 업체명을 넣든 빼든 글자를 안 자르고는 20자를 못 맞춤 (11/17 v192)
-    //  ① 상품명을 뒤에서 자르지 말고, 상품명 안의 더 짧은 품목 명사부터 시도
-    //     (그린코코 니트 털방울 올인원 겨울모자 여성모자 방한모자 → 겨울모자·여성모자·방한모자, 검색 키워드 끝부분과 같은 낱말 먼저)
-    const w1 = pick(1).join("");
-    const cands = [];
-    const addCand = x => { x = String(x || "").replace(/\s+/g, ""); if (x.length >= 2 && x !== w1 && cands.indexOf(x) === -1) cands.push(x); };
-    if (String(g1.pname || "").trim()) {
-      const sug = g1.kwSug || suggestKeywords(g1.pname, g1.kwAlts || []);
-      addCand(sug.main);
-      (sug.alts || []).forEach(addCand);
-      const pw = String(g1.pname).replace(/[\[\]()]/g, " ").split(/[\s,]+/).filter(w => /^[가-힣]{2,}$/.test(w) && !KW_STOP.test(w) && w !== seller0);
-      pw.filter(w => w1.slice(w1.length - w.length) === w).forEach(addCand);
-      pw.slice().sort((a, b) => b.length - a.length).forEach(addCand);
-    }
-    for (const cd of cands) {
-      for (const sh of tryShops) {
-        for (const body of [cd + multi + " " + cnt, cd + multi + cnt]) {
-          const t = [head, sil, sh, body].filter(Boolean).join(" ");
-          if (t.length <= 20) return t;
-        }
+      // ② 업체명은 두고 업체명 뒤 상품 키워드만 짧은 대표 키워드로 (그린코코 여성겨울모자 → 그린코코 겨울모자)
+      for (const cd of cands) for (const b of [cd + multi + " " + cnt, cd + multi + cnt]) {
+        const t = withBody(sh, b);
+        if (t.length <= 20) return t;
       }
-    }
-    //  ② 그래도 넘으면 앞 수식어를 줄이고 뒤쪽 핵심 명사는 남김 (여성겨울모자 → 겨울모자, 여성겨울4처럼 품목 명사가 잘리지 않게)
-    //     업체명은 먼저 뺌 (상품명을 온전히 남기는 쪽이 먼저)
-    const fbShops = tryShops.length > 1 ? ["", tryShops[0]] : tryShops;
-    for (const sh of fbShops) {
-      for (let k = w1.length - 1; k >= 2; k--) {
-        const body = w1.slice(w1.length - k);
-        for (const b of [body + multi + " " + cnt, body + multi + cnt]) {
-          const s1 = [head, sil, sh, b].filter(Boolean).join(" ");
-          if (s1.length <= 20) return s1;
-        }
+      // ③ 그래도 넘으면 앞 수식어를 지우고 품목 명사만 남김 (여성겨울모자 → 모자). 품목이 잘린 '여성겨울' 같은 조각은 만들지 않음
+      const nm = (w1.match(PROD_NOUN) || [""])[0];
+      if (nm.length >= 2 && nm.length < w1.length) for (const b of [nm + multi + " " + cnt, nm + multi + cnt]) {
+        const t = withBody(sh, b);
+        if (t.length <= 20) return t;
       }
     }
     return [head, sil, pick(1).join("") + multi + cnt].filter(Boolean).join(" ");
