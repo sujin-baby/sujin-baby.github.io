@@ -1709,6 +1709,12 @@ function diag_(p) {
     }); });
     try { (p.paym ? [payTab_(Number(p.paym), true)].filter(Boolean) : payTabsNow_()).forEach(function (sh) { out.payMax = (out.payMax || []).concat([sh.getName() + ' 마지막 ' + sh.getLastRow() + ' / 최대 ' + sh.getMaxRows()]); }); } catch (e) {}
   } catch (e) { out.payErr = String(e); }
+  // &ltab=방제 글자: 그 진행 명단 시트의 '명단' 탭 1~2행·줄 수·D1 (읽기만, 11/17 진행건수 0 확인)
+  if (p.ltab) try {
+    const rr = readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']).indexOf(String(p.ltab)) >= 0 && x['시트ID']; })[0];
+    if (rr) { const lss = SpreadsheetApp.openById(rr['시트ID']), lt = lss.getSheetByName(LIST_TAB); out.ltab = { name: lss.getName(), tabs: lss.getSheets().map(function (t) { return t.getName() + (t.getFormUrl() ? '(폼)' : '') + (t.isSheetHidden() ? '(숨김)' : '') + ' ' + t.getLastRow(); }), listv: !!PropertiesService.getScriptProperties().getProperty('LISTV_' + rr['시트ID']), sig: String(PropertiesService.getScriptProperties().getProperty('LISTSIG_' + rr['시트ID']) || '').slice(0, 80) };
+      if (lt) { out.ltab.last = lt.getLastRow(); out.ltab.top = lt.getRange(1, 1, Math.min(Math.max(lt.getLastRow(), 2), 6), Math.min(lt.getLastColumn(), 14)).getDisplayValues().map(function (r) { return r.join(' | ').slice(0, 300); }); out.ltab.d1 = lt.getRange('A1:F1').getFormulas()[0].join(' ¦ '); } }
+  } catch (e) { out.ltabErr = String(e); }
   // &resp=요청ID: 그 진행 명단 시트의 폼 응답 (시각, 닉네임, 수령인, 전화 뒤 4자리, 옵션) — 중복·두 번 낸 사람 찾기 (읽기만)
   if (p.resp) try {
     const rr = runByRequest_(p.resp) || readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']).indexOf(String(p.resp)) >= 0 && x['시트ID']; })[0]; out.resp = [];   // 요청ID가 없는 진행은 방제 글자로
