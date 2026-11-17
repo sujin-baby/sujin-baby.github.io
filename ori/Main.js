@@ -3428,6 +3428,7 @@ function checkFullInner_() {
   try { subTime_('알림: 안 산 사람', function () { fruitCheck_(runs); }); } catch (e) { note_('안 산 사람 확인 실패: ' + e); }
   try { subTime_('알림: 택배시트', function () { takbaeCheck_(runs); }); } catch (e) { note_('택배시트 알림 실패: ' + e); }
   try { subTime_('알림: 포토대기', function () { photoWaitCheck_(runs); }); } catch (e) { note_('포토대기 알림 실패: ' + e); }
+  try { if (!late_(240)) subTime_('📷포토전달 탭', function () { photoTabBuild_(runs); }); } catch (e) { note_('포토전달 탭 실패: ' + e); }
   try { subTime_('알림: 포토 요청', function () { photoAskCheck_(runs); }); } catch (e) { note_('포토 요청 알림 실패: ' + e); }
   try { subTime_('알림: 2시 이후 구매', function () { takLateCheck_(runs); }); } catch (e) { note_('2시 이후 구매 알림 실패: ' + e); }
   try { payChkRecheck1_(runs); } catch (e) { note_('결제금액 확인 다시 보기 실패: ' + e); }
@@ -7036,6 +7037,7 @@ function onAdminEdit(e) {
   { let mgi = -1; try { mgi = msgvGroupOfSheet_(e.range.getSheet()); } catch (err) {}
     if (mgi >= 0) { try { return msgViewEdit_(e, mgi); } catch (err) { try { e.source.toast('체크 저장이 안 됐어요: ' + err.message + ' → 다시 체크해 주세요', '메시지 모아보기', 12); } catch (x) {} return; } } }
   try { if (e.range.getSheet().getName() === OUTBOX_SHEET) obUserEdit_(e); } catch (err) {}
+  try { const pn = e.range.getSheet().getName(); if (pn === PHOTO_TAB || pn.indexOf(PHOTO_TAB + ' ') === 0) return photoTabEdit_(e); } catch (err) { try { e.source.toast('체크 저장이 안 됐어요: ' + err.message + ' → 다시 체크해 주세요', '포토전달', 10); } catch (e2) {} return; }
   try { if (e.range.getSheet().getName() === USAGE_TAB && e.range.getColumn() === 2 && e.range.getNumRows() === 1 && String(e.range.getSheet().getRange(e.range.getRow(), 1).getValue()) === GEMINI_CELL_LABEL) return geminiCellEdit_(e); } catch (err) {}
   // 한눈에 탭 '진행 도우미' 체크 → 시트 오른쪽에 진행 도우미 (새 탭 없이)
   if (e.range.getSheet().getName() === DASH_TAB && e.range.getColumn() === 1 && String(e.range.getRow()) === PropertiesService.getScriptProperties().getProperty('DASH_BAR_ROW')) {
@@ -9584,6 +9586,115 @@ function fruitCheck_(runs) {
 // 포토대기 진행: 리뷰 기한(배송완료 후 7일)이 있어서 사진을 오래 기다리면 리뷰가 몰림 → 진행 2일 뒤부터 매일 한 번 '업체 사진 왔는지 사장님께 물어보세요' 메일
 // 포토대기 진행: 진행일부터 2일이 지나도 업체 포토(리뷰 가이드 보냄 표시)가 없으면 사장님께 '업체에 포토 요청' 부탁 메시지 (한 번, 사용자 요청 10/21)
 //  리뷰 기한이 수령 후 7일이라 사진이 늦으면 리뷰가 몰림. 한눈에 탭 '확인 필요' 칸에도 (checkFull errs)
+/* ---------------- 📷포토전달 탭 (11/17 사용자) ----------------
+ *  업체가 '뽀짝피드백' 방에 '의성마늘 포토5건'처럼 포토를 보내 주면 오후에 받고 저녁에 리뷰어에게 전달 → 받았는지·전달했는지 헷갈림
+ *  포토대기 진행(실배송·기대평 빼고)마다 한 줄: [업체 포토 받음] 체크 → PHOTOGOT_<키> = 받은 때, [리뷰어 전달] 체크 → RVSENT_<키> = 전달한 때
+ *  (RVSENT_는 원래 '포토 가이드 보냄' 표시: 보낼메시지에서 포토 가이드를 체크해도 전달로 봄). 키 = 캠페인 키 + 날짜 (photoKey_)
+ *  줄 순서: 안 받음(오래된 것 먼저) → 받았는데 전달 안 함 → 전달 끝(이틀 뒤 사라짐). 체크해도 줄은 그 자리(다음 확인 때 다시 정렬)
+ */
+const PHOTO_TAB = '📷포토전달', PHOTO_COLS = 10;
+function photoKey_(r) { return campKey_(r['명단 제목']) + '_' + dateTok_(r['명단 제목']); }
+// 업체 포토를 기다리는 진행인지 (photoLate_과 같은 기준, 실배송은 빼기: 실배송은 리뷰어가 직접 찍음)
+function photoWaitRun_(r, props, all) {
+  if (isExpect_(r) || r['실배송'] === 'Y' || !(r['진행일'] instanceof Date) || !(Number(r['인원']) > 0)) return false;
+  let rv = null; try { rv = JSON.parse((all ? all['RV_' + r['시트ID']] : props.getProperty('RV_' + r['시트ID'])) || 'null'); } catch (e) {}
+  return /^\s*(유|y)/i.test(String(r['포토'] || '')) && !(rv && rv.kind === 'self') || !!(rv && (rv.kind === 'photo' || /포토\s*대기/.test(String(rv.mix || ''))));
+}
+function photoTab_(create) {
+  const ss = adminSs_(), props = PropertiesService.getScriptProperties(), id = String(props.getProperty('PHOTOTAB_ID') || '');
+  let sh = null;
+  if (id) sh = ss.getSheets().filter(function (t) { return String(t.getSheetId()) === id; })[0] || null;
+  if (!sh) sh = ss.getSheets().filter(function (t) { return t.getName() === PHOTO_TAB || t.getName().indexOf(PHOTO_TAB + ' ') === 0; })[0] || null;
+  if (!sh && create) { sh = ss.insertSheet(PHOTO_TAB); props.setProperty('PHOTOTAB_ID', String(sh.getSheetId())); props.deleteProperty('PHOTOTAB_SIG'); }
+  else if (sh && String(sh.getSheetId()) !== id) props.setProperty('PHOTOTAB_ID', String(sh.getSheetId()));
+  return sh;
+}
+// 그 방 리뷰 가이드 글에서 포토 인원 ('포토리뷰(15명)', '포토+한줄리뷰(2명)'). 못 찾으면 ''
+function photoNeed_(room, obRows) {
+  let n = '';
+  obRows.forEach(function (v) {
+    if (n !== '' || String(v[3]) !== room || !/리뷰내용\s*가이드/.test(String(v[4]).slice(0, 40))) return;
+    let t = 0; String(v[4]).split('\n').forEach(function (l) { const m = l.match(/^\s*포토[^\n(:]*\((\d+)\s*명\)/); if (m) t += Number(m[1]); });
+    if (t) n = t;
+  });
+  return n;
+}
+function photoTabRows_(runs) {
+  const props = PropertiesService.getScriptProperties(), all = props.getProperties(), t0 = today_().getTime(), D = 86400000;
+  let ob = []; try { const o = outboxSheet_(), ol = o.getLastRow(); if (ol >= 2) ob = o.getRange(2, 1, ol - 1, 6).getValues(); } catch (e) {}
+  const out = [], seen = {};
+  (runs || readRuns_()).forEach(function (r) {
+    if (!photoWaitRun_(r, props, all) || r['진행 상태'] === '종료') return;
+    const age = Math.round((t0 - dayStart_(r['진행일'])) / D);
+    if (age < 0 || age > 20) return;
+    const k = photoKey_(r); if (seen[k]) return; seen[k] = 1;
+    const got = String(all['PHOTOGOT_' + k] || ''), sent = String(all['RVSENT_' + k] || '');
+    const sentAt = /^\d{2}\/\d{2}/.test(sent) ? sent : (sent ? '(포토 가이드 보냄)' : '');
+    // 전달 끝난 지 이틀 지나면 안 보임 (날짜를 모르는 예전 표시는 진행일 7일 뒤부터)
+    if (sent) { const m = sent.match(/^(\d{2})\/(\d{2})/); const sd = m ? new Date(today_().getFullYear(), Number(m[1]) - 1, Number(m[2])).getTime() : dayStart_(r['진행일']) + 5 * D; if (t0 - sd > 2 * D) return; }
+    const room = String(r['카톡방'] || bareTitle_(r['명단 제목']));
+    out.push({ k: k, day: r['진행일'], room: bareTitle_(r['명단 제목']), camp: campOf_(r['명단 제목']), shop: String(r['업체'] || ''), need: photoNeed_(room, ob) || '', got: got, sent: sentAt, age: age,
+      st: sent ? 2 : got ? 1 : 0 });
+  });
+  out.sort(function (a, b) { return (a.st - b.st) || (a.day - b.day); });
+  return out;
+}
+function photoTabBuild_(runs, force) {
+  const rows = photoTabRows_(runs), props = PropertiesService.getScriptProperties();
+  const pend = rows.filter(function (x) { return x.st < 2; }).length;
+  const sig = msgvSigHash_(JSON.stringify(rows.map(function (x) { return [x.k, x.need, x.got, x.sent, x.st, x.age > 1]; })) + '|v1');
+  let sh = photoTab_(rows.length > 0 || force);
+  if (!sh) return 0;
+  const want = PHOTO_TAB + (pend ? ' ' + pend : '');
+  if (sh.getName() !== want) { try { sh.setName(want); } catch (e) {} }
+  if (!force && props.getProperty('PHOTOTAB_SIG') === sig) return 0;
+  const n = rows.length, H = 2;
+  sh.clear(); try { sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).clearDataValidations(); } catch (e) {}
+  if (sh.getMaxColumns() < PHOTO_COLS) sh.insertColumnsAfter(sh.getMaxColumns(), PHOTO_COLS - sh.getMaxColumns());
+  if (sh.getMaxRows() < n + H + 3) sh.insertRowsAfter(sh.getMaxRows(), n + H + 3 - sh.getMaxRows());
+  sh.getRange(1, 1, 1, 9).merge().setValue('📷 업체 포토 받았는지 · 리뷰어에게 전달했는지 (뽀짝피드백 방에 업체 포토가 오면 ✅받음 → 리뷰어에게 보내면 ✅전달)  ·  실배송 제외')
+    .setFontWeight('bold').setBackground('#fde7f3').setFontColor('#7a2e57').setWrap(true);
+  sh.setRowHeight(1, 34);
+  sh.getRange(H, 1, 1, PHOTO_COLS).setValues([['진행일', '방제', '상품', '포토', '업체 포토 받음', '받은 때', '리뷰어 전달', '전달한 때', '상태', '키']])
+    .setFontWeight('bold').setBackground('#f3e5f5').setHorizontalAlignment('center');
+  if (n) {
+    const md = function (d) { return (d.getMonth() + 1) + '/' + d.getDate(); };
+    sh.getRange(H + 1, 1, n, PHOTO_COLS).setValues(rows.map(function (x) {
+      const stt = x.st === 2 ? '전달 끝' : x.st === 1 ? '받음 → 전달하기' : (x.age >= 2 ? '⚠ ' + x.age + '일째 안 옴 (업체에 요청)' : '포토 기다리는 중');
+      return [md(x.day), x.room, x.camp + (x.shop && x.camp.indexOf(x.shop) < 0 ? ' (' + x.shop + ')' : ''), x.need === '' ? '' : x.need + '건', x.st >= 1, x.got, x.st === 2, x.sent, stt, x.k];
+    }));
+    sh.getRange(H + 1, 5, n, 1).insertCheckboxes(); sh.getRange(H + 1, 7, n, 1).insertCheckboxes();
+    sh.getRange(H + 1, 1, n, PHOTO_COLS).setBackgrounds(rows.map(function (x) { return Array(PHOTO_COLS).fill(x.st === 2 ? '#eeeeee' : x.st === 1 ? '#fff3cd' : x.age >= 2 ? '#fde2e2' : '#ffffff'); }))
+      .setFontColors(rows.map(function (x) { return Array(PHOTO_COLS).fill(x.st === 2 ? '#9e9e9e' : '#222222'); }));
+    sh.getRange(H + 1, 4, n, 6).setHorizontalAlignment('center');
+  } else sh.getRange(H + 1, 1).setValue('지금 업체 포토를 기다리는 진행이 없어요');
+  sh.setFrozenRows(H);
+  [60, 230, 200, 50, 90, 90, 80, 110, 190].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
+  try { sh.hideColumns(PHOTO_COLS); } catch (e) {}
+  props.setProperty('PHOTOTAB_SIG', sig);
+  return n;
+}
+// 📷포토전달 탭 체크 (onAdminEdit): E칸 받음, G칸 전달. 줄은 안 옮기고 그 자리에서 시각·색만 (다음 확인 때 다시 정렬)
+function photoTabEdit_(e) {
+  const sh = e.range.getSheet(), c = e.range.getColumn(), r0 = e.range.getRow(), nr = e.range.getNumRows();
+  if ((c !== 5 && c !== 7) || e.range.getNumColumns() !== 1 || r0 < 3) return;
+  const props = PropertiesService.getScriptProperties(), at = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM/dd HH:mm');
+  const keys = sh.getRange(r0, PHOTO_COLS, nr, 1).getValues(), vals = e.range.getValues();
+  for (let i = 0; i < nr; i++) {
+    const k = String(keys[i][0] || ''); if (!k) continue;
+    const on = vals[i][0] === true, row = r0 + i;
+    if (c === 5) { if (on) props.setProperty('PHOTOGOT_' + k, at); else props.deleteProperty('PHOTOGOT_' + k); sh.getRange(row, 6).setValue(on ? at : ''); }
+    else {
+      if (on) { props.setProperty('RVSENT_' + k, at); if (sh.getRange(row, 5).getValue() !== true) { sh.getRange(row, 5).setValue(true); if (!props.getProperty('PHOTOGOT_' + k)) { props.setProperty('PHOTOGOT_' + k, at); sh.getRange(row, 6).setValue(at); } } }
+      else props.deleteProperty('RVSENT_' + k);
+      sh.getRange(row, 8).setValue(on ? at : '');
+    }
+    const got = sh.getRange(row, 5).getValue() === true, sent = sh.getRange(row, 7).getValue() === true;
+    sh.getRange(row, 1, 1, 9).setBackground(sent ? '#eeeeee' : got ? '#fff3cd' : '#ffffff').setFontColor(sent ? '#9e9e9e' : '#222222');
+    sh.getRange(row, 9).setValue(sent ? '전달 끝' : got ? '받음 → 전달하기' : '포토 기다리는 중');
+  }
+  props.deleteProperty('PHOTOTAB_SIG');
+}
 function photoLate_(r, props) {
   if (isExpect_(r)) return false;
   if (!(r['진행일'] instanceof Date) || !(Number(r['인원']) > 0) || r['진행 상태'] === '종료') return false;
@@ -9591,7 +9702,7 @@ function photoLate_(r, props) {
   const wait = /^\s*(유|y)/i.test(String(r['포토'] || '')) && !(rv && rv.kind === 'self') || (rv && (rv.kind === 'photo' || /포토\s*대기/.test(String(rv.mix || ''))));
   if (!wait) return false;
   const days = Math.round((today_().getTime() - dayStart_(r['진행일'])) / 86400000);
-  return days >= 2 && days <= 9 && !props.getProperty('RVSENT_' + campKey_(r['명단 제목']) + '_' + dateTok_(r['명단 제목']));
+  return days >= 2 && days <= 9 && !props.getProperty('RVSENT_' + photoKey_(r)) && !props.getProperty('PHOTOGOT_' + photoKey_(r));   // 📷포토전달 탭에서 '업체 포토 받음' 체크하면 '업체 포토 아직' 알림 끔
 }
 // 택배시트 마감. 택대 진행에서 이 시각 뒤 구매(폼 낸 시각)는 다음 택배시트로 (11/9 사용자: 시간 지정건이 많아짐, 11시~3시 30분 구매)
 //  실제로는 2시 20분~40분 사이에 닫힘 → 기본 2시 20분, 한눈에 탭 명단 덩어리 제목 줄 L칸에서 진행마다 바꿈 (TAKCUT_<방제> = 분)
@@ -9735,7 +9846,7 @@ function photoWaitCheck_(runs) {
   const wait = runs.filter(function (r) {
     if (!/^\s*유/.test(String(r['포토'] || '')) || !(r['진행일'] instanceof Date) || !(Number(r['인원']) > 0)) return false;
     const days = Math.round((now - dayStart_(r['진행일'])) / 86400000);
-    return days >= 2 && days <= 9 && !props.getProperty('RVSENT_' + campKey_(r['명단 제목']) + '_' + dateTok_(r['명단 제목']));
+    return days >= 2 && days <= 9 && !props.getProperty('RVSENT_' + photoKey_(r)) && !props.getProperty('PHOTOGOT_' + photoKey_(r));
   });
   if (!wait.length) return;
   MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[체험단] 포토대기 ' + wait.length + '개: 업체 사진 왔는지 사장님께 확인하세요',
