@@ -5007,6 +5007,37 @@ function msgvRoomBg_(room, map) {
 // 페이백 요청 글: 요청 줄과 '명단시트:' 사이 한 줄 띄움 (11/15 사용자. 예전에 만든 글도 탭에서는 띄워 보여 줌 → 복사하면 띄운 채로)
 function msgvPaybackGap_(kind, msg) { return kind === '페이백 요청' ? String(msg).replace(/^(\[전원 리뷰완료\][^\n]*)\n(?=명단시트:)/, '$1\n\n') : msg; }
 // 명단 전달 글 속 캠페인 방제 (#11.11 …)
+// 명단 전달 비고 경고: 목표보다 폼이 많음 / 그날 같은 사람(전화번호 뒤 8자리, 없으면 이름)이 폼을 두 번 이상 냄. 한 번 그릴 때 진행마다 한 번만 읽음
+function listWarn_(lc) {
+  const memo = globalThis.__LISTWARN = globalThis.__LISTWARN || {};
+  if (memo[lc] !== undefined) return memo[lc];
+  const out = [];
+  try {
+    const runs = globalThis.__LW_RUNS = globalThis.__LW_RUNS || readRuns_();
+    const r = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === bareTitle_(lc); })[0] || runs.filter(function (x) { return sameRunTitle_(x['명단 제목'], lc); })[0];
+    if (r && r['시트ID'] && !isExpect_(r)) {
+      const goal = Number(r['목표인원']) || 0, got = Number(r['인원']) || 0;
+      if (goal && got > goal) out.push('⚠ 목표 ' + goal + '명인데 폼 ' + got + '개 (' + (got - goal) + '개 많음) → 중복·초과 확인하고 보내기');
+      const w = windowOf_(runs, r), seen = {};
+      SpreadsheetApp.openById(r['시트ID']).getSheets().filter(function (t) { return !!t.getFormUrl(); }).forEach(function (t) {
+        const lr = t.getLastRow(), lcN = t.getLastColumn(); if (lr < 2 || lcN < 2) return;
+        const h = t.getRange(1, 1, 1, lcN).getValues()[0].map(hk_);
+        const cN = h.findIndex(function (x) { return /계정명|수령인|이름/.test(x) && !MATCH.nick.test(x); }), cP = h.findIndex(function (x) { return /전화|연락처|휴대폰/.test(x); });
+        t.getRange(2, 1, lr - 1, lcN).getValues().forEach(function (x) {
+          const tm = x[0] instanceof Date ? x[0].getTime() : NaN;
+          if (!isFinite(tm) || tm < w.from || tm >= w.to) return;
+          const ph = cP >= 0 ? String(x[cP]).replace(/\D/g, '').slice(-8) : '', nm = cN >= 0 ? String(x[cN]).replace(/\s+/g, '') : '';
+          const k = ph.length >= 7 ? 'p' + ph : nm ? 'n' + nm : '';
+          if (!k) return;
+          (seen[k] = seen[k] || { nm: nm, n: 0 }).n++;
+        });
+      });
+      const dup = Object.keys(seen).filter(function (k) { return seen[k].n > 1; }).map(function (k) { return seen[k].nm + ' ' + seen[k].n + '번'; });
+      if (dup.length) out.push('⚠ 같은 사람이 폼을 두 번 냄: ' + dup.join(', ') + ' → 한 줄 빼고 보내기');
+    }
+  } catch (e) {}
+  return (memo[lc] = out.join('\n'));
+}
 function msgvListCamp_(text) {
   const ls = String(text || '').split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
   for (let i = 0; i < ls.length; i++) if (/^#/.test(ls[i])) return bareTitle_(ls[i]);
@@ -5141,6 +5172,8 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
       if (grp.key === 'list') {
         const lc = msgvListCamp_(x[4]);
         if (lc && payForList[lc]) lnote = payForList[lc].filter(function (v, i, a) { return a.indexOf(v) === i; }).join('\n');
+        // 안 보낸 명단: 목표보다 폼이 많거나 같은 사람이 두 번 낸 폼이 있으면 비고 맨 위에 (11/18 사용자: 문풍지 2명인데 안민지가 두 번 써서 3명, 비고 없이 보내라고 뜸)
+        if (lc && !isSent) { const lw = listWarn_(lc); if (lw) lnote = lw + (lnote ? '\n' + lnote : ''); }
       }
       return { type: 'msg', id: xs.map(function (y) { return String(y[0]); }).join(','), sent: isSent, day: msgvDay_(x[1]), over: od, today: x[1] instanceof Date && x[1].getTime() === t0,
         room: head ? head + '\n' + room : room, boldTo: head ? head.length : 0, msg: grp.fee && kind === '취완' ? '취완  →  ' + String(x[3]) : msgvPaybackGap_(kind, msgvCombine_(xs)), bg: msgvRoomBg_(camp || x[3], colors),
