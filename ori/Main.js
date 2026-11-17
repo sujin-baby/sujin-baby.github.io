@@ -7086,6 +7086,38 @@ function setupEditTab() {
   SpreadsheetApp.getUi().alert('폼수정 탭을 만들었어요. B1에서 진행을 고르세요.');
 }
 
+// 폼수정 탭 C1 날짜 고르기: 보기 '11.18(수) 오늘' … + '전체'. 고른 날짜의 진행만 B1 목록에
+function editDateLabel_(d) {
+  const t0 = today_().getTime(), dd = Math.round((dayStart_(d) - t0) / 86400000), wd = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
+  return (d.getMonth() + 1) + '.' + d.getDate() + '(' + wd + ')' + (dd === 0 ? ' 오늘' : dd === 1 ? ' 내일' : dd === -1 ? ' 어제' : '');
+}
+function editDateSet_(sh, live, keepB1) {
+  const labels = [], byLabel = {};
+  live.forEach(function (r) { const l = editDateLabel_(r['진행일']); if (!byLabel[l]) { byLabel[l] = []; labels.push(l); } byLabel[l].push(String(r['명단 제목'])); });
+  const all = ['전체'].concat(labels);
+  let sel = String(sh.getRange('C1').getValue() || '').trim();
+  if (all.indexOf(sel) < 0) sel = labels.filter(function (l) { return / 오늘$/.test(l); })[0] || labels[0] || '전체';
+  const c1 = sh.getRange('C1');
+  c1.setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(all, true).setAllowInvalid(false).build());
+  if (String(c1.getValue()) !== sel) c1.setValue(sel);
+  try { c1.setBackground('#e8f0fe').setFontWeight('bold').setHorizontalAlignment('center').setNote('날짜를 고르면 B1 목록에 그날 진행만 나와요 (전체 = 다)'); } catch (e) {}
+  const list = sel === '전체' ? live.map(function (r) { return String(r['명단 제목']); }) : (byLabel[sel] || []);
+  sh.getRange('B1').setDataValidation(list.length ? SpreadsheetApp.newDataValidation().requireValueInList(list, true).setAllowInvalid(true).build() : null);
+  return list;
+}
+// C1 날짜를 바꾸면: B1 목록을 그날 진행으로, B1이 그날 진행이 아니면 그날 첫 진행으로 바꿔 불러옴 (삭제 체크 중이면 B1은 그대로)
+function editDatePick_(sh, e) {
+  const yd = today_().getTime() - 86400000;
+  const live = readRuns_().filter(function (r) { return r['진행 상태'] !== '종료' && r['시트ID'] && r['진행일'] instanceof Date && dayStart_(r['진행일']) >= yd; })
+    .sort(function (a, b) { return (a['진행일'] - b['진행일']) || (a.row - b.row); });
+  const list = editDateSet_(sh, live);
+  const cur = String(sh.getRange('B1').getValue()).trim();
+  if (!list.length || list.indexOf(cur) >= 0 || !/\|$/.test(editMarks_(sh))) return;
+  sh.getRange('B1').setValue(list[0]);
+  let ran = false;
+  try { locked_(function () { ran = true; loadEditTab_(sh); }, 20000); } catch (err) {}
+  if (!ran) { try { e.source.toast('진행을 바꿨어요. 자동 확인이 돌고 있어서 명단은 B1을 한 번 더 고르면 불러와요', '폼수정', 8); } catch (err) {} }
+}
 function ensureEditTab_() {
   const ss = adminSs_();
   let sh = ss.getSheetByName(EDIT_TAB);
@@ -7112,7 +7144,8 @@ function ensureEditTab_() {
   const live = readRuns_().filter(function (r) { return r['진행 상태'] !== '종료' && r['시트ID'] && r['진행일'] instanceof Date && dayStart_(r['진행일']) >= yd; })
     .sort(function (a, b) { return (a['진행일'] - b['진행일']) || (a.row - b.row); });
   const titles = live.map(function (r) { return String(r['명단 제목']); });
-  sh.getRange('B1').setDataValidation(titles.length ? SpreadsheetApp.newDataValidation().requireValueInList(titles, true).setAllowInvalid(true).build() : null);
+  // C1 날짜 고르기 → B1 목록은 그날 진행만 (11/18 사용자: 진행이 40개 넘게 한 목록이라 보기 힘듦). '전체'면 다 (날짜순)
+  editDateSet_(sh, live);
   // B1에 지난 진행(목록에 없음)이 남아 있으면 오늘 진행으로 바꿈 (11/16 사용자 승인: 지난 날짜가 남아 빨간 유효성 오류 표시).
   //  삭제 체크를 해 둔 중이면(체크된 줄이 있으면) 안 바꿈. 오늘 진행이 없으면 가장 가까운 다음 진행, 그것도 없으면 비움
   try {
@@ -7146,6 +7179,8 @@ function onAdminEdit(e) {
     try { showToolsSidebar_(); } catch (err) { e.range.getSheet().getRange(e.range.getRow(), 2).setValue('도우미 열기 실패: ' + err.message + ' → 옆 링크로 열어 주세요'); }
     return;
   }
+  // 폼수정 탭 C1 날짜 고르기: 잠금 없이 바로 (목록만 바꿈)
+  try { if (e.range.getSheet().getName() === EDIT_TAB && e.range.getA1Notation() === 'C1') return editDatePick_(e.range.getSheet(), e); } catch (err) { try { e.source.toast('날짜 고르기 실패: ' + err.message, '폼수정', 8); } catch (x) {} return; }
   // 손으로 하는 동작(폼수정 탭 칸, 진행목록 진행일, 한눈에 방제·택배 옮김)은 15분 자동 확인이 돌고 있어도 양보받아서 함
   //  (예전엔 30초만 기다리고 조용히 안 해서 공지 붙여넣기가 배정에 안 들어갔음, 10/20)
   const sh0 = e.range.getSheet(), nm0 = sh0.getName(), a10 = e.range.getA1Notation();
