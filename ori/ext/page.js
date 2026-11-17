@@ -20,6 +20,42 @@
     const om = document.body.innerText.match(/(?:색상|옵션|구성|사이즈|수량|선택)[^\n]{0,12}[:：]\s*([^\n]{1,40})/);
     return om ? om[1].trim() : "";
   }
+  /* 전체 색상/옵션 목록 (11/17 v194): 고른 값 하나만 읽으면 다른 색이 있는지 몰라 '단일옵션'으로 나감.
+     상품 옵션 칸 안의 색상 칩·목록·드롭다운에서 2~12개가 잡히면 '블랙 / 아이보리 / 핑크'로. 가격·배송·광고 글자는 뺌 */
+  const ALL_BAD_EL = /추천|함께|비슷|관련|리뷰|광고|배너|랭킹|위젯|recommend|together|similar|related|review|banner|ranking|widget/i;
+  const ALL_BAD_TXT = /^(선택\s*하세요|선택해\s*주세요|옵션\s*선택|색상\s*선택|사이즈|수량|전체|모든\s*옵션|필터|정렬|구매하기|장바구니|바로\s*구매|더\s*보기|접기|펼치기)$/;
+  const ALL_BAD_WORD = /원|할인|쿠폰|적립|무료\s*배송|로켓|배송|특가|사은품|증정|이벤트|리뷰|평점|재고|품절\s*제외/;
+  function readAllColors() {
+    const out = [];
+    const add = t => {
+      const v = String(t || "").replace(/\s+/g, " ").replace(/^[\s:：·•\-–—]+|[\s:：·•\-–—]+$/g, "").trim();
+      if (!v || v.length > 20 || !/[가-힣a-z]/i.test(v) || /^\d+$/.test(v)) return;
+      if (ALL_BAD_TXT.test(v) || ALL_BAD_WORD.test(v) || /[×*]/.test(v)) return;
+      const n = v.replace(/\s+/g, "");
+      if (out.some(x => x.replace(/\s+/g, "") === n)) return;
+      out.push(v);
+    };
+    const okRoot = el => { try { return !ALL_BAD_EL.test(String((el && el.className) || "")) && !(el && el.closest && el.closest('[class*="recommend"],[class*="together"],[class*="similar"],[class*="related"],[class*="review"],[class*="banner"],[class*="ranking"],[class*="widget"]')); } catch (e) { return false; } };
+    let roots = [];
+    try { roots = [...document.querySelectorAll('.prod-option, [class*="prod-option"], [class*="ProductOption"], [class*="option-picker"], [class*="optionPicker"], [class*="color-option"], [class*="colorOption"], [class*="color-chip"], [class*="colorChip"], [class*="swatch"], [class*="variant"]')].filter(okRoot); } catch (e) { roots = []; }
+    if (!roots.length) { try { const s = document.querySelector('select[name*="옵션"], select[id*="option"], select[id*="Option"]'); if (s && okRoot(s)) roots = [s]; } catch (e) {} }
+    const SEL = '[role="option"], li, button, label, [class*="chip"], [class*="swatch"], [class*="color"], [class*="option-item"], [class*="OptionItem"]';
+    roots.forEach(rt => {
+      try { rt.querySelectorAll("select option").forEach(o => add(o.textContent)); } catch (e) {}
+      let els = []; try { els = [...rt.querySelectorAll(SEL)]; } catch (e) {}
+      els.forEach(el => {
+        try { if (el.querySelector(SEL)) return; } catch (e) {}
+        const lbl = el.getAttribute ? el.getAttribute("aria-label") || el.getAttribute("title") || "" : "";
+        add(lbl || el.textContent);
+      });
+      /* 색상 칩이 이미지로만 된 경우 alt 글자 */
+      try { rt.querySelectorAll("img[alt]").forEach(im => add(im.getAttribute("alt"))); } catch (e) {}
+    });
+    /* 부모 칸 글자('블랙 아이보리 핑크'처럼 여러 색이 한 칸에 붙은 것)는 뺌 */
+    const fin = out.filter(v => !/\s/.test(v) || !out.some(w => w !== v && v.indexOf(w) >= 0));
+    if (fin.length < 2 || fin.length > 12) return "";
+    return fin.join(" / ");
+  }
   /* 옵션마다 가격 (쿠팡 '수량' 목록: 2개 29,200원 / 3개 41,200원 …, 10/24 옥광밤·황금향). 이름표(수량) 줄 다음 옵션 이름 줄 → 가격 줄.
      지금 고른 옵션 가격(cur)과 같은 줄이 목록에 없으면 잘못 읽은 걸로 보고 안 씀 */
   const readOptPrices = (txt, name, cur) => {
@@ -162,6 +198,9 @@
       if (!optPrices.length) optPrices = readOptItems(price);
       /* 고른 옵션을 못 읽었으면 목록에서 지금 가격과 같은 옵션 (하나일 때만) */
       if (optPrices.length && !optPrices.some(x => x.o === opt)) { const hit = optPrices.filter(x => x.p === price); opt = hit.length === 1 ? hit[0].o : ""; }
+      /* 고른 값 하나만으론 어떤 색이 있는지 몰라 '단일옵션'으로 나가던 것 → 페이지의 전체 색상 목록을 옵션으로 (11/17 v194, 
+         생성기 fillCoupang이 의뢰서 6번이 비고 7번에 색상 이야기가 있을 때 이 목록을 씀) */
+      { const allC = readAllColors(); if (allC && (!opt || !opt.trim() || /^단일\s*옵션$/.test(opt) || (!/[×*]/.test(opt) && opt.length <= 20))) opt = allC; }
       /* 로켓 배송: 배지 이미지, 클래스, 본문 키워드로 정확히 감지 (10/30: 텍스트에 안 나오는 SVG/이미지 배지 감지 보강) */
       const rkTxt = (function (t, nm) { const c = t.search(/쿠팡\s*상품\s*번호|이런\s*건\s*어때요|함께\s*비교하면|다른\s*고객이\s*함께/); if (c > 0) t = t.slice(0, c); const ni = nm ? t.indexOf(String(nm).slice(0, 12)) : -1; if (ni > 0) t = t.slice(ni); return t.slice(0, 8000); })(txt, name);
       const isRocket = !!document.querySelector('.prod-badge__rocket, [class*="badge-rocket"], [class*="rocket-badge"], img[alt*="로켓"], [class*="delivery-badge-rocket"]') ||

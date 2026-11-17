@@ -1496,7 +1496,78 @@ console.log('-- Test 35: 20자 방제에서 업체명(판매처) 먼저 살리�
   console.log('✓ 업체명 살리고 대표 키워드로 줄이기 시험 통과 (' + r73 + ' / ' + rLong + ')');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (35개 샘플 전원 일치)');
+console.log('-- Test 36: 6번 구매옵션이 비고 7번에 색상 이야기가 있으면 단일옵션이 뜨지 않음 (11/17 v194)');
+{
+  // 수진 님 지시: "7번에 색깔 얘기 있을때 단일옵션으로 안뜨게해"
+  const reqColor = `#입금대행 실5 텍5 구확10 14900
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 여성겨울모자
+2. 키워드 검색 시 현재 순위 :모르시면 비워두세요
+3. 총 결제하신 건수 : 구확10건 리뷰 10건
+4. 하루 구매하는건수 (어뷰징 피하기위해 
+조금씩 변동될수 있습니다 : 4건
+5. 상품주소(URL) : https://www.coupang.com/vp/products/2332028624
+6. 구매옵션 : 
+7. 포토제공 (몇명)  /포토없음  선택: 포토(5명)/5 ->포토는 각 색깔별로 1개씩이고 나머지 포토없음 5건과 구확 10건은 다 핑크로 해주세요 
+8. 리뷰 가이드 :  자율 
+9. 입금하실 입금자명 : 장수정
+10.택배대행 Y/N: N`;
+  const hC = P.parseAll(reqColor);
+  const gC = hC.guides[0];
+  if (!gC.hasColorHint) throw new Error('Test 36 7번 색상 이야기(각 색깔별·핑크)를 못 읽음');
+  if (/단일옵션/.test(String(gC.option || ''))) throw new Error('Test 36 6번 공란+7번 색상 → 단일옵션이 뜸: ' + gC.option);
+  if (gC.option !== '각 색상별 1개씩 / 핑크') throw new Error('Test 36 색상 안내가 옵션으로 안 감: ' + JSON.stringify(gC.option));
+  if (!gC.colorHintOnly) throw new Error('Test 36 색상 안내는 페이지 목록이 오면 바뀔 수 있는 상태(colorHintOnly)여야 함');
+  if ((gC.optBase || []).length) throw new Error('Test 36 색상 안내로 옵션 이름 목록(optBase)을 임의로 만들면 안 됨');
+
+  // 실제 공지에 '🐥옵션 : 단일옵션'이 찍히지 않는지 (수진 님이 보는 화면)
+  getElem('req').value = reqColor;
+  getElem('t-ip').checked = true;
+  getElem('t-up').checked = false;
+  getElem('takdae').checked = false;
+  getElem('realship').checked = false;
+  getElem('fruit').checked = false;
+  getElem('cart').checked = false;
+  getElem('day').value = '1';
+  getElem('date').value = '2026-11-17';
+  getElem('slot').value = 'midnight';
+  const ggC = Object.assign({}, gC, { seller: '그린코코', price: '14900', pname: '그린코코 니트 털방울 올인원 겨울모자', platform: '쿠팡' });
+  P.setGuides([ggC]);
+  ['keyword', 'guide', 'daily', 'total', 'price', 'ship', 'platform', 'seller', 'option', 'pname', 'url', 'pno', 'short', 'page', 'pageM', 'similar', 'photo', 'thumb'].forEach(k => { getElem(k).value = String(ggC[k] === undefined ? '' : ggC[k]); });
+  P.render();
+  const noticeC = String(getElem('o-notice').value || '');
+  if (!/🐥옵션 : 각 색상별 1개씩 \/ 핑크/.test(noticeC)) throw new Error('Test 36 공지 옵션 줄에 색상 안내가 안 들어감: ' + noticeC.split('\n').filter(l => /옵션/.test(l)).join(' | '));
+  if (/단일옵션/.test(noticeC)) throw new Error('Test 36 공지에 단일옵션이 찍힘');
+
+  // fillCoupang의 옵션 판단(optForGuide): 단일옵션이 와도 색상 안내는 안 덮어쓰고, 전체 색상 목록이 오면 그게 우선
+  const hintG = { hasColorHint: true, colorHint: '각 색상별 1개씩 / 핑크', optBase: [], option: '각 색상별 1개씩 / 핑크' };
+  if (P.optForGuide(hintG, '단일옵션', hintG.option).value !== '각 색상별 1개씩 / 핑크') throw new Error('Test 36 페이지가 단일옵션이면 색상 안내를 지켜야 함');
+  { const put = P.optForGuide(hintG, '블랙 / 아이보리 / 핑크', hintG.option);
+    if (put.value !== '블랙 / 아이보리 / 핑크') throw new Error('Test 36 페이지 전체 색상 목록이 우선이어야 함: ' + put.value);
+    if (put.hint) throw new Error('Test 36 페이지 목록을 넣었으면 hint 상태를 풀어야 함'); }
+  // 수진 님이 옵션 칸을 직접 고쳤으면 페이지가 단일옵션이어도 그 글을 지우지 않음
+  if (P.optForGuide(hintG, '단일옵션', '핑크 1개씩 살 사람만').value !== '핑크 1개씩 살 사람만') throw new Error('Test 36 직접 고친 옵션을 단일옵션/안내로 덮어씀');
+  // 회귀: 색상 이야기가 없는 의뢰서는 예전 그대로 — 진짜 단일옵션 상품은 단일옵션, 페이지 옵션은 빈칸일 때만
+  const plainG = { optBase: [], option: '' };
+  if (P.optForGuide(plainG, '단일옵션', '').value !== '단일옵션') throw new Error('Test 36 회귀: 보통 의뢰서의 단일옵션이 사라짐');
+  if (P.optForGuide(plainG, '블랙', '').value !== '블랙') throw new Error('Test 36 회귀: 빈 옵션 칸에 페이지 옵션이 안 들어감');
+  if (P.optForGuide({ optBase: [{ label: '블랙', qty: '' }], option: '블랙' }, '아이보리', '블랙').value !== '블랙') throw new Error('Test 36 회귀: 의뢰서 옵션을 페이지 옵션으로 덮어씀');
+
+  // 6번에 옵션이 적혀 있으면 색상 안내를 만들지 않고 의뢰서 옵션 그대로
+  const hO = P.parseAll(reqColor.replace('6. 구매옵션 : \n', '6. 구매옵션 : 블랙\n'));
+  if (hO.guides[0].hasColorHint) throw new Error('Test 36 6번에 옵션이 있으면 색상 안내를 만들면 안 됨');
+  if (hO.guides[0].option !== '블랙') throw new Error('Test 36 6번 옵션 회귀: ' + hO.guides[0].option);
+
+  // 7번·8번에 색상 이야기가 없으면 옵션은 예전처럼 비어 있음 (억지로 안 만음)
+  const reqPlain = reqColor.replace(/7\. 포토제공[^\n]*/, '7. 포토제공 (몇명) /포토없음 선택: 포토(5명)/5');
+  const hP = P.parseAll(reqPlain);
+  if (hP.guides[0].hasColorHint) throw new Error('Test 36 색상 이야기가 없는데 색상 안내를 만듦');
+  if (String(hP.guides[0].option || '') !== '') throw new Error('Test 36 색상 없는 의뢰서 옵션은 빈칸이어야 함: ' + hP.guides[0].option);
+
+  console.log('✓ 7번 색상 안내 시 단일옵션 방지 시험 통과 (' + gC.option + ')');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (36개 샘플 전원 일치)');
 process.exit(0);
 
 

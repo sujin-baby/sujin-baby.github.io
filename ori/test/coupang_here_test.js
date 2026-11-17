@@ -66,5 +66,37 @@ ok(ev === man.version, '생성기 EXT_VER(' + ev + ') = 확장 manifest 버전('
 ok(/const ov = extOld\(\); if \(ov\) \{ batchSay\(extOldSay\(ov\), true\); return; \}/.test(gen) && /if \(ov\) \{ extOldSay\(ov\); return; \} autoIdx/.test(gen), '예전 확장이면 [한 번에 가져오기]·[자동 가져오기]를 안 보내고 알림');
 ok(/\/생성기를\\s\*새로고침\/\.test\(m\.status\)\) \{ batchStop = true;/.test(gen), "예전 확장이 '생성기를 새로고침'만 하면 한 번에 가져오기 바로 멈춤 (4분씩 안 기다림)");
 
+// 6) 전체 색상 목록 읽기 (11/17 v194): 고른 값 하나만 읽어 '단일옵션'이 나가던 것 → 색상 칩·목록에서 2개 이상이면 '블랙 / 아이보리 / 핑크'
+{
+  const chip = (t, aria) => ({ textContent: t, getAttribute: n => (n === 'aria-label' || n === 'title') ? (aria || '') : '', querySelector: () => null });
+  const root = (cls, els, opts) => ({ className: cls, closest: () => null, querySelectorAll: sel => sel === 'select option' ? (opts || []) : els });
+  const runAll = (src, roots) => {
+    const consts = ['ALL_BAD_EL', 'ALL_BAD_TXT', 'ALL_BAD_WORD'].map(k => (src.match(new RegExp('^  const ' + k + ' = .*$', 'm')) || [])[0]).join('\n');
+    if (!consts) throw new Error('readAllColors 규칙 상수를 못 찾음');
+    const c = { document: { querySelectorAll: () => roots, querySelector: () => null } };
+    vm.createContext(c);
+    vm.runInContext(consts + '\n' + fnSrc(src, /function readAllColors/.test(src) ? 'function readAllColors' : 'const readAllColors =') + '\nthis.f = readAllColors;', c);
+    return c.f();
+  };
+  const chips3 = () => [root('prod-option', [chip('블랙'), chip('아이보리'), chip('핑크'), chip('12,900원'), chip('무료배송'), chip('블랙'), chip(''), chip('아주 긴 상품 설명 문구입니다 정말 깁니다')])];
+  for (const [label, src] of [['page.js', pg], ['생성기 북마크', gen]]) {
+    ok(runAll(src, chips3()) === '블랙 / 아이보리 / 핑크', label + ': 색상 칩 3개 → "블랙 / 아이보리 / 핑크" (가격·배송·중복·빈칸·긴 글 제거)');
+    ok(runAll(src, [root('prod-option', [chip('블랙')])]) === '', label + ': 색상이 1개뿐이면 목록으로 안 만듦 (기본 옵션 그대로)');
+    ok(runAll(src, [root('recommend-carousel', [chip('블랙'), chip('아이보리')])]) === '', label + ': 추천·함께본 상품 칸은 색상 목록에서 뺌');
+    ok(runAll(src, [root('prod-option', [chip('블랙 아이보리'), chip('블랙'), chip('아이보리')])]) === '블랙 / 아이보리', label + ': 여러 색이 붙은 부모 칸 글자는 뺌');
+    ok(runAll(src, [root('', [], [{ textContent: '블랙' }, { textContent: '화이트' }])]) === '블랙 / 화이트', label + ': 드롭다운(select) 목록도 읽음');
+    ok(runAll(src, [root('prod-option', [chip('', '검정'), chip('', '아이보리')])]) === '검정 / 아이보리', label + ': 그림만 있는 색상 칩은 aria-label 글자로');
+  }
+  ok(/const allC = readAllColors\(\)/.test(gen) && /optForGuide\(gg, r\.option, \$\('option'\)\.value\)|optForGuide\(gg, r\.option, \$\("option"\)\.value\)/.test(gen), '생성기: 북마크 전체 색상 목록 + fillCoupang 단일옵션 방지(optForGuide)가 연결돼 있음');
+  ok(/const allC = readAllColors\(\)/.test(pg), 'page.js: 전체 색상 목록(readAllColors)을 옵션으로 채움');
+  // 북마크릿 코드는 줄바꿈을 지우고 한 줄로 이어 붙여 브라우저에 넣으므로, 한 줄 주석(//)이 있으면 뒤 코드가 통째로 주석이 됨
+  //  (11/01 sugKw 수정땜에 // 주석 7줄이 들어가 북마크릿 전체 코드가 실행되지 않던 것을 11/17 v194에서 잡음)
+  { const bm = (gen.match(/<script type="text\/plain" id="bm-src">([\s\S]*?)<\/script>/) || [])[1] || '';
+    const joined = bm.replace(/\s*\n\s*/g, ' ').trim();
+    let err = '';
+    try { new Function(joined); } catch (e) { err = e.message; }
+    ok(!err && joined.length > 1000, '북마크릿 전체 코드가 한 줄로 이어 붙여도 문법이 맞음' + (err ? ' — 오류: ' + err : ' (// 한 줄 주석 없음)')); }
+}
+
 if (fail) { console.error(fail + '개 실패'); process.exit(1); }
 console.log('✓ 쿠팡 시험 통과');
