@@ -205,7 +205,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v190 (과일 다중 방제·쿠팡 위치/가격검색·판매처 보강)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v191 (실·빈 혼합 한 방·구확+리뷰 건수 합산)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -384,7 +384,7 @@ details.help-box summary {
             <span style="font-weight: 900; font-size: 14px; color: var(--pink-deep, #ff5fa8); display:flex; align-items:center; gap:5px;">
               <span>💬 AI 다이렉트 대화 · 공지 수정 요청</span>
             </span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v190</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v191</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 10px;">
             공지가 이상하게 나왔거나 수정이 필요한가요? 여기서 메시지를 보내면 <b>피클(생성기)</b>과 <b>클로드(시트)</b>에게 실시간으로 전달돼요!
@@ -1573,11 +1573,38 @@ details.help-box summary {
     if (head.confirm) head.guides.forEach(g => { g.isConfirm = true; });
     return head;
   }
+  // 실·빈 혼합(실배송 + 빈박스·구확): 방제를 '실/빈' 한 방으로 잡고, 공지에 리뷰 배분을 넣지 않음 (11/17 v191)
+  const SILBIN_RE = /실\s*빈\s*섞|실\s*[\/ㅣ|]\s*빈|실빈/;
+  //  기존 표기 외에 '#입금대행 실5 텍5 구확10'처럼 실 건수와 구확·빈 건수를 함께 적은 줄도 혼합으로 봄
+  const SILBIN_HEAD_RE = /(?:^|[\s#(])실\s*(?:배송)?\s*[:：]?\s*\d+\s*(?:건|개|명)?/;
+  function isSilbin(text) {
+    const t = String(text || "");
+    if (SILBIN_RE.test(t)) return true;
+    return t.split("\n").some(l => SILBIN_HEAD_RE.test(l) && /(?:구확|구매\s*확정|빈\s*박스|빈\s*\d)/.test(l));
+  }
+  // 총 건수: '구확10건 리뷰 10건'처럼 항목별 건수를 늘어놓은 칸은 합해서 읽음 (실·빈 혼합 20건, 11/17 v191)
+  //  합계를 따로 적어 둔 경우('총 20건 (구확10 리뷰10)', '20건(10+10)')는 그 합계를 그대로 씀
+  const TOTAL_ITEM_RE = /(?:구확|구매\s*확정|빈\s*박스|실\s*배송|실|텍스트|텍|포토|별점|리뷰)\s*[:：]?\s*(\d+)\s*(?:건|개|명)?/g;
+  function totalCount(s0) {
+    const s = String(s0 || "").replace(/\n/g, " ").trim();
+    if (!s) return "";
+    const items = []; let m;
+    TOTAL_ITEM_RE.lastIndex = 0;
+    while ((m = TOTAL_ITEM_RE.exec(s))) items.push({ n: Number(m[1]), from: m.index, to: TOTAL_ITEM_RE.lastIndex });
+    if (items.length < 2) return (s.match(/\d+/) || [""])[0];
+    // 항목 이름 밖에 적힌 숫자 = 이미 적어 둔 합계
+    let out = ""; const re = /\d+/g; let d;
+    while ((d = re.exec(s))) {
+      const i = d.index;
+      if (!items.some(it => i >= it.from && i < it.to)) { out = d[0]; break; }
+    }
+    return out || String(items.reduce((a, it) => a + it.n, 0));
+  }
   function parseHead(l) {
     const r = {};
     r.type = /업체\s*입금|업입/.test(l) ? "업체입금" : "입대";
     r.takdae = /택대|택배\s*대행/.test(l.replace(/^\s*#?\s*입금\s*대행/, ""));
-    r.silbin = /실\s*빈\s*섞|실\s*[\/ㅣ|]\s*빈|실빈/.test(l);
+    r.silbin = isSilbin(l);
     r.realship = !r.silbin && /실배/.test(l);
     r.cart = /장바구니/.test(l);   // 장바구니건: 한 사람이 상품 전부 한 번에 (10/28)
     r.confirm = /구확|구매\s*확정/.test(l);
@@ -1824,7 +1851,7 @@ details.help-box summary {
         }
       }
     }
-    r.total = ((f.total || "").match(/\d+/) || [""])[0];
+    r.total = totalCount(f.total);
     r.photo = (f.photo || "").replace(/\n/g, " ");
     // '포토 제공 6/ 없음 4', '유 10개, 무10개', '2개 정도만 사진 나머지는 별점만' = 포토 N + 텍스트 M. 실배송·로켓이면 직접 찍는 포토리뷰 (10/31)
     {
@@ -1904,7 +1931,7 @@ details.help-box summary {
     r.dailyRaw = dv;
     r.daily = r.days.length ? r.days[0].n : ((dv.match(/\d+/) || [""])[0]);
     // '1일간 진행', '2일 진행'처럼 일수만 적었으면 총건수를 그 일수로 나눔 (10/21 토스 부유단감 5건 = 하루에 5)
-    { const dm = dv.trim().match(/^(\d+)\s*일\s*(간|동안)\s*(진행)?|^(\d+)\s*일\s*진행/); if (dm) dm[1] = dm[1] || dm[4]; const tot = Number(((f.total || "").match(/\d+/) || [0])[0]); if (dm && !r.days.length && tot) r.daily = String(Math.ceil(tot / Number(dm[1]))); }
+    { const dm = dv.trim().match(/^(\d+)\s*일\s*(간|동안)\s*(진행)?|^(\d+)\s*일\s*진행/); if (dm) dm[1] = dm[1] || dm[4]; const tot = Number(r.total || 0); if (dm && !r.days.length && tot) r.daily = String(Math.ceil(tot / Number(dm[1]))); }
     // 상품 주소: 줄마다 "1kg https://..." → 라벨 + 주소
     // https:// 없이 'coupang.com/vp/...'만 적은 의뢰서도 주소로 (10/22 저주파 발 마사지기: 주소를 못 읽어 키워드 없이 찾음)
     const src = (f.url || text).replace(/(^|[\s:：])((?:www\.|m\.|link\.)?(?:coupang\.com|coupa\.ng|smartstore\.naver\.com|brand\.naver\.com|naver\.me|oliveyoung\.co\.kr|toss\.im|store\.kakao\.com|kko\.to)\/)/gi, "$1https://$2");
@@ -3035,7 +3062,7 @@ details.help-box summary {
     const isTalkdeal = guides.some(g => g.platform === "카카오톡딜") || /톡딜/.test(String($("req").value || "")) || /store\.kakao\.com|kko\.to/.test(String($("req").value || ""));
     const t = type(), tk = $("takdae").checked;
     const g1 = guides[0] || {};
-    const silbin = /실\s*빈\s*섞|실\s*[\/ㅣ|]\s*빈|실빈/.test(String($("req").value || ""));
+    const silbin = isSilbin(String($("req").value || ""));
     const head = (t === "입대" ? "#" : "업)") + (silbin ? "" : (tk ? "택" : "")) + date + (silbin ? "실/빈" : "");
     const fruitRoom = $("fruit").checked;
     const seller0 = (g1.seller || "").replace(/\s+/g, "");
@@ -3420,8 +3447,10 @@ details.help-box summary {
     $("o-warn").textContent = warns.join(" ");
 
     const days = reviewDays();
+    // 실·빈 혼합은 다 사고 배정한 뒤 알려주는 진행이라 공지에 리뷰 배분·구확 안내를 넣지 않음 (11/17 v191)
+    const silbinRun = isSilbin(String($("req").value || ""));
     // 구확건(리뷰 없음)은 사장님 예시 공지 모양 그대로 (10/23 카카오톡딜 홍삼스틱)
-    const confirmRun = reviewKind() === "confirm";
+    const confirmRun = reviewKind() === "confirm" && !silbinRun;
     const notice = confirmRun ? [
       slotLine(),
       "★xxx광고(AD)절대 주문금지 xxxx ★",
@@ -3511,7 +3540,9 @@ details.help-box summary {
       const isReal = (rocketRun || $("realship").checked || /실배/.test(String($("req").value || "")) || (guides[cur] && /포토리뷰/.test(guides[cur].review || "")));
       const isPhotoYes = /^\s*(유|y(es)?\b|있)/i.test(g.photo || "");
       const hasPhotoAndText = (mix.length >= 2 && mix.some(x => /포토/.test(x.label)) && mix.some(x => /텍스트|별점/.test(x.label))) || /유\s*\d+.*무\s*\d+|무\s*\d+.*유\s*\d+/i.test(g.photo || "");
-      const photo = photoWait(g) || (!isReal && isPhotoYes)
+      // 실·빈 혼합은 리뷰 배분 줄을 공지에 넣지 않음 (11/17 v191)
+      const photo = silbinRun ? null
+        : photoWait(g) || (!isReal && isPhotoYes)
         ? "🐥리뷰 : ★★★포토대기★★★"
         : isReal && hasPhotoAndText
         ? "🐥리뷰 : ★★★리뷰배정대기★★★"
@@ -4403,7 +4434,7 @@ details.help-box summary {
   if (typeof globalThis !== "undefined") {
     globalThis.__PARSER__ = {
       parseAll, parseHead, setGuides: gs => { guides = gs; }, fieldsOf, parseOptions, parse, parseCoupang, optionText, baseName, makeRoom, shortName, suggestKeywords, sugKw, kwList, reviewMix, isBlockedText, posText, okSeller, maskItem,
-      buildPlan, planRoomFrom, dayTotalOf, roomHasTak, takFixRoom, sheetBaseName, takAskNeeded
+      buildPlan, planRoomFrom, dayTotalOf, roomHasTak, takFixRoom, sheetBaseName, takAskNeeded, render, isSilbin, totalCount
     };
   }
 })();
