@@ -1727,6 +1727,23 @@ function diag_(p) {
       return { name: k, n: by[k].length, items: by[k].map(function (f) { let nf = 0, nd = 0; const a = f.getFiles(); while (a.hasNext() && nf < 50) { a.next(); nf++; } const b2 = f.getFolders(); while (b2.hasNext() && nd < 50) { b2.next(); nd++; } return '…' + f.getId().slice(-6) + ' 파일' + nf + ' 폴더' + nd + ' ' + Utilities.formatDate(f.getDateCreated(), CONFIG.TIMEZONE, 'MM-dd HH:mm'); }) };
     });
   } catch (e) { out.mfoldErr = String(e); }
+  // &feesheet=1: '오리방리뷰비' 스프레드시트의 리뷰비 요청 칸 규칙(날짜·진행자 목록·서식) (읽기만, 11/17 붙여넣기 빨간 표시)
+  if (p.feesheet) try {
+    const it = DriveApp.searchFiles("title contains '오리방리뷰비' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false");
+    out.feesheet = [];
+    while (it.hasNext() && out.feesheet.length < 3) {
+      const f = it.next(), fs = SpreadsheetApp.openById(f.getId()), o = { name: f.getName(), tabs: fs.getSheets().map(function (t) { return t.getName(); }).slice(0, 12) };
+      const sh0 = fs.getSheets().filter(function (t) { return /리뷰비/.test(t.getName()); })[0] || fs.getSheets()[0];
+      o.tab = sh0.getName();
+      const rg = sh0.getRange(3, 2, 9, 8);
+      o.head = sh0.getRange(3, 2, 1, 8).getDisplayValues()[0];
+      o.vals = rg.getValues().map(function (r) { return r.map(function (v) { return (v instanceof Date ? 'D:' + Utilities.formatDate(v, CONFIG.TIMEZONE, 'yyyy-MM-dd') : typeof v + ':' + String(v).slice(0, 30)); }).join(' | '); });
+      o.fmt = rg.getNumberFormats().map(function (r) { return r.join(' | '); });
+      o.fw = rg.getFontWeights().map(function (r) { return r.join(','); });
+      o.dv = ['B4', 'C4', 'D4', 'E4', 'F4', 'H4', 'B11', 'D11'].map(function (a1) { const dv = sh0.getRange(a1).getDataValidation(); return a1 + ' ' + (dv ? dv.getCriteriaType() + ' ' + JSON.stringify(dv.getCriteriaValues().map(function (x) { return x && x.getA1Notation ? x.getA1Notation() : x; })).slice(0, 300) + ' allowInvalid=' + dv.getAllowInvalid() : '없음'); });
+      out.feesheet.push(o);
+    }
+  } catch (e) { out.feesheetErr = String(e); }
   // &ltab=방제 글자: 그 진행 명단 시트의 '명단' 탭 1~2행·줄 수·D1 (읽기만, 11/17 진행건수 0 확인)
   if (p.ltab) try {
     const rr = readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']).indexOf(String(p.ltab)) >= 0 && x['시트ID']; })[0];
