@@ -1913,15 +1913,17 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       if (!opts.length) return;
       var ok = null;
       opts.forEach(function (o) { if (o.classList.contains('ok')) ok = o; });
+      var bar = $('#qBody .q-tags');
       for (var round = 0; round < 3; round++) {
         var br = bd.getBoundingClientRect();
         if (br.height < 80) return;
+        var barH = bar ? Math.max(0, bar.getBoundingClientRect().bottom - br.top) : 0;   /* 위에 붙은 배지 줄 높이 */
         var maxS = Math.max(0, bd.scrollHeight - bd.clientHeight);
         var delta = 0;
         if (ok) {
           var r = ok.getBoundingClientRect();
           if (r.bottom > br.bottom - 10) delta = (ok === opts[opts.length - 1]) ? (maxS - bd.scrollTop) : (r.bottom - (br.bottom - 10));
-          else if (r.top < br.top + 6) delta = -((br.top + 6) - r.top);
+          else if (r.top < br.top + barH + 6) delta = -((br.top + barH + 6) - r.top);
         }
         if (!delta) {
           for (var i = 0; i < opts.length; i++) {

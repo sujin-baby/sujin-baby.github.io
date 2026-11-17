@@ -157,7 +157,7 @@ button{font-family:inherit;font-size:inherit;color:inherit;border:0;background:n
 .combo.hot{animation:comboBump .36s cubic-bezier(.2,1.5,.4,1)}
 @keyframes comboBump{0%{transform:scale(1) rotate(0)}45%{transform:scale(1.34) rotate(-5deg)}100%{transform:scale(1.12) rotate(0)}}
 @keyframes pop{50%{transform:scale(1.25)}}
-.quiz-body{flex:1;overflow-y:auto;overflow-anchor:none;padding:6px 14px 34px;max-width:560px;width:100%;margin:0 auto;-webkit-overflow-scrolling:touch}
+.quiz-body{flex:1;overflow-y:auto;overflow-anchor:none;padding:0 14px 34px;max-width:560px;width:100%;margin:0 auto;-webkit-overflow-scrolling:touch}
 .q-tag{display:inline-block;font-size:11.5px;font-weight:900;color:var(--c);background:var(--c-soft);padding:5px 10px;border-radius:99px;margin-bottom:12px}
 .q-text{font-size:18px;font-weight:900;letter-spacing:-.4px;line-height:1.42;margin:0 0 16px}
 .opts{display:flex;flex-direction:column;gap:10px}
@@ -902,7 +902,7 @@ body.speed #qBar{background:linear-gradient(90deg,#ffd166,#ff8a3c)}
 .lib-all i{font-style:normal;font-size:11px;color:var(--ink3)}
 
 /* --- 퀴즈: 힌트권 · 보스 --- */
-.q-tags{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px}
+.q-tags{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 12px;position:sticky;top:0;z-index:6;background:var(--bg);padding:8px 0 8px;box-shadow:0 8px 12px -12px rgba(0,0,0,.85)}
 .hint-btn{margin-left:auto;font-size:10.5px;font-weight:900;color:#08110d;background:var(--gold);
   border-radius:99px;padding:5px 10px;white-space:nowrap}
 .hint-btn:disabled{background:var(--card3);color:var(--ink3)}
