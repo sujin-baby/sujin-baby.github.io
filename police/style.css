@@ -865,6 +865,9 @@ body.speed #qBar{background:linear-gradient(90deg,#ffd166,#ff8a3c)}
 .fcard .fc-hint{position:absolute;bottom:9px;left:0;right:0;font-size:9.5px;font-weight:800;color:var(--ink3);pointer-events:none}
 .fcard.flipped .fc-hint{opacity:0}
 /* 해설 영역에서만 G-POINT 번호·공식명 노출 */
+.gp-cnt{flex:0 0 auto;font-size:9px;font-weight:900;color:var(--c-dark);background:var(--c-soft);border-radius:99px;
+  padding:2px 6px;margin:0 4px 0 0;white-space:nowrap}
+.gp-cnt.zero{color:var(--ink3);background:transparent;border:1px dashed var(--line2)}
 .fb-gp{display:block;width:fit-content;font-size:11.5px;font-weight:900;color:var(--c-dark);background:var(--c-soft);
   border-radius:8px;padding:4px 9px;margin:0 0 7px;text-align:left}
 .fc-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}

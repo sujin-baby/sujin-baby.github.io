@@ -2363,8 +2363,10 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     GP_TABLE.forEach(function (grp, gi) {
       h += '<div class="gp-group" id="gp-g' + gi + '"><div class="gp-group-h">' + esc(grp.g) + '</div>';
       grp.rows.forEach(function (r) {
+        var cnt = gpQuestions(Number(r[0])).length;
         h += '<button class="gp-row" data-gp="' + esc(r[0]) + '">' +
           '<span class="gp-no">' + esc(r[0]) + '</span>' +
+          '<span class="gp-cnt' + (cnt ? '' : ' zero') + '">' + (cnt ? '기출 ' + cnt : '기출 없음') + '</span>' +
           '<span class="gp-body"><span class="gp-cond">' + esc(r[1]) + '</span>' +
           '<span class="gp-ans">👉 ' + esc(r[2]) + '</span></span>' +
           '<span class="gp-go">▶</span></button>';
