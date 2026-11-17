@@ -1902,7 +1902,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3492,6 +3492,7 @@ function checkFullInner_() {
   try { seolSlot1_(); } catch (e) {}
   try { dolge20_(); } catch (e) {}
   try { daedi60_(); } catch (e) {}
+  try { foldClean1_(); } catch (e) {}
   try { upAcctOpen1_(); } catch (e) {}
   try { exp135_(); } catch (e) {}
   try { rvPhotoFix2_(); } catch (e) {}
@@ -8404,6 +8405,22 @@ function noticeClear3_() {
 // (11/17 한 번, 사용자: '오늘 하루 20명') 업)택11.17지니네농수산 돌게외20: 목표 10 → 20 (오늘 이미 18명), 마감 시각 비움(20명 차면 다시 마감), 11.18 진행(0명) 지움
 // (11/17 한 번, 사용자) #택 데이디 사과 단감: 1일차 사과 10·단감 10, 2일차 사과 20·단감 20 = 총 60. 생성기가 '일 진행 건수 : 10건, 20건'을
 //  1일차 단감 20, 2일차 20명, 3일차 10명으로 읽음 → 11.17 공지 단감 (20명) → (10명), 11.18 방제 40·목표 40·공지 상품마다 (20명), 11.19 일정 취소
+// (11/17 한 번, 사용자 승인) 11월 폴더의 '#택 실버반석 전기면도기' 빈 폴더(11/16 폼 만들기 실패로 생긴 것, 파일·하위 폴더 0개)만 휴지통으로. 쓰는 폴더는 그대로
+function foldClean1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('FOLDCLEAN1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const mf = monthFolder_(new Date(2026, 10, 16)), it = mf.getFoldersByName('#택 실버반석 전기면도기');
+    let n = 0, kept = 0;
+    while (it.hasNext()) {
+      const f = it.next();
+      if (f.getFiles().hasNext() || f.getFolders().hasNext()) { kept++; continue; }
+      if (n >= 10) { kept++; continue; }   // 승인받은 개수(10개)까지만
+      f.setTrashed(true); n++;
+    }
+    props.setProperty('FOLDCLEAN1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 빈 폴더 ' + n + '개 휴지통, 남긴 폴더 ' + kept + '개');
+  } catch (e) { props.setProperty('FOLDCLEAN1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
 function daedi60_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('DAEDI60') || '');
   if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
