@@ -205,7 +205,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v189 (일차 인원 표기 보강)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v190 (과일 다중 방제·쿠팡 위치/가격검색·판매처 보강)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -384,7 +384,7 @@ details.help-box summary {
             <span style="font-weight: 900; font-size: 14px; color: var(--pink-deep, #ff5fa8); display:flex; align-items:center; gap:5px;">
               <span>💬 AI 다이렉트 대화 · 공지 수정 요청</span>
             </span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v182</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v190</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 10px;">
             공지가 이상하게 나왔거나 수정이 필요한가요? 여기서 메시지를 보내면 <b>피클(생성기)</b>과 <b>클로드(시트)</b>에게 실시간으로 전달돼요!
@@ -1022,7 +1022,7 @@ details.help-box summary {
       if (okSeller(t)) return t;
     }
     const tnow = document.body.innerText || "";
-    const re = /판매자\s*[:：]?\s*([^\n]{1,60})/g;
+    const re = /판매자\s*[:：]?\s*\n?\s*([^\n]{1,60})/g;
     let sm;
     while ((sm = re.exec(tnow))) {
       const t = sm[1].replace(/\s*(판매자\s*)?(상품\s*)?보러\s*가기.*$/, "").replace(/\s*판매자\s*평가.*$/, "").trim();
@@ -1030,7 +1030,7 @@ details.help-box summary {
     }
     const vn = (String(document.documentElement.innerHTML).match(/\\?"(?:vendorName|sellerName)\\?"\s*:\s*\\?"([^"\\]{2,60})/) || [])[1] || "";
     if (okSeller(vn)) return vn;
-    const s2 = tnow.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/);
+    const s2 = tnow.match(/상호\s*\/\s*대표자\s*[:：]?\s*\n?\s*([^\n\/]{1,40})/);
     if (s2 && okSeller(s2[1].trim())) return s2[1].trim();
     return "";
   };
@@ -1448,8 +1448,9 @@ details.help-box summary {
     const head = parseHead(headLine);
     const chunks = splitGuides(body);
     const prices = head.headPrices;
+    head.isCoupangNaver = chunks.some(x => /coupang\.com/i.test(x)) && chunks.some(x => /smartstore\.naver|brand\.naver|shopping\.naver/i.test(x));
     head.guides = (chunks.length ? chunks : [body]).map((c, i) => {
-      const g = parse(c, head);
+      const g = parse(c, head, i, chunks.length || 1);
       if (prices.length === chunks.length) g.price = prices[i];
       else if (prices.length && chunks.length === 1) g.price = prices.join("\n");
       else if (prices.length === 1) g.price = prices[0];
@@ -1772,7 +1773,7 @@ details.help-box summary {
   }
 
   const UNKNOWN = /^\s*(모릅|모름|모르겠|없음|없습니다|미정|미노출|-+\s*$|x\s*$|\?+\s*$)/i;
-  function parse(text, head) {
+  function parse(text, head, chunkIdx, nChunks) {
     const f = fieldsOf(text);
     const r = {};
     r.takdaeYN = f.takdaeYN || "";
@@ -2032,9 +2033,9 @@ details.help-box summary {
       const isUnranked = !isNewRank && /뜨지\s*않|어뷰징|검색유입|미노출|안\s*나오/.test(r.rank);
       if (isUnranked) {
         const hp = (head && head.headPrices) || [];
-        const singleP = r.price || (hp && hp[0]) || "";
+        const singleP = r.price || (hp.length === (nChunks || 1) ? hp[chunkIdx || 0] : hp[0]) || "";
         const priceStr = singleP ? Number(String(singleP).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "";
-        const priceInfo = hp.length >= 2 ? "쿠팡 " + hp[0] + " 네이버 " + hp[1] : (priceStr ? priceStr : "");
+        const priceInfo = (head && head.isCoupangNaver && hp.length >= 2) ? "쿠팡 " + hp[0] + " 네이버 " + hp[1] : (priceStr ? priceStr : "");
         const filterNotice = "(안나오면 가격검색 해주세요" + (priceInfo ? ". " + priceInfo : "") + ")";
         r.page = "1p " + filterNotice;
         if (r.keyword && r.keyword.indexOf("가격검색") === -1) {
@@ -2060,13 +2061,14 @@ details.help-box summary {
       if (!r.page || UNKNOWN.test(r.page) || /비워|모르/.test(r.page)) r.page = "1p";
     } else {
       // 엔부사과 등: 키워드 라벨이나 의뢰서에 '미노출시' 또는 '가격검색'이 명시되어 있고 순위가 없는 경우
-      // (단, 텀블러·대봉감처럼 순위에 '신상품', '신규 등록'이 적힌 경우는 11/1 지침에 따라 위치 빈칸 유지)
+      // 단, 2번 순위에 '하위권 노출' 등 실제 순위 설명이 적혀 있으면 1p로 채우지 않음 (11/17 v190)
       const isNewRank = /신상품|신규/.test(r.rank || "");
-      if (!r.page && !isNewRank && (/미노출시/.test(text) || /가격\s*검색/.test(text))) {
+      const hasExplicitRank = !!(r.rank && !UNKNOWN.test(r.rank) && !/비워|모르/.test(r.rank));
+      if (!r.page && !isNewRank && !hasExplicitRank && (/미노출시/.test(text) || /가격\s*검색/.test(text))) {
         const hp = (head && head.headPrices) || [];
-        const singleP = r.price || (hp && hp[0]) || "";
+        const singleP = r.price || (hp.length === (nChunks || 1) ? hp[chunkIdx || 0] : hp[0]) || "";
         const priceStr = singleP ? Number(String(singleP).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "";
-        const priceInfo = hp.length >= 2 ? "쿠팡 " + hp[0] + " 네이버 " + hp[1] : (priceStr ? priceStr : "");
+        const priceInfo = (head && head.isCoupangNaver && hp.length >= 2) ? "쿠팡 " + hp[0] + " 네이버 " + hp[1] : (priceStr ? priceStr : "");
         const filterNotice = "(안나오면 가격검색 해주세요" + (priceInfo ? ". " + priceInfo : "") + ")";
         r.page = "1p " + filterNotice;
       }
@@ -3088,9 +3090,36 @@ details.help-box summary {
       const opts = [[head, sl, sh, mk + cnt], [head, sl, sh, phrase + cnt], [head, sl, sh, mk, cnt], [head, sl, sh, phrase, cnt], [head, sl, mk + cnt], [head, sl, phrase, cnt]].map(a => a.filter(Boolean).join(" "));
       if (mk) return opts.find(x => x.length <= 20) || opts[opts.length - 1];
     }
+    const fruitShort = g => {
+      for (const src of [g.keyword || "", g.pname || ""]) {
+        const w = src.replace(/[\[\]()]/g, " ").split(/\s+/).find(x => isFruit(x));
+        if (w) {
+          if (/귤$/.test(w)) return "귤";
+          if (/^(대봉감|청도감|홍시감)$/.test(w)) return w;
+          const fm = w.match(FRUIT);
+          return fm ? fm[1] : w;
+        }
+      }
+      return "";
+    };
+    if (fruitRoom && guides.length >= 2 && !g1.guideEdited) {
+      let fNames = guides.map(g => fruitShort(g) || nounOf(g)).filter(Boolean);
+      fNames = fNames.filter((x, i, a) => a.indexOf(x) === i);
+      const sh = seller0 || "(업체명)", sl = silbin ? "" : ($("realship").checked ? "실" : "");
+      const joined = fNames.length === 2 ? fNames.join("") : "", firstWae = (fNames[0] || nounOf(g1) || "") + "외";
+      const tries = joined
+        ? [[sh, joined, cnt], [sh, joined + cnt], [sh, firstWae, cnt], [sh, firstWae + cnt], [joined, cnt], [firstWae, cnt]]
+        : [[sh, firstWae, cnt], [sh, firstWae + cnt], [firstWae, cnt], [firstWae + cnt]];
+      for (const t of tries) {
+        const hasTailGlue = t.length >= 2 && !/^\d+$/.test(t[t.length - 1]);
+        const r = hasTailGlue ? [head, sl].concat(t).filter(Boolean).join(" ") : [head, sl].concat(t).filter(Boolean).join(" ");
+        if (r.length <= 20) return r;
+      }
+      return [head, sl, sh, firstWae + cnt].filter(Boolean).join(" ");
+    }
     const many3 = guides.length > 2 && !g1.guideEdited && !fruitRoom, many = guides.length === 2 && !g1.guideEdited && !fruitRoom;
-    // 과일이면 짧은 이름은 과일 이름 (키워드가 '타이벡'이어도 상품명에 감귤이 있으면 '귤', 10/23)
-    const fw = $("fruit").checked && !many3 && !many && !g1.guideEdited ? (() => { for (const src of [g1.keyword || "", g1.pname || ""]) { const w = src.replace(/[\[\]()]/g, " ").split(/\s+/).find(x => isFruit(x)); if (w) return /귤$/.test(w) ? "귤" : w; } return ""; })() : "";
+    // 과일이면 짧은 이름은 과일 이름 (키워드가 '타이벡'이어도 상품명에 감귤이 있으면 '귤', 10/23; 시나노골드사과 → 사과, 11/17 v190)
+    const fw = $("fruit").checked && !many3 && !many && !g1.guideEdited ? fruitShort(g1) : "";
     const toks = fw ? [fw] : many3 ? [(g1.seller || "").replace(/\s+/g, ""), nounOf(g1)].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i) : many ? [(g1.seller || "").replace(/\s+/g, "")].concat(guides.map(nounOf)).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i)
       : (((g1.guide || g1.keyword || "(상품)").replace(/\([^)]*\)/g, "").trim()).split(/\s+/));
     const multi = many3 ? "외" : guides.length > 1 && !many ? "외" : "";
