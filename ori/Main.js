@@ -1878,7 +1878,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -2150,7 +2150,7 @@ function createRunInner_(d) {
   try { soonCheck_(); } catch (e) { note_('1분 뒤 확인 예약 실패: ' + e); }
 
   // 공지의 '(구글폼 링크)' 자리에 폼 링크를 넣어서 폼 설명과 카톡 공지를 한 번에 완성
-  const fruit0 = d.fruit || (reuse && chainFruit_(reuse));
+  const fruit0 = /바로구매/.test(String(d.slot || '')) ? false : (d.fruit || (reuse && chainFruit_(reuse)));   // 바로구매로 만드는 날은 과일이어도 바로구매 줄 그대로 (11/17 설향딸기외 이어서)
   const notice = withSlotLine_(String(d.desc || '').split('(구글폼 링크)').join(formUrl), d.slot, fruit0);
   if (notice) { form.setDescription(formDesc_(notice)); formDescForget_(form.getId()); }
   if (d.platform !== '기대평') try { fixFormQuestions_(form, !!d.realship); } catch (e) { note_('폼 질문 필수/선택 실패: ' + e.message); }
@@ -3459,6 +3459,7 @@ function checkFullInner_() {
   try { noticeClear2_(); } catch (e) {}
   try { noticeClear3_(); } catch (e) {}
   try { seolResume1_(); } catch (e) {}
+  try { seolSlot1_(); } catch (e) {}
   try { upAcctOpen1_(); } catch (e) {}
   try { exp135_(); } catch (e) {}
   try { rvPhotoFix2_(); } catch (e) {}
@@ -8366,6 +8367,22 @@ function noticeClear3_() {
 }
 // (11/17 한 번, 사용자) 오늘과일 설향딸기외(11.9 시작, 의뢰서 120건): 토스는 끝, 쿠팡 남은 81건(설향딸기 41 + 황금향 40)을 같은 명단 시트·폼으로 이어서.
 //  11.17 바로구매 21명(설향 11·황금향 10) 바로 만들고, 11.18·19·20 자정 ~ 오전 7시 20명씩 일정. 공지·리뷰 배정 줄은 예전 일정(38b3hmrt-2~5)의 쿠팡 몫 그대로, 토스 상품은 0명(공지·폼 보기에서 빠짐)
+// (11/17 한 번) 설향딸기외 11.17 방 공지 첫 줄이 과일 규칙으로 '자정 ~ 오전 7시'가 된 것 → '★★★바로구매★★★' (사용자: 오늘 거는 바로구매)
+function seolSlot1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SEOLSLOT1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5 || !/^✓/.test(String(props.getProperty('SEOLRESUME1') || ''))) return;
+  try {
+    let n = 0;
+    const ob = outboxSheet_(), ol = ob.getLastRow();
+    if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
+      if (String(v[2]) !== '방 공지' || String(v[3]) !== '#택11.17 오늘과일 설향딸기외21' || v[5] !== '대기') return;
+      const L = String(v[4]).split('\n'), i = L.findIndex(function (l) { return l.trim(); });
+      if (i < 0 || !isSlotLine_(L[i]) || /바로구매/.test(L[i])) return;
+      L[i] = '★★★바로구매★★★'; obSet_(ob, v[0], 5, L.join('\n')); n++;
+    });
+    props.setProperty('SEOLSLOT1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 방 공지 ' + n + '개');
+  } catch (e) { props.setProperty('SEOLSLOT1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
 function seolResume1_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SEOLRESUME1') || '');
   if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
