@@ -205,7 +205,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v191 (실·빈 혼합 한 방·구확+리뷰 건수 합산)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v192 (방제 20자: 업체명 빼고 상품명·품목명 살리기)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -384,7 +384,7 @@ details.help-box summary {
             <span style="font-weight: 900; font-size: 14px; color: var(--pink-deep, #ff5fa8); display:flex; align-items:center; gap:5px;">
               <span>💬 AI 다이렉트 대화 · 공지 수정 요청</span>
             </span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v191</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v192</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 10px;">
             공지가 이상하게 나왔거나 수정이 필요한가요? 여기서 메시지를 보내면 <b>피클(생성기)</b>과 <b>클로드(시트)</b>에게 실시간으로 전달돼요!
@@ -3195,6 +3195,9 @@ details.help-box summary {
       return [head, sil, platTag, (names[0] || "") + "외", cnt].filter(Boolean).join(" ");
     }
     // 20자 안 넘으면 앞에 업체명도 넣기 (11/10 v170 사용자: '20자 안 넘으면 앞에 업체명도 넣으라고')
+    // 11/17 v192 (#73 수진 님: "여성겨울이아니라 겨울모자 여성모자 방한모자 이런식으로나와야된다고"):
+    //  업체명을 넣은 조합을 다 시도하고 → 업체명을 뺀 조합도 다 시도한 뒤에야 상품명을 줄임.
+    //  (업체명만 빼면 온전한 상품명이 20자에 들어가는데도 업체명을 쥔 채 상품명 꼬리를 잘라 버리던 것을 고침)
     const tryShops = (!fruitRoom && seller0) ? [seller0, ""] : [shop];
     for (const sh of tryShops) {
       const spaced = n => [head, sil, sh, pick(n).join(" ") + multi, cnt].filter(Boolean).join(" ");
@@ -3203,11 +3206,42 @@ details.help-box summary {
       for (let n = toks.length; n >= 1; n--) if (semi(n).length <= 20) return semi(n);
       const tight = n => head + " " + (sil ? "실 " : "") + (sh ? sh + " " : "") + pick(n).join("") + multi + cnt;
       for (let n = toks.length; n >= 1; n--) if (tight(n).length <= 20) return tight(n);
-      // 그래도 20자가 넘으면 상품 이름을 뒤에서부터 줄이고 업체명과는 띄어 씀 (11/10 사용자: '#택11.10 싱싱곳간시나노골드사과10' 21자 → '#택11.10 싱싱곳간 시나노골드10')
-      const w1 = pick(1).join("");
-      for (let k = w1.length - 1; k >= 2; k--) { const s1 = [head, sil, sh, w1.slice(0, k) + multi + cnt].filter(Boolean).join(" "); if (s1.length <= 20) return s1; }
     }
-    return tight(1);
+    // 여기까지 왔으면 업체명을 넣든 빼든 글자를 안 자르고는 20자를 못 맞춤 (11/17 v192)
+    //  ① 상품명을 뒤에서 자르지 말고, 상품명 안의 더 짧은 품목 명사부터 시도
+    //     (그린코코 니트 털방울 올인원 겨울모자 여성모자 방한모자 → 겨울모자·여성모자·방한모자, 검색 키워드 끝부분과 같은 낱말 먼저)
+    const w1 = pick(1).join("");
+    const cands = [];
+    const addCand = x => { x = String(x || "").replace(/\s+/g, ""); if (x.length >= 2 && x !== w1 && cands.indexOf(x) === -1) cands.push(x); };
+    if (String(g1.pname || "").trim()) {
+      const sug = g1.kwSug || suggestKeywords(g1.pname, g1.kwAlts || []);
+      addCand(sug.main);
+      (sug.alts || []).forEach(addCand);
+      const pw = String(g1.pname).replace(/[\[\]()]/g, " ").split(/[\s,]+/).filter(w => /^[가-힣]{2,}$/.test(w) && !KW_STOP.test(w) && w !== seller0);
+      pw.filter(w => w1.slice(w1.length - w.length) === w).forEach(addCand);
+      pw.slice().sort((a, b) => b.length - a.length).forEach(addCand);
+    }
+    for (const cd of cands) {
+      for (const sh of tryShops) {
+        for (const body of [cd + multi + " " + cnt, cd + multi + cnt]) {
+          const t = [head, sil, sh, body].filter(Boolean).join(" ");
+          if (t.length <= 20) return t;
+        }
+      }
+    }
+    //  ② 그래도 넘으면 앞 수식어를 줄이고 뒤쪽 핵심 명사는 남김 (여성겨울모자 → 겨울모자, 여성겨울4처럼 품목 명사가 잘리지 않게)
+    //     업체명은 먼저 뺌 (상품명을 온전히 남기는 쪽이 먼저)
+    const fbShops = tryShops.length > 1 ? ["", tryShops[0]] : tryShops;
+    for (const sh of fbShops) {
+      for (let k = w1.length - 1; k >= 2; k--) {
+        const body = w1.slice(w1.length - k);
+        for (const b of [body + multi + " " + cnt, body + multi + cnt]) {
+          const s1 = [head, sil, sh, b].filter(Boolean).join(" ");
+          if (s1.length <= 20) return s1;
+        }
+      }
+    }
+    return [head, sil, pick(1).join("") + multi + cnt].filter(Boolean).join(" ");
   }
 
   // 여러 날 진행 계획: 의뢰서의 1일차, 2일차... 또는 총 건수 / 일 건수로 남은 일차를 계산
