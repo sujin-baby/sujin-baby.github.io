@@ -224,6 +224,8 @@ details.help-box summary {
   }
   /* 고정 바가 내용을 안 가리게 본문 아래를 띄움 */
   body { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+  /* 작은 클립보드 단추는 큰 [📋 결과 바로 붙여넣기]가 대신하므로 모바일에서는 숨김 */
+  #paste-cp-btn { display: none; }
 }
 </style>
 </head>
