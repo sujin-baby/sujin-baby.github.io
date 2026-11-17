@@ -1650,11 +1650,12 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (it.boss) h += '<div class="boss-head"><span class="bh-ico">👾</span><span><b>오늘의 보스 문제</b><i>3연속 정답 기념 · 맞히면 +' + BOSS_BONUS + ' P</i></span></div>';
     h += '<div class="q-tags"><span class="q-tag">' + esc(tag) + '</span><span class="q-src ' + badge.k + '">' + esc(badge.t) + '</span>' +
       '<button class="hint-btn" id="qHint">🎟️ 힌트 -' + HINT_COST + ' P</button></div>' +
-      '<h2 class="q-text">' + esc(q.q) + '</h2><div class="opts">';
+      '<h2 class="q-text">' + esc(q.q) + '</h2>' +
+      '<div id="hintBox"></div><div class="opts">';
     it.order.forEach(function (oi, idx) {
       h += '<button class="opt" data-i="' + oi + '"><span class="k">' + keys[idx] + '</span><span>' + esc(q.o[oi]) + '</span></button>';
     });
-    h += '</div><div id="hintBox"></div>';
+    h += '</div>';
     $('#qBody').innerHTML = h;
     $('#qBody').scrollTop = 0;
     $('#qFb').classList.add('hidden');
@@ -1665,32 +1666,93 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (hb) hb.onclick = useHint;
   }
 
-  /* 🎟️ 오답 힌트권 (30 P): 4지선다 오답 보기 1개 지우기 / OX는 핵심 키워드 */
+  /* ============================================================
+     💡 진짜 힌트권 (30 P)
+     · 보기 지우기가 아니라 '어디를 봐야 하는지' 알려주는 힌트 카드를 띄운다
+     · 지텔프: 문항의 G-POINT 번호 + 그 포인트의 조건·공식
+     · 경찰 과목: data.js의 문항별 hint(쟁점 한 줄). 없으면 아래 생성기가
+       단원·법조문·조문번호만 뽑아 정답은 노출하지 않고 쟁점을 짚어 준다
+     · 한 문제당 1회 · 사용 시 차감은 한 번만
+     ============================================================ */
+  var HINT_SUBJ_ICO = { crim: '⚖️', pol: '🚔', cri: '🧠' };
+
+  /* G-POINT 암기표에서 해당 번호의 [번호, 조건, 공식] 행 찾기 */
+  function gpRow(n) {
+    for (var i = 0; i < GP_TABLE.length; i++) {
+      var rows = GP_TABLE[i].rows || [];
+      for (var j = 0; j < rows.length; j++) if (Number(rows[j][0]) === Number(n)) return rows[j];
+    }
+    return null;
+  }
+
+  /* 지텔프 힌트: 몇 포인트 문법인지 + 조건 → 공식 */
+  function gpHint(q) {
+    var c = COURSE[q.c];
+    var name = (c && c.lec && c.lec[q.gp - 1] && c.lec[q.gp - 1].t) ? c.lec[q.gp - 1].t : '';
+    var row = gpRow(q.gp);
+    var kicker = '📘 G-POINT ' + q.gp + (name ? ' · ' + name : '') + ' 문법이에요';
+    var main = row ? ('조건: ' + row[1] + '  →  공식: ' + row[2]) : (name ? ('공식: ' + name) : '');
+    return {
+      k: kicker,
+      t: main,
+      s: '선지에서 이 공식의 형태(시제·준동사·관계사 자리)와 어긋나는 것을 먼저 지우고 남는 것을 고르세요.'
+    };
+  }
+
+  /* 힌트 필드가 없는 문항용 생성기: 단원 + 법조문·조문번호만 뽑아 쟁점을 짚는다 */
+  function autoHint(q) {
+    var text = String(q.q || '') + ' ' + (q.o || []).join(' ');
+    var laws = [], arts = [];
+    (text.match(/[「『][^」』]{2,26}[」』]/g) || []).forEach(function (x) {
+      var v = x.replace(/[「」『』]/g, '');
+      if (laws.indexOf(v) < 0) laws.push(v);
+    });
+    (text.match(/제\s?\d+조(?:의\s?\d+)?/g) || []).forEach(function (x) {
+      var v = x.replace(/\s+/g, '');
+      if (arts.indexOf(v) < 0) arts.push(v);
+    });
+    var unit = unitName(q.c, q.u) || '';
+    var bits = [];
+    if (laws.length) bits.push('「' + laws.slice(0, 2).join('」·「') + '」');
+    if (arts.length) bits.push(arts.slice(0, 4).join('·'));
+    var main = '';
+    if (bits.length) main = bits.join(' ') + ' 조문의 요건·주체·숫자를 먼저 대조하세요.';
+    var sub;
+    if ((q.o || []).length === 2) sub = '문장에서 주체·수치·결론이 바뀐 부분을 찾아보세요.';
+    else sub = '①~④ 중 법조문·판례의 결론과 어긋나는 진술 하나가 정답이에요. 숫자와 주체부터 확인하세요.';
+    return { k: (HINT_SUBJ_ICO[q.s] || '🎯') + ' 쟁점 힌트' + (unit ? ' · ' + unit : ''), t: main, s: sub };
+  }
+
+  /* 문항에 맞는 힌트 카드 내용 만들기 */
+  function hintFor(q) {
+    var h;
+    if (q.gp) h = gpHint(q);
+    else if (q.hint) h = { k: (HINT_SUBJ_ICO[q.s] || '🎯') + ' 쟁점 힌트' + (unitName(q.c, q.u) ? ' · ' + unitName(q.c, q.u) : ''), t: q.hint, s: '' };
+    else h = autoHint(q);
+    if (!h.t) h = autoHint(q);
+    return h;
+  }
+
   function useHint() {
     if (!QS || QS.locked || QS.hintUsed) return;
     var it = QS.items[QS.i], q = it.q;
     if (xpAvail() < HINT_COST) { toast('힌트권에는 ' + HINT_COST + ' P가 필요해요 · 지금 ' + xpAvail() + ' P'); return; }
     if (!spendXp(HINT_COST)) return;
     QS.hintUsed = true;
+    var h = hintFor(q);
     var box = $('#hintBox');
-    if (q.o.length > 2) {
-      var cands = it.order.filter(function (oi) { return oi !== q.a; });
-      var pick = cands[Math.floor(Math.random() * cands.length)];
-      QS.hintGone = pick;
-      var b = $('#qBody .opt[data-i="' + pick + '"]');
-      if (b) { b.classList.add('gone'); b.disabled = true; }
-      if (box) box.innerHTML = '<p class="hint-note">🎟️ 힌트권 사용 · 오답 보기 1개를 지웠어요 (−' + HINT_COST + ' P)</p>';
-      toast('힌트권 사용 · 오답 보기 1개를 지웠어요');
-    } else {
-      var toks = String(q.o[q.a] || '').split(/\s+/);
-      var ki = keyTokenIdx(toks, q.e);
-      var kw = ki >= 0 ? toks[ki].replace(/[.,;:!?'"”’)\]】·]+$/g, '') : '';
-      if (box) box.innerHTML = '<p class="hint-note">🎟️ 힌트권 사용 (−' + HINT_COST + ' P) · 핵심 키워드 <b>' + esc(kw || (unitName(q.c, q.u) || '해설의 밑줄 부분')) + '</b>를 먼저 확인해 보세요</p>';
-      toast('핵심 키워드 힌트를 봤어요');
+    if (box) {
+      box.innerHTML = '<div class="hint-card">' +
+        '<div class="hint-top"><span class="hint-ico">💡</span><b>' + esc(h.k) + '</b><i>−' + HINT_COST + ' P</i></div>' +
+        (h.t ? '<p class="hint-main">' + esc(h.t) + '</p>' : '') +
+        (h.s ? '<p class="hint-sub">' + esc(h.s) + '</p>' : '') +
+        '</div>';
+      box.classList.add('show');
     }
+    toast('힌트를 확인했어요 · −' + HINT_COST + ' P');
     sfx('tap');
     var hb = $('#qHint');
-    if (hb) { hb.disabled = true; hb.textContent = '🎟️ 사용됨'; }
+    if (hb) { hb.disabled = true; hb.textContent = '💡 힌트 확인함'; }
   }
 
   function setCombo(n, bonus) {
@@ -2673,6 +2735,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         (rd.done ? '받음 ✓' : (got ? '받기' : '잠금')) + '</button></div>';
     }
     h += '<div class="xp-use"><span>🎟️ 힌트권 · ' + HINT_COST + ' ' + XP_LABEL + '</span><span>🛡️ 출석 방패 · ' + SHIELD_COST + ' ' + XP_LABEL + '</span></div>' +
+      '<div class="sheet-note" style="margin-top:6px">힌트권은 보기를 지우지 않고, 그 문제의 쟁점(지텔프는 G-POINT 번호와 공식)을 알려줘요 · 한 문제당 1회</div>' +
       '<div class="sheet-note" style="margin-top:8px">쓸 수 있는 ' + XP_LABEL + ' ' + xpAvail() + ' · 누적 ' + xp + ' (계급은 누적으로 올라가요)</div></div>';
     return h;
   }
