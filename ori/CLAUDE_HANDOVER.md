@@ -1174,4 +1174,9 @@
   - 그래서 `bm-src` 겉포장을 `(async (oriMode) => { … })();`로 바꾸고, `const out` → `let out` + `oriMode === "pos"`면 위치 줄만 남김, 검색 화면에서 상품번호 입력 팝업은 유저스크립트에서 띄우지 않음(안내 문구로 대체) — 북마크릿 동작은 그대로(`oriMode` 없음).
   - **`ori/product-helper.user.js`는 손으로 고치지 말 것**: `node ori/tools/build_userscript.js` 가 `bm-src`에서 이 파일과 생성기 안 `<script id="us-src">`(다운로드·복사용)를 함께 다시 만듦. 어긋나면 `ori/test/userscript_test.js`(CI 포함)가 멈춤.
 - **설치 안내**: `⚙️ PC 확장 / 북마크 / 아이폰 사파리 설치 안내` 안에 `📱 아이폰 사파리 자동 실행 (Userscripts)` 3줄(App Store 설치 → 설정 → Safari → 확장 프로그램에서 켜기 → `[📥 저장]`/`[📋 코드 복사]`).
-- **검증**: `run_ci.sh` 전 구간 통과(userscript_test 추가). 라이브 PC 1280px·모바일 390px 확인 결과는 배포 후 보고.
+- **검증(끝남)**: 로컬 `run_ci.sh` exit 0 → ori-dev `test`·`deploy` 성공(b63e9f7·9879954·1d8f45c·dcee2b5) → main `pages-build-deployment` 성공.
+  - 라이브 `https://sujin-baby.github.io/guide/` 를 PC 1280px·모바일 390px iframe 으로 열어 확인: 390px에서 하단 바 4단추·큰 붙여넣기 단추가 뜨고 본문을 가리지 않음, 1280px는 예전 화면 그대로(모바일 UI 전부 숨김).
+  - `[📥 ori-product-helper.user.js 저장]` 을 실제로 눌러 `downloads/ori-product-helper.user.js`(74,912바이트, Userscripts 헤더 포함) 가 받아진 것과, 생성기 안 `us-src` 가 `ori/product-helper.user.js` 와 같은 글자인 것 확인.
+  - `open.html` 의 [🚀 사파리에서 바로 열기] href = `https://m.coupang.com/vm/products/7934521?itemId=2291234567#kw=…&pr=15900` (해시 유지·rel `noreferrer noopener`).
+  - `userscript_test` 는 가짜 DOM 으로 유저스크립트를 실행해 플로팅 단추 2개가 실제로 붙는지까지 확인(쿠팡에 접속하지 않음).
+  - **남은 것(수진 님 기기에서만)**: Userscripts 앱 설치·확장 켜기·파일 열기는 아이폰에서 직접 해야 하고, 쿠팡 상품 화면에서 단추를 눌러 실제 값이 복사되는 지는 그 뒤에 확인된다.
