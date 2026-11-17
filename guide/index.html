@@ -205,7 +205,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v188 (리뷰 가이드 직접 입력 칸)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v189 (일차 인원 표기 보강)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -1864,10 +1864,11 @@ details.help-box summary {
     const dv = f.daily || "";
     r.days = [];
     let m;
-    const dre = /(\d+)\s*일\s*차\s*[:：]?\s*(\d+)\s*[건개]?\s*(\(([^)]*)\))?/g;
-    while ((m = dre.exec(dv))) r.days.push({ n: m[2], br: m[4] ? m[4].split(/[\/,]/).map(x => (x.match(/(\d+)\s*개/) || x.match(/(\d+)\s*$/) || [])[1]).filter(Boolean) : [] });
+    // '1일차 20건'/'1일차 20명'과 '첫째날 20명 둘째날 30명'(첫날·첫번째날, 은/는/이/가 조사) 모두 읽음 (11/17 v189)
+    const dre = /(?:(\d+)\s*일\s*차|(첫|둘|셋|넷|다섯)\s*(?:번째|째)?\s*날)\s*(?:은|는|이|가)?\s*[:：]?\s*(\d+)\s*[건개명]?\s*(\(([^)]*)\))?/g;
+    while ((m = dre.exec(dv))) r.days.push({ n: m[3], br: m[5] ? m[5].split(/[\/,]/).map(x => (x.match(/(\d+)\s*개/) || x.match(/(\d+)\s*$/) || [])[1]).filter(Boolean) : [] });
     if (!r.days.length) {
-      const dd = /(\d{1,2})\s*일\s*(\d+)\s*[건개]/g;
+      const dd = /(\d{1,2})\s*일\s*(\d+)\s*[건개명]/g;
       while ((m = dd.exec(dv))) {
         const t = todayKST(); const [ty, tm, td] = ymd(t); let mo = tm, yy = ty;
         if (Number(m[1]) < td - 7) { mo++; if (mo > 12) { mo = 1; yy++; } }
@@ -1876,12 +1877,14 @@ details.help-box summary {
     }
     if (!r.days.length && /^\s*\d+\s*\/\s*\d+/.test(dv)) dv.split("/").map(x => (x.match(/\d+/) || [""])[0]).filter(Boolean).forEach(n => r.days.push({ n: n, br: [] }));
     // '3-2'(1일차 3, 2일차 2) 또는 '2~3' 일진행 건수 표기 지원: '-'이거나 앞 숫자가 크면 적은 순서 그대로(3-2 → [3,2]), '~'이면서 앞이 작으면 큰 수 먼저 (11/16 v184)
-    if (!r.days.length && /(\d+)\s*([-~])\s*(\d+)/.test(dv)) {
-      const rng = dv.match(/(\d+)\s*([-~])\s*(\d+)/);
+    // '20건 -> 30건'·'20명 => 30명'·'20 → 30' 범위/화살표 표기는 적힌 순서 그대로 [20, 30] (11/17 v189)
+    if (!r.days.length && /(\d+)\s*[건개명]?\s*(?:->|=>|→|[-~])\s*(\d+)\s*[건개명]?/.test(dv)) {
+      const rng = dv.match(/(\d+)\s*[건개명]?\s*(->|=>|→|[-~])\s*(\d+)\s*[건개명]?/);
       const n1 = Number(rng[1]), sep = rng[2], n2 = Number(rng[3]);
+      const arrow = (sep === "->" || sep === "=>" || sep === "→");
       const tot = Number(r.total) || 0;
       if (tot > 0 && n1 + n2 === tot) {
-        const first = (sep === "-" || n1 >= n2) ? n1 : n2;
+        const first = arrow ? n1 : (sep === "-" || n1 >= n2) ? n1 : n2;
         const second = (first === n1) ? n2 : n1;
         r.days.push({ n: String(first), br: [] });
         r.days.push({ n: String(second), br: [] });
