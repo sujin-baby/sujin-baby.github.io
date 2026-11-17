@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=1794930600">
+<link rel="stylesheet" href="style.css?v=1794930200">
 </head>
 <body>
 
@@ -274,9 +274,13 @@
   </div>
   <div class="quiz-body" id="qBody"></div>
   <div class="feedback hidden" id="qFb">
-    <div class="fb-head" id="fbHead"></div>
-    <div class="fb-text" id="fbText"></div>
-    <button class="btn primary wide" id="fbNext">다음</button>
+    <div class="fb-scroll">
+      <div class="fb-head" id="fbHead"></div>
+      <div class="fb-text" id="fbText"></div>
+    </div>
+    <div class="fb-foot">
+      <button class="btn primary wide" id="fbNext">다음</button>
+    </div>
   </div>
   <div id="comboBanner" class="combo-banner hidden">2연속 정답!</div>
 </div>
@@ -304,7 +308,7 @@
 <div id="fx" class="fx"></div>
 <div id="toast" class="toast hidden"></div>
 
-<script src="data.js?v=1794930600"></script>
-<script src="app.js?v=1794930600"></script>
+<script src="data.js?v=1794930200"></script>
+<script src="app.js?v=1794930200"></script>
 </body>
 </html>

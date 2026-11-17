@@ -144,7 +144,7 @@ button{font-family:inherit;font-size:inherit;color:inherit;border:0;background:n
 /* quiz */
 .quiz{position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;animation:slideUp .22s ease}
 @keyframes slideUp{from{transform:translateY(14px);opacity:.6}to{transform:none;opacity:1}}
-.quiz-top{display:flex;align-items:center;gap:10px;padding:calc(12px + var(--safe-t)) 14px 10px}
+.quiz-top{display:flex;align-items:center;gap:10px;padding:calc(12px + var(--safe-t)) 14px 10px;background:var(--bg)}
 .q-close{width:36px;height:36px;border-radius:12px;background:#fff;border:1px solid var(--line);font-size:16px;color:var(--ink2)}
 .combo{display:inline-flex;align-items:center;gap:3px;font-size:11.5px;font-weight:900;color:#8a5a00;background:#fff7e0;border:1px solid #ffe0a3;border-radius:99px;padding:4px 9px;white-space:nowrap;transition:transform .18s ease,background .18s ease,color .18s ease}
 .combo b{font-size:12px}
@@ -157,7 +157,7 @@ button{font-family:inherit;font-size:inherit;color:inherit;border:0;background:n
 .combo.hot{animation:comboBump .36s cubic-bezier(.2,1.5,.4,1)}
 @keyframes comboBump{0%{transform:scale(1) rotate(0)}45%{transform:scale(1.34) rotate(-5deg)}100%{transform:scale(1.12) rotate(0)}}
 @keyframes pop{50%{transform:scale(1.25)}}
-.quiz-body{flex:1;overflow-y:auto;padding:6px 14px 200px;max-width:560px;width:100%;margin:0 auto}
+.quiz-body{flex:1;overflow-y:auto;overflow-anchor:none;padding:6px 14px 34px;max-width:560px;width:100%;margin:0 auto;-webkit-overflow-scrolling:touch}
 .q-tag{display:inline-block;font-size:11.5px;font-weight:900;color:var(--c);background:var(--c-soft);padding:5px 10px;border-radius:99px;margin-bottom:12px}
 .q-text{font-size:18px;font-weight:900;letter-spacing:-.4px;line-height:1.42;margin:0 0 16px}
 .opts{display:flex;flex-direction:column;gap:10px}
@@ -173,7 +173,10 @@ button{font-family:inherit;font-size:inherit;color:inherit;border:0;background:n
 @keyframes shake{25%{transform:translateX(-5px)}50%{transform:translateX(5px)}75%{transform:translateX(-3px)}}
 .quiz.shake{animation:shake .3s}
 
-.feedback{position:fixed;left:0;right:0;bottom:0;z-index:70;background:#fff;border-top:1px solid var(--line);border-radius:22px 22px 0 0;padding:16px 16px calc(16px + var(--safe-b));box-shadow:0 -10px 30px -18px #101828;animation:slideUp .18s ease;max-height:72vh;overflow-y:auto}
+/* 해설 패널은 화면 위에 떠 있지 않고 퀴즈 화면의 한 칸(flow)으로 들어간다 → 보기 C·D를 덮지 않음 */
+.feedback{position:relative;flex:0 0 auto;display:flex;flex-direction:column;margin-top:8px;background:#fff;border-top:1px solid var(--line);border-radius:22px 22px 0 0;padding:14px 16px calc(12px + var(--safe-b));box-shadow:0 -10px 30px -18px #101828;animation:slideUp .18s ease;max-height:46vh}
+.fb-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;max-width:560px;width:100%;margin:0 auto;padding-bottom:2px}
+.fb-foot{flex:0 0 auto;max-width:560px;width:100%;margin:0 auto;padding-top:10px}
 .feedback.ok{background:#f1fdf5;border-top-color:#bbf7d0}
 .feedback.no{background:#fff5f5;border-top-color:#fecaca}
 .feedback .inner{max-width:560px;margin:0 auto}

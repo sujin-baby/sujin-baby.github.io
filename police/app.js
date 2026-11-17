@@ -1685,18 +1685,31 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     return null;
   }
 
-  /* 지텔프 힌트: 몇 포인트 문법인지 + 조건 → 공식 */
+  /* 문항 해설 첫머리 [최신 교재 G-POINT 13 · to부정사 (to + 동원) · seem to + 동원]
+     → 이 문항이 실제로 묻는 표현(base·spec)을 꺼낸다 */
+  function gpSpec(q) {
+    var m = String(q.e || '').match(/^\[([^\]]*)\]/);
+    if (!m) return null;
+    var s = m[1].replace(/^.*?G-POINT\s*\d+\s*·\s*/, '').replace(/^최신 교재\s*/, '');
+    var parts = s.split(' · ');
+    return { base: (parts[0] || '').trim(), spec: (parts[1] || '').trim() };
+  }
+
+  /* 지텔프 힌트: 이 문항의 G-POINT + 그 문항이 실제로 묻는 표현 + 짧은 구분점
+     · 문항별 hint가 있으면 그것을 쓴다 (조건 목록이 문항과 어긋나 보이던 문제 해결)
+     · 없으면 해설의 표현(spec) → G-POINT 암기표 행 순으로 떨어뜨린다 */
   function gpHint(q) {
     var c = COURSE[q.c];
-    var name = (c && c.lec && c.lec[q.gp - 1] && c.lec[q.gp - 1].t) ? c.lec[q.gp - 1].t : '';
-    var row = gpRow(q.gp);
-    var kicker = '📘 G-POINT ' + q.gp + (name ? ' · ' + name : '') + ' 문법이에요';
-    var main = row ? ('조건: ' + row[1] + '  →  공식: ' + row[2]) : (name ? ('공식: ' + name) : '');
-    return {
-      k: kicker,
-      t: main,
-      s: '선지에서 이 공식의 형태(시제·준동사·관계사 자리)와 어긋나는 것을 먼저 지우고 남는 것을 고르세요.'
-    };
+    var sp = gpSpec(q) || {};
+    var name = sp.base || ((c && c.lec && c.lec[q.gp - 1] && c.lec[q.gp - 1].t) ? c.lec[q.gp - 1].t : '');
+    var kicker = '📘 G-POINT ' + q.gp + (name ? ' · ' + name : '');
+    var main = q.hint || '';
+    if (!main && sp.spec) main = sp.spec + ' 구문이 이 문항의 포인트예요.';
+    if (!main) {
+      var row = gpRow(q.gp);
+      main = row ? ('조건: ' + row[1] + ' → 공식: ' + row[2]) : '';
+    }
+    return { k: kicker, t: main, s: '' };
   }
 
   /* 힌트 필드가 없는 문항용 생성기: 단원 + 법조문·조문번호만 뽑아 쟁점을 짚는다 */
@@ -1748,6 +1761,16 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         (h.s ? '<p class="hint-sub">' + esc(h.s) + '</p>' : '') +
         '</div>';
       box.classList.add('show');
+      /* 힌트를 열면 상단 배지가 반쯤 잘린 채로 남지 않게 스크롤을 정리한다 */
+      var bd = $('#qBody');
+      if (bd) {
+        bd.scrollTop = 0;                       // 상단 배지가 반쯤 잘린 자리로 남지 않게 맨 위부터
+        var br = bd.getBoundingClientRect(), cr = box.getBoundingClientRect();
+        if (cr.top > br.bottom - 8) {           // 카드가 화면 아래로 완전히 밀렸으면 카드 위쪽부터 보이게
+          var maxS = bd.scrollHeight - bd.clientHeight;
+          bd.scrollTop = Math.min(maxS, bd.scrollTop + (cr.top - br.top) - 8);
+        }
+      }
     }
     toast('힌트를 확인했어요 · −' + HINT_COST + ' P');
     sfx('tap');
@@ -1867,6 +1890,46 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     el.querySelector('.fb-text').innerHTML = gpLead + '<b>해설</b> · ' + esc(q.e);
     var b = $('#fbNext');
     b.textContent = QS.i + 1 >= QS.items.length ? '결과 보기' : '다음 문제';
+    /* 해설 패널이 보기 아래를 덮지 않게 바뀌었으니, 정답 보기가 화면 안에 들어오도록만 맞춘다 */
+    revealAnswerOpt();
+    revealAnswerOpt(true);
+    revealAnswerOpt(2);
+  }
+
+  /* 해설이 뜰 때 정답 보기가 화면 안에 들어오고, 보기가 경계에서 반토막 나 보이지 않게 스크롤을 맞춘다
+     (해설 패널은 flow라 보기를 덮지 않음 — 여기서는 보이는 위치만 정리)
+     · 화면 좌표(getBoundingClientRect) 기준으로 재서 스크롤 컨테이너 안에서도 정확하게 맞춘다 */
+  function revealAnswerOpt(pass) {
+    setTimeout(function () {
+      if (!QS) return;
+      var bd = $('#qBody');
+      if (!bd) return;
+      var opts = $$('#qBody .opt');
+      if (!opts.length) return;
+      var ok = null;
+      opts.forEach(function (o) { if (o.classList.contains('ok')) ok = o; });
+      for (var round = 0; round < 3; round++) {
+        var br = bd.getBoundingClientRect();
+        if (br.height < 80) return;
+        var maxS = Math.max(0, bd.scrollHeight - bd.clientHeight);
+        var delta = 0;
+        if (ok) {
+          var r = ok.getBoundingClientRect();
+          if (r.bottom > br.bottom - 10) delta = (ok === opts[opts.length - 1]) ? (maxS - bd.scrollTop) : (r.bottom - (br.bottom - 10));
+          else if (r.top < br.top + 6) delta = -((br.top + 6) - r.top);
+        }
+        if (!delta) {
+          for (var i = 0; i < opts.length; i++) {
+            var q = opts[i].getBoundingClientRect();
+            if (q.top < br.bottom - 0.5 && q.bottom > br.bottom + 0.5) { delta = q.bottom - br.bottom + 10; break; }
+          }
+        }
+        if (Math.abs(delta) < 1) break;
+        var before = bd.scrollTop;
+        bd.scrollTop = Math.min(maxS, Math.max(0, before + delta));
+        if (bd.scrollTop === before) break;
+      }
+    }, pass === 2 ? 600 : pass ? 260 : 80);
   }
 
   function nextQ() {
