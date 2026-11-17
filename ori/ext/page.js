@@ -139,7 +139,7 @@
         if (okSeller(t)) { seller = t; break; }
       }
       if (!seller) {
-        const re = /판매자\s*[:：]?\s*([^\n]{1,60})/g;
+        const re = /판매자\s*[:：]?\s*\n?\s*([^\n]{1,60})/g;
         let sm;
         while ((sm = re.exec(txt))) {
           const t = sm[1].replace(/\s*(판매자\s*)?(상품\s*)?보러\s*가기.*$/, "").replace(/\s*판매자\s*평가.*$/, "").trim();
@@ -148,7 +148,7 @@
       }
       /* '판매자 특가', '판매자로켓' 같은 배지 글자는 판매처가 아님 → 페이지 데이터의 판매자 이름 (따옴표가 \" 로 들어간 데이터도) */
       if (!seller) { const vn = (String(html).match(/\\?"(?:vendorName|sellerName)\\?"\s*:\s*\\?"([^"\\]{2,60})/) || [])[1] || ""; if (okSeller(vn)) seller = vn; }
-      if (!seller) { const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/); if (s2 && okSeller(s2[1].trim())) seller = s2[1].trim(); }
+      if (!seller) { const s2 = txt.match(/상호\s*\/\s*대표자\s*[:：]?\s*\n?\s*([^\n\/]{1,40})/); if (s2 && okSeller(s2[1].trim())) seller = s2[1].trim(); }
       /* 못 읽었으면 왜 그런지 보려고 화면의 '판매자·상호' 줄을 같이 보냄 */
       const sellerHint = seller ? "" : txt.split("\n").map(x => x.replace(/\s+/g, " ").trim()).filter(x => /판매자|판매처|상호|스토어/.test(x) && x.length <= 60).slice(0, 4).join(" | ") + (/vendorName|sellerName/.test(html) ? " [페이지 데이터에 판매자 칸 있음]" : "");
       let opt = readOption();

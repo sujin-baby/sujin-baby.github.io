@@ -1279,7 +1279,57 @@ console.log('-- Test 32: 일차 인원 표기 보강 — 화살표·첫째날·�
   console.log('✓ 일차 인원 표기 보강(화살표·첫째날·명 단위) 시험 통과');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (32개 샘플 전원 일치)');
+// ==========================================
+console.log('-- Test 33: 과일 다중 방제(사과단감)·하위권 1p 오인식 및 쿠팡/네이버 가격문구 오표기 차단 (11/17 v190)');
+{
+  const req = `#입금대행 택대 12700 11500
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 시나노골드사과
+2. 키워드 검색 시 현재 순위 : '시나노골드사과'라고 검색 시 하위권 노출
+3. 총 구매 건수 : 30건
+4. 일 진행 건수 : 30건
+5. 상품주소(URL) : https://www.coupang.com/vp/products/9824856933?vendorItemId=96336330506
+6. 구매옵션 : 3kg x 1박스
+7. 포토제공 유 무  : 유
+8. 리뷰내용 가이드 : 자율작성 요청
+9. 입금하실 입금자명 : 박영찬
+10.택배대행 Y/N: Y
+=========================
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 단감
+2. 키워드 검색 시 현재 순위 : '단감'이라고 검색 시 하위권 노출
+3. 총 구매 건수 : 30건
+4. 일 진행 건수 : 30건
+5. 상품주소(URL) : https://www.coupang.com/vp/products/9824773602?vendorItemId=96336089554
+6. 구매옵션 : 3kg x 1박스
+7. 포토제공 유 무  : 유
+8. 리뷰내용 가이드 : 자율작성 요청
+9. 입금하실 입금자명 : 박영찬
+10.택배대행 Y/N: Y`;
+
+  const h = P.parseAll(req);
+  if (h.guides.length !== 2) throw new Error('Test 33 guides length should be 2');
+  h.guides.forEach((g, idx) => {
+    if (g.page) throw new Error('Test 33 guide[' + idx + '] page should be empty for 하위권 노출, got: ' + g.page);
+    if (/네이버/.test(g.page || '') || /네이버/.test(g.keyword || '')) throw new Error('Test 33 쿠팡 단독에 네이버 문구 들어가면 안 됨');
+  });
+  if (String(h.guides[0].price) !== '12700' || String(h.guides[1].price) !== '11500') {
+    throw new Error('Test 33 price mismatch: ' + h.guides.map(g => g.price).join(','));
+  }
+  getElem('t-ip').checked = true;
+  getElem('t-up').checked = false;
+  getElem('takdae').checked = true;
+  getElem('realship').checked = false;
+  getElem('fruit').checked = true;
+  P.setGuides(h.guides.map(g => Object.assign({}, g, { seller: '이디스' })));
+  const rA = P.makeRoom('11.17', '30');
+  if (rA !== '#택11.17 이디스 사과단감 30') throw new Error('Test 33 roomA mismatch: ' + rA);
+  P.setGuides(h.guides.map(g => Object.assign({}, g, { seller: '' })));
+  const rB = P.makeRoom('11.17', '30');
+  if (rB !== '#택11.17 (업체명) 사과단감30') throw new Error('Test 33 roomB mismatch: ' + rB);
+  console.log('✓ 과일 다중 방제(사과단감)·하위권 1p 차단·쿠팡 가격문구 시험 통과 (' + rA + ')');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (33개 샘플 전원 일치)');
 process.exit(0);
 
 
