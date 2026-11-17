@@ -1097,3 +1097,231 @@ body.boss .quiz::before{content:"";position:absolute;inset:0;pointer-events:none
 
 /* 긴 시트(계급·계획표)는 화면 안에서 스크롤 */
 .sheet-in{max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+
+/* ============================================================
+   2026-11-18 개편: 상단 슬림화 · 다크 유닛 배너 · 조문표 ·
+   일상 연습 그림 · 해설 가독성 · 약점 TOP3 · 1줄 OX 회독
+   ============================================================ */
+:root{ --topH:44px; }
+
+/* --- 헤더: 아이콘 줄이 하단 탭바와 겹치던 3버튼(계획·G-POINT·자료실) 제거 --- */
+.top{padding:calc(6px + var(--safe-t)) 12px 6px;gap:6px;background:rgba(11,13,16,.94);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.brand{font-size:13.5px;gap:5px}
+.brand-dot{font-size:15px}
+.hud{gap:5px}
+.hud-btn{width:28px;height:28px;border-radius:9px;font-size:12.5px}
+.hud-chip{padding:3px 6px;font-size:11px;border-radius:9px;gap:2px}
+.hud-chip span{font-size:11px}
+.rank-badge{font-size:10.5px;padding:4px 7px;border-radius:9px;gap:3px}
+.rank-badge span{font-size:11.5px}
+@media(max-width:400px){ .brand-txt{display:inline} .brand{font-size:13px} }
+
+/* --- 과목 탭: 두 줄 카드 → 한 줄 슬림 세그먼트 --- */
+.subtabs{display:flex;gap:5px;padding:6px 10px;top:var(--topH);background:var(--bg);
+  border-bottom:1px solid var(--line);box-shadow:0 6px 14px -12px #000}
+.stab{flex:1 1 0;min-width:0;flex-direction:row;gap:4px;padding:7px 4px;border-radius:10px;
+  background:var(--card);border:1px solid var(--line);transition:.15s}
+.stab .si{font-size:12.5px;line-height:1;flex:0 0 auto}
+.stab b{font-size:12px;font-weight:900;letter-spacing:-.4px;line-height:1.1}
+.stab i{display:none}
+.stab:active{transform:translateY(1px)}
+.stab.on{box-shadow:0 3px 10px -6px var(--c);border-color:transparent}
+.stab.on b,.stab.on .si{color:#fff !important}
+@media(max-width:360px){ .stab b{font-size:11px} .stab .si{font-size:11.5px} .subtabs{gap:4px;padding:5px 8px} }
+
+/* --- UNIT 배너: 형광 그라데이션 → 다크 글래스 --- */
+.unit-banner{background:linear-gradient(100deg,rgba(255,255,255,.075),rgba(255,255,255,.02));
+  border:1px solid var(--line2);border-left:3px solid var(--ubc,#6E8BFF);
+  color:var(--ink);box-shadow:0 8px 18px -18px #000;padding:6px 10px;border-radius:11px;
+  font-size:11.5px;font-weight:900;backdrop-filter:blur(6px)}
+.unit-banner .ub-n{background:rgba(255,255,255,.10);color:var(--ink2);font-size:8.5px;padding:2px 5px;border-radius:5px;letter-spacing:.4px}
+.unit-banner .ub-t{font-size:11.5px}
+.unit-banner .ub-p{font-size:9.5px;color:var(--ink3);opacity:1}
+
+/* --- 노드: 64px → 52px, 한 화면에 더 많이 --- */
+.node{width:52px;height:52px;font-size:15.5px;border-width:2px;box-shadow:0 3px 0 rgba(0,0,0,.35)}
+.node.done{box-shadow:0 3px 0 var(--gold-d)}
+.node.current{box-shadow:0 3px 0 var(--c-dark,#3f5fe0),0 0 0 6px color-mix(in srgb,var(--c) 14%,transparent)}
+.node .crown{font-size:13px;top:-11px}
+.node-tag{font-size:8.5px;padding:1px 6px}
+.node-date{font-size:8.5px;padding:1px 4px;border-radius:6px}
+.node.done::before{width:18px;height:18px;font-size:9.5px}
+.path-svg{pointer-events:none}
+
+/* --- 암기·자료 세그먼트: 과목에 따라 3~4칸, 칸 너비 자동 --- */
+.seg{display:flex;gap:5px;padding:5px}
+.seg-b{flex:1 1 0;min-width:0;font-size:10.5px;padding:8px 3px;border-radius:9px;letter-spacing:-.4px}
+@media(max-width:360px){ .seg-b{font-size:9.5px;padding:7px 1px} }
+
+/* --- 조문·숫자·두문자 표 --- */
+.law-row{align-items:flex-start;background:var(--card);gap:8px}
+.law-row .law-no{padding:2px 0;background:var(--card3);color:var(--ink3);font-size:10px}
+.law-row .gp-cond{color:#8FB3FF;font-size:11.5px}
+.law-row .gp-ans{color:var(--gold);font-size:12.5px;font-weight:900}
+.law-row .law-tip{display:block;margin-top:3px;font-size:10px;font-weight:700;color:var(--ink3);line-height:1.45}
+.law-src{flex:0 0 auto;font-size:9.5px;font-weight:900;color:var(--ink2);background:var(--card3);
+  border:1px solid var(--line);border-radius:6px;padding:2px 5px;white-space:nowrap;margin-top:1px}
+@media(max-width:360px){ .law-row .gp-ans{font-size:11.5px} .law-src{font-size:8.5px;padding:2px 4px} }
+
+/* --- 해설 가독성 (지텔프·경찰 공통) --- */
+.feedback{max-height:64vh;padding:16px 18px calc(14px + var(--safe-b))}
+.fb-scroll{padding-bottom:6px}
+.fb-text{font-size:14.5px;line-height:1.68;color:#e6edf3;letter-spacing:-.1px;margin-bottom:12px}
+.fb-key{font-size:15px;font-weight:900;line-height:1.62;color:#ffd68a;background:rgba(255,194,75,.10);
+  border-left:3px solid var(--gold);border-radius:9px;padding:9px 11px;margin:0 0 11px;word-break:keep-all}
+.fb-p{margin:0 0 11px;word-break:keep-all;overflow-wrap:anywhere}
+.fb-li{margin:0 0 8px;padding-left:15px;text-indent:-15px;word-break:keep-all;overflow-wrap:anywhere}
+.fb-ansline{display:flex;align-items:center;gap:8px;margin:0 0 11px;flex-wrap:wrap}
+.fb-ansline span{flex:0 0 auto;font-size:10px;font-weight:900;color:#08110d;background:var(--gold);border-radius:99px;padding:2px 8px}
+.fb-ansline b{font-size:15.5px;font-weight:900;color:var(--gold);letter-spacing:-.2px}
+.fb-gp{display:inline-block;width:fit-content;font-size:11px;font-weight:900;color:var(--c-dark);
+  background:var(--c-soft);border:1px solid rgba(110,139,255,.3);border-radius:8px;padding:4px 9px;margin:0 0 10px}
+.fb-tr{margin:14px 0 0;padding:10px 12px;border-radius:11px;background:var(--card2);border:1px dashed var(--line2);
+  font-size:12.5px;line-height:1.6;color:var(--ink2);word-break:keep-all}
+.fb-tr b{display:block;font-size:9.5px;font-weight:900;color:var(--c-dark);letter-spacing:.4px;margin-bottom:3px}
+.fb-src{margin-top:9px;font-size:10.5px;font-weight:700;color:var(--ink3)}
+.fb-head{font-size:15.5px;margin-bottom:9px}
+@media(max-width:390px){ .feedback{max-height:70vh;padding:14px 15px calc(12px + var(--safe-b))}
+  .fb-text{font-size:14px;line-height:1.66} .fb-key{font-size:14.5px} }
+
+/* --- 체력: 일상 연습을 그림 + 쉬운 설명 카드로 --- */
+.ph-lead{margin:-2px 0 9px}
+.ph-rt{display:flex;flex-direction:column;gap:9px}
+.ph-rt-item{flex-direction:row;align-items:flex-start;text-align:left;gap:10px;padding:10px 11px}
+.ph-rt-item:last-child:nth-child(odd){grid-column:auto}
+.ph-rt-item .rt-anim{flex:0 0 92px;width:92px;height:70px;padding:3px;background:var(--card);
+  border:1px solid var(--line);border-radius:11px;color:var(--c-dark);display:grid;place-items:center}
+.rt-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.rt-txt b{font-size:12.5px;font-weight:900;color:var(--ink);letter-spacing:-.3px;line-height:1.35;word-break:keep-all}
+.rt-chips{display:flex;gap:4px;flex-wrap:wrap;margin:1px 0 2px}
+.rt-chips i{font-style:normal;font-size:9.5px;font-weight:900;border-radius:6px;padding:2px 6px}
+.rt-part{background:var(--c-soft);color:var(--c-dark)}
+.rt-rep{background:rgba(255,194,75,.14);color:var(--gold)}
+.rt-txt em{font-style:normal;font-size:11px;font-weight:700;color:var(--ink2);line-height:1.55;word-break:keep-all;overflow-wrap:anywhere}
+.ex-svg .ex-frame line{stroke:var(--line2);stroke-width:2.6}
+.ex-svg .ex-bag rect{fill:rgba(255,194,75,.22);stroke:var(--gold);stroke-width:2.4}
+.ex-svg .ex-bag line{stroke:var(--gold);stroke-width:2}
+.ex-svg .ex-back line,.ex-svg .ex-back path,.ex-svg .ex-pullarrow line,.ex-svg .ex-pullarrow path{stroke:var(--gold);stroke-width:2.4}
+.ex-svg .ex-uparrow line,.ex-svg .ex-uparrow path{stroke:currentColor;stroke-width:2.4;opacity:.85}
+.ex-svg .ex-clock{stroke:var(--gold);stroke-width:2;opacity:.75}
+.ex-svg .ex-armf rect{fill:rgba(255,194,75,.22);stroke:var(--gold)}
+.ex-svg .ex-stand,.ex-svg .ex-plank,.ex-svg .ex-walk,.ex-svg .ex-hold,.ex-svg .ex-row{stroke:currentColor}
+.ex-svg .ex-stand circle,.ex-svg .ex-plank circle,.ex-svg .ex-walk circle,.ex-svg .ex-hold circle,.ex-svg .ex-row circle{fill:currentColor;stroke:none}
+.ex-svg .ex-arc{stroke:currentColor;stroke-dasharray:4 4;opacity:.7}
+.ex-svg .ex-arrowhead{stroke:currentColor;opacity:.8}
+.ex-door .ex-row{animation:none}
+@media(prefers-reduced-motion:no-preference){
+  .ex-door .ex-row{transform-box:fill-box;transform-origin:right center;animation:exRowPull 2.8s ease-in-out infinite}
+  @keyframes exRowPull{0%,100%{transform:translateX(0)}45%,60%{transform:translateX(-4px)}}
+}
+
+/* --- 약점 단원 TOP 3 --- */
+.sec-note{font-size:9.5px;font-weight:800;color:var(--ink3);margin-left:6px;letter-spacing:0}
+.weak-top{display:flex;flex-direction:column;gap:7px;margin-top:2px}
+.weak-card{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:var(--card);
+  border:1px solid var(--line);border-radius:14px;padding:11px 12px;transition:transform .08s}
+.weak-card:active{transform:scale(.99)}
+.wc-rank{flex:0 0 24px;height:24px;border-radius:8px;display:grid;place-items:center;
+  font-size:11.5px;font-weight:900;background:var(--card3);color:var(--ink2)}
+.wc-rank.hot{background:rgba(248,113,113,.18);color:#ffb3b3}
+.wc-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.wc-body b{font-size:12.5px;font-weight:900;letter-spacing:-.3px;color:var(--ink);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wc-body i{font-style:normal;font-size:10.5px;font-weight:700;color:var(--ink3)}
+.wc-go{flex:0 0 auto;font-size:10.5px;font-weight:900;color:var(--c-dark)}
+
+/* --- 5분 1줄 OX 회독 --- */
+.ox{position:fixed;inset:0;z-index:70;background:var(--bg);display:flex;flex-direction:column;animation:slideUp .2s ease}
+.ox-top{display:flex;align-items:center;gap:10px;padding:calc(10px + var(--safe-t)) 14px 8px;flex:0 0 auto}
+.ox-tmid{flex:1;min-width:0}
+.ox-trow{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px}
+.ox-trow b{font-size:12px;font-weight:900;color:var(--ink);letter-spacing:-.3px}
+.ox-trow span{font-size:10.5px;font-weight:900;color:var(--ink3)}
+.ox-bar{height:6px;background:var(--card3);border-radius:99px;overflow:hidden}
+.ox-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--c),var(--c-dark));border-radius:99px;transition:width .25s}
+.ox-timer{flex:0 0 auto;font-size:12.5px;font-weight:900;color:var(--gold);background:rgba(255,194,75,.12);
+  border:1px solid rgba(255,194,75,.32);border-radius:10px;padding:6px 9px;letter-spacing:.3px}
+.ox-body{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;
+  padding:8px 16px calc(18px + var(--safe-b));max-width:560px;width:100%;margin:0 auto}
+.ox-tag{align-self:flex-start;font-size:10px;font-weight:900;color:var(--c-dark);background:var(--c-soft);
+  border-radius:99px;padding:4px 9px;margin-bottom:12px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ox-stmt{font-size:18.5px;font-weight:900;line-height:1.62;letter-spacing:-.35px;color:var(--ink);
+  word-break:keep-all;overflow-wrap:anywhere;margin:0 0 16px}
+.ox-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:auto;padding-top:10px}
+.ox-choice{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  padding:16px 8px;border-radius:18px;border:2px solid var(--line2);background:var(--card2);min-height:92px;transition:.1s}
+.ox-choice:active{transform:translateY(2px)}
+.ox-choice b{font-size:25px;font-weight:900;line-height:1.1}
+.ox-choice i{font-style:normal;font-size:10px;font-weight:800;color:var(--ink3)}
+.ox-choice.o{border-color:rgba(52,211,153,.42)} .ox-choice.o b{color:#5eead4}
+.ox-choice.x{border-color:rgba(248,113,113,.42)} .ox-choice.x b{color:#fca5a5}
+.ox-choice.right{background:rgba(52,211,153,.16);border-color:rgba(52,211,153,.75);box-shadow:0 0 0 3px rgba(52,211,153,.12)}
+.ox-choice.wrong{background:rgba(248,113,113,.16);border-color:rgba(248,113,113,.75)}
+.ox-fb{min-height:66px;margin-top:12px;font-size:12px;line-height:1.55;color:var(--ink2);word-break:keep-all}
+.ox-fb.on{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:9px 11px}
+.ox-fb b{display:block;font-size:13px;font-weight:900;margin-bottom:3px}
+.ox-fb.ok b{color:#8ee8c4} .ox-fb.no b{color:#ffb3b3}
+.ox-fb i{display:block;margin-top:4px;font-style:normal;font-size:10px;font-weight:800;color:var(--gold)}
+.ox-result{display:flex;flex-direction:column;align-items:center;text-align:center;gap:5px;margin:auto 0;padding:24px 6px}
+.oxr-emoji{font-size:54px;line-height:1.1}
+.oxr-t{font-size:21px;font-weight:900;letter-spacing:-.5px}
+.oxr-s{font-size:13px;font-weight:900;color:var(--gold)}
+.oxr-note{font-size:11.5px;color:var(--ink3);line-height:1.55;margin:6px 0 14px;word-break:keep-all}
+.oxr-btns{display:flex;gap:8px;width:100%;max-width:320px}
+.oxr-btns .btn{flex:1}
+
+/* --- 오늘 목표 게이지 (스테이지 상단 한 줄) --- */
+.goalbar{background:linear-gradient(100deg,rgba(110,139,255,.12),var(--card));border:1px solid var(--line2);
+  border-radius:14px;padding:9px 12px 10px;margin:2px 0 8px}
+.gb-top{display:flex;align-items:center;gap:7px;min-width:0}
+.gb-label{font-size:11px;font-weight:900;color:var(--ink);letter-spacing:-.2px;white-space:nowrap}
+.gb-top b{font-size:12px;font-weight:900;color:var(--c-dark);white-space:nowrap}
+.gb-pct{font-size:10.5px;font-weight:900;color:var(--ink3);margin-right:auto;white-space:nowrap}
+.gb-set{flex:0 0 auto;font-size:10px;font-weight:900;color:var(--ink2);background:var(--card3);
+  border:1px solid var(--line);border-radius:8px;padding:4px 7px;white-space:nowrap}
+.gb-track{height:8px;background:#20252e;border-radius:99px;overflow:hidden;margin-top:7px}
+.gb-track i{display:block;height:100%;width:0;border-radius:99px;
+  background:linear-gradient(90deg,var(--c),var(--c-dark));transition:width .3s ease}
+.goalbar.done{border-color:rgba(52,211,153,.45);background:linear-gradient(100deg,rgba(52,211,153,.16),var(--card))}
+.goalbar.done .gb-track i{background:linear-gradient(90deg,#34d399,#8ee8c4)}
+.goalbar.done .gb-top b{color:#8ee8c4}
+.gb-done{margin-top:7px;font-size:10.5px;font-weight:900;color:#8ee8c4}
+.goal-opts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:4px 0 2px}
+.goal-opt{padding:15px 10px;border-radius:14px;background:var(--card2);border:2px solid var(--line);
+  font-size:15px;font-weight:900;color:var(--ink)}
+.goal-opt.on{background:var(--c);border-color:transparent;color:#fff}
+@media(max-width:360px){.gb-label{font-size:10px}}
+
+/* --- 해설 함정 키워드 하이라이트 --- */
+.fb-legend{font-size:10.5px;font-weight:700;color:var(--ink3);margin:-2px 0 10px;line-height:1.7}
+mark.hl-trap,mark.hl-must,mark.hl-num,mark.hl-soft,mark.hl-guilt{background:none;color:inherit;
+  border-radius:3px;padding:0 2px;font-weight:900}
+mark.hl-trap{background:rgba(248,113,113,.18);color:#ffb9b9;border-bottom:2px solid rgba(248,113,113,.75)}
+mark.hl-must{background:rgba(248,113,113,.22);color:#ffc2c2;border-bottom:2px solid #f87171}
+mark.hl-num{background:rgba(255,194,75,.16);color:#ffd68a;border-bottom:2px solid rgba(255,194,75,.7)}
+mark.hl-soft{background:rgba(255,194,75,.10);color:#ffd68a;border-bottom:1px dashed rgba(255,194,75,.6)}
+mark.hl-guilt{background:rgba(110,139,255,.18);color:#b9c8ff;border-bottom:2px solid rgba(110,139,255,.7)}
+.fb-legend .hl-trap,.fb-legend .hl-num{padding:1px 5px;border-radius:5px}
+
+/* --- 보정: 함정 배지(범례 span 포함)·한글 줄바꿈 --- */
+mark.hl-trap,.hl-trap{background:rgba(248,113,113,.18);color:#ffb9b9;border-bottom:2px solid rgba(248,113,113,.75);
+  border-radius:3px;padding:0 2px;font-weight:900}
+mark.hl-must,.hl-must{background:rgba(248,113,113,.22);color:#ffc2c2;border-bottom:2px solid #f87171;border-radius:3px;padding:0 2px;font-weight:900}
+mark.hl-num,.hl-num{background:rgba(255,194,75,.16);color:#ffd68a;border-bottom:2px solid rgba(255,194,75,.7);border-radius:3px;padding:0 2px;font-weight:900}
+mark.hl-soft,.hl-soft{background:rgba(255,194,75,.10);color:#ffd68a;border-bottom:1px dashed rgba(255,194,75,.6);border-radius:3px;padding:0 2px;font-weight:900}
+mark.hl-guilt,.hl-guilt{background:rgba(110,139,255,.18);color:#b9c8ff;border-bottom:2px solid rgba(110,139,255,.7);border-radius:3px;padding:0 2px;font-weight:900}
+.fb-legend .hl-trap,.fb-legend .hl-num{border-bottom-width:1px}
+.law-row .gp-cond,.law-row .gp-ans,.gp-cond,.gp-ans,.ffb-p,.ph-lead,.lib-sub{word-break:keep-all;overflow-wrap:anywhere}
+.gp-group{scroll-margin-top:110px}
+
+/* --- 상단 고정 탭 아래를 부드럽게 --- */
+.subtabs{position:sticky}
+.subtabs::after{content:"";position:absolute;left:0;right:0;top:100%;height:12px;
+  background:linear-gradient(var(--bg),rgba(11,13,16,0));pointer-events:none}
+
+/* --- OX 문장은 화면 가운데에 --- */
+.ox-stmt{margin-top:auto;margin-bottom:auto}
+.ox-btns{margin-top:0}
+
+/* OX 출처 줄 */
+.ox-src{font-size:9.5px;font-weight:700;color:var(--ink3);margin:-7px 0 10px;line-height:1.5;word-break:keep-all}

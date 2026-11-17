@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=1794933200">
+<link rel="stylesheet" href="style.css?v=2026111802">
 </head>
 <body>
 
@@ -21,18 +21,26 @@
   <div class="brand"><span class="brand-dot">🎯</span><span class="brand-txt">인강 복습</span></div>
   <div class="hud">
     <button id="rankBadge" class="rank-badge" aria-label="내 계급">👮 순경</button>
-    <button id="planBtn" class="hud-btn" aria-label="학습 계획">🗺️</button>
-    <button id="gpBtn" class="hud-btn" aria-label="G-POINT 1~33 요약 암기표">📘</button>
-    <button id="libBtn" class="hud-btn" aria-label="자료실 · 미래인재경찰 PDF">📂</button>
-    <button id="mute" class="hud-btn" aria-label="소리 켜기/끄기">🔊</button>
     <div class="hud-chip" title="연속 학습일"><span>🔥</span><b id="streakN">0</b></div>
-    <div class="hud-chip" title="P"><span>⚡</span><b id="xpN">0</b></div>
+    <div class="hud-chip" title="포인트"><span>⚡</span><b id="xpN">0</b></div>
+    <button id="mute" class="hud-btn" aria-label="소리 켜기/끄기">🔊</button>
   </div>
 </header>
 
 <nav class="subtabs" id="subtabs"></nav>
 
 <main id="view-stage" class="view">
+  <section class="goalbar" id="goalBar" aria-label="오늘의 학습 목표">
+    <div class="gb-top">
+      <span class="gb-label">🎯 오늘 목표</span>
+      <b id="gbText">0 / 30문제</b>
+      <span class="gb-pct" id="gbPct">0%</span>
+      <button class="gb-set" id="gbSet" aria-label="목표 문제 수 바꾸기">30문제 ▾</button>
+    </div>
+    <div class="gb-track"><i id="gbFill"></i></div>
+    <div class="gb-done hidden" id="gbDone">✅ 오늘 목표 달성! 이 정도면 충분해요</div>
+  </section>
+
   <section class="dday slim" id="ddayCard">
     <div class="dday-main">
       <div class="dday-badge"><span>D-</span><b id="ddayNum">0</b></div>
@@ -172,7 +180,15 @@
       <span class="mode-body"><b>1분 스피드 타임어택</b><i id="mSpeedTxt">-</i></span>
       <span class="mode-go">›</span>
     </button>
+    <button class="mode-card ox-btn" id="mOx">
+      <span class="mode-ico">⭕</span>
+      <span class="mode-body"><b>5분 1줄 OX 회독</b><i id="mOxTxt">기출 선지 한 문장씩 O/X</i></span>
+      <span class="mode-go">›</span>
+    </button>
   </div>
+
+  <h2 class="sec-title">약점 단원 TOP 3 <span class="sec-note" id="weakHint">오답이 많은 단원부터</span></h2>
+  <div id="weakTop" class="weak-top"></div>
 
   <h2 class="sec-title">문제 수</h2>
   <div class="chip-row" id="lenChips">
@@ -194,6 +210,7 @@
   <div class="seg" id="memoSeg">
     <button class="seg-b on" data-seg="card">🃏 카드</button>
     <button class="seg-b" data-seg="gp">📘 G-POINT</button>
+    <button class="seg-b" data-seg="law">⚖️ 조문·두문자</button>
     <button class="seg-b" data-seg="lib">📂 자료실</button>
     <button class="seg-b" data-seg="phys">💪 체력</button>
   </div>
@@ -219,6 +236,7 @@
   </section>
 
   <section id="segGp" class="hidden"></section>
+  <section id="segLaw" class="hidden"></section>
   <section id="segLib" class="hidden"></section>
   <section id="segPhys" class="hidden"></section>
 </main>
@@ -308,7 +326,19 @@
 <div id="fx" class="fx"></div>
 <div id="toast" class="toast hidden"></div>
 
-<script src="data.js?v=1794933200"></script>
-<script src="app.js?v=1794933200"></script>
+<div id="oxq" class="ox hidden">
+  <div class="ox-top">
+    <button id="oxClose" class="q-close" aria-label="닫기">✕</button>
+    <div class="ox-tmid">
+      <div class="ox-trow"><b>⭕ 1줄 OX 회독</b><span id="oxCount">0/0</span></div>
+      <div class="ox-bar"><i id="oxBar"></i></div>
+    </div>
+    <div class="ox-timer" id="oxTimer">05:00</div>
+  </div>
+  <div class="ox-body" id="oxBody"></div>
+</div>
+
+<script src="data.js?v=2026111802"></script>
+<script src="app.js?v=2026111802"></script>
 </body>
 </html>

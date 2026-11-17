@@ -73,6 +73,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!S.goal) S.goal = { xp: 50, q: 10 };
     if (!S.dday) S.dday = DTARGET;
     if (!S.planLog) S.planLog = {};
+    if (!S.dayGoal) S.dayGoal = 30;   /* 오늘 목표 문제 수 (기본 30) */
     D.subjects.forEach(function (s) {
       if (!S.course[s.id] || !COURSE[S.course[s.id]]) S.course[s.id] = s.defaultCourse || s.courses[0].id;
     });
@@ -951,6 +952,12 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     $('#sheet').classList.remove('hidden');
     bindRankSheet();
   }
+  /* 헤더 실제 높이를 CSS 변수로 넘겨 과목 탭이 그 아래에 정확히 붙게 한다(카드가 반쯤 비치는 겹침 방지) */
+  function syncTopHeight() {
+    var h = $('header.top');
+    if (!h) return;
+    document.documentElement.style.setProperty('--topH', Math.round(h.offsetHeight) + 'px');
+  }
   function renderSubtabs() {
     var el = $('#subtabs'); el.innerHTML = '';
     D.subjects.forEach(function (s) {
@@ -958,7 +965,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       b.className = 'stab' + (s.id === S.subj ? ' on' : '');
       if (s.id === S.subj) b.style.background = s.color;
       b.setAttribute('data-sub', s.id);
-      b.innerHTML = '<b>' + s.emoji + ' ' + s.name + '</b><i>' + s.teacher + '</i>';
+      b.setAttribute('aria-label', s.name + ' · ' + s.teacher);
+      b.innerHTML = '<span class="si">' + s.emoji + '</span><b>' + s.name + '</b>';
       b.onclick = function () {
         if (S.subj === s.id) return;
         S.subj = s.id; save(); sfx('tap');
@@ -968,6 +976,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     });
     var onTab = el.querySelector('.stab.on');
     if (onTab && onTab.scrollIntoView) { try { onTab.scrollIntoView({ block: 'nearest', inline: 'center' }); } catch (e) {} }
+    syncTopHeight();
   }
 
   /* ---------- 오늘의 목표 ---------- */
@@ -1005,6 +1014,42 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var done = [lecN >= 1, (d.xp || 0) >= S.goal.xp, (d.ans || 0) >= S.goal.q].filter(Boolean).length;
     $('#questPct').textContent = done + '/3 완료';
     $('#questCard').classList.toggle('all-done', all);
+    renderGoalBar();
+  }
+
+  /* ---------- 오늘 목표 게이지 (문항·OX·빈칸 모두 포함) ---------- */
+  function renderGoalBar() {
+    var el = $('#goalBar');
+    if (!el) return;
+    var d = dayRec(), goal = S.dayGoal || 30, n = d.ans || 0;
+    var pct = Math.min(100, Math.round(n / goal * 100));
+    var txt = $('#gbText'), pe = $('#gbPct'), fill = $('#gbFill');
+    if (txt) txt.textContent = n + ' / ' + goal + '문제';
+    if (pe) pe.textContent = pct + '%';
+    if (fill) fill.style.width = pct + '%';
+    var done = n >= goal;
+    el.classList.toggle('done', done);
+    var dn = $('#gbDone'); if (dn) dn.classList.toggle('hidden', !done);
+    var st = $('#gbSet'); if (st) st.textContent = goal + '문제 ▾';
+  }
+  function openGoalSheet() {
+    var opts = [10, 20, 30, 50], cur = S.dayGoal || 30;
+    var h = '<button class="sheet-close" data-close="1">✕</button>' +
+      '<div class="sheet-num">오늘 목표</div>' +
+      '<div class="sheet-title">하루에 몇 문제 풀까요?</div>' +
+      '<div class="sheet-meta">문항 풀이·OX 회독·빈칸 채우기가 모두 오늘 푼 문제로 집계돼요.</div><div class="goal-opts">';
+    opts.forEach(function (n) {
+      h += '<button class="goal-opt' + (n === cur ? ' on' : '') + '" data-n="' + n + '">' + n + '문제</button>';
+    });
+    h += '</div>';
+    $('#sheetIn').innerHTML = h;
+    $('#sheet').classList.remove('hidden');
+    $$('#sheetIn .goal-opt').forEach(function (b) {
+      b.onclick = function () {
+        S.dayGoal = Number(b.getAttribute('data-n')); save(); closeSheet(); renderGoalBar(); sfx('tap');
+        toast('오늘 목표를 ' + S.dayGoal + '문제로 바꿨어요');
+      };
+    });
   }
 
   /* ---------- 오늘의 챌린지 ---------- */
@@ -1215,14 +1260,14 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var W = wrap.clientWidth || 360;
     var gp = isGP(c), today = todayStr(), doneSet = ckMap(c.id);
     var cur = nextLecture(c.id);
-    var list = [], y = 46, lastU = -2;
+    var list = [], y = 34, lastU = -2;
     c.lec.forEach(function (L) {
       var ui = unitIndex(c.id, L.n);
-      if (ui !== lastU) { list.push({ kind: 'banner', ui: ui, y: y }); y += 44; lastU = ui; }
+      if (ui !== lastU) { list.push({ kind: 'banner', ui: ui, y: y }); y += 32; lastU = ui; }
       list.push({ kind: 'node', L: L, y: y });
-      y += 90;
+      y += 74;
     });
-    var H = y + 30;
+    var H = y + 24;
     path.style.height = H + 'px';
     var pts = [], unitCount = {};
     c.lec.forEach(function (L) {
@@ -1238,9 +1283,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         var doneN = nums.filter(function (n) { return doneSet[n]; }).length;
         var el = document.createElement('div');
         el.className = 'unit-banner';
-        el.style.top = (it.y - 20) + 'px';
-        el.style.background = 'linear-gradient(100deg,' + shade(SUBJ[S.subj].color, 0.12) + ',' + SUBJ[S.subj].accent + ')';
-        el.style.color = shade(SUBJ[S.subj].color, -0.35);
+        el.style.top = (it.y - 15) + 'px';
+        el.style.setProperty('--ubc', SUBJ[S.subj].color);
         el.innerHTML = '<span class="ub-n">UNIT ' + (it.ui + 1) + '</span>' +
           '<span class="ub-t">' + esc(u.n) + '</span>' +
           '<span class="ub-p">' + (gp ? 'G-POINT ' + u.a + (u.b !== u.a ? '~' + u.b : '') : u.a + '~' + u.b + '강') +
@@ -1299,7 +1343,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     }
     if (!path._scrolled) {
       path._scrolled = true;
-      var target = 46 + (Math.min(cur, c.lec.length) - 1) * 90 - (window.innerHeight * 0.45);
+      var target = 34 + (Math.min(cur, c.lec.length) - 1) * 74 - (window.innerHeight * 0.45);
       setTimeout(function () { window.scrollTo({ top: Math.max(0, target), behavior: 'auto' }); }, 60);
     }
   }
@@ -1475,6 +1519,14 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     $('#mixAll').checked = !!S.mix;
     var sp = $('#mSpeedTxt');
     if (sp) sp.textContent = (S.speedBest || 0) ? '최고 ' + S.speedBest + '문제 · 60초' : '60초 동안 최대한 많이';
+    var ox = $('#mOxTxt');
+    if (ox) ox.textContent = (S.oxBest || 0) ? '최고 ' + S.oxBest + '문장 · 5분' : '기출 선지 한 문장씩 O/X';
+    var isGp = S.subj === 'gtelp';
+    var oxBtn = $('#mOx'); if (oxBtn) oxBtn.classList.toggle('hidden', isGp);
+    var wHead = $('#weakTop') && $('#weakTop').previousElementSibling;
+    if (wHead && wHead.classList && wHead.classList.contains('sec-title')) wHead.classList.toggle('hidden', isGp);
+    if ($('#weakTop')) $('#weakTop').classList.toggle('hidden', isGp);
+    renderWeakTop();
   }
 
   /* ---------- stats ---------- */
@@ -1490,6 +1542,76 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     });
     arr.sort(function (x, y) { return x.acc - y.acc; });
     return arr.slice(0, 3);
+  }
+
+  /* ============================================================
+     🎯 약점 단원 집중 공략 — 오답 이력으로 TOP 3를 자동 집계
+     · 오답이 없으면 지금 과목에서 기출이 많은 단원을 골라 바로 시작할 수 있게
+     ============================================================ */
+  function weakTopList(limit) {
+    var by = {};
+    D.questions.forEach(function (q) {
+      var w = S.wrong[q.i];
+      if (!w || q.gp) return;
+      var k = q.c + ':' + q.u;
+      var e = by[k] || (by[k] = { cid: q.c, ui: q.u, wrong: 0, cnt: 0 });
+      e.wrong += (w.c || 1);
+    });
+    var out = [];
+    Object.keys(by).forEach(function (k) {
+      var e = by[k], c = COURSE[e.cid];
+      if (!c || !c.units[e.ui]) return;
+      var pool = poolForUnit(e.cid, e.ui);
+      if (!pool.length) return;
+      var fresh = pool.filter(function (q) { return !S.qok[q.i] && !S.wrong[q.i]; }).length;
+      out.push({
+        cid: e.cid, ui: e.ui, wrong: e.wrong, total: pool.length, fresh: fresh,
+        name: (SUBJ[c.sub] ? SUBJ[c.sub].name + ' · ' : '') + c.units[e.ui].n
+      });
+    });
+    out.sort(function (a, b) { return b.wrong - a.wrong || b.fresh - a.fresh; });
+    return out.slice(0, limit || 3);
+  }
+  function unitSuggest(limit) {
+    var c = curCourse(), s = SUBJ[S.subj];
+    if (!c || isGP(c)) return [];
+    var arr = [];
+    (c.units || []).forEach(function (u, i) {
+      var pool = poolForUnit(c.id, i);
+      if (!pool.length) return;
+      arr.push({ cid: c.id, ui: i, wrong: 0, total: pool.length, fresh: pool.length, name: s.name + ' · ' + u.n });
+    });
+    arr.sort(function (a, b) { return b.total - a.total; });
+    return arr.slice(0, limit || 3);
+  }
+  function renderWeakTop() {
+    var el = $('#weakTop');
+    if (!el) return;
+    var list = weakTopList(3), suggest = false;
+    if (!list.length) { list = unitSuggest(3); suggest = true; }
+    var hint = $('#weakHint');
+    if (hint) hint.textContent = suggest ? '오답이 쌓이면 그 단원이 1순위로 올라와요' : '틀린 문제가 많은 단원부터';
+    if (!list.length) {
+      el.innerHTML = '<div class="empty">문제를 몇 개 풀면 약한 단원이 여기 자동으로 올라와요.</div>';
+      return;
+    }
+    var h = '';
+    list.forEach(function (w, i) {
+      h += '<button class="weak-card" data-cid="' + w.cid + '" data-u="' + w.ui + '">' +
+        '<span class="wc-rank' + (i === 0 ? ' hot' : '') + '">' + (i + 1) + '</span>' +
+        '<span class="wc-body"><b>' + esc(w.name) + '</b>' +
+        '<i>' + (w.wrong ? '틀린 ' + w.wrong + '문제 · ' : '') + '기출 ' + w.total + '문제' +
+        (w.fresh ? ' · 안 푼 ' + w.fresh : '') + '</i></span>' +
+        '<span class="wc-go">집중 풀이 ›</span></button>';
+    });
+    if (suggest) h += '<p class="lib-sub" style="margin:8px 0 0">아직 오답 기록이 없어서 ' + esc(SUBJ[S.subj].name) + ' 기출이 많은 단원을 골랐어요. 한 단원만 풀어도 기록이 쌓여요.</p>';
+    el.innerHTML = h;
+    $$('#weakTop .weak-card').forEach(function (b) {
+      b.onclick = function () {
+        sfx('tap');
+        startSession('weakUnit', { cid: b.getAttribute('data-cid'), u: Number(b.getAttribute('data-u')) });
+      };
+    });
   }
   function renderStats() {
     $('#stStreak').textContent = S.streak.n || 0;
@@ -1565,6 +1687,9 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     } else if (mode === 'speed') {
       pool = S.mix ? allScopePool() : scopeQPool(S.subj);
       title = '⏱ 1분 스피드';
+    } else if (mode === 'weakUnit') {
+      pool = poolForUnit(opt.cid, opt.u);
+      title = '🎯 약점 집중 · ' + unitName(opt.cid, opt.u);
     } else {
       pool = S.mix ? D.subjects.reduce(function (a, s) { return a.concat(poolForSubject(s.id, mode)); }, []) : poolForSubject(S.subj, mode);
       title = mode === 'today' ? '오늘 들은 강의' : '누적 랜덤 복습';
@@ -1579,6 +1704,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       else if (mode === 'lecture') toast('이 강의 문제가 아직 없어요. 다른 강의를 체크해 보세요.');
       else if (mode === 'ids') toast('다시 풀 문제가 없어요.');
       else if (mode === 'gp') toast('이 포인트의 켈리 기출이 아직 없어요.');
+      else if (mode === 'weakUnit') toast('이 단원에 연결된 기출이 아직 없어요.');
       else toast('아직 체크한 진도가 없어요. 스테이지에서 1강부터 체크해 주세요.');
       return;
     }
@@ -1586,7 +1712,16 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var n = mode === 'lecture' ? Math.min(pool.length, 6) : mode === 'gp' ? pool.length : Math.min(pool.length, S.qlen);
     if (mode === 'ids') n = Math.min(pool.length, 20);
     if (mode === 'speed') n = Math.min(pool.length, 60);
-    var pick = mode === 'gp' ? pool.slice() : qs(pool, n);
+    if (mode === 'weakUnit') n = Math.min(pool.length, 20);
+    var pick;
+    if (mode === 'gp') pick = pool.slice();
+    else if (mode === 'weakUnit') {
+      /* 틀린 문제 → 아직 안 푸문 같은 단원 문제 순서로 묶는다 */
+      var ws = pool.filter(function (q) { return !!S.wrong[q.i]; })
+        .sort(function (a, b) { return ((S.wrong[b.i] || {}).c || 1) - ((S.wrong[a.i] || {}).c || 1); });
+      var rest = qs(pool.filter(function (q) { return !S.wrong[q.i]; }), n - ws.length);
+      pick = ws.concat(rest).slice(0, n);
+    } else pick = qs(pool, n);
     var items = pick.map(function (q) {
       var order = q.o.map(function (_, i) { return i; });   // OX(2지선다)도 지원
       shuffle(order);
@@ -1633,6 +1768,171 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   function speedStop() {
     clearInterval(speedTimer); speedTimer = null;
     document.body.classList.remove('speed', 'fever');
+  }
+
+  /* ============================================================
+     ⭕ 5분 1줄 OX 회독
+     · 기존 4지선다 기출의 선지를 '한 문장 O/X'로 옮긴다
+     · 정답 방향은 원문 정답키로만 정한다
+       - "옳지 않은 것을" → 정답 선지는 X, 나머지 세 선지는 O
+       - "옳은 것을"     → 정답 선지는 O, 나머지 세 선지는 X
+     · 문장이 불완전하거나(짧음) ①~④·"모두 고른 것" 같은 복합 선지는 뺀다
+     ============================================================ */
+  var OX = null;
+  function oxOkText(t, lo, hi) {
+    t = String(t || '').replace(/\s+/g, ' ').trim();
+    if (t.length < lo || t.length > hi) return false;
+    if (/[①-④]|모두\s*고른|위의\s*것|㉠|㉡/.test(t)) return false;
+    if (!/(다|음|함|됨)[.)]?$/.test(t)) return false;
+    return true;
+  }
+  function oxItems(sid) {
+    var out = [];
+    D.questions.forEach(function (q) {
+      if (q.s === 'gtelp' || (sid && q.s !== sid)) return;
+      if ((q.o || []).length === 2) {
+        var st = String(q.q || '').trim();
+        if (!oxOkText(st, 30, 180)) return;
+        out.push({ st: st, ans: Number(q.a) === 0 ? 'O' : 'X', q: q });
+        return;
+      }
+      if ((q.o || []).length !== 4) return;
+      var stem = String(q.q || '');
+      if (stem.indexOf('설명으로') < 0) return;      // '학자는 누구?'·'공통점은?' 같은 선지형 제외
+      var neg = /옳지\s*않은|적절하지\s*않은|틀린\s*것|아닌\s*것|옳지\s*못한/.test(stem);
+      var pos = /옳은\s*것|적절한\s*것|맞는\s*것|타당한\s*것/.test(stem);
+      if (neg === pos) return;
+      var okAll = q.o.every(function (c) { return oxOkText(c, 25, 120); });
+      if (!okAll) return;
+      q.o.forEach(function (c, i) {
+        var isAns = i === Number(q.a);
+        out.push({
+          st: String(c).replace(/\s+/g, ' ').trim(),
+          ans: neg ? (isAns ? 'X' : 'O') : (isAns ? 'O' : 'X'),
+          q: q, srcAns: isAns
+        });
+      });
+    });
+    return out;
+  }
+  function startOx() {
+    var all = oxItems(S.subj === 'gtelp' ? null : S.subj);
+    if (!all.length) {
+      all = oxItems(null);
+      if (!all.length) { toast('OX로 바뀔 경찰 기출 선지가 아직 없어요'); return; }
+    }
+    var pick = shuffle(all.slice()).slice(0, 80);
+    OX = { items: pick, i: 0, ok: 0, done: 0, xp: 0, locked: false, end: Date.now() + 300000, timer: null };
+    document.body.style.overflow = 'hidden';
+    $('#oxq').classList.remove('hidden');
+    clearInterval(OX.timer);
+    OX.timer = setInterval(oxTick, 500);
+    oxTick(); renderOx();
+  }
+  function oxTick() {
+    if (!OX) return;
+    var left = Math.max(0, Math.ceil((OX.end - Date.now()) / 1000));
+    var el = $('#oxTimer');
+    if (el) el.textContent = Math.floor(left / 60) + ':' + pad(left % 60);
+    var bar = $('#oxBar');
+    if (bar) bar.style.width = Math.min(100, (300 - left) / 300 * 100) + '%';
+    if (left <= 0 && !OX.over) finishOx();
+  }
+  function renderOx() {
+    var it = OX.items[OX.i];
+    if (!it) { finishOx(); return; }
+    OX.locked = false;
+    $('#oxCount').textContent = (OX.done + 1) + ' / ' + OX.items.length;
+    var tag = SUBJ[it.q.s].name + ' · ' + (it.q.gp ? 'G-POINT ' + it.q.gp : unitName(it.q.c, it.q.u));
+    var srcLine = it.q.src ? '<div class="ox-src">📌 ' + esc(it.q.src) + '</div>' : '';
+    $('#oxBody').innerHTML =
+      '<div class="ox-tag">' + esc(tag) + '</div>' +
+      srcLine +
+      '<div class="ox-stmt">' + esc(it.st) + '</div>' +
+      '<div class="ox-btns">' +
+      '<button class="ox-choice o" data-ox="O"><b>⭕ O</b><i>옳은 문장</i></button>' +
+      '<button class="ox-choice x" data-ox="X"><b>❌ X</b><i>틀린 문장</i></button></div>' +
+      '<div class="ox-fb" id="oxFb"></div>';
+    $$('#oxBody .ox-choice').forEach(function (b) {
+      b.onclick = function () { answerOx(b.getAttribute('data-ox'), b); };
+    });
+  }
+  function answerOx(val, btn) {
+    if (!OX || OX.locked) return;
+    OX.locked = true;
+    var it = OX.items[OX.i];
+    if (!it) return;
+    var right = val === it.ans;
+    $$('#oxBody .ox-choice').forEach(function (b) {
+      b.disabled = true;
+      if (b.getAttribute('data-ox') === it.ans) b.classList.add('right');
+    });
+    if (!right) btn.classList.add('wrong');
+    OX.done++;
+    var q = it.q;
+    var day = dayRec();
+    S.ans++; day.ans = (day.ans || 0) + 1;
+    var uk = q.c + ':' + q.u;
+    var u = S.unit[uk] || (S.unit[uk] = { a: 0, ok: 0 });
+    u.a++;
+    var gain;
+    if (right) {
+      OX.ok++; S.ok++; u.ok++; day.ok = (day.ok || 0) + 1;
+      S.qok[q.i] = (S.qok[q.i] || 0) + 1; delete S.wrong[q.i];
+      gain = 4;
+      sfx('ok');
+    } else {
+      var w = S.wrong[q.i] || { c: 0 };
+      S.wrong[q.i] = { c: (w.c || 0) + 1, d: todayStr() };
+      gain = 1;
+      sfx('no');
+    }
+    OX.xp += gain; S.xp += gain; day.xp = (day.xp || 0) + gain;
+    var why = String(q.e || '').replace(/^\[[^\]]*\]\s*/, '').replace(/([.!?])\s+/g, '$1\n').split('\n')[0] || '';
+    if (!why || /^정답\s*[OX0-9①-④][.)]?$/.test(why.trim())) {
+      why = (right ? '정답이에요. ' : '이 문장은 원문과 다듬어진 부분이 있는 선지예요. ') + '출처: ' + (q.src || qLabel(q));
+    }
+    if (why.length > 96) why = why.slice(0, 95) + '…';
+    var fbEl = $('#oxFb');
+    if (fbEl) {
+      fbEl.className = 'ox-fb on ' + (right ? 'ok' : 'no');
+      fbEl.innerHTML = '<b>' + (right ? '정답 ⭕' : '정답 ❌') + '</b>' +
+        '<span>' + esc(why) + '</span>' +
+        (it.srcAns ? '<i>네가 고른 선지가 원문 정답 선지</i>' : '');
+    }
+    touchStreak(); save();
+    renderHud(); renderQuest(); renderMascot(); renderDash(); renderPass();
+    clearTimeout(OX._h);
+    OX._h = setTimeout(function () {
+      if (!OX) return;
+      OX.i++;
+      if (OX.i >= OX.items.length) finishOx(); else renderOx();
+    }, right ? 850 : 1500);
+  }
+  function finishOx() {
+    if (!OX || OX.over) return;
+    OX.over = true;
+    clearInterval(OX.timer); OX.timer = null;
+    var n = OX.done, ok = OX.ok;
+    if (ok > (S.oxBest || 0)) { S.oxBest = ok; }
+    S.oxRuns = (S.oxRuns || 0) + 1;
+    save();
+    var acc = n ? Math.round(ok / n * 100) : 0;
+    $('#oxBody').innerHTML =
+      '<div class="ox-result"><div class="oxr-emoji">' + (acc >= 80 ? '🎉' : acc >= 60 ? '💪' : '🌱') + '</div>' +
+      '<div class="oxr-t">' + n + '문장 중 ' + ok + '개 정답</div>' +
+      '<div class="oxr-s">정답률 ' + acc + '% · +' + OX.xp + ' P' + (ok > 0 ? ' · 최고 기록 ' + Math.max(ok, 0) + '문장' : '') + '</div>' +
+      '<p class="oxr-note">틀린 문장은 오답노트에 쌓여 약점 단원 TOP 3에 바로 반영돼요.</p>' +
+      '<div class="oxr-btns"><button class="btn ghost" id="oxAgain">한 번 더</button>' +
+      '<button class="btn primary" id="oxDone">닫기</button></div></div>';
+    $('#oxAgain').onclick = function () { closeOx(); startOx(); };
+    $('#oxDone').onclick = function () { closeOx(); renderAll(); };
+    if (acc >= 80) sfx('done');
+  }
+  function closeOx() {
+    if (OX) { clearInterval(OX.timer); clearTimeout(OX._h); OX = null; }
+    $('#oxq').classList.add('hidden');
+    document.body.style.overflow = '';
   }
 
   function renderQ() {
@@ -1886,8 +2186,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     el.querySelector('.fb-head').innerHTML = '<img class="fb-mascot" src="assets/' + (ok ? 'mascot-happy.png' : 'mascot-happy.png') + '" alt="">' +
       '<span>' + (ok ? '정답이에요!' + (bonus ? ' 콤보 보너스 🎉' : ' 🎉') : '아쉬워요 😢') + '</span>' +
       '<span class="fb-xp">+' + gain + ' P</span>';
-    var gpLead = q.gp ? '<span class="fb-gp">' + esc(gpHead(q)) + '</span>' : '';
-    el.querySelector('.fb-text').innerHTML = gpLead + '<b>해설</b> · ' + esc(q.e);
+    el.querySelector('.fb-text').innerHTML = expHtml(q);
     var b = $('#fbNext');
     b.textContent = QS.i + 1 >= QS.items.length ? '결과 보기' : '다음 문제';
     /* 해설이 패널에 다 안 들어가면 스크롤 안내(아래 흐림) 표시 */
@@ -1899,6 +2198,69 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     revealAnswerOpt();
     revealAnswerOpt(true);
     revealAnswerOpt(2);
+  }
+
+  /* ============================================================
+     해설 읽기 좋게 정리 (수진 님 "지텔프 해설 가독성이 너무 안 좋아")
+     · 맨 앞 [G-POINT …] 메타는 본문에서 빼서 위 칩으로
+     · 첫 문장(핵심)은 굵게, 나머지는 문장 단위 단락으로
+     · 괄호 속 우리말 해석과 출처는 따로 떼어 맨 아래로
+     ============================================================ */
+  function expHtml(q) {
+    var raw = String(q.e || '').replace(/\r/g, '').trim();
+    if (!raw) return '<span class="fb-empty">해설이 아직 없어요.</span>';
+    var chip = '';
+    var m = raw.match(/^\[([^\]]{2,90})\]\s*/);
+    if (m) { chip = m[1].replace(/^최신 교재\s*/, ''); raw = raw.slice(m[0].length); }
+    if (q.gp) {
+      var c = COURSE[q.c];
+      var tn = c && c.lec && c.lec[q.gp - 1] ? String(c.lec[q.gp - 1].t || '') : '';
+      chip = 'G-POINT ' + q.gp + (tn ? ' · ' + tn.replace(/^.*?·\s*/, '') : '');
+    }
+    var src = '', sm = raw.match(/\(([^()]*(?:켈리 카페|난이도)[^()]*)\)\s*$/);
+    if (sm) { src = sm[1].trim(); raw = raw.slice(0, sm.index).trim(); }
+    var tr = '', tm = raw.match(/\(([^()]{12,})\)\s*$/);
+    if (tm && /[가-힣]/.test(tm[1]) && /다[.)]?\s*$/.test(tm[1].trim())) { tr = tm[1].trim(); raw = raw.slice(0, tm.index).trim(); }
+    var sents = raw.replace(/([.!?])\s+(?=[^\s])/g, '$1\n').split(/\n+/).map(function (x) { return x.trim(); }).filter(Boolean);
+    var isPol = q.s !== 'gtelp';
+    var T = function (s) { return isPol ? hlText(s) : esc(s); };
+    var h = '';
+    if (chip) h += '<div class="fb-gp">📘 ' + esc(chip) + '</div>';
+    if (isPol) h += '<div class="fb-legend">빨간 <span class="hl-trap">함정 표현</span> · 노란 <span class="hl-num">숫자·기간</span> 먼저 확인</div>';
+    var ansTxt = q.o && q.o[q.a] ? String(q.o[q.a]) : '';
+    if (ansTxt && ansTxt.length <= 46) h += '<div class="fb-ansline"><span>정답</span><b>' + esc(ansTxt) + '</b></div>';
+    var hasAns = ansTxt && ansTxt.length <= 46 && ansTxt.length > 0;
+    sents.forEach(function (s, i) {
+      /* "정답 O."처럼 정답만 되풀이하는 짧은 문장은 위 정답 줄과 겹치니 빼기 */
+      if (hasAns && /^정답\s*[OX0-9①-④][.)]?$/.test(s.trim())) return;
+      if (/^[①-④]/.test(s) || /^[-·•]/.test(s)) h += '<p class="fb-li">' + T(s) + '</p>';
+      else if (i === 0) h += '<p class="fb-key">' + T(s) + '</p>';
+      else h += '<p class="fb-p">' + T(s) + '</p>';
+    });
+    if (tr) h += '<div class="fb-tr"><b>해석</b>' + esc(tr) + '</div>';
+    if (src) h += '<div class="fb-src">' + esc(src) + '</div>';
+    return h;
+  }
+
+  /* 경찰 과목 해설의 함정·숫자 자동 하이라이트 */
+  var TRAP_PATTERNS = [
+    [/(?:할 수 있(?:다|습니다)|할 수 없(?:다|습니다))/g, 'trap'],
+    [/(?:하여야 한다|해야 한다|하여야 합니다)/g, 'must'],
+    [/(?:임의적|필요적)/g, 'trap'],
+    [/(?:추정|간주)(?:된다|되지 않는다|한다|하지 않는다)?/g, 'trap'],
+    [/(?:직접정범|간접정범)/g, 'trap'],
+    [/(?:유죄|무죄)/g, 'guilt'],
+    [/(?:공소시효|형의 시효|제척기간)/g, 'must'],
+    [/(?:원칙적으로|예외적으로|원칙|예외)/g, 'soft'],
+    [/제\s?\d+조(?:의\s?\d+)?/g, 'num'],
+    [/\d+(?:년|개월|일|시간|분|초|%|퍼센트|회|명|개|cm|kg)/g, 'num']
+  ];
+  function hlText(s) {
+    var t = esc(String(s || ''));
+    TRAP_PATTERNS.forEach(function (p) {
+      t = t.replace(p[0], function (m) { return '<mark class="hl-' + p[1] + '">' + m + '</mark>'; });
+    });
+    return t;
   }
 
   /* 해설이 뜰 때 정답 보기가 화면 안에 들어오고, 보기가 경계에서 반토막 나 보이지 않게 스크롤을 맞춘다
@@ -2050,7 +2412,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     S.muted = !S.muted; save(); renderHud();
     if (!S.muted) sfx('tap');
   };
-  $('#planBtn').onclick = function () { sfx('tap'); openPlanSheet(); };
+  var _planBtn = $('#planBtn');
+  if (_planBtn) _planBtn.onclick = function () { sfx('tap'); openPlanSheet(); };
   var _gpBtn = $('#gpBtn');
   if (_gpBtn) _gpBtn.onclick = function () { sfx('tap'); openGpSheet(); };
   var _dashBar = $('#dashBar');
@@ -2100,6 +2463,16 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   $('#mixAll').onchange = function () { S.mix = this.checked; save(); renderReview(); };
   var _mSpeed = $('#mSpeed');
   if (_mSpeed) _mSpeed.onclick = function () { sfx('tap'); startSession('speed', {}); };
+  var _mOx = $('#mOx');
+  if (_mOx) _mOx.onclick = function () { sfx('tap'); startOx(); };
+  var _gbSet = $('#gbSet');
+  if (_gbSet) _gbSet.onclick = function () { sfx('tap'); openGoalSheet(); };
+  var _gbBar = $('#goalBar');
+  if (_gbBar) _gbBar.onclick = function (e) { if (e.target && e.target.id === 'gbSet') return; sfx('tap'); openGoalSheet(); };
+  var _oxClose = $('#oxClose');
+  if (_oxClose) _oxClose.onclick = function () { sfx('tap'); closeOx(); renderAll(); };  
+  window.addEventListener('resize', function () { syncTopHeight(); });
+  window.addEventListener('load', function () { syncTopHeight(); });
   $('#qClose').onclick = function () { closeQuiz(); renderAll(); };
   $('#fbNext').onclick = nextQ;
   $('#stWrongGo').onclick = function () { startSession('wrong'); };
@@ -2110,7 +2483,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       xp: 0, streak: { n: 0, last: '', best: 0 }, checked: {}, wrong: {}, ans: 0, ok: 0,
       muted: S.muted, subj: S.subj, course: {}, qlen: 10, mix: false, days: {},
       dday: DTARGET, ddayNote: '예상일', unit: {}, node: {}, qok: {}, gpSeeded: true, goal: { xp: 50, q: 10 },
-      planLog: {}, planSubj: 'done', xpSpent: 0, shields: {}, cards: {}, rewardData: {}, gpLast: {}, bossWins: 0
+      planLog: {}, planSubj: 'done', xpSpent: 0, shields: {}, cards: {}, rewardData: {}, gpLast: {}, bossWins: 0,
+      dayGoal: S.dayGoal || 30, oxBest: 0, oxRuns: 0
     };
     scopeCache = null;
     CF.deck = []; BQ = null;
@@ -2516,6 +2890,147 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   function gpQuestions(n) {
     return D.questions.filter(function (q) { return q.s === 'gtelp' && Number(q.gp) === Number(n); });
   }
+
+  /* ============================================================
+     ⚖️ 경찰 과목 조문·숫자·두문자 암기표
+     · 2026. 11. 현행 법령 원문(국가법령정보센터)을 직접 확인해 적은 것만 넣는다
+     · rows = [조건(파랑), 정답·숫자(노랑), 근거 조문, 두문자·주의]
+     ============================================================ */
+  var LAW_TABLE = {
+    crim: [
+      { g: '형벌의 종류와 기간', tip: '형량 숫자는 기간·벌금액·구류/과료 단위까지 함께 외운다', rows: [
+        ['형법상 형벌의 종류', '사형·징역·금고·자격상실·자격정지·벌금·구류·과료·몰수 (9종)', '§41',
+          '두문자 사·징·금·자·자·벌·구·과·몰'],
+        ['징역·금고의 기간', '1개월 이상 30년 이하 (가중하면 50년까지)', '§42', ''],
+        ['자격정지의 기간', '1년 이상 15년 이하', '§44①', ''],
+        ['구류 / 과료', '구류 1일 이상 30일 미만 / 과료 2천원 이상 5만원 미만', '§46·§47', ''],
+        ['벌금의 최저액', '5만원 이상 (감경하면 5만원 미만도 가능)', '§45', '']
+      ] },
+      { g: '선고유예·집행유예·가석방', tip: '유예기간은 선고유예 2년, 집행유예 1~5년으로 서로 다르다', rows: [
+        ['선고유예', '1년 이하 징역·금고·자격정지·벌금 → 유예기간 2년이 지나면 면소 간주', '§59①·§60', '보호관찰은 1년'],
+        ['집행유예', '3년 이하 징역·금고 또는 500만원 이하 벌금 → 1년 이상 5년 이하 유예', '§62①', ''],
+        ['집행유예 실효', '유예기간 중 고의로 범한 죄로 금고 이상의 실형이 확정된 때', '§63', '취소(§64)와 구별'],
+        ['가석방', '무기형 20년 / 유기형은 형기의 1/3이 지난 후', '§72①', ''],
+        ['가석방 기간', '무기형 10년 / 유기형은 남은 형기(10년 초과 불가)', '§73의2①', '기간 중 보호관찰'],
+        ['형의 시효', '무기 20년 · 10년 이상 15년 · 3년 이상 10년 · 3년 미만 7년 · 벌금·몰수 5년 · 구류·과료 1년', '§78',
+          '2023.8.8 개정으로 사형의 형 시효는 폐지']
+      ] },
+      { g: '죄수·공범', tip: '경합범은 1/2까지 가중, 상상적 경합은 가장 무거운 죄의 형', rows: [
+        ['경합범 가중', '가장 무거운 죄의 장기 또는 다액의 1/2까지 (합산한 형기·액수 초과 불가)', '§38①2', ''],
+        ['상상적 경합', '가장 무거운 죄에 정한 형으로 처벌', '§40', ''],
+        ['공범과 신분', '신분이 없는 자는 보통 형으로 처벌', '§33', '신분이 있는 자는 신분범의 형'],
+        ['종범(방조범)', '필요적으로 감경한다', '§32②', '임의적 감경 아님'],
+        ['몰수·추징', '제공한 물건 / 생긴 물건 / 그 대가 3종, 몰수 못 하면 가액 추징', '§48', '임의적 몰수']
+      ] },
+      { g: '수사·증거 숫자 (형사소송법)', tip: '구속기간 10일+10일, 고소기간 6개월은 단골 숫자', rows: [
+        ['구속기간', '사법경찰관 10일 / 검사 10일 (각각 그 안에 인치·공소제기)', '§202·§203', '2026.8.4 개정'],
+        ['고소기간', '범인을 알게 된 날부터 6개월', '§230①', ''],
+        ['공소시효', '사형 25년 · 무기 15년 · 장기 10년 이상 10년 · 장기 10년 미만 7년', '§249①', '장기 5년 미만은 5년'],
+        ['사법경찰관 피의자신문조서', '피고인 또는 변호인이 내용을 인정할 때에만 증거로 사용', '§312③', ''],
+        ['§314조 예외', '사망·질병·외국거주·소재불명 등 + 특히 신빙할 수 있는 상태', '§314', '두 요건 모두 필요']
+      ] },
+      { g: '판례·쟁점 비교', tip: '숫자보다 갈리는 지점을 묻는 비교형', rows: [
+        ['절도 vs 횡령', '점유가 넘어갔으면 횡령 / 넘어가지 않았으면 절도', '판례 쟁점', '보관자성 판단'],
+        ['사기죄 4요건', '기망 → 착오 → 처분행위 → 재산상 손실', '§347', '처분행위 없으면 사기 불성립'],
+        ['공무집행방해', '직무집행이 적법할 때 성립 (위법한 직무집행은 방해죄 불성립)', '§136', ''],
+        ['정당방위', '현재의 부당한 침해 + 상당한 이유', '§21①', '과잉방위는 감경·면제'],
+        ['공동정범', '공동의 의사 + 기능적 행위지배', '§30', '']
+      ] }
+    ],
+    pol: [
+      { g: '경찰관 직무집행법 — 숫자', tip: '동행 6시간 · 보호 24시간 · 영치 10일, 세 숫자만 확실히', rows: [
+        ['불심검문 동행', '경찰관서에 6시간을 초과하여 머물게 할 수 없다', '§3⑥', '동행은 거절 가능'],
+        ['보호조치', '경찰관서에서 보호하는 기간 24시간 초과 금지', '§4⑦', ''],
+        ['임시영치', '10일 초과 금지', '§4⑦', '보호와 기간이 다름'],
+        ['구호대상자 3호', '정신착란·술취한 자 / 자살 시도자 / 미아·병자·부상자', '§4①', '3호는 본인이 거절하면 제외'],
+        ['불심검문 절차', '증표 제시 + 소속·성명, 동행 시 장소·목적·이유 설명', '§3④', '가족·친지 통지, 변호인 권리 고지']
+      ] },
+      { g: '집회 및 시위에 관한 법률', tip: '신고 720~48시간, 금지통고 48시간, 이의신청 10일', rows: [
+        ['옥외집회·시위 신고', '시작하기 720시간 전부터 48시간 전까지', '§6①', ''],
+        ['금지 통고', '신고서를 접수한 때부터 48시간 이내', '§8①', ''],
+        ['이의 신청', '통고를 받은 날부터 10일 이내 / 재결은 접수 후 24시간 이내', '§9①·②', '']
+      ] },
+      { g: '행정구제 기간', tip: '심판 90/180, 소송 90/1년 — 숫자 짝으로 외운다', rows: [
+        ['행정심판 청구', '처분을 안 날부터 90일 / 처분이 있은 날부터 180일', '행정심판법 §27', ''],
+        ['행정소송 제소', '처분을 안 날부터 90일 / 처분이 있은 날부터 1년', '행정소송법 §20', ''],
+        ['국가배상 청구', '손해 및 가해자를 안 날부터 3년 / 불법행위가 있은 날부터 10년', '민법 §766 준용', '']
+      ] },
+      { g: '공무원·징계', tip: '징계 6종은 중징계 4 + 경징계 2로 나눠 외운다', rows: [
+        ['징계의 종류', '파면·해임·강등·정직 / 감봉·견책 (6종)', '국가공무원법 §79', '중징계 4 · 경징계 2'],
+        ['강등의 효력', '1계급 아래로 내리고 3개월 직무정지, 보수 전액 감', '§80①', ''],
+        ['소청심사 청구', '처분사유 설명서를 받은 날부터 30일 이내', '§76①', ''],
+        ['경찰 계급', '순경·경장·경사·경위·경감·경정·총경·경무관·치안감·치안정감·치안총감 (11개)', '경찰공무원법', '']
+      ] },
+      { g: '교통·음주', tip: '0.03%는 처벌선, 0.08%는 면허취소선', rows: [
+        ['음주운전 처벌 기준', '혈중알코올농도 0.03% 이상이면 처벌', '도로교통법 §44④', ''],
+        ['운전면허 취소', '혈중알코올농도 0.08% 이상', '도로교통법 §93①', '행정안전부령 기준']
+      ] }
+    ],
+    cri: [
+      { g: '이론가와 핵심 숫자', tip: '이름 → 숫자 → 항목 순서로 묶어 외운다', rows: [
+        ['머튼 아노미이론', '적응양식 5 = 동조·혁신·의례·도피·반항', 'Merton 1938', '두문자 동·혁·의·도·반'],
+        ['허쉬 사회유대이론', '4요소 = 애착·전념·참여·신념', 'Hirschi 1969', '두문자 애·전·참·신'],
+        ['중화기술이론', '5기술 = 책임부인·가해부인·피해부인·비난자 비난·상위가치 충성', 'Sykes & Matza 1957', '두문자 책·가·피·비·상'],
+        ['차별적 접촉이론', '9명제 · 친밀한 집단과의 상호작용으로 범죄를 학습', 'Sutherland 1939', ''],
+        ['사회해체론', '동심원 5지대 = 중심업무·전이·주거·침입·통근', 'Shaw & McKay 1942', '해체 3요인 빈곤·이질성·이동'],
+        ['비행하위문화', '3하위문화 = 범죄적·갈등적·회피적', 'Cloward & Ohlin 1960', '']
+      ] },
+      { g: '환경·통제 이론', tip: '요소 개수가 헷갈리면 3·4·5로 나눠 기억', rows: [
+        ['일상활동이론', '3요소 = 동기화된 범죄자·적절한 대상·보호자의 부재', 'Cohen & Felson 1979', '두문자 동·대·보'],
+        ['자기통제이론', '낮은 자기통제 + 범죄 기회가 만나면 범죄', 'Gottfredson & Hirschi 1990', ''],
+        ['CPTED 5원칙', '자연적 감시·영역성 강화·활동의 활성화·접근통제·유지관리', '환경설계', '두문자 자·영·활·접·유'],
+        ['일반긴장이론', '긴장 3유형 = 목표 달성 실패·긍정적 자극의 제거·부정적 자극의 제시', 'Agnew 1992', '']
+      ] },
+      { g: '낙인·생물학·회복', tip: '1차/2차, 재통합/낙인처럼 짝으로 나오는 개념', rows: [
+        ['낙인론', '1차 이탈(원인과 무관) → 낙인 → 2차 이탈(정체성화)', 'Lemert', ''],
+        ['재통합적 수치', '비행은 수치스럽게 하되 사람은 받아들여 복귀시킴', 'Braithwaite 1989', '낙인적 수치와 반대'],
+        ['셸던 체형이론', '외배엽·중배엽·내배엽 (중배엽형이 범죄 많다고 주장)', 'Sheldon', '']
+      ] }
+    ]
+  };
+  function lawGroups() {
+    return LAW_TABLE[S.subj] || null;
+  }
+  function lawHtml() {
+    var groups = lawGroups(), s = SUBJ[S.subj];
+    if (!groups) {
+      return '<div class="empty">' + esc(s ? s.name : '이 과목') + '은(는) 조문 암기표를 아직 만들지 않았어요.<br>조문·숫자 암기표는 형사법·경찰학·범죄학 세 과목에 있어요.</div>';
+    }
+    var h = '<div class="gp-note">조건은 <b class="gp-cond">파랑</b>, 시험에 그대로 나오는 정답·숫자는 <b class="gp-ans">노랑</b>. ' +
+      '근거 조문을 함께 적었어요. 법령 숫자는 <b>2026. 11. 현행 원문 확인분</b>, 판례·이론은 표준 교재 기준이에요.</div>';
+    h += '<div class="gp-jump">';
+    groups.forEach(function (grp, gi) {
+      h += '<button class="gp-jbtn" data-lawgoto="' + gi + '">' + esc(grp.g) + '</button>';
+    });
+    h += '</div>';
+    var n = 0;
+    groups.forEach(function (grp, gi) {
+      h += '<div class="gp-group" id="law-g' + gi + '"><div class="gp-group-h">' + esc(grp.g) + '</div>';
+      grp.rows.forEach(function (r) {
+        n++;
+        h += '<div class="gp-row law-row">' +
+          '<span class="gp-no law-no">' + n + '</span>' +
+          '<span class="gp-body"><span class="gp-cond">' + esc(r[0]) + '</span>' +
+          '<span class="gp-ans">👉 ' + esc(r[1]) + '</span>' +
+          (r[3] ? '<span class="law-tip">💡 ' + esc(r[3]) + '</span>' : '') + '</span>' +
+          '<span class="law-src">' + esc(r[2] || '') + '</span></div>';
+      });
+      if (grp.tip) h += '<div class="gp-tip">💡 ' + esc(grp.tip) + '</div>';
+      h += '</div>';
+    });
+    h += '<p class="lib-sub" style="margin-top:10px">근거: 국가법령정보센터 현행 법령 원문(형법·형사소송법·경찰관 직무집행법·집회 및 시위에 관한 법률·국가공무원법·행정심판법·행정소송법·도로교통법) · 범죄학 이론가·연도는 표준 교재 기준.</p>';
+    return h;
+  }
+  function bindLawRows(root) {
+    $$('#segLaw .gp-jbtn', root || document).forEach(function (b) {
+      b.onclick = function () {
+        var t = $('#law-g' + b.getAttribute('data-lawgoto'));
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        $$('#segLaw .gp-jbtn').forEach(function (x) { x.classList.toggle('on', x === b); });
+        sfx('tap');
+      };
+    });
+  }
   /* 표에서 G-POINT를 누르면 그 포인트 켈리 기출을 한 문제씩(직전 문제와 안 겹치게) */
   function startGp(n) {
     var pool = gpQuestions(n);
@@ -2595,7 +3110,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   function renderMemo() {
     syncMemoSegs();
     $$('#memoSeg .seg-b').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-seg') === MEMO.seg); });
-    ['Card', 'Gp', 'Lib', 'Phys'].forEach(function (k) {
+    ['Card', 'Gp', 'Law', 'Lib', 'Phys'].forEach(function (k) {
       var el = $('#seg' + k);
       if (el) el.classList.toggle('hidden', MEMO.seg !== k.toLowerCase());
     });
@@ -2605,6 +3120,10 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (MEMO.seg === 'gp') {
       var g = $('#segGp');
       if (!g._built) { g.innerHTML = gpTableHtml(true); g._built = true; bindGpRows(g); }
+    }
+    if (MEMO.seg === 'law') {
+      var w = $('#segLaw');
+      if (!w._built) { w.innerHTML = lawHtml(); w._built = true; bindLawRows(w); }
     }
     if (MEMO.seg === 'lib') {
       var l = $('#segLib');
@@ -2621,20 +3140,22 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var gp = S.subj === 'gtelp';
     $$('#memoSeg .seg-b').forEach(function (b) {
       var seg = b.getAttribute('data-seg');
-      var show = seg === 'gp' ? gp : seg === 'lib' ? !gp : true;
+      var show = (seg === 'gp') ? gp : (seg === 'lib' || seg === 'law') ? !gp : true;
       b.classList.toggle('hidden', !show);
     });
     if (MEMO.seg === 'gp' && !gp) MEMO.seg = 'card';
-    if (MEMO.seg === 'lib' && gp) MEMO.seg = 'card';
+    if ((MEMO.seg === 'lib' || MEMO.seg === 'law') && gp) MEMO.seg = 'card';
     var gb = $('#gpBtn'), lb = $('#libBtn');
     if (gb) gb.classList.toggle('hidden', !gp);
     if (lb) lb.classList.toggle('hidden', gp);
+    syncTopHeight();
   }
   function rebuildMemo() {
-    var g = $('#segGp'), l = $('#segLib'), p = $('#segPhys');
+    var g = $('#segGp'), l = $('#segLib'), p = $('#segPhys'), w = $('#segLaw');
     if (g) { g._built = false; }
     if (l) { l._built = false; }
     if (p) { p._built = false; }
+    if (w) { w._built = false; }
     syncMemoSegs();
     var key = S.subj + '|' + scopeQPool(S.subj).length;
     if (CF.key !== key) { CF.deck = []; CF.key = key; }
@@ -2929,41 +3450,73 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       '<text class="ex-cap" x="30" y="62">16 + 15회</text>' +
       '</svg>';
   }
+  /* ---- 일상 연습: 무엇을 잡고 어떻게 움직이는지 그림에 그대로 ---- */
   function svgStairs() {
-    return '<svg viewBox="0 0 64 64" class="ex-svg ex-stairs" aria-hidden="true">' +
-      '<path class="ex-step" d="M8 54 h14 v-12 h14 v-12 h14 v-12" fill="none"/>' +
-      '<g class="ex-foot"><rect x="6" y="48" width="9" height="4" rx="2"/></g></svg>';
+    return '<svg viewBox="0 0 96 72" class="ex-svg ex-stairs" aria-hidden="true">' +
+      '<path class="ex-step" d="M10 62 h20 v-13 h20 v-13 h20 v-13 h18" fill="none"/>' +
+      '<text class="ex-cap" x="72" y="12">2칸씩</text>' +
+      '<g class="ex-foot"><rect x="8" y="55" width="11" height="5" rx="2.5"/></g>' +
+      '<g class="ex-uparrow"><line x1="31" y1="58" x2="31" y2="34"/><path d="M25 40 l6 -7 6 7" fill="none"/></g>' +
+      '</svg>';
   }
   function svgBurpee() {
-    return '<svg viewBox="0 0 64 64" class="ex-svg ex-burpee" aria-hidden="true">' +
-      '<line class="ex-ground" x1="6" y1="54" x2="58" y2="54"/>' +
-      '<g class="ex-fold"><circle cx="32" cy="16" r="4"/>' +
-      '<line x1="32" y1="20" x2="32" y2="36"/><line x1="32" y1="36" x2="24" y2="52"/>' +
-      '<line x1="32" y1="36" x2="40" y2="52"/><line x1="32" y1="25" x2="24" y2="32"/>' +
-      '<line x1="32" y1="25" x2="40" y2="32"/></g></svg>';
+    return '<svg viewBox="0 0 96 72" class="ex-svg ex-burpee" aria-hidden="true">' +
+      '<line class="ex-ground" x1="6" y1="64" x2="90" y2="64"/>' +
+      /* 왼쪽: 선 자세 */
+      '<g class="ex-stand"><circle cx="20" cy="22" r="5"/><line x1="20" y1="27" x2="20" y2="46"/>' +
+      '<line x1="20" y1="46" x2="14" y2="62"/><line x1="20" y1="46" x2="26" y2="62"/>' +
+      '<line x1="20" y1="32" x2="12" y2="24"/><line x1="20" y1="32" x2="28" y2="24"/></g>' +
+      /* 오른쪽: 엎드린 자세 */
+      '<g class="ex-plank"><circle cx="76" cy="50" r="5"/><line x1="71" y1="52" x2="50" y2="58"/>' +
+      '<line x1="50" y1="58" x2="34" y2="60"/><line x1="71" y1="54" x2="74" y2="63"/>' +
+      '<line x1="60" y1="55" x2="58" y2="63"/></g>' +
+      '<path class="ex-arc" d="M26 34 Q44 14 60 44" fill="none"/>' +
+      '<path class="ex-arrowhead" d="M54 40 l7 5 1 -8" fill="none"/>' +
+      '<text class="ex-cap" x="44" y="70">엎드렸다 → 일어서기</text>' +
+      '</svg>';
   }
-  function svgPush() {
-    return '<svg viewBox="0 0 64 64" class="ex-svg ex-push" aria-hidden="true">' +
-      '<line class="ex-ground" x1="6" y1="54" x2="58" y2="54"/>' +
-      '<g class="ex-pushg"><circle cx="20" cy="34" r="4"/>' +
-      '<line x1="24" y1="36" x2="46" y2="44"/><line x1="46" y1="44" x2="52" y2="54"/>' +
-      '<line class="ex-arm" x1="22" y1="38" x2="26" y2="52"/></g></svg>';
+  function svgBagWalk() {
+    return '<svg viewBox="0 0 96 72" class="ex-svg ex-bagwalk" aria-hidden="true">' +
+      '<line class="ex-ground" x1="6" y1="64" x2="90" y2="64"/>' +
+      /* 뒤로 걸어가는 사람(몸은 오른쪽, 진행은 왼쪽) */
+      '<g class="ex-walk"><circle cx="62" cy="18" r="5"/>' +
+      '<line x1="62" y1="23" x2="58" y2="44"/><line x1="58" y1="44" x2="50" y2="62"/>' +
+      '<line x1="58" y1="44" x2="66" y2="62"/><line x1="62" y1="28" x2="72" y2="36"/>' +
+      '<line x1="62" y1="28" x2="52" y2="36"/></g>' +
+      /* 무거운 가방 */
+      '<g class="ex-bag"><rect x="66" y="24" width="18" height="20" rx="4"/><line x1="70" y1="24" x2="70" y2="19"/>' +
+      '<line x1="80" y1="24" x2="80" y2="19"/></g>' +
+      '<g class="ex-back"><line x1="46" y1="30" x2="18" y2="30"/><path d="M26 24 l-8 6 8 6" fill="none"/></g>' +
+      '<text class="ex-cap" x="30" y="70">뒤로 걷기</text>' +
+      '</svg>';
   }
-  function svgSquat() {
-    return '<svg viewBox="0 0 64 64" class="ex-svg ex-squat" aria-hidden="true">' +
-      '<line class="ex-ground" x1="6" y1="54" x2="58" y2="54"/>' +
-      '<g class="ex-sq"><circle cx="32" cy="16" r="4.4"/>' +
-      '<line x1="32" y1="21" x2="32" y2="34"/>' +
-      '<line class="ex-thigh" x1="32" y1="34" x2="24" y2="44"/><line x1="24" y1="44" x2="26" y2="54"/>' +
-      '<line class="ex-thigh" x1="32" y1="34" x2="40" y2="44"/><line x1="40" y1="44" x2="38" y2="54"/>' +
-      '<line class="ex-arm" x1="32" y1="25" x2="32" y2="36"/></g></svg>';
+  function svgBottleGrip() {
+    return '<svg viewBox="0 0 96 72" class="ex-svg ex-bottle" aria-hidden="true">' +
+      '<line class="ex-ground" x1="6" y1="64" x2="90" y2="64"/>' +
+      '<g class="ex-hold"><circle cx="24" cy="18" r="5"/><line x1="24" y1="23" x2="24" y2="44"/>' +
+      '<line x1="24" y1="44" x2="18" y2="62"/><line x1="24" y1="44" x2="30" y2="62"/></g>' +
+      /* 앞으로 뻗은 팔 + 물병 */
+      '<g class="ex-armf"><line x1="26" y1="28" x2="58" y2="28"/><rect x="58" y="18" width="11" height="22" rx="3"/>' +
+      '<rect x="60" y="13" width="7" height="6" rx="2"/></g>' +
+      '<circle class="ex-clock" cx="66" cy="50" r="11"/><line stroke-width="1.6" x1="66" y1="50" x2="66" y2="43"/>' +
+      '<line stroke-width="1.6" x1="66" y1="50" x2="71" y2="52"/>' +
+      '<text class="ex-cap" x="66" y="70">30초 버티기</text>' +
+      '</svg>';
   }
-  function svgReach() {
-    return '<svg viewBox="0 0 64 64" class="ex-svg ex-reach" aria-hidden="true">' +
-      '<circle class="ex-ring" cx="42" cy="26" r="13"/>' +
-      '<g class="ex-armg"><line class="ex-myarm" x1="10" y1="38" x2="38" y2="28"/>' +
-      '<rect class="ex-hand" x="36" y="24" width="7" height="7" rx="3"/></g>' +
-      '<circle class="ex-pulse" cx="42" cy="26" r="4"/></svg>';
+  function svgDoorRow() {
+    return '<svg viewBox="0 0 96 72" class="ex-svg ex-door" aria-hidden="true">' +
+      '<line class="ex-ground" x1="6" y1="64" x2="90" y2="64"/>' +
+      /* 문틀 */
+      '<g class="ex-frame"><line x1="72" y1="6" x2="72" y2="64"/><line x1="90" y1="6" x2="90" y2="64"/>' +
+      '<line x1="72" y1="6" x2="90" y2="6"/></g>' +
+      /* 문틀을 잡고 뒤로 기대는 사람 */
+      '<g class="ex-row"><circle cx="44" cy="20" r="5"/><line x1="46" y1="25" x2="40" y2="46"/>' +
+      '<line x1="40" y1="46" x2="32" y2="64"/><line x1="40" y1="46" x2="46" y2="64"/>' +
+      '<line x1="46" y1="29" x2="70" y2="26"/><line x1="45" y1="34" x2="70" y2="34"/></g>' +
+      '<text class="ex-cap" x="26" y="16">등</text>' +
+      '<g class="ex-pullarrow"><line x1="34" y1="28" x2="16" y2="28"/><path d="M22 23 l-7 5 7 5" fill="none"/></g>' +
+      '<text class="ex-cap" x="83" y="70">문틀</text>' +
+      '</svg>';
   }
   var PHYS_COURSES = [
     { n: 1, t: '장애물 달리기', s: '매트(1.5m) → 5단 계단 → 허들(0.6m) · 6바퀴', d: '2바퀴째에 1.5m 장벽 넘기 1회 포함', svg: svgRun },
@@ -2973,11 +3526,16 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     { n: 5, t: '방아쇠 당기기', s: '지름 23cm 원 안 · 팔꿈치 편 채', d: '주손 16회 + 반대손 15회 격발', svg: svgTrigger }
   ];
   var PHYS_ROUTINE = [
-    { t: '계단·장애물', s: '계단 2칸씩 오르기 3세트, 버피 10개', svg: svgStairs },
-    { t: '버피', s: '엎드렸다 일어나기 10개 × 3세트', svg: svgBurpee },
-    { t: '밀기·당기기', s: '푸시업 10개 + 문틀 로우(밴드 당기기) 10개', svg: svgPush },
-    { t: '뒤로 끌기·스쿼트', s: '무거운 가방 10m 끌기, 스쿼트 15개', svg: svgSquat },
-    { t: '팔 뻗고 방아쇠', s: '물병 들고 팔 뻗어 30초, 악력기 20회', svg: svgReach }
+    { t: '문틀·책상 잡고 등 당기기', part: '등·팔', rep: '10회 × 3세트', svg: svgDoorRow,
+      how: '문틀(또는 튼튼한 책상 끝)을 두 손으로 잡고, 팔꿈치를 굽혀 가슴을 잡은 쪽으로 당겨요. 1초 멈췄다가 천천히 놓아요.' },
+    { t: '엎드렸다 일어서기(버피)', part: '전신·심폐', rep: '10회 × 3세트', svg: svgBurpee,
+      how: '선 자세에서 손을 바닥에 짚고 엎드렸다가(플랭크) 다시 두 발을 모아 일어서요. 뛰지 않아도 돼요.' },
+    { t: '무거운 가방 메고 뒤로 걷기 + 앉았다 일어나기', part: '하체·등', rep: '10m × 3회 + 15회', svg: svgBagWalk,
+      how: '책·물병 넣은 가방을 앞뒤로 메고 뒤로 10m 걸어요. 이어서 의자에 앉았다 일어나기를 15회 해요.' },
+    { t: '물병 앞으로 들고 버티기 + 악력기 쥐기', part: '팔·어깨·악력', rep: '30초 × 3 + 20회', svg: svgBottleGrip,
+      how: '물병을 들고 팔을 어깨 높이로 앞에 뻗어 30초 버티요. 악력기는 손이 아플 때까지 20회 쥐었다 펴요.' },
+    { t: '계단 2칸씩 오르기', part: '하체·심폐', rep: '3세트', svg: svgStairs,
+      how: '계단을 두 칸씩 오르내려요. 무릎이 아프면 한 칸씩, 10층 정도면 충분해요.' }
   ];
   function physHtml() {
     var h = '<div class="ph-top"><b>경찰 순환식 체력검사</b><i>2026년부터 전 채용 적용 · 남녀 동일 기준</i></div>';
@@ -2990,11 +3548,14 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         '<span class="ph-body"><b>' + c.n + '. ' + esc(c.t) + '</b><i>' + esc(c.s) + '</i><em>' + esc(c.d) + '</em></span></div>';
     });
     h += '</div>';
-    h += '<div class="ph-sub">🧍 일상에서 그대로 따라 하는 연습 <span>제안</span></div>';
+    h += '<div class="ph-sub">🧍 일상에서 그대로 따라 하는 연습 <span>집에서 5분</span></div>' +
+      '<p class="lib-sub ph-lead">그림에 나온 자세 그대로 하면 돼요. 한 동작 <b>10~15회 · 3세트</b>, 숨이 차면 30초 쉬어요.</p>';
     h += '<div class="ph-rt">';
-    PHYS_ROUTINE.forEach(function (r) {
+    PHYS_ROUTINE.forEach(function (r, i) {
       h += '<div class="ph-rt-item"><span class="rt-anim">' + r.svg() + '</span>' +
-        '<b>' + esc(r.t) + '</b><i>' + esc(r.s) + '</i></div>';
+        '<span class="rt-txt"><b>' + (i + 1) + '. ' + esc(r.t) + '</b>' +
+        '<span class="rt-chips"><i class="rt-part">' + esc(r.part) + '</i><i class="rt-rep">' + esc(r.rep) + '</i></span>' +
+        '<em>' + esc(r.how) + '</em></span></div>';
     });
     h += '</div><p class="lib-sub" style="margin-top:10px">· 기준(4분 40초·4.2kg·32kg·72kg·23cm·16/15회)은 경찰청 발표 자료 기준이고, 루틴은 그 코스를 겨냥한 연습 제안이에요.</p>';
     return h;
