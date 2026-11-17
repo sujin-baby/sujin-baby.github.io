@@ -2820,10 +2820,13 @@ details.help-box summary {
      return { value: 넣을 글, hint: 7번 안내를 그대로 둔 상태인지(페이지 목록이 오면 바꿔도 됨) } */
   function optForGuide(g, pageOpt, curVal) {
     const gg = g || {}, p = String(pageOpt || "").replace(/\s+/g, " ").trim(), cur = String(curVal || "").trim();
-    const notOpt = !p || /^단일\s*옵션$/.test(p);
+    const single = !p || /^단일\s*옵션$/.test(p);
+    // 페이지에서 읽은 '여러 옵션 묶음'(블랙 / 아이보리 / 핑크, 콤마 묶음)일 때만 색상 안내를 바꿈.
+    //  한 값('단일옵션', '핑크', 타이핑 중 생긴 '단' 같은 조각)은 색상 안내를 덮지 않음
+    const multi = !single && (p.indexOf(" / ") >= 0 || /[,，]/.test(p)) && p.split(/\s*[/,，]\s*/).filter(Boolean).length >= 2;
     const hintOnly = !!gg.hasColorHint && !((gg.optBase || []).length) && (!cur || cur === String(gg.colorHint || ""));
     if (hintOnly) {
-      if (!notOpt) return { value: p, hint: false, toast: "상품 페이지에서 읽은 색상 목록을 옵션에 넣었어요: " + p };
+      if (multi) return { value: p, hint: false, toast: "상품 페이지에서 읽은 색상 목록을 옵션에 넣었어요: " + p };
       if (!cur && gg.colorHint) return { value: String(gg.colorHint), hint: true };
       return { value: cur || String(gg.colorHint || ""), hint: true };
     }

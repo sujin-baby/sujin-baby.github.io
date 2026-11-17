@@ -1547,6 +1547,10 @@ console.log('-- Test 36: 6번 구매옵션이 비고 7번에 색상 이야기가
     if (put.hint) throw new Error('Test 36 페이지 목록을 넣었으면 hint 상태를 풀어야 함'); }
   // 수진 님이 옵션 칸을 직접 고쳤으면 페이지가 단일옵션이어도 그 글을 지우지 않음
   if (P.optForGuide(hintG, '단일옵션', '핑크 1개씩 살 사람만').value !== '핑크 1개씩 살 사람만') throw new Error('Test 36 직접 고친 옵션을 단일옵션/안내로 덮어씀');
+  // 상품 정보 칸에 타이핑하면 글자마다 읽혀서 '옵션 : 단' 같은 조각이 들어옴 — 한 값은 색상 안내를 덮으면 안 됨 (11/17 라이브 확인에서 발견)
+  if (P.optForGuide(hintG, '단', hintG.option).value !== '각 색상별 1개씩 / 핑크') throw new Error('Test 36 타이핑 중 조각(단)이 색상 안내를 덮음');
+  if (P.optForGuide(hintG, '핑크 × 1개', hintG.option).value !== '각 색상별 1개씩 / 핑크') throw new Error('Test 36 고른 한 옵션이 색상 안내를 덮음');
+  if (P.optForGuide(hintG, '블랙, 화이트', hintG.option).value !== '블랙, 화이트') throw new Error('Test 36 콤마로 된 색상 목록은 받아야 함');
   // 회귀: 색상 이야기가 없는 의뢰서는 예전 그대로 — 진짜 단일옵션 상품은 단일옵션, 페이지 옵션은 빈칸일 때만
   const plainG = { optBase: [], option: '' };
   if (P.optForGuide(plainG, '단일옵션', '').value !== '단일옵션') throw new Error('Test 36 회귀: 보통 의뢰서의 단일옵션이 사라짐');
