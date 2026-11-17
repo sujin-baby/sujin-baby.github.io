@@ -1894,7 +1894,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3480,6 +3480,7 @@ function checkFullInner_() {
   try { seolResume1_(); } catch (e) {}
   try { seolSlot1_(); } catch (e) {}
   try { dolge20_(); } catch (e) {}
+  try { daedi60_(); } catch (e) {}
   try { upAcctOpen1_(); } catch (e) {}
   try { exp135_(); } catch (e) {}
   try { rvPhotoFix2_(); } catch (e) {}
@@ -8390,6 +8391,46 @@ function noticeClear3_() {
 //  11.17 바로구매 21명(설향 11·황금향 10) 바로 만들고, 11.18·19·20 자정 ~ 오전 7시 20명씩 일정. 공지·리뷰 배정 줄은 예전 일정(38b3hmrt-2~5)의 쿠팡 몫 그대로, 토스 상품은 0명(공지·폼 보기에서 빠짐)
 // (11/17 한 번) 설향딸기외 11.17 방 공지 첫 줄이 과일 규칙으로 '자정 ~ 오전 7시'가 된 것 → '★★★바로구매★★★' (사용자: 오늘 거는 바로구매)
 // (11/17 한 번, 사용자: '오늘 하루 20명') 업)택11.17지니네농수산 돌게외20: 목표 10 → 20 (오늘 이미 18명), 마감 시각 비움(20명 차면 다시 마감), 11.18 진행(0명) 지움
+// (11/17 한 번, 사용자) #택 데이디 사과 단감: 1일차 사과 10·단감 10, 2일차 사과 20·단감 20 = 총 60. 생성기가 '일 진행 건수 : 10건, 20건'을
+//  1일차 단감 20, 2일차 20명, 3일차 10명으로 읽음 → 11.17 공지 단감 (20명) → (10명), 11.18 방제 40·목표 40·공지 상품마다 (20명), 11.19 일정 취소
+function daedi60_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('DAEDI60') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  const out = [];
+  try {
+    const T17 = '#택11.17 데이디 사과 단감 20', T18 = '#택11.18 데이디 사과 단감 20', N18 = '#택11.18 데이디 사과 단감 40';
+    const ob = outboxSheet_(), ol = ob.getLastRow(), v = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues() : [];
+    // 1) 11.17 공지: 단감 블록 머리 '쿠팡 (20명):' → '(10명):'
+    v.forEach(function (x) {
+      if (String(x[2]) !== '방 공지' || String(x[3]) !== T17 || x[5] === '보냄' || !/단감/.test(String(x[4]))) return;
+      const parts = String(x[4]).split(/(\n\s*[-—─_]{10,}\s*\n)/);
+      let ch = false;
+      for (let i = 0; i < parts.length; i += 2) if (/단감/.test(parts[i]) && /쿠팡\s*\(\s*20\s*명\)/.test(parts[i])) { parts[i] = parts[i].replace(/쿠팡\s*\(\s*20\s*명\)/, '쿠팡 (10명)'); ch = true; }
+      if (ch) { obSet_(ob, x[0], 5, parts.join('')); out.push('11.17 공지 단감 10명'); }
+    });
+    let runs = readRuns_();
+    const r17 = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === T17; })[0];
+    // 폼 설명(오늘 사람이 보는 글)도 단감 20 → 10
+    if (r17 && r17['폼ID']) { try { const fm = FormApp.openById(r17['폼ID']), ds = fm.getDescription(); const parts = String(ds).split(/(\n\s*[-—─_]{10,}\s*\n)/); let ch = false; for (let i = 0; i < parts.length; i += 2) if (/단감/.test(parts[i]) && /쿠팡\s*\(\s*20\s*명\)/.test(parts[i])) { parts[i] = parts[i].replace(/쿠팡\s*\(\s*20\s*명\)/, '쿠팡 (10명)'); ch = true; } if (ch) { fm.setDescription(parts.join('')); formDescForget_(r17['폼ID']); out.push('폼 설명 단감 10명'); } } catch (e) { out.push('폼 설명 못 고침 ' + e); } }
+    // 2) 11.18: 방제 40·목표 40 (명단 시트 이름은 그대로), 공지 상품마다 (20명)
+    const r18 = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === T18 || bareTitle_(x['명단 제목']) === N18; })[0];
+    if (r18 && bareTitle_(r18['명단 제목']) === T18) { globalThis.__NO_FILE_RENAME = true; try { out.push(renameRun_(r18, N18, '사용자 11/17: 2일차 사과 20·단감 20') ? '11.18 방제 40' : '11.18 방제 안 바뀜'); } finally { globalThis.__NO_FILE_RENAME = false; } }
+    runs = readRuns_();
+    const m18 = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === N18; })[0];
+    if (m18 && Number(m18['목표인원']) !== 40) setRun_(m18.row, '목표인원', 40);
+    const v2 = ob.getLastRow() >= 2 ? ob.getRange(2, 1, ob.getLastRow() - 1, 6).getValues() : [];
+    v2.forEach(function (x) {
+      if (String(x[2]) !== '방 공지' || (String(x[3]) !== N18 && String(x[3]) !== T18) || x[5] === '보냄') return;
+      const t = String(x[4]).replace(/쿠팡\s*\(\s*\d*\s*명\)/g, '쿠팡 (20명)');
+      if (t !== String(x[4])) { obSet_(ob, x[0], 5, t); out.push('11.18 공지 상품마다 20명'); }
+    });
+    // 3) 11.19 일정(대기) 취소
+    const ps = planSheet_(), pl = ps.getLastRow();
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x, i) { if (String(x[0]) === 'c7y75pw6-3' && x[8] === '대기') { ps.getRange(i + 2, 9).setValue('취소 (사용자: 총 60 = 10·10 + 20·20)'); out.push('11.19 일정 취소'); } });
+    props.setProperty('DAEDI60', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '바꿀 것 없음'));
+    try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); }
+  } catch (e) { props.setProperty('DAEDI60', (st + ' 실패(' + (e && e.message || e) + ') ' + out.join(', ')).slice(-400)); }
+}
 function dolge20_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('DOLGE20') || '');
   if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
@@ -9637,7 +9678,7 @@ function photoKey_(r) { return campKey_(r['명단 제목']) + '_' + dateTok_(r['
 function photoWaitRun_(r, props, all) {
   if (isExpect_(r) || r['실배송'] === 'Y' || !(r['진행일'] instanceof Date) || !(Number(r['인원']) > 0)) return false;
   let rv = null; try { rv = JSON.parse((all ? all['RV_' + r['시트ID']] : props.getProperty('RV_' + r['시트ID'])) || 'null'); } catch (e) {}
-  return /^\s*(유|y)/i.test(String(r['포토'] || '')) && !(rv && rv.kind === 'self') || !!(rv && (rv.kind === 'photo' || /포토\s*대기/.test(String(rv.mix || ''))));
+  return /^\s*(유|y)/i.test(String(r['포토'] || '')) && !(rv && rv.kind === 'self') || !!(rv && (rv.kind === 'photo' || /포토\s*대기/.test(String(rv.mix || '')) || /포토\s*제공/.test(String(rv.guide || ''))));   // 직접 적은 가이드에 '포토제공'(업체가 사진 줌, 11/17 돌게)
 }
 function photoTab_(create) {
   const ss = adminSs_(), props = PropertiesService.getScriptProperties(), id = String(props.getProperty('PHOTOTAB_ID') || '');
@@ -9738,7 +9779,7 @@ function photoLate_(r, props) {
   if (isExpect_(r)) return false;
   if (!(r['진행일'] instanceof Date) || !(Number(r['인원']) > 0) || r['진행 상태'] === '종료') return false;
   let rv = null; try { rv = JSON.parse(props.getProperty('RV_' + r['시트ID']) || 'null'); } catch (e) {}
-  const wait = /^\s*(유|y)/i.test(String(r['포토'] || '')) && !(rv && rv.kind === 'self') || (rv && (rv.kind === 'photo' || /포토\s*대기/.test(String(rv.mix || ''))));
+  const wait = /^\s*(유|y)/i.test(String(r['포토'] || '')) && !(rv && rv.kind === 'self') || (rv && (rv.kind === 'photo' || /포토\s*대기/.test(String(rv.mix || '')) || /포토\s*제공/.test(String(rv.guide || ''))));
   if (!wait) return false;
   const days = Math.round((today_().getTime() - dayStart_(r['진행일'])) / 86400000);
   return days >= 2 && days <= 9 && !props.getProperty('RVSENT_' + photoKey_(r)) && !props.getProperty('PHOTOGOT_' + photoKey_(r));   // 📷포토전달 탭에서 '업체 포토 받음' 체크하면 '업체 포토 아직' 알림 끔
