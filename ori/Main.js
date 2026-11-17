@@ -4849,7 +4849,7 @@ function todayItems_(runs) {
     let lk = {}; try { lk = msgvLinks_(x, ctx) || {}; } catch (e) {}
     let link = ''; try { link = roomLinkOf_(String(x[3]), links) || ''; } catch (e) {}
     const fee = kind === '리뷰비 요청' ? msgvFeeCells_(x) : null;
-    out.items.push({ id: String(x[0]), g: gi, gname: MSGV_GROUPS[gi].base, kind: kind, room: String(x[3]), msg: fee ? fee[0] + ' · ' + fee[1] + ' · ' + fee[4] + '건' : String(x[4]).slice(0, 1500),
+    out.items.push({ id: String(x[0]), g: gi, gname: MSGV_GROUPS[gi].base, kind: kind, room: String(x[3]), msg: fee ? (fee[0] instanceof Date ? Utilities.formatDate(fee[0], CONFIG.TIMEZONE, 'yyyy.MM.dd') : fee[0]) + ' · ' + fee[1] + ' · ' + fee[4] + '건' : String(x[4]).slice(0, 1500),
       copy: copy.slice(0, 3000), over: due !== null && due < t0, day: due !== null ? md(new Date(due)) : '', list: String(lk.list || ''), rvimg: String(lk.img || ''), link: link, todo: kind === '할 일' });
     if (kind === '방 공지') { try { out.items[out.items.length - 1].img = thumbOfRoom_(String(x[3]), ctx.runs); } catch (e) {} }   // 썸네일 (길게 눌러 저장)
   });
@@ -4940,7 +4940,7 @@ function msgvLinks_(x, ctx) {
  *  - 보낼메시지가 바뀌면 실행이 끝날 때 바뀐 탭만 다시 그림. 다시 그린 지 20초 안에 누른 칸이 다른 메시지로 밀렸으면 체크를 되돌리고 알림
  */
 const MSGV_CHWAN_COL = 3;   // 리뷰비 탭 취완 체크칸 (C, 보냄 B 바로 옆. 11/16 전엔 L)
-const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '13', MSGV_COLS = 5;   // 11: 리뷰비 탭 취완 체크 C칸으로, L칸 리뷰이미지 (11/16)   // 10: 리뷰독촉 탭 리뷰이미지 링크 칸, 페이백 글 한 줄 띄움·줄 높이 (11/15)   // 9: 리뷰비 탭 L칸에 걸린 취완은 취완 탭에서 뺌, 페이백 줄 E~K 합침 (11/15)   // 8: 명단전달 F열 '비고'(가격 틀리게 산 사람) 및 할일 탭 중복 제외 (11/11)   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
+const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '14', MSGV_COLS = 5;   // 11: 리뷰비 탭 취완 체크 C칸으로, L칸 리뷰이미지 (11/16)   // 10: 리뷰독촉 탭 리뷰이미지 링크 칸, 페이백 글 한 줄 띄움·줄 높이 (11/15)   // 9: 리뷰비 탭 L칸에 걸린 취완은 취완 탭에서 뺌, 페이백 줄 E~K 합침 (11/15)   // 8: 명단전달 F열 '비고'(가격 틀리게 산 사람) 및 할일 탭 중복 제외 (11/11)   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
 const MSGV_GROUPS = [
   { key: 'notice', base: '🐥방공지', t: '🐥 방 공지', k: ['방 공지'], bg: '#eee6f7', tab: '#b48fd9' },
   { key: 'list', base: '📋명단전달', t: '📋 명단 전달 (오리명단방)', k: ['명단 전달', '업체 명단'], bg: '#d9ead2', tab: '#7fbf6a' },
@@ -5173,6 +5173,8 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
   return { groups: groups, colors: colors };
 }
 // 리뷰비 요청 글('M/d<탭>방제<탭>N건<탭>링크') → 리뷰비 시트(B 주문 날짜, C 진행명, D 진행자, E 구확건수, F 리뷰작성건수 / H 진행링크)에 붙여넣을 칸 (11/8 사용자 요청)
+// 리뷰비 시트 진행자 칸 목록 값 그대로 (목록에 없는 '뽀짝오리'를 붙이면 빨간 표시, 11/17)
+const MSGV_FEE_WHO = '🫶뽀짝오리', MSGV_FEE_DATE_FMT = 'yyyy"."mm"."dd"."ddd';
 function msgvFeeCells_(x) {
   const p = String(x[4]).split('\t'), m = String(p[0] || '').match(/(\d{1,2})\/(\d{1,2})/);
   let date = String(p[0] || '');
@@ -5180,11 +5182,11 @@ function msgvFeeCells_(x) {
     const base = x[1] instanceof Date ? x[1] : new Date();
     const d = new Date(base.getFullYear(), Number(m[1]) - 1, Number(m[2]));
     if (d.getTime() - base.getTime() > 60 * 86400000) d.setFullYear(d.getFullYear() - 1);
-    date = Utilities.formatDate(d, CONFIG.TIMEZONE, 'yyyy.MM.dd') + '.' + ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
+    date = d;   // 날짜 값 그대로 (리뷰비 시트 주문 날짜 칸은 '유효한 날짜' 규칙이라 글자를 붙이면 빨간 표시, 11/17). 탭에서는 yyyy.mm.dd.요일로 보이게
   }
   const n = Number((String(p[2] || '').match(/\d+/) || [''])[0]);
   // [E 주문 날짜, F 진행명, G 진행자, H 구확건수, I 리뷰작성건수, J 리뷰비 총합(수식, 쓸 때 넣음), K 진행링크]
-  return [date, campOf_(String(p[1] || '').trim()), '뽀짝오리', '', isNaN(n) || !String(p[2] || '').match(/\d/) ? '' : n, '', String(p[3] || '').trim()];
+  return [date, campOf_(String(p[1] || '').trim()), MSGV_FEE_WHO, '', isNaN(n) || !String(p[2] || '').match(/\d/) ? '' : n, '', String(p[3] || '').trim()];
 }
 // 할일 묶기 기준: 글 첫 줄 속 방제(#택11.6 …) 또는 [ ] 안 이름, 없으면 첫 줄. 보낼 곳(내 할 일·사장님)이 같아야 묶음
 function msgvCampOf_(x) {
@@ -5342,6 +5344,16 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
     try { sh.getRange(1, 6, n, 3).setNumberFormat('@'); sh.getRange(1, 9, n, 1).setNumberFormat('0'); sh.getRange(1, 10, n, 1).setNumberFormat('#,##0'); sh.getRange(1, 11, n, 1).setNumberFormat('@'); } catch (e) {}
     const gr = sh.getRange(1, 6, n, 6);
     gr.setValues(gv); gr.setBackgrounds(gb);
+    // 리뷰비 요청 줄 E~K: 리뷰비 시트와 같은 모양으로 (주문 날짜는 날짜 값·yyyy.mm.dd.요일, 글씨 보통·검정, 안 보낸 줄 바탕 흰색) → 복사해 붙여도 빨간 표시·굵은 글씨가 안 따라감 (11/17)
+    try {
+      for (let i = 0; i < n; i++) {
+        const l = lines[i] || {};
+        if (l.type !== 'msg' || !l.fee) continue;
+        const er = sh.getRange(i + 1, 5, 1, 7);
+        er.setFontWeight('normal').setFontColor(l.sent ? '#9e9e9e' : '#000000').setBackground(l.sent ? '#f3f3f3' : '#ffffff');
+        if (l.fee[0] instanceof Date) sh.getRange(i + 1, 5).setNumberFormat(MSGV_FEE_DATE_FMT).setHorizontalAlignment('center');
+      }
+    } catch (e) {}
     // 합친 칸은 줄 높이가 저절로 안 늘어서(11/15: 둘째 줄만 보이고 첫 줄이 가려짐) 글 줄 수만큼 높이를 줌. 다른 줄은 기본 높이로
     try { sh.setRowHeights(1, n, 21); } catch (e) {}
     for (let i = 0; i < n; i++) {
