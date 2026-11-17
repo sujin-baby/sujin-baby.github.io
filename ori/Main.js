@@ -3440,6 +3440,8 @@ function checkFullInner_() {
   if (!late_(150)) { try { propsCleanup_(); } catch (e) { note_('속성 정리 실패: ' + e); } }
   if (!props.getProperty('NPROD_CLEAN_V1')) try { props.setProperty('NPROD_CLEAN_V1', '1'); Object.keys(props.getProperties()).forEach(function (k) { if (/^NPROD_/.test(k) && k !== 'NPROD_CLEAN_V1') props.deleteProperty(k); }); } catch (e) {}   // 옛 공지 상품 기억(영구) 지움 → 6시간 캐시로 (표시 이름도 NPROD_로 시작해서 같이 지워지던 것 10/30)
   const runs = readRuns_(), times = {};
+  // 정리(지난 명단 탭·보낸 메시지·사용법 탭 등)가 2시간 넘게 밀렸으면 이번엔 맨 앞에서 (11/17: 확인이 매번 4분 50초쯤 걸려 맨 뒤 정리가 3시간 넘게 못 돌았음)
+  { const sa0 = Date.now() - Number(props.getProperty('SLOW_AT') || 0); if (sa0 > 120 * 60000 && !late_(60)) { step_('정리(밀려서 먼저)'); try { slowTasks_(runs, {}); } catch (e) { if (e && e.yieldLock) throw e; note_('정리 실패: ' + e); } } }
   step_('알림');
   try { subTime_('알림: 안 산 사람', function () { fruitCheck_(runs); }); } catch (e) { note_('안 산 사람 확인 실패: ' + e); }
   try { subTime_('알림: 택배시트', function () { takbaeCheck_(runs); }); } catch (e) { note_('택배시트 알림 실패: ' + e); }
