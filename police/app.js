@@ -1839,6 +1839,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (left <= 0 && !OX.over) finishOx();
   }
   function renderOx() {
+    if (!OX || OX.over) return;   /* 시간 종료·결과 화면 뒤에 늦게 도착한 타이머가 결과를 덮지 않게 */
     var it = OX.items[OX.i];
     if (!it) { finishOx(); return; }
     OX.locked = false;
@@ -1904,7 +1905,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     renderHud(); renderQuest(); renderMascot(); renderDash(); renderPass();
     clearTimeout(OX._h);
     OX._h = setTimeout(function () {
-      if (!OX) return;
+      if (!OX || OX.over) return;
       OX.i++;
       if (OX.i >= OX.items.length) finishOx(); else renderOx();
     }, right ? 850 : 1500);
@@ -1913,6 +1914,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!OX || OX.over) return;
     OX.over = true;
     clearInterval(OX.timer); OX.timer = null;
+    clearTimeout(OX._h);
     var n = OX.done, ok = OX.ok;
     if (ok > (S.oxBest || 0)) { S.oxBest = ok; }
     S.oxRuns = (S.oxRuns || 0) + 1;
