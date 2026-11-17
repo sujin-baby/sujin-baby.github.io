@@ -2186,7 +2186,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     el.querySelector('.fb-head').innerHTML = '<img class="fb-mascot" src="assets/' + (ok ? 'mascot-happy.png' : 'mascot-happy.png') + '" alt="">' +
       '<span>' + (ok ? '정답이에요!' + (bonus ? ' 콤보 보너스 🎉' : ' 🎉') : '아쉬워요 😢') + '</span>' +
       '<span class="fb-xp">+' + gain + ' P</span>';
-    el.querySelector('.fb-text').innerHTML = expHtml(q);
+    el.querySelector('.fb-text').innerHTML = expHtml(q, QS && QS.items[QS.i]);
     var b = $('#fbNext');
     b.textContent = QS.i + 1 >= QS.items.length ? '결과 보기' : '다음 문제';
     /* 해설이 패널에 다 안 들어가면 스크롤 안내(아래 흐림) 표시 */
@@ -2206,7 +2206,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
      · 첫 문장(핵심)은 굵게, 나머지는 문장 단위 단락으로
      · 괄호 속 우리말 해석과 출처는 따로 떼어 맨 아래로
      ============================================================ */
-  function expHtml(q) {
+  function expHtml(q, it) {
     var raw = String(q.e || '').replace(/\r/g, '').trim();
     if (!raw) return '<span class="fb-empty">해설이 아직 없어요.</span>';
     var chip = '';
@@ -2228,11 +2228,25 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (chip) h += '<div class="fb-gp">📘 ' + esc(chip) + '</div>';
     if (isPol) h += '<div class="fb-legend">빨간 <span class="hl-trap">함정 표현</span> · 노란 <span class="hl-num">숫자·기간</span> 먼저 확인</div>';
     var ansTxt = q.o && q.o[q.a] ? String(q.o[q.a]) : '';
-    if (ansTxt && ansTxt.length <= 46) h += '<div class="fb-ansline"><span>정답</span><b>' + esc(ansTxt) + '</b></div>';
-    var hasAns = ansTxt && ansTxt.length <= 46 && ansTxt.length > 0;
-    sents.forEach(function (s, i) {
-      /* "정답 O."처럼 정답만 되풀이하는 짧은 문장은 위 정답 줄과 겹치니 빼기 */
-      if (hasAns && /^정답\s*[OX0-9①-④][.)]?$/.test(s.trim())) return;
+    var hasAns = !!ansTxt;
+    var norm = function (x) { return String(x).replace(/[\s.,·"'“”‘’(){}\[\]]/g, ''); };
+    var ansN = norm(ansTxt);
+    var ai = Number(q.a) || 0;
+    if (it && it.order && it.order.indexOf) { var kk = it.order.indexOf(q.a); if (kk >= 0) ai = kk; }
+    var letter = 'ABCD'.charAt(ai);
+    if (hasAns) h += '<div class="fb-ansline"><span>정답 ' + letter + '</span><b>' +
+      esc(ansTxt.length <= 60 ? ansTxt : ansTxt.slice(0, 38) + '…') + '</b></div>';
+    /* "정답 O." 같은 중복 문장을 빼고 남은 첫 문장을 핵심 박스로 */
+    var body = sents.filter(function (s) {
+      return !(hasAns && /^정답\s*[OX0-9①-④][.)]?$/.test(s.trim()));
+    });
+    body.forEach(function (s, i) {
+      /* 정답 줄과 거의 같은 문장을 핵심 박스로 또 보여주면 두 번 읽게 되니 일반 문단으로만 */
+      var sN = norm(s);
+      if (hasAns && body.length > 1 && sN.length > 10 && (sN === ansN || sN.indexOf(ansN) >= 0 || ansN.indexOf(sN) >= 0)) {
+        h += '<p class="fb-p">' + T(s) + '</p>';
+        return;
+      }
       if (/^[①-④]/.test(s) || /^[-·•]/.test(s)) h += '<p class="fb-li">' + T(s) + '</p>';
       else if (i === 0) h += '<p class="fb-key">' + T(s) + '</p>';
       else h += '<p class="fb-p">' + T(s) + '</p>';
