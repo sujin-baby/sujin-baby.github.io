@@ -273,10 +273,10 @@ const tossPname = '홍시용 대봉감, 소과, 3kg, 1박스';
 const tossClean = P.baseName(tossPname, null, { platform: '토스' });
 if (tossClean !== tossPname) throw new Error('Toss pname should be preserved exactly, got: ' + tossClean);
 
-// 쿠팡 상품명은 옵션 규격 정리 유지
+// 11/18 수진 님 "1개 100g은 상품명에있으면상품명뒤에넣음되지" — 쿠팡도 끝 수량·용량은 원문 그대로 둔다
 const coupangPname = '홍시용 대봉감, 소과, 3kg, 1박스';
 const cpClean = P.baseName(coupangPname, null, { platform: '쿠팡' });
-if (cpClean === tossPname) throw new Error('Coupang pname should strip trailing box/kg');
+if (cpClean !== '홍시용 대봉감, 소과, 3kg, 1박스') throw new Error('Coupang pname should keep trailing quantity/volume, got: ' + cpClean);
 
 // 3) 계층 키워드 추천 테스트: 밴드 -> 산리오 밴드 -> 아텍스 산리오 밴드
 const kwHierarchy = P.suggestKeywords('아텍스 산리오 캐릭터즈 우사하나 밴드 표준형');
@@ -1655,6 +1655,18 @@ https://naver.me/GDQGBL7P
   const notice77 = String(getElem('o-notice').value || '');
   if (/비슷한 상품 많으니/.test(notice77)) throw new Error('Test 37 공지에 "비슷한 상품 많으니…" 문구가 남아 있음');
   if (/판매처, 가격 보고/.test(notice77)) throw new Error('Test 37 공지에 판매처·가격 보고 안내가 남아 있음');
+
+  // 8) 상품명 끝 ', 1개, 100g'은 원문에 있으면 떼지 않는다 (수진 님 11/18). 옵션 칸은 '단일옵션' 유지
+  const fullPname = '에큐어 젊음크림 팔자주름 눈가주름 목주름 영양크림 탄력크림 리프팅 100ml, 1개, 100g';
+  if (P.baseName(fullPname, { option: '단일옵션' }, { platform: '쿠팡' }) !== fullPname) throw new Error('Test 37 상품명 끝 수량·용량이 잘림: ' + P.baseName(fullPname, { option: '단일옵션' }, { platform: '쿠팡' }));
+  if (P.baseName(fullPname, { option: '100g' }, { platform: '쿠팡' }) !== fullPname) throw new Error('Test 37 옵션이 100g일 때 상품명 끝이 잘림: ' + P.baseName(fullPname, { option: '100g' }, { platform: '쿠팡' }));
+  const gFull = { keyword: '젊음크림', guide: '젊음크림', pname: fullPname, seller: '휴리진', option: '단일옵션', pno: '9463496930 - 2816***8459', platform: '쿠팡', price: '39900', page: '1p', similar: '1' };
+  P.setGuides([Object.assign({}, gFull, { daily: '5' })]);
+  ['keyword', 'guide', 'daily', 'total', 'price', 'ship', 'platform', 'seller', 'option', 'pname', 'url', 'pno', 'short', 'page', 'pageM', 'similar', 'photo', 'thumb'].forEach(k => { getElem(k).value = String(gFull[k] === undefined ? '' : gFull[k]); });
+  P.render();
+  const noticeFull = String(getElem('o-notice').value || '');
+  if (noticeFull.indexOf('🐥상품명 : ' + fullPname) < 0) throw new Error('Test 37 공지 상품명이 원문 그대로가 아님: ' + (noticeFull.match(/🐥상품명 : .*/) || [''])[0]);
+  if (!/🐥옵션 : 단일옵션/.test(noticeFull)) throw new Error('Test 37 옵션 칸이 단일옵션으로 유지되지 않음: ' + (noticeFull.match(/🐥옵션 : .*/) || [''])[0]);
 
   console.log('✓ #77 택대·실⁄빈 혼합·네쿠 방제 및 다중 가이드 상품번호 분리 시험 통과 (' + room77 + ')');
 }
