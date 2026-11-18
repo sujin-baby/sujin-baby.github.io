@@ -4111,7 +4111,6 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         '<span class="mi-res">' + (x.pick == null ? '–' : right ? 'O' : 'X') + '</span></summary>' +
         '<div class="mi-body">' +
         '<div class="mi-row"><span>내 답</span><b class="' + (right ? 'ok' : 'no') + '">' + esc(cutTxt(pickTxt, 90)) + '</b></div>' +
-        '<div class="mi-row"><span>정답</span><b class="ok">' + esc(cutTxt(String(q.o[q.a] || ''), 120)) + '</b></div>' +
         expHtml(q) +
         '<div class="mi-src">📌 ' + esc(q.src || qLabel(q)) + '</div>' +
         '</div></details>';
