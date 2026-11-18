@@ -1751,6 +1751,8 @@ function diag_(p) {
       if (lt) { out.ltab.last = lt.getLastRow(); out.ltab.top = lt.getRange(1, 1, Math.min(Math.max(lt.getLastRow(), 2), 6), Math.min(lt.getLastColumn(), 14)).getDisplayValues().map(function (r) { return r.join(' | ').slice(0, 300); }); out.ltab.d1 = lt.getRange('A1:F1').getFormulas()[0].join(' ¦ '); } }
   } catch (e) { out.ltabErr = String(e); }
   // &resp=요청ID: 그 진행 명단 시트의 폼 응답 (시각, 닉네임, 수령인, 전화 뒤 4자리, 옵션) — 중복·두 번 낸 사람 찾기 (읽기만)
+  // &legplan=1: 레깅스 50 응답 옮기기 미리보기 (읽기만)
+  if (p.legplan) try { out.legplan = legMove_(true); } catch (e) { out.legplanErr = String(e && e.stack || e); }
   if (p.resp) try {
     const rr = runByRequest_(p.resp) || readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']).indexOf(String(p.resp)) >= 0 && x['시트ID']; })[0]; out.resp = [];   // 요청ID가 없는 진행은 방제 글자로
     if (rr) SpreadsheetApp.openById(rr['시트ID']).getSheets().filter(function (t) { return !!t.getFormUrl(); }).forEach(function (t) {
@@ -1919,7 +1921,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'LEGMOVE1', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -8793,6 +8795,80 @@ function foldClean1_() {
   } catch (e) { props.setProperty('FOLDCLEAN1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 // (11/18 한 번, 사용자: '#택11.18실/빈 김상사케이블타이5 이런식으로 다 택 붙여') 김상사 케이블타이 진행 방제를 모두 '#택M.D실/빈 김상사케이블타이5'로 (20자). 명단 시트 이름은 그대로
+// (11/18 사용자 승인 "(나) 이걸로 해") 레깅스 50 응답 옮기기: 생성기가 새 의뢰서 '#11.18 실 탄탄상점 레깅스 50'을 '레깅스 30'(2일차, 다른 의뢰)에 붙여
+//  옛 폼 링크를 줘서 14:21부터 레깅스 50 사람들이 옛 폼으로 냄 → 새 폼(사용자가 다시 만든 것)에 같은 답으로 넣고, 옛 폼·옛 명단 시트에서는 지움(deleteRunTimes_)
+//  · 옛 폼의 11/18 10:00 뒤 응답만 (레깅스 30의 30번째 응답은 09:00:35, 그 뒤 14:21까지 없음)
+//  · 질문은 제목(띄어쓰기 무시)·종류가 같은 것끼리. 새 폼에 없는 질문이 있거나 선택지가 없으면 그 사람은 안 옮김(옛 것도 안 지움) → 실행 기록에 적음
+//  · 새 폼에 같은 답(수령인·전화)이 이미 있으면 넣지 않고 옛 것만 지움
+//  · 11/18 안에는 옛 폼으로 늦게 들어온 것도 확인 때마다 옮김 (LEGMOVE1 기록에 누적)
+//  dry: 읽기만 (점검 &legplan=1)
+const LEG_OLD_REQ = 'npb3d175-2', LEG_NEW_REQ = 'src3cf7o', LEG_NEW_SID = '1LHU3jWeO2T93AcG1nwz5Wco5x2CvxRBJ_tlm8WRisY4';
+function legMove_(dry) {
+  const props = PropertiesService.getScriptProperties(), out = { plan: [], prob: [] };
+  const today = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
+  if (!dry && today !== '20261118') return null;
+  const runs = readRuns_();
+  const oldR = runs.filter(function (x) { return String(x['요청ID']) === LEG_OLD_REQ; })[0], newR = runs.filter(function (x) { return String(x['요청ID']) === LEG_NEW_REQ; })[0];
+  if (!oldR || !newR) { out.prob.push('진행 못 찾음 old=' + !!oldR + ' new=' + !!newR); return out; }
+  if (String(newR['시트ID']) !== LEG_NEW_SID) { out.prob.push('새 진행 명단 시트가 다름 ' + newR['시트ID']); return out; }
+  if (String(oldR['폼ID']) === String(newR['폼ID'])) { out.prob.push('폼이 같음'); return out; }
+  const of = FormApp.openById(oldR['폼ID']), nf = FormApp.openById(newR['폼ID']);
+  const key = function (t) { return String(t || '').replace(/\s+/g, ''); };
+  const nItems = {}; nf.getItems().forEach(function (it) { nItems[key(it.getTitle())] = it; });
+  out.oldItems = of.getItems().map(function (it) { return it.getTitle() + ' [' + it.getType() + ']'; });
+  out.newItems = nf.getItems().map(function (it) { return it.getTitle() + ' [' + it.getType() + ']'; });
+  const T = FormApp.ItemType;
+  const mk = function (it, v) {
+    const t = it.getType();
+    if (t === T.TEXT) return it.asTextItem().createResponse(String(v));
+    if (t === T.PARAGRAPH_TEXT) return it.asParagraphTextItem().createResponse(String(v));
+    if (t === T.MULTIPLE_CHOICE) { const m = it.asMultipleChoiceItem(); if (!m.hasOtherOption() && m.getChoices().map(function (c) { return c.getValue(); }).indexOf(String(v)) < 0) throw new Error('선택지 없음: ' + it.getTitle() + '=' + v); return m.createResponse(String(v)); }
+    if (t === T.LIST) { const l = it.asListItem(); if (l.getChoices().map(function (c) { return c.getValue(); }).indexOf(String(v)) < 0) throw new Error('선택지 없음: ' + it.getTitle() + '=' + v); return l.createResponse(String(v)); }
+    if (t === T.CHECKBOX) { const c = it.asCheckboxItem(), ok = c.getChoices().map(function (x) { return x.getValue(); }); [].concat(v).forEach(function (x) { if (!c.hasOtherOption() && ok.indexOf(String(x)) < 0) throw new Error('선택지 없음: ' + it.getTitle() + '=' + x); }); return c.createResponse([].concat(v).map(String)); }
+    throw new Error('못 옮기는 질문 종류: ' + it.getTitle() + ' [' + t + ']');
+  };
+  const sig = function (pairs) {   // 수령인·전화(숫자만)로 같은 사람
+    let a = '', p = '';
+    pairs.forEach(function (x) { if (/수령인|계정명/.test(x[0])) a = key(x[1]); else if (/전화|연락처|휴대폰/.test(x[0])) p = String(x[1]).replace(/\D/g, ''); });
+    return a && p ? a + '|' + p : '';
+  };
+  const have = {}; nf.getResponses().forEach(function (fr) { const g = sig(fr.getItemResponses().map(function (ir) { return [ir.getItem().getTitle(), ir.getResponse()]; })); if (g) have[g] = 1; });
+  const cut = new Date('2026-11-18T10:00:00+09:00').getTime();
+  const moved = [], del = [];
+  of.getResponses().filter(function (fr) { return fr.getTimestamp().getTime() >= cut; }).forEach(function (fr) {
+    const irs = fr.getItemResponses(), pairs = irs.map(function (ir) { return [ir.getItem().getTitle(), ir.getResponse()]; });
+    const who = Utilities.formatDate(fr.getTimestamp(), CONFIG.TIMEZONE, 'HH:mm:ss') + ' ' + pairs.filter(function (x) { return /수령인|계정명|닉네임/.test(x[0]); }).map(function (x) { return x[1]; }).join('/');
+    try {
+      const g = sig(pairs);
+      if (g && have[g]) { out.plan.push(who + ' → 새 폼에 이미 있음(옛 것만 지움)'); del.push(fr.getTimestamp()); return; }
+      const nr = nf.createResponse();
+      irs.forEach(function (ir) {
+        const v = ir.getResponse();
+        if (v === '' || v === null || (Array.isArray(v) && !v.length)) return;
+        const it = nItems[key(ir.getItem().getTitle())];
+        if (!it) throw new Error('새 폼에 없는 질문: ' + ir.getItem().getTitle());
+        if (it.getType() !== ir.getItem().getType()) throw new Error('질문 종류 다름: ' + ir.getItem().getTitle());
+        nr.withItemResponse(mk(it, v));
+      });
+      out.plan.push(who);
+      if (!dry) { nr.submit(); if (g) have[g] = 1; moved.push(who); del.push(fr.getTimestamp()); }
+    } catch (e) { out.prob.push(who + ': ' + (e && e.message || e)); }
+  });
+  if (dry) return out;
+  if (del.length) {
+    SpreadsheetApp.flush();
+    const msg = deleteRunTimes_(oldR, del);
+    note_('✓ 레깅스 50 응답 옮김 ' + moved.length + '명 (옛 폼에서 ' + del.length + '개 지움): ' + moved.join(', ') + (out.prob.length ? ' / 못 옮김: ' + out.prob.join(', ') : ''));
+    try { syncList_(SpreadsheetApp.openById(LEG_NEW_SID)); } catch (e) {}
+    cfDirty_(true);
+    void msg;
+  }
+  if (del.length || out.prob.length) {
+    const st = String(props.getProperty('LEGMOVE1') || '');
+    props.setProperty('LEGMOVE1', (st + ' / ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'HH:mm') + ' 옮김 ' + moved.length + ' 지움 ' + del.length + (out.prob.length ? ' 못 옮김 ' + out.prob.join('; ') : '')).slice(-1500));
+  }
+  return out;
+}
 function cableFmt1_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('CABLEFMT1') || '');
   if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
