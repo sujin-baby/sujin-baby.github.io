@@ -4287,7 +4287,11 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   function searchMeta(q) {
     var out = [SUBJ[q.s] ? SUBJ[q.s].name : ''];
     if (q.gp) out.push('G-POINT ' + q.gp);
-    else { var u = unitName(q.c, q.u); if (u) out.push(u); }
+    else {
+      var u = unitName(q.c, q.u) || '', sn = SUBJ[q.s] ? SUBJ[q.s].name : '';
+      if (sn && u.indexOf(sn + ' ') === 0) u = u.slice(sn.length + 1);   /* '형사법 형사법 40문항' 같은 겹침 제거 */
+      if (u) out.push(u);
+    }
     var src = String(q.src || '');
     var head = out.join(' · ');
     if (src && head.indexOf(src) < 0) out.push(src);
