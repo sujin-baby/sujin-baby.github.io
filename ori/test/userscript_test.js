@@ -66,7 +66,9 @@ ok(us.indexOf('if (oriMode === "pos" || oriMode === "info") { show("", "쿠팡 �
 // 유저스크립트는 줄 단위로 실행되므로 // 주석이 있어도 되지만, 북마크릿(bm-src)은 한 줄로 이어 붙이므로 // 주석 금지 (coupang_here_test 가 확인)
 
 // --- 4) 모바일 편의 UI (v195) — 880px 이하에서만, PC 화면은 그대로
-ok(/생성기 v195/.test(gen), 'guide/index.html 버전 표기가 v195');
+//  버전 숫자를 시험에 박아 두면 다음 버전에서 무조건 빨간불이 된다(plantitle 날짜 하드코딩 교훈, 11/18) → v195 이상인지만 본다
+const gver = (gen.match(/생성기 v(\d+)/) || [])[1];
+ok(!!gver && Number(gver) >= 195, 'guide/index.html 버전 표기(생성기 v' + (gver || '?') + ')');
 ok(/@media \(max-width: 880px\) \{[\s\S]*#m-bar/.test(gen), '#m-bar 는 @media (max-width: 880px) 안에서만 보임');
 ok(/\.m-only \{ display: none; \}/.test(gen) && /\.m-only \{ display: block; \}/.test(gen), 'PC에서는 숨고 모바일에서만 보이는 .m-only 규칙');
 ['parse', 'paste', 'notice', 'make'].forEach(m => {
