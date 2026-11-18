@@ -2191,6 +2191,7 @@ function createRunInner_(d) {
   try { ensureEditTab_(); } catch (e) { note_('폼수정 탭 갱신 실패: ' + e); }
   try { ensureCheckTrigger_(); } catch (e) { note_('마감 확인 트리거 실패: ' + e); }
   // 한눈에 탭·월급시트는 오래 걸려서(각 40초 넘게) 여기서 안 하고 1분 뒤 자동 확인이 갱신
+  cfDirty_(true);
   try { soonCheck_(); } catch (e) { note_('1분 뒤 확인 예약 실패: ' + e); }
 
   // 공지의 '(구글폼 링크)' 자리에 폼 링크를 넣어서 폼 설명과 카톡 공지를 한 번에 완성
@@ -3340,6 +3341,7 @@ function quickCheck_(ui) {
     });
     return true;
   }, 15000);
+  cfDirty_(true);   // 메뉴로 누르셨으면 1분 뒤 확인은 단계를 건너뛰지 않고 전부
   try { soonCheck_(); } catch (e) {}
   if (!ok) { ui.alert('지금 15분 자동 확인이 돌고 있어서 이번엔 건너뛰었어요 (오류 아님).\n한눈에 탭 Q1의 ⏳가 ✔로 바뀌면 끝난 거예요.'); return; }
   ui.alert('명단 탭 새로고침 했어요 (명단 시트 ' + sheets + '개, 새 줄 ' + added + '개, ' + Math.round((Date.now() - t0) / 1000) + '초).\n\n나머지(인원 세기, 폼 닫기, 한눈에 탭, 월급시트)는 1분 뒤 뒤에서 자동으로 해요. 기다리지 않아도 돼요.');
@@ -3436,121 +3438,315 @@ function runOver_(runs, r, now) {
   return runs.some(function (x) { return x !== r && x['진행일'] instanceof Date && x['진행일'] > r['진행일'] && dayStart_(x['진행일']) <= now && campKey_(x['캠페인'] || x['명단 제목']) === k; });
 }
 
+// ── 15분 확인을 6분 제한 안에서 끝내고, 못 한 단계는 1분 뒤 '거기서부터' 이어서 (11/18 사용자: "뒤에 있는 게 계속 밀린다, 도돌이표야")
+//  · 단계마다 지난번에 걸린 시간을 기억(CF_PH). 남은 시간 안에 못 끝낼 것 같은 단계는 시작하지 않음 → 구글이 6분에 끊어서 보고도 없이 사라지는 일 없음
+//  · 넘긴 단계가 있으면 1분 뒤 확인을 걸고, 그 확인은 8분 안에 끝낸 단계는 건너뛰고 못 한 단계부터 함
+//  · 20분 넘게 못 한 단계는 맨 앞으로 (어떤 단계도 계속 뒤로 밀리지 않게)
+//  · 진행이 새로 생기거나 마감·목표가 바뀌면 전부 다시. 폼 응답이 들어오면 폼 인원·명단 시트·한눈에는 다시. 직접 하신 일(폼수정 탭 등) 뒤엔 전부 다시
+//  · 그래도 6분에 끊기면 다음 확인이 알아채서 그 단계는 시간이 넉넉할 때(맨 앞)만 시작
+const CF_BUDGET = 300, CF_HARD = 325, CF_FRESH = 8 * 60000, CF_OVERDUE = 20 * 60000;
+const CF_SUB_PHASES = ['폼 인원', '명단 시트', '한눈에'];
+function cfElapsed_() { return (Date.now() - (globalThis.__ORI_T0 || Date.now())) / 1000; }
+function cfOver_() { return cfElapsed_() > CF_HARD; }
+// 긴 단계 안 작은 일 사이: 6분에 가까우면 여기서 멈춤 (이 단계는 끝난 걸로 안 적음 → 다음 확인이 다시)
+function cfCut_() { if (globalThis.__ORI_T0 && cfOver_()) throw { cfCut: 1 }; }
+function cfHash_(s) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, String(s), Utilities.Charset.UTF_8)); }
+// 배정 수식·월급시트용 (예전 runSig와 같은 값)
+function cfRunSig_(rr) {
+  const live = rr.filter(function (r) { return r['진행 상태'] !== '종료'; });
+  return cfHash_(JSON.stringify([Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd'), live.map(function (r) { return [r['명단 제목'], String(r['진행일']), r['시트ID'], r['폼ID'], r['진행 상태']]; })]));
+}
+// 단계를 건너뛰어도 되는지 보는 서명: 날짜·진행(제목·진행일·시트·폼·상태·마감 시각·목표인원)
+function cfSig_(rr) {
+  const live = rr.filter(function (r) { return r['진행 상태'] !== '종료'; });
+  return cfHash_(JSON.stringify([Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd'), live.map(function (r) { return [r['명단 제목'], String(r['진행일']), r['시트ID'], r['폼ID'], r['진행 상태'], String(r['마감 시각'] || ''), String(r['목표인원'] || '')]; })])).slice(0, 16);
+}
+// 폼 응답이 들어옴(all 아님) → 폼 인원·명단 시트·한눈에 다시 / 직접 하신 일(all) → 전부 다시
+function cfDirty_(all) { try { PropertiesService.getScriptProperties().setProperty(all ? 'CF_DIRTY_ALL' : 'CF_DIRTY', String(Date.now())); } catch (e) {} }
+function cfLoad_() { let s = {}; try { s = JSON.parse(PropertiesService.getScriptProperties().getProperty('CF_PH') || '{}') || {}; } catch (e) {} return s; }
+function cfSave_(S) { try { PropertiesService.getScriptProperties().setProperty('CF_PH', JSON.stringify(S)); } catch (e) {} }
+// 걸린 시간 기억: 길어지면 바로 올리고, 짧아지면 조금씩 내림
+function cfLearn_(t, dur) { return Math.round((t == null ? dur : Math.max(dur, t * 0.8 + dur * 0.2)) * 10) / 10; }
+// 멈춘 곳(cur)부터 돌게 순서를 돌림
+function cfRotate_(arr, key, cur) {
+  if (!cur) return arr.slice();
+  for (let i = 0; i < arr.length; i++) if (key(arr[i]) === cur) return arr.slice(i).concat(arr.slice(0, i));
+  return arr.slice();
+}
+// 지난 확인이 6분 제한에 끊겼는지 (시작만 적히고 끝이 안 적힌 단계)
+function cfKilled_(S) {
+  const dead = [];
+  Object.keys(S).forEach(function (k) {
+    const st = S[k];
+    if (!st || !st.s) return;
+    dead.push(k + '(' + (st.o || 0) + '초에 시작)');
+    st.t = Math.max(st.t || 0, 360 - (st.o || 0));   // 끊길 때까지 걸린 만큼은 걸린다고 보고 → 다음엔 시간이 넉넉할 때만 시작
+    st.s = 0;
+  });
+  if (dead.length) { cfSave_(S); note_('⚠ 지난 확인이 6분 제한에 끊김: ' + dead.join(', ') + ' → 이번엔 그 단계를 시간이 넉넉할 때 함'); }
+}
+// 단계 하나 실행: 시작·끝 시각과 걸린 시간 적음. 시간이 모자라 중간에 멈추면(cfCut) false
+function cfDo_(S, name, fn, sig) {
+  step_(name);
+  const st = S[name] = S[name] || {}, t0 = Date.now();
+  st.s = t0; st.o = Math.round(cfElapsed_()); cfSave_(S);
+  try { fn(st); }
+  catch (e) {
+    st.s = 0;
+    if (e && e.cfCut) { st.t = cfLearn_(st.t, (Date.now() - t0) / 1000); cfSave_(S); return false; }
+    cfSave_(S); throw e;
+  }
+  st.s = 0; st.d = t0; st.t = cfLearn_(st.t, (Date.now() - t0) / 1000);
+  if (sig) st.g = sig;
+  cfSave_(S);
+  return true;
+}
+// 매번 하는 급하고 빠른 단계 (건너뛰거나 미루지 않음)
+function cfAlways_(S, name, fn) { cfDo_(S, name, fn, null); }
+// 나머지 단계: 건너뛸 것(방금 함) 빼고, 오래 밀린 것 먼저, 남은 시간 안에 끝날 것만. 못 한 건 1분 뒤 확인이 이어서
+function cfRun_(S, list) {
+  const props = PropertiesService.getScriptProperties(), now = Date.now(), sig = cfSig_(readRuns_());
+  const dirty = Number(props.getProperty('CF_DIRTY') || 0), dirtyAll = Number(props.getProperty('CF_DIRTY_ALL') || 0);
+  const skipped = [], deferred = [];
+  const todo = list.map(function (p, i) { return { p: p, i: i, st: S[p.n] = S[p.n] || {} }; }).filter(function (x) {
+    const d = x.st.d || 0;
+    const fresh = d && now - d < CF_FRESH && x.st.g === sig && dirtyAll < d && !(CF_SUB_PHASES.indexOf(x.p.n) >= 0 && dirty >= d);
+    if (fresh) skipped.push(x.p.n);
+    return !fresh;
+  });
+  const od = function (x) { return now - (x.st.d || 0) > CF_OVERDUE; };
+  todo.sort(function (a, b) {
+    const A = od(a), B = od(b);
+    if (A !== B) return A ? -1 : 1;
+    if (A && (a.st.d || 0) !== (b.st.d || 0)) return (a.st.d || 0) - (b.st.d || 0);
+    return a.i - b.i;
+  });
+  let ranAny = false;
+  todo.forEach(function (x) {
+    const need = Math.min(200, x.st.t != null ? x.st.t : (x.p.need || 30));
+    // 이번 확인에서 아직 아무 단계도 못 했고 시간이 넉넉하면(2분 안) 예상 시간과 상관없이 시작 (안 그러면 큰 단계가 영영 못 돎)
+    const must = !ranAny && cfElapsed_() < 120;
+    if (!must && cfElapsed_() + need > CF_BUDGET) { deferred.push(x.p.n); return; }
+    ranAny = true;
+    if (!cfDo_(S, x.p.n, x.p.run, sig)) deferred.push(x.p.n + '(중간까지)');
+  });
+  if (deferred.length) {
+    try { soonCheck_(); } catch (e) {}
+    note_('✓ 시간이 모자라 1분 뒤 이어서: ' + deferred.join(', ') + ' (오류 아님)');
+  }
+  if (skipped.length) note_('✓ 방금 한 단계는 건너뜀: ' + skipped.join(', '));
+}
+
 function checkFullInner_() {
-  step_('진행목록');
-  try { removeOldUpdateTrigger_(); } catch (e) {}
-  try { subTime_('진행목록 정리', normalizeRuns_); } catch (e) { note_('진행목록 정리 실패: ' + e); }
-  // 진행일이 된 진행은 '진행예정' → '진행중' (11/2: 9시 현황 업데이트 때만 바뀌어서 새벽에 끝난 진행도 '진행예정'으로 남았음)
-  try { readRuns_().forEach(function (r) { if (r['진행 상태'] === '진행예정' && r['진행일'] instanceof Date && r['진행일'] <= today_()) setRun_(r.row, '진행 상태', '진행중'); }); } catch (e) {}
-  // (10/24) 밀린 월급시트·정리를 맨 앞에서 하던 것 없앰: 월급시트가 6분 안에 안 끝나서 확인이 매번 맨 앞에서 끊겼고,
-  //  그 뒤 일(다음 일차 만들기, 방 공지, 폼 트리거, 보낼 날짜)이 몇 시간 동안 하나도 안 됨. 이제 급한 일 먼저, 월급시트는 끝에서 나눠서 이어 함
-  // 단계를 잘게 나눠서 폼수정 탭 삭제 같은 직접 하는 일이 덜 기다리게 (10/26 '진행목록' 단계가 126초 걸려 삭제가 2분 늦음)
-  try { fixGold1110Once_(); } catch (e) { note_('황금향외 11.10 정리 실패: ' + e); }
-  step_('다음 일차');
-  try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
-  step_('다음 날 진행');
-  try { autoNextDay_(); } catch (e) { note_('다음 날 진행 만들기 실패: ' + e); }
   const me = Session.getEffectiveUser().getEmail();
   const props = PropertiesService.getScriptProperties();
   let changed = false;
+  // 단계들이 같이 쓰는 것 (단계마다 진행목록을 새로 읽음: 앞 단계가 진행을 바꿀 수 있어서)
+  let runs = [], times = {}, errs = {}, listed = {}, obAll = [];
+  const S = cfLoad_();
+  cfKilled_(S);
+  // ── 매번 (급하고 빠른 것): 진행목록 정리, 다음 일차·다음 날 진행 만들기, 새 진행 한눈에, 보낼메시지·폼 열기
+  cfAlways_(S, '진행목록', function () {
+    try { removeOldUpdateTrigger_(); } catch (e) {}
+    try { subTime_('진행목록 정리', normalizeRuns_); } catch (e) { note_('진행목록 정리 실패: ' + e); }
+    // 진행일이 된 진행은 '진행예정' → '진행중' (11/2: 9시 현황 업데이트 때만 바뀌어서 새벽에 끝난 진행도 '진행예정'으로 남았음)
+    try { readRuns_().forEach(function (r) { if (r['진행 상태'] === '진행예정' && r['진행일'] instanceof Date && r['진행일'] <= today_()) setRun_(r.row, '진행 상태', '진행중'); }); } catch (e) {}
+    // (10/24) 밀린 월급시트·정리를 맨 앞에서 하던 것 없앰: 월급시트가 6분 안에 안 끝나서 확인이 매번 맨 앞에서 끊겼고,
+    //  그 뒤 일(다음 일차 만들기, 방 공지, 폼 트리거, 보낼 날짜)이 몇 시간 동안 하나도 안 됨. 이제 급한 일 먼저, 월급시트는 끝에서 나눠서 이어 함
+    // 단계를 잘게 나눠서 폼수정 탭 삭제 같은 직접 하는 일이 덜 기다리게 (10/26 '진행목록' 단계가 126초 걸려 삭제가 2분 늦음)
+    try { fixGold1110Once_(); } catch (e) { note_('황금향외 11.10 정리 실패: ' + e); }
+  });
+  cfAlways_(S, '다음 일차', function () {
+    try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
+  });
+  cfAlways_(S, '다음 날 진행', function () {
+    try { autoNextDay_(); } catch (e) { note_('다음 날 진행 만들기 실패: ' + e); }
+  });
   // 빨리 끝나고 꼭 해야 하는 것 먼저 (뒤에서 시간이 모자라도 이건 되게)
   // 새로 만든 진행이 한눈에 탭에 아직 없으면 먼저 다시 그림 (맨 끝 '한눈에' 단계까지 5분 넘게 걸려서, 10/20)
   try {
     const shown = JSON.parse(PropertiesService.getScriptProperties().getProperty('DASH_TITLES') || '[]');
     if (readRuns_().some(function (r) { return r['진행 상태'] !== '종료' && r['시트ID'] && !dashHidden_(r) && shown.indexOf(bareTitle_(r['명단 제목'])) === -1; })) { step_('한눈에(새 진행)'); buildDashboard_(false); }
   } catch (e) { note_('한눈에 탭(새 진행) 실패: ' + e); }
-  step_('보낼메시지, 폼 닫기');
-  try { tidyOutbox_(); } catch (e) { note_('보낼메시지 정리 실패: ' + e); }
-  try { const rr = readRuns_(), mm = outboxRows_(); closeIdleForms_(rr, mm); openStartingForms_(rr, mm); } catch (e) { note_('폼 열고 닫기 실패: ' + e); }
-  try { ensureMidnightTrigger_(); } catch (e) { note_('0시 확인 예약 실패: ' + e); }
-  step_('공지 모양');
-  try { ensureRunNotices_(readRuns_()); } catch (e) { note_('방 공지 확인 실패: ' + e); }
-  try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
-  try { morningCheck_(); } catch (e) { note_('새벽 점검 실패: ' + e); }
-  try { assignCleanDaily_(); } catch (e) { note_('배정 탭 정리 실패: ' + e); }
-  if (!late_(150)) { try { propsCleanup_(); } catch (e) { note_('속성 정리 실패: ' + e); } }
-  if (!props.getProperty('NPROD_CLEAN_V1')) try { props.setProperty('NPROD_CLEAN_V1', '1'); Object.keys(props.getProperties()).forEach(function (k) { if (/^NPROD_/.test(k) && k !== 'NPROD_CLEAN_V1') props.deleteProperty(k); }); } catch (e) {}   // 옛 공지 상품 기억(영구) 지움 → 6시간 캐시로 (표시 이름도 NPROD_로 시작해서 같이 지워지던 것 10/30)
-  const runs = readRuns_(), times = {};
-  step_('알림');
-  try { subTime_('알림: 안 산 사람', function () { fruitCheck_(runs); }); } catch (e) { note_('안 산 사람 확인 실패: ' + e); }
-  try { subTime_('알림: 택배시트', function () { takbaeCheck_(runs); }); } catch (e) { note_('택배시트 알림 실패: ' + e); }
-  try { subTime_('알림: 포토대기', function () { photoWaitCheck_(runs); }); } catch (e) { note_('포토대기 알림 실패: ' + e); }
-  try { subTime_('알림: 포토 요청', function () { photoAskCheck_(runs); }); } catch (e) { note_('포토 요청 알림 실패: ' + e); }
-  try { subTime_('알림: 2시 이후 구매', function () { takLateCheck_(runs); }); } catch (e) { note_('2시 이후 구매 알림 실패: ' + e); }
-  try { payChkRecheck1_(runs); } catch (e) { note_('결제금액 확인 다시 보기 실패: ' + e); }
-  try { carrySeol1_(); } catch (e) {}
-  try { seolRename1_(); } catch (e) {}
-  try { singRename1_(); } catch (e) {}
-  try { yangReport1_(); } catch (e) {}
-  try { seolToss1_(); } catch (e) {}
-  try { seolCoupangOff1_(); } catch (e) {}
-  try { lunchReclass1_(); } catch (e) {}
-  try { storeDupScan1_(); } catch (e) {}
-  try { lunchReclass2_(); } catch (e) {}
-  try { tossNoticeGap1_(); } catch (e) {}
-  try { seol1111Del1_(); } catch (e) {}
-  try { geochiDel1_(); } catch (e) {}
-  try { rvPhotoFix1_(); } catch (e) {}
-  try { cableTak1_(); } catch (e) {}
-  try { cableRevert1_(); } catch (e) {}
-  try { rvPhotoFix3_(); } catch (e) {}
-  try { rvPhotoFix4_(); } catch (e) {}
-  try { albRename1_(); } catch (e) {}
-  try { planNameFix1_(); } catch (e) {}
-  try { silsil1_(); } catch (e) {}
-  try { mungFix1_(); } catch (e) {}
-  try { cableTak2_(); } catch (e) {}
-  try { memoRec1_(); } catch (e) {}
-  try { talk70_(); } catch (e) {}
-  try { noticeClear1_(); } catch (e) {}
-  try { noticeClear2_(); } catch (e) {}
-  try { noticeClear3_(); } catch (e) {}
-  try { seolResume1_(); } catch (e) {}
-  try { seolSlot1_(); } catch (e) {}
-  try { dolge20_(); } catch (e) {}
-  try { daedi60_(); } catch (e) {}
-  try { foldClean1_(); } catch (e) {}
-  try { cableFmt1_(); } catch (e) {}
-  try { if (!props.getProperty('EDITC1')) { ensureEditTab_(); props.setProperty('EDITC1', Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm')); } } catch (e) { note_('폼수정 날짜 칸 실패: ' + e); }   // (11/18 한 번) C1 날짜 고르기 바로 (정리가 밀려 늦게 생기던 것)
-  try { upAcctOpen1_(); } catch (e) {}
-  try { exp135_(); } catch (e) {}
-  try { rvPhotoFix2_(); } catch (e) {}
-  try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
-  try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
-  try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
-  const errs = {}, listed = {};
-  // 보낼메시지 점검용 (방 공지가 방마다 하나씩, 그 진행 폼 링크로 맞게 있는지, 사용자 요청 10/21)
-  let obAll = []; try { const ob0 = outboxSheet_(), ol0 = ob0.getLastRow(); if (ol0 >= 2) obAll = ob0.getRange(2, 1, ol0 - 1, 6).getValues(); } catch (e) {}
-  step_('폼 인원');
-  try { ensureSubmitTriggers_(runs); } catch (e) { note_('응답 트리거 실패: ' + e); }
-  runs.forEach(function (r) {
-    yieldIfWanted_();   // 폼수정 탭 같은 직접 하는 일이 기다리면 진행 하나 끝날 때마다 바로 넘김 (10/26 '폼 인원' 한 단계가 100초 넘어 붙여넣기가 실패)
-    if (r['진행 상태'] === '종료' || !r['폼ID']) return;
-    // 어제 이전에 끝난 진행은 15분마다 안 봄 (폼을 열 때마다 느리고 구글 쪽 시간 초과가 남. 인원은 매일 9시 현황 업데이트가 다시 셈)
-    //  단일 진행 또는 마지막 일차 진행은 windowOf_.to가 Infinity라 runOver_가 false이므로 마감 시각 또는 구매 마감(pastEnd_)도 함께 확인 (10/29 최적화)
-    if (r['진행일'] instanceof Date && r['진행일'] < today_() && (r['마감 시각'] || runOver_(runs, r) || pastEnd_(r))) return;
-    // 진행 하나에서 오류가 나도 다른 진행은 계속 (오류는 한눈에 탭 '확인 필요' 칸에 보임)
-    try { subTime_('폼 인원: 진행 확인', function () { checkRun_(r); }); } catch (e) { errs[r['명단 제목']] = String(e.message || e).slice(0, 120); note_('진행 확인 실패 ' + r['명단 제목'] + ': ' + e); }
+  cfAlways_(S, '보낼메시지, 폼 닫기', function () {
+    try { tidyOutbox_(); } catch (e) { note_('보낼메시지 정리 실패: ' + e); }
+    try { const rr = readRuns_(), mm = outboxRows_(); closeIdleForms_(rr, mm); openStartingForms_(rr, mm); } catch (e) { note_('폼 열고 닫기 실패: ' + e); }
+    try { ensureMidnightTrigger_(); } catch (e) { note_('0시 확인 예약 실패: ' + e); }
   });
-  // 폼을 다 연결한 뒤 명단 탭이 그 시트의 모든 폼 응답을 합쳐 보여 주게
-  step_('명단 시트');
-  Object.keys(listed).forEach(function (id) {
-    yieldIfWanted_();
-    try {
-      const lss = subTime_('명단 시트: 열기', function () { return SpreadsheetApp.openById(id); });
-      if (runs.some(function (x) { return String(x['시트ID']) === id && x['실배송'] === 'Y'; })) props.setProperty('LISTREAL_' + id, '1');
-      try { if (subTime_('명단 시트: 값 확인', function () { return fixListRef_(lss); })) note_('✓ 명단 탭을 값으로 바꿈 (열을 지워도 유지): ' + lss.getName()); else { const na = subTime_('명단 시트: 새 응답', function () { return syncList_(lss); }); if (na) note_('✓ 명단 탭에 새 응답 ' + na + '줄: ' + lss.getName()); } } catch (e) { note_('명단 탭 갱신 실패: ' + e); }
-      // 총건수 = 이 명단 시트를 쓰는 의뢰의 총건수 (없으면 날마다 목표인원 합)
-      const mine = runs.filter(function (x) { return String(x['시트ID']) === id; });
-      const total = mine.reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0) ||
-        mine.reduce(function (a, x) { return a + (Number(x['목표인원']) || 0); }, 0);
-      subTime_('명단 시트: 요약', function () { listSummary_(lss, total); });
-      if (!props.getProperty('LISTV_' + id)) { try { dayColors_(lss); } catch (e) { note_('명단 날짜 색 실패: ' + e); } }
-    } catch (e) { note_('명단 탭 합치기 실패: ' + e); }
-  });
-  props.setProperty('RUN_ERRORS', JSON.stringify(errs));
-  // 리뷰체크 탭은 사용자 요청으로 없앰(10/19). 만들어 둔 탭은 한 번 지움
-  try { refreshEditTab_(); } catch (e) { note_('폼수정 탭 새로고침 실패: ' + e); }
+  // ── 나머지: 지난번 걸린 시간으로 남은 시간 안에 끝날 것만 시작, 못 한 건 1분 뒤 확인이 이어서 (cfRun_ 설명)
+  //  순서: 폼 인원(인원·마감·명단 전달)을 알림보다 먼저 (11/18 사용자: 명단 전달이 늦음). 방 공지가 먼저 있어야 폼 인원의 '방 공지 없음' 표시가 안 틀림
+  cfRun_(S, [
+    { n: '공지 모양', need: 20, run: function () {
+      try { ensureRunNotices_(readRuns_()); } catch (e) { note_('방 공지 확인 실패: ' + e); }
+      try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
+      try { morningCheck_(); } catch (e) { note_('새벽 점검 실패: ' + e); }
+      try { assignCleanDaily_(); } catch (e) { note_('배정 탭 정리 실패: ' + e); }
+      if (!props.getProperty('NPROD_CLEAN_V1')) try { props.setProperty('NPROD_CLEAN_V1', '1'); Object.keys(props.getProperties()).forEach(function (k) { if (/^NPROD_/.test(k) && k !== 'NPROD_CLEAN_V1') props.deleteProperty(k); }); } catch (e) {}   // 옛 공지 상품 기억(영구) 지움 → 6시간 캐시로 (표시 이름도 NPROD_로 시작해서 같이 지워지던 것 10/30)
+    } },
+    // 한 번만 고치는 것들 (끝난 건 속성만 보고 바로 넘어감)
+    { n: '한 번 고치기', need: 15, run: function () {
+      try { carrySeol1_(); } catch (e) {}
+      try { seolRename1_(); } catch (e) {}
+      try { singRename1_(); } catch (e) {}
+      try { yangReport1_(); } catch (e) {}
+      try { seolToss1_(); } catch (e) {}
+      try { seolCoupangOff1_(); } catch (e) {}
+      try { lunchReclass1_(); } catch (e) {}
+      try { storeDupScan1_(); } catch (e) {}
+      try { lunchReclass2_(); } catch (e) {}
+      try { tossNoticeGap1_(); } catch (e) {}
+      try { seol1111Del1_(); } catch (e) {}
+      try { geochiDel1_(); } catch (e) {}
+      try { rvPhotoFix1_(); } catch (e) {}
+      try { cableTak1_(); } catch (e) {}
+      try { cableRevert1_(); } catch (e) {}
+      try { rvPhotoFix3_(); } catch (e) {}
+      try { rvPhotoFix4_(); } catch (e) {}
+      try { albRename1_(); } catch (e) {}
+      try { planNameFix1_(); } catch (e) {}
+      try { silsil1_(); } catch (e) {}
+      try { mungFix1_(); } catch (e) {}
+      try { cableTak2_(); } catch (e) {}
+      try { memoRec1_(); } catch (e) {}
+      try { talk70_(); } catch (e) {}
+      try { noticeClear1_(); } catch (e) {}
+      try { noticeClear2_(); } catch (e) {}
+      try { noticeClear3_(); } catch (e) {}
+      try { seolResume1_(); } catch (e) {}
+      try { seolSlot1_(); } catch (e) {}
+      try { dolge20_(); } catch (e) {}
+      try { daedi60_(); } catch (e) {}
+      try { foldClean1_(); } catch (e) {}
+      try { cableFmt1_(); } catch (e) {}
+      try { if (!props.getProperty('EDITC1')) { ensureEditTab_(); props.setProperty('EDITC1', Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm')); } } catch (e) { note_('폼수정 날짜 칸 실패: ' + e); }   // (11/18 한 번) C1 날짜 고르기 바로 (정리가 밀려 늦게 생기던 것)
+      try { upAcctOpen1_(); } catch (e) {}
+      try { exp135_(); } catch (e) {}
+      try { rvPhotoFix2_(); } catch (e) {}
+    } },
+    { n: '폼 인원', need: 90, run: function (st) {
+      runs = readRuns_(); times = {}; errs = {}; listed = {};
+      // 보낼메시지 점검용 (방 공지가 방마다 하나씩, 그 진행 폼 링크로 맞게 있는지, 사용자 요청 10/21)
+      obAll = []; try { const ob0 = outboxSheet_(), ol0 = ob0.getLastRow(); if (ol0 >= 2) obAll = ob0.getRange(2, 1, ol0 - 1, 6).getValues(); } catch (e) {}
+      try { ensureSubmitTriggers_(runs); } catch (e) { note_('응답 트리거 실패: ' + e); }
+      // 시간이 모자라 중간에 멈추면 다음엔 멈춘 진행부터 (뒤쪽 진행이 계속 안 세지는 일 없게)
+      const order = cfRotate_(runs, function (r) { return String(r['명단 제목']); }, st.cur);
+      const seen = [];
+      let cut = '';
+      order.forEach(function (r) {
+        if (cut) return;
+        yieldIfWanted_();   // 폼수정 탭 같은 직접 하는 일이 기다리면 진행 하나 끝날 때마다 바로 넘김 (10/26 '폼 인원' 한 단계가 100초 넘어 붙여넣기가 실패)
+        if (r['진행 상태'] === '종료' || !r['폼ID']) return;
+        // 어제 이전에 끝난 진행은 15분마다 안 봄 (폼을 열 때마다 느리고 구글 쪽 시간 초과가 남. 인원은 매일 9시 현황 업데이트가 다시 셈)
+        //  단일 진행 또는 마지막 일차 진행은 windowOf_.to가 Infinity라 runOver_가 false이므로 마감 시각 또는 구매 마감(pastEnd_)도 함께 확인 (10/29 최적화)
+        if (r['진행일'] instanceof Date && r['진행일'] < today_() && (r['마감 시각'] || runOver_(runs, r) || pastEnd_(r))) return;
+        if (cfOver_()) { cut = String(r['명단 제목']); return; }
+        seen.push(String(r['명단 제목']));
+        // 진행 하나에서 오류가 나도 다른 진행은 계속 (오류는 한눈에 탭 '확인 필요' 칸에 보임)
+        try { subTime_('폼 인원: 진행 확인', function () { checkRun_(r); }); } catch (e) { if (e && e.yieldLock) throw e; errs[r['명단 제목']] = String(e.message || e).slice(0, 120); note_('진행 확인 실패 ' + r['명단 제목'] + ': ' + e); }
+      });
+      // 확인 필요 칸: 이번에 본 진행만 바꿈 (중간에 멈췄으면 못 본 진행의 지난 표시는 그대로)
+      let prevErr = {}, prevListed = {};
+      if (cut) { try { prevErr = JSON.parse(props.getProperty('RUN_ERRORS') || '{}'); } catch (e) {} try { prevListed = JSON.parse(props.getProperty('CF_LISTED') || '{}'); } catch (e) {} }
+      seen.forEach(function (t) { delete prevErr[t]; });
+      props.setProperty('RUN_ERRORS', JSON.stringify(Object.assign(prevErr, errs)));
+      props.setProperty('CF_LISTED', JSON.stringify(Object.assign(prevListed, listed)));
+      st.cur = cut;
+      if (cut) throw { cfCut: 1 };
+    } },
+    // 폼을 다 연결한 뒤 명단 탭이 그 시트의 모든 폼 응답을 합쳐 보여 주게 (폼 인원이 이번에 안 돌았으면 지난번 목록으로)
+    { n: '명단 시트', need: 45, run: function (st) {
+      runs = readRuns_();
+      let ids = {}; try { ids = JSON.parse(props.getProperty('CF_LISTED') || '{}'); } catch (e) {}
+      let cut = '';
+      cfRotate_(Object.keys(ids), function (id) { return id; }, st.cur).forEach(function (id) {
+        if (cut) return;
+        yieldIfWanted_();
+        if (cfOver_()) { cut = id; return; }
+        try {
+          const lss = subTime_('명단 시트: 열기', function () { return SpreadsheetApp.openById(id); });
+          if (runs.some(function (x) { return String(x['시트ID']) === id && x['실배송'] === 'Y'; })) props.setProperty('LISTREAL_' + id, '1');
+          try { if (subTime_('명단 시트: 값 확인', function () { return fixListRef_(lss); })) note_('✓ 명단 탭을 값으로 바꿈 (열을 지워도 유지): ' + lss.getName()); else { const na = subTime_('명단 시트: 새 응답', function () { return syncList_(lss); }); if (na) note_('✓ 명단 탭에 새 응답 ' + na + '줄: ' + lss.getName()); } } catch (e) { note_('명단 탭 갱신 실패: ' + e); }
+          // 총건수 = 이 명단 시트를 쓰는 의뢰의 총건수 (없으면 날마다 목표인원 합)
+          const mine = runs.filter(function (x) { return String(x['시트ID']) === id; });
+          const total = mine.reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0) ||
+            mine.reduce(function (a, x) { return a + (Number(x['목표인원']) || 0); }, 0);
+          subTime_('명단 시트: 요약', function () { listSummary_(lss, total); });
+          if (!props.getProperty('LISTV_' + id)) { try { dayColors_(lss); } catch (e) { note_('명단 날짜 색 실패: ' + e); } }
+        } catch (e) { if (e && e.yieldLock) throw e; note_('명단 탭 합치기 실패: ' + e); }
+      });
+      st.cur = cut;
+      if (cut) throw { cfCut: 1 };
+      // 리뷰체크 탭은 사용자 요청으로 없앰(10/19). 만들어 둔 탭은 한 번 지움
+      try { refreshEditTab_(); } catch (e) { note_('폼수정 탭 새로고침 실패: ' + e); }
+    } },
+    { n: '알림', need: 60, run: function () {
+      runs = readRuns_();
+      try { subTime_('알림: 안 산 사람', function () { fruitCheck_(runs); }); } catch (e) { note_('안 산 사람 확인 실패: ' + e); }
+      try { subTime_('알림: 택배시트', function () { takbaeCheck_(runs); }); } catch (e) { note_('택배시트 알림 실패: ' + e); }
+      cfCut_();
+      try { subTime_('알림: 포토대기', function () { photoWaitCheck_(runs); }); } catch (e) { note_('포토대기 알림 실패: ' + e); }
+      try { subTime_('알림: 포토 요청', function () { photoAskCheck_(runs); }); } catch (e) { note_('포토 요청 알림 실패: ' + e); }
+      try { subTime_('알림: 2시 이후 구매', function () { takLateCheck_(runs); }); } catch (e) { note_('2시 이후 구매 알림 실패: ' + e); }
+      cfCut_();
+      try { payChkRecheck1_(runs); } catch (e) { note_('결제금액 확인 다시 보기 실패: ' + e); }
+    } },
+    { n: '명단 전달·리뷰 가이드', need: 90, run: function () {
+      runs = readRuns_();
+      try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
+      cfCut_();
+      try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
+      cfCut_();
+      try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
+    } },
+    // 리뷰 체크 확인(취완·독촉·리뷰 보고)은 15분마다 (11/2 사용자 요청). 한눈에를 그리기 전에 해서 '리뷰 취합할 것'이 바로 보이게
+    { n: '리뷰 확인', need: 30, run: function () {
+      try { subTime_('리뷰 확인', function () { reviewDone_(readRuns_()); }); globalThis.__RV_DONE_RUN = 1; } catch (e) { if (e && e.yieldLock) throw e; note_('리뷰 완료 확인 실패: ' + e); }
+    } },
+    { n: '한눈에', need: 75, run: function () {
+      try { buildDashboard_(false); } catch (e) { if (e && e.yieldLock) throw e; note_('한눈에 탭 실패: ' + e); }
+      // 한눈에에 #REF! 같은 오류 칸이 있으면 통째로 다시 그림 (메뉴 '한눈에 탭 새로 만들기'와 같음, 10/30). 한 시간에 한 번까지, 시간이 넉넉할 때만
+      try {
+        const bad = dashErrorCells_();
+        if (bad.length && !late_(200) && Date.now() - Number(props.getProperty('DASH_AUTOFIX_AT') || 0) > 3600000) {
+          props.setProperty('DASH_AUTOFIX_AT', String(Date.now()));
+          step_('한눈에 다시 그림'); buildDashboard_(true);
+          const left = dashErrorCells_();
+          // 남은 칸의 수식·값 앞부분도 기록 (Claude가 점검 기록으로 원인 보게, 11/2 A43이 계속 남음)
+          let why = ''; try { if (left.length) { const c0 = adminSs_().getSheetByName(DASH_TAB).getRange(left[0]); why = ' [' + left[0] + ' 수식: ' + String(c0.getFormula() || '').slice(0, 140) + ' / 값: ' + String(c0.getDisplayValue()).slice(0, 60) + ']'; } } catch (e) {}
+          note_(left.length ? '⚠ 한눈에 오류 칸(' + bad.slice(0, 3).join(', ') + ')을 다시 그렸는데 ' + left.length + '개 남음: ' + left.slice(0, 3).join(', ') + why : '✓ 한눈에 오류 칸 ' + bad.length + '개(' + bad.slice(0, 3).join(', ') + ') 다시 그려서 고침');
+        }
+      } catch (e) { if (e && e.yieldLock) throw e; note_('한눈에 오류 칸 확인 실패: ' + e); }
+    } },
+    { n: '리뷰 사진', need: 30, run: function () {
+      // 진행 중 의뢰 리뷰이미지에 바로 올린 사진도 대기열로 (11/15)
+      if (geminiKey_()) { try { subTime_('리뷰 사진 진행 중', function () { rvLooseCheck_(readRuns_()); }); } catch (e) { if (e && e.yieldLock) throw e; note_('진행 중 리뷰 사진 확인 실패: ' + e); } }
+      // 리뷰 사진 AI 분류가 남은 의뢰가 있으면 이어서 (10/31)
+      if (props.getProperty('RVAI_Q') && !late_(200)) { try { step_('리뷰 사진 AI'); rvAiQueue_(); } catch (e) { if (e && e.yieldLock) throw e; note_('리뷰 사진 AI 실패: ' + e); } }
+      if (geminiKey_() && !late_(200)) { try { subTime_('리뷰 사진 받는 곳', function () { rvInboxSort_(null); }); } catch (e) { if (e && e.yieldLock) throw e; note_('리뷰 사진 받는 곳 실패: ' + e); } }
+    } },
+    { n: '마무리', need: 15, run: function () {
+      try { ensureInboxTrigger_(); } catch (e) {}
+      // 사용법 탭 글이 바뀌었으면 바로 (같으면 속성 하나만 보고 끝)
+      try { ensureUsageTab_(); } catch (e) {}
+      // 배정 수식은 진행이 바뀌었을 때(방제·날짜·상태) 또는 30분마다
+      const rr = readRuns_(), runSig = cfRunSig_(rr);
+      if (Date.now() - Number(props.getProperty('ASSIGN_AT') || 0) > 30 * 60000 || props.getProperty('RUN_SIG') !== runSig) {
+        try { refreshAssignFormulasOnce_(rr); props.setProperty('RUN_SIG', runSig); props.setProperty('ASSIGN_AT', String(Date.now())); } catch (e) { note_('배정 수식 갱신 실패: ' + e); }
+      }
+    } },
+    // 월급시트는 진행이 바뀌었을 때(인원·방제·날짜·상태·가격) 또는 30분마다. 나눠서 함 (못 한 건 PAY_PENDING → 다음 확인·5분 실행이 이어서)
+    { n: '월급시트', need: 60, run: function () {
+      if (!CONFIG.PAY_SHEET_ID) return;
+      const rr = readRuns_(), live = rr.filter(function (r) { return r['진행 상태'] !== '종료'; });
+      const paySig = cfHash_(JSON.stringify([cfRunSig_(rr), live.map(function (r) { return [r['인원'], r['목표인원'], r['가격'], r['총건수'], r['업체'], r['구매시간']]; })]));
+      if (!(Date.now() - Number(props.getProperty('PAY_AT') || 0) > 30 * 60000 || props.getProperty('PAY_SIG') !== paySig || props.getProperty('PAY_PENDING'))) return;
+      props.setProperty('PAY_PENDING', '1');   // 끝나야 지움
+      try { updatePay_(true); props.setProperty('PAY_SIG', paySig); props.setProperty('PAY_AT', String(Date.now())); props.deleteProperty('PAY_PENDING'); }
+      catch (e) { if (e && e.yieldLock) throw e; if (e && e.payLate) note_('✓ 월급시트 나눠서 하는 중 (' + e.payLate + ', 다음 확인에서 이어서. 오류 아님)'); else note_('월급시트 갱신 실패: ' + e); }
+    } }
+  ]);
+  // 미뤄도 되는 일(정리·한눈에 명단 다시 불러오기·포토전달 탭·월급시트 이어하기)은 5분 실행(bgLane_)이 '가장 오래 밀린 것부터' 함 (11/18). 거기서도 3배 넘게 밀렸으면 여기서
+  try { bgOverdue_(runs); } catch (e) { if (e && e.yieldLock) throw e; note_('밀린 일 확인 실패: ' + e); }
   function checkRun_(r) {
     let form;
     try { form = FormApp.openById(r['폼ID']); } catch (e) {
@@ -3652,7 +3848,7 @@ function checkFullInner_() {
     try {
       const lt2 = SpreadsheetApp.openById(r['시트ID']).getSheetByName(MERGE_TAB);
       const got2 = lt2 && lt2.getLastRow() >= 3 ? lt2.getRange(3, 1, lt2.getLastRow() - 2, 1).getValues().filter(function (x) { const t = tsMs_(x[0]); return isFinite(t) && t >= w.from && t < w.to; }).length : 0;
-      if (got2 < Number(r['목표인원'])) { try { syncList_(SpreadsheetApp.openById(r['시트ID'])); } catch (e) {} try { soonCheck_(); } catch (e) {} return; }
+      if (got2 < Number(r['목표인원'])) { try { syncList_(SpreadsheetApp.openById(r['시트ID'])); } catch (e) {} cfDirty_(); try { soonCheck_(); } catch (e) {} return; }
     } catch (e) { return; }
     // 폼은 안 닫음 (사용자 요청 10/21) → 인원이 차면 마감 시각만 적고 명단·리뷰 가이드 메시지
     setRun_(r.row, '마감 시각', new Date());
@@ -3672,55 +3868,6 @@ function checkFullInner_() {
       '잘못 산 사람을 빼려면 관리 시트 폼수정 탭에서 지우세요. 인원이 모자라면 폼이 다시 열려요.',
       r['택대'] === 'Y' ? '\n★ 택배시트에 옮겨 적기 (2시 전까지): 한눈에 탭에서 A~K 복사 → 붙여넣기 → \'택배 옮김\' 체크' : ''
     ].join('\n'));
-  }
-  // 리뷰 체크 확인(취완·독촉·리뷰 보고)은 15분마다 (11/2 사용자 요청, 전엔 30분 정리 때만). 한눈에를 그리기 전에 해서 '리뷰 취합할 것'이 바로 보이게
-  //  시간이 빠듯하면(3분 넘음) 건너뜀 → 30분 정리가 대신 함
-  if (!late_(180)) { step_('리뷰 확인'); try { subTime_('리뷰 확인', function () { reviewDone_(readRuns_()); }); globalThis.__RV_DONE_RUN = 1; } catch (e) { if (e && e.yieldLock) throw e; note_('리뷰 완료 확인 실패: ' + e); } }
-  step_('한눈에');
-  try { buildDashboard_(false); } catch (e) { note_('한눈에 탭 실패: ' + e); }
-  // 한눈에에 #REF! 같은 오류 칸이 있으면 통째로 다시 그림 (메뉴 '한눈에 탭 새로 만들기'와 같음, 10/30). 한 시간에 한 번까지, 시간이 넉넉할 때만
-  try {
-    const bad = dashErrorCells_();
-    if (bad.length && !late_(200) && Date.now() - Number(props.getProperty('DASH_AUTOFIX_AT') || 0) > 3600000) {
-      props.setProperty('DASH_AUTOFIX_AT', String(Date.now()));
-      step_('한눈에 다시 그림'); buildDashboard_(true);
-      const left = dashErrorCells_();
-      // 남은 칸의 수식·값 앞부분도 기록 (Claude가 점검 기록으로 원인 보게, 11/2 A43이 계속 남음)
-      let why = ''; try { if (left.length) { const c0 = adminSs_().getSheetByName(DASH_TAB).getRange(left[0]); why = ' [' + left[0] + ' 수식: ' + String(c0.getFormula() || '').slice(0, 140) + ' / 값: ' + String(c0.getDisplayValue()).slice(0, 40) + ' / 옆 B: ' + String(c0.offset(0, 1).getDisplayValue()).slice(0, 40) + ']'; } } catch (e) {}
-      note_(left.length ? '⚠ 한눈에 오류 칸(' + bad.slice(0, 3).join(', ') + ')을 다시 그렸는데 ' + left.length + '개 남음: ' + left.slice(0, 3).join(', ') + why : '✓ 한눈에 오류 칸 ' + bad.length + '개(' + bad.slice(0, 3).join(', ') + ') → 다시 그려서 고침');
-    }
-  } catch (e) { note_('한눈에 오류 칸 확인 실패: ' + e); }
-  // 진행 중 의뢰 리뷰이미지에 바로 올린 사진도 대기열로 (11/15)
-  if (geminiKey_() && !late_(200)) { try { subTime_('리뷰 사진 진행 중', function () { rvLooseCheck_(readRuns_()); }); } catch (e) { note_('진행 중 리뷰 사진 확인 실패: ' + e); } }
-  // 리뷰 사진 AI 분류가 남은 의뢰가 있으면 이어서 (10/31)
-  if (props.getProperty('RVAI_Q') && !late_(200)) { step_('리뷰 사진 AI'); rvAiQueue_(); }
-  try { ensureInboxTrigger_(); } catch (e) {}
-  // 미뤄도 되는 일(정리·한눈에 명단 다시 불러오기·포토전달 탭·월급시트 이어하기)은 5분 실행(bgLane_)이 '가장 오래 밀린 것부터' 함 (11/18). 거기서도 3배 넘게 밀렸으면 여기서
-  try { bgOverdue_(runs); } catch (e) { note_('밀린 일 확인 실패: ' + e); }
-  if (geminiKey_() && !late_(200)) { try { subTime_('리뷰 사진 받는 곳', function () { rvInboxSort_(null); }); } catch (e) { note_('리뷰 사진 받는 곳 실패: ' + e); } }
-  // 사용법 탭 글이 바뀌었으면 바로 (정리는 30분마다라 새 칸이 늦게 생김. 같으면 속성 하나만 보고 끝)
-  try { ensureUsageTab_(); } catch (e) {}
-  // 월급시트·배정 수식은 진행이 바뀌었을 때(인원·방제·날짜·상태) 또는 30분마다만 (10/23 정리: 매번 하면 확인이 5분 넘게 걸려 명단이 늦게 뜸)
-  const rr = readRuns_(), sigOf = function (o) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(o), Utilities.Charset.UTF_8)); };
-  const live = rr.filter(function (r) { return r['진행 상태'] !== '종료'; });
-  const runSig = sigOf([Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd'), live.map(function (r) { return [r['명단 제목'], String(r['진행일']), r['시트ID'], r['폼ID'], r['진행 상태']]; })]);
-  const paySig = sigOf([runSig, live.map(function (r) { return [r['인원'], r['목표인원'], r['가격'], r['총건수'], r['업체'], r['구매시간']]; })]);
-  const slowAge = Date.now() - Number(props.getProperty('SLOW_AT') || 0), slow = slowAge > 30 * 60000;
-  if (slow || props.getProperty('RUN_SIG') !== runSig) {
-    step_('배정 수식'); try { refreshAssignFormulasOnce_(rr); props.setProperty('RUN_SIG', runSig); } catch (e) { note_('배정 수식 갱신 실패: ' + e); }
-  }
-  // 급하지 않은 정리(취완·리뷰 독촉·리뷰 보고·사용법 탭 등)는 30분마다. 밀렸으면 월급시트보다 먼저 (월급시트는 나눠서 다음 확인에서 이어 함)
-  //  10/26: 월급시트가 매번 90초 걸려 4분을 넘기는 바람에 정리가 16:53부터 2시간 넘게 안 돌았음 → 정리 시각이 안 바뀌어 월급시트가 또 매번 도는 악순환
-  //  1시간 넘게 밀리면 조금 늦게(4분 30초 전까지) 시작해도 돌림. 2시간 넘게 못 돌면 실행 기록에 ⚠
-  if (slow && !late_(slowAge > 60 * 60000 ? 270 : 240)) { step_('정리'); slowTasks_(rr, listed); }
-  else if (slow && slowAge > 120 * 60000) note_('⚠ 정리(취완·리뷰 독촉·리뷰 보고)가 ' + Math.floor(slowAge / 3600000) + '시간 넘게 못 돌았어요: 확인이 오래 걸려서 (다음 확인에서 다시)');
-  if (CONFIG.PAY_SHEET_ID && (slow || props.getProperty('PAY_SIG') !== paySig || props.getProperty('PAY_PENDING'))) {
-    props.setProperty('PAY_PENDING', '1');   // 끝나야 지움 → 시간이 모자라면 다음 확인 끝에서 이어서 (한 일은 다시 안 함)
-    if (!late_(250)) {
-      step_('월급시트');
-      try { updatePay_(true); props.setProperty('PAY_SIG', paySig); props.deleteProperty('PAY_PENDING'); }
-      catch (e) { if (e && e.payLate) note_('✓ 월급시트 나눠서 하는 중 (' + e.payLate + ', 다음 확인에서 이어서. 오류 아님)'); else note_('월급시트 갱신 실패: ' + e); }
-    }
   }
 }
 // 진행목록 링크·ID 칸, 일정 탭 ID·설정 칸: 고치려 하면 '실수로 변경하면 안 되는…' 경고 (사용자 요청 10/31: 링크를 잘못 건드려 없어질 뻔함)
@@ -7263,7 +7410,7 @@ function onAdminEdit(e) {
   props.setProperty('WANT_LOCK', String(Date.now()));
   let ran = false, out;
   try { out = locked_(function () { ran = true; props.deleteProperty('WANT_LOCK'); return onAdminEditInner_(e); }, 270000); }
-  finally { props.deleteProperty('WANT_LOCK'); }
+  finally { props.deleteProperty('WANT_LOCK'); if (ran) cfDirty_(true); }   // 직접 하신 일 뒤 15분 확인은 단계를 건너뛰지 않고 전부
   if (!ran) {
     const msg = '⚠ 자동 확인이 안 끝나서 못 했어요. 1~2분 뒤 다시 해 주세요 (붙여넣기면 다시 붙여넣기)';
     try { if (nm0 === EDIT_TAB) sh0.getRange('G1').setValue(msg); else e.source.toast(msg, '체험단', 10); } catch (err) {}
@@ -7527,6 +7674,7 @@ function ensureSubmitTriggers_(runs) {
 // 폼이 제출되면: 그 폼 진행들의 인원 → 월급시트, 한눈에 탭. 다 찼으면 마감 확인까지
 function onRunSubmit_(e) {
   // 폼 응답은 바로 명단에 (10/23 정리): 15분 확인이 돌고 있으면 그 확인이 다음 단계에서 멈추고 잠금을 넘김(1분 뒤 이어서). 최대 60초 기다림
+  cfDirty_();   // 다음 15분 확인(1분 뒤 포함)은 폼 인원·명단 시트·한눈에를 방금 했어도 다시
   let ran = false;
   const props0 = PropertiesService.getScriptProperties();
   props0.setProperty('WANT_LOCK', String(Date.now()));
