@@ -5310,7 +5310,16 @@ details.help-box summary {
   // 쿠팡 정보 칸
   // 붙여넣기는 paste와 input 이벤트가 둘 다 와서, 같은 내용은 한 번만 처리
   let cpLast = "";
-  const cpRead = () => { const t = $("cp").value; if (t === cpLast) return; cpLast = t; fillCoupang(parseCoupang(t)); };
+  const cpRead = () => {
+    const t = $("cp").value; if (t === cpLast) return; cpLast = t;
+    const r = parseCoupang(t);
+    // 아직 덜 적힌 블록은 적용하지 않음 (11/18 #77): 타자 중간 글자만으로 판매처·상품명이 엉뚱한 가이드에 들어가던 것
+    //  - 붙여넣기는 한 번에 들어오지만, 손으로 고치면 글자마다 들어옴 → '상품 - 아이템'·11자리 상품번호·위치·썸네일 중 하나가 있어야 완성으로 봄
+    const pno77 = String(r.pno || "").trim();
+    const done = /\d{6,}\s*-\s*\d{2,}/.test(pno77) || /^\d{11,}$/.test(pno77) || !!(r.page || r.pageP || r.pageMo || r.thumb);
+    if (!done) return;
+    fillCoupang(r);
+  };
   $("cp").addEventListener("input", cpRead);
   // 확장 프로그램(gen.js)이 붙으면 [자동 가져오기] 보이기, 결과가 오면 '상품 정보 붙여넣기' 칸에 넣고 바로 읽음
   // 확장 프로그램이 예전 버전이면 알려 주고 [자동 가져오기]·[한 번에 가져오기]를 안 보냄
