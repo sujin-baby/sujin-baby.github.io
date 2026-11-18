@@ -6642,7 +6642,9 @@ function toolAction_(d) {
     st.sort(function (a, b) { return grp(a) - grp(b) || (grp(a) === 2 ? b['진행일'] - a['진행일'] : a['진행일'] - b['진행일']); });
     out.status = st.slice(0, 40).map(function (r) {
       const got = Number(r['인원']) || 0, goal = Number(r['목표인원']) || 0;
-      return { d: md(r['진행일']), t: bareTitle_(r['명단 제목']), got: got, goal: goal, g: grp(r), done: r['마감 시각'] instanceof Date, real: r['실배송'] === 'Y' };
+      return { d: md(r['진행일']), t: bareTitle_(r['명단 제목']), got: got, goal: goal, g: grp(r), done: r['마감 시각'] instanceof Date, real: r['실배송'] === 'Y',
+        sheet: String(r['시트 링크'] || ''),
+        formEdit: r['폼ID'] ? 'https://docs.google.com/forms/d/' + String(r['폼ID']).trim() + '/edit' : '' };
     });
     out.last = String(PropertiesService.getScriptProperties().getProperty('LAST_REPORT') || '');
     out.black = Object.keys(blacklist_()).map(function (k) { return blacklist_()[k]; });
@@ -6683,6 +6685,8 @@ function toolAction_(d) {
     .map(function (x) { return { title: String(x['명단 제목']), label: bareTitle_(x['명단 제목']) }; });
   const me = readRuns_().filter(function (x) { return String(x['명단 제목']) === String(r['명단 제목']) || (sameRunTitle_(x['명단 제목'], r['명단 제목']) && String(x['시트ID']) === String(r['시트ID'])); })[0] || r;
   out.title = String(me['명단 제목']);
+  out.sheet = String(me['시트 링크'] || '');
+  out.formEdit = me['폼ID'] ? 'https://docs.google.com/forms/d/' + String(me['폼ID']).trim() + '/edit' : '';
   out.count = Number(me['인원']) || 0; out.target = Number(me['목표인원']) || 0;
   try { out.dups = dupList_(me); } catch (e) { out.dups = []; out.dupErr = e.message; }
   try { out.short = shortByOption_(readRuns_(), me); } catch (e) { out.short = {}; }
@@ -7030,6 +7034,46 @@ const TOOLS_HTML = String.raw`
     box-shadow: var(--shadow-btn);
   }
   .two a:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+  /* ---- 상단 4개 탭 (11/19: 세로 스크롤 대신 탭으로 나눔) ---- */
+  .tabs {
+    position: sticky; top: 0; z-index: 30;
+    display: flex; gap: 4px;
+    margin: 10px 0 6px; padding: 5px;
+    background: #fff; border: 2px solid var(--ink); border-radius: 16px;
+    box-shadow: var(--shadow);
+  }
+  .tabs button.tab {
+    flex: 1 1 0; min-width: 0; width: auto; margin: 0; padding: 9px 1px;
+    display: flex; align-items: center; justify-content: center; gap: 2px;
+    border: 2px solid transparent; border-radius: 11px;
+    background: transparent; color: var(--ink-soft);
+    box-shadow: none; font-size: 12.5px; font-weight: 900;
+    letter-spacing: -0.03em; white-space: nowrap; overflow: hidden;
+  }
+  .tabs button.tab.on {
+    background: var(--pink-deep); color: #fff; border-color: var(--ink);
+    box-shadow: 2px 2px 0 rgba(74, 43, 60, 0.35);
+  }
+  .tabs button.tab:active { transform: none; box-shadow: none; }
+  .tabs button.tab.on:active { transform: none; box-shadow: 2px 2px 0 rgba(74, 43, 60, 0.35); }
+  .tabs .tb {
+    flex: none; font-size: 10px; font-weight: 900; line-height: 1.35; padding: 0 5px;
+    border-radius: 999px; background: #fff; color: var(--alert); border: 1.5px solid var(--alert);
+  }
+  .tabs .tb:empty { display: none; }
+  .pane { display: none; scroll-margin-top: 66px; }
+  .pane.on { display: block; }
+  #msg, #altcard { scroll-margin-top: 66px; }
+  /* 현황 줄의 명단·폼 수정 바로가기 (11/19) */
+  .stlnk { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .stlnk a {
+    display: inline-block; padding: 4px 10px; border-radius: 999px;
+    border: 1.5px solid var(--ink); background: #fff; color: var(--ink);
+    font-size: 11.5px; font-weight: 900; text-decoration: none; line-height: 1.3;
+  }
+  .stlnk a.l { background: var(--mint); }
+  .stlnk a.f { background: var(--lav-bg); }
+  .stlnk:empty { display: none; }
 </style>
 
 <div class="win-bar">
@@ -7043,13 +7087,33 @@ const TOOLS_HTML = String.raw`
   <div id="alts"></div>
 </div>
 
-<!-- 맨 위: 오늘 할 것 (메시지 탭 8개 모음, 11/16) -->
-<div class="card">
-  <h2>📋 오늘 할 것 <span id="obcnt"></span></h2>
-  <p class="hint">메시지 탭 8개에서 오늘·지난 날짜 안 보낸 것만 모았어요. <b>[복사]</b> → 카톡에 붙여넣고 보낸 뒤 <b>[보냄 ✔]</b>을 눌러 주세요.</p>
-  <div id="ob"></div>
+<nav class="tabs" id="tabbar" role="tablist" aria-label="진행 도우미 탭">
+  <button type="button" class="tab on" data-p="stat" role="tab" aria-selected="true" aria-controls="pane-stat">📊 현황</button>
+  <button type="button" class="tab" data-p="todo" role="tab" aria-selected="false" aria-controls="pane-todo">📋 할 일<span class="tb" id="tabob"></span></button>
+  <button type="button" class="tab" data-p="manage" role="tab" aria-selected="false" aria-controls="pane-manage">📝 배정·관리</button>
+  <button type="button" class="tab" data-p="review" role="tab" aria-selected="false" aria-controls="pane-review">⭐ 리뷰</button>
+</nav>
+
+<!-- 탭 1: 현황 (기본) -->
+<div class="pane on" id="pane-stat" role="tabpanel">
+  <div class="card">
+    <h2>📊 진행 현황 (한눈에)</h2>
+    <p class="hint" id="statlast">15분마다 자동으로 최신 인원을 확인합니다.</p>
+    <div id="stat"></div>
+  </div>
 </div>
 
+<!-- 탭 2: 오늘 할 것 (메시지 탭 8개 모음, 11/16) -->
+<div class="pane" id="pane-todo" role="tabpanel">
+  <div class="card">
+    <h2>📋 오늘 할 것 <span id="obcnt"></span></h2>
+    <p class="hint">메시지 탭 8개에서 오늘·지난 날짜 안 보낸 것만 모았어요. <b>[복사]</b> → 카톡에 붙여넣고 보낸 뒤 <b>[보냄 ✔]</b>을 눌러 주세요.</p>
+    <div id="ob"></div>
+  </div>
+</div>
+
+<!-- 탭 3: 배정·관리 -->
+<div class="pane" id="pane-manage" role="tabpanel">
 <!-- 카톡 공지 저장 (배정 등록) -->
 <div class="card card-hero" id="card-notice">
   <h2>📋 카톡 공지 저장 (배정 등록)</h2>
@@ -7062,6 +7126,7 @@ const TOOLS_HTML = String.raw`
   <button id="b1" class="btn-primary">이 진행에 저장</button>
 </div>
 <p class="hint" id="pick" style="margin:4px 6px"></p>
+<div class="stlnk" id="runlnk" style="margin:0 6px 4px"></div>
 
 <!-- 특정 진행 선택 시 나타나는 상세 관리 카드들 -->
 <div class="card" id="card3" style="display:none">
@@ -7087,24 +7152,43 @@ const TOOLS_HTML = String.raw`
     <button id="b5" class="btn-outline-danger">이 진행 지우기 (0명일 때만)</button>
   </div>
 </div>
-
-
-<!-- 리뷰 공지 -->
-<div class="card">
-  <h2>⭐ 리뷰 공지 (구매·폼 종료 후)</h2>
-  <p class="hint">의뢰를 선택하면 수취인 이름과 상품을 확인하여 리뷰 종류(별점/텍스트/포토)를 고르게 배정합니다.</p>
-  <a id="rvlink" href="#" target="_top" class="btn-review">리뷰 배정 열기</a>
 </div>
 
-<!-- 현황 -->
-<div class="card">
-  <h2>📊 진행 현황 (한눈에)</h2>
-  <p class="hint" id="statlast">15분마다 자동으로 최신 인원을 확인합니다.</p>
-  <div id="stat"></div>
+<!-- 탭 4: 리뷰 공지 -->
+<div class="pane" id="pane-review" role="tabpanel">
+  <div class="card">
+    <h2>⭐ 리뷰 공지 (구매·폼 종료 후)</h2>
+    <p class="hint">의뢰를 선택하면 수취인 이름과 상품을 확인하여 리뷰 종류(별점/텍스트/포토)를 고르게 배정합니다.</p>
+    <a id="rvlink" href="#" target="_top" class="btn-review">리뷰 배정 열기</a>
+  </div>
 </div>
 <script>
 var K = __K__, INIT = __INIT__, MODE = __MODE__, EXEC = __EXEC__, PV = __PV__, $ = function (i) { return document.getElementById(i); }, running = false, tick = null, NEXTMD = '', JUST = false;
 try { $('rvlink').href = EXEC + '?p=review&k=' + encodeURIComponent(K); if (MODE !== 'web') $('rvlink').target = '_blank'; } catch (e) {}
+// 상단 4개 탭 (11/19): 탭을 바꾸면 그 카드만 보임. 카드 안 버튼·동작은 그대로
+var TABS = ['stat', 'todo', 'manage', 'review'];
+function tabTo(p, jump) {
+  var bs = document.querySelectorAll('.tabs .tab');
+  for (var i = 0; i < bs.length; i++) {
+    var on = bs[i].getAttribute('data-p') === p;
+    bs[i].className = 'tab' + (on ? ' on' : '');
+    bs[i].setAttribute('aria-selected', on ? 'true' : 'false');
+  }
+  TABS.forEach(function (k) { var el = $('pane-' + k); if (el) el.className = 'pane' + (k === p ? ' on' : ''); });
+  if (!jump) return;
+  var pe = $('pane-' + p), bar = $('tabbar');
+  if (!pe) return;
+  var oy = window.pageYOffset || 0, barH = bar ? bar.offsetHeight : 0;
+  var y = (pe.getBoundingClientRect().top + oy) - barH - 14;
+  if (bar) y = Math.max(y, bar.getBoundingClientRect().top + oy);   // 탭 바가 위에 붙은 채로 내용이 시작되게
+  y = Math.max(0, y);
+  try { window.scrollTo(0, y); } catch (e) { }
+}
+(function () {
+  var bs = document.querySelectorAll('.tabs .tab');
+  for (var i = 0; i < bs.length; i++) bs[i].onclick = function () { tabTo(this.getAttribute('data-p'), true); };
+})();
+tabTo((INIT && INIT.title) ? 'manage' : 'stat', false);   // 첫 화면은 현황 — 진행을 골라 돌아온 화면이면 배정·관리
 function say(t) { $('msg').style.display = t ? 'block' : 'none'; $('msg').textContent = t || ''; if (t) $('msg').scrollIntoView({ block: 'nearest' }); }
 function busy(on, label) {
   running = on;
@@ -7166,6 +7250,7 @@ function today(o) {
   var box = $('ob'), list = (o && o.items) || [], tabs = (o && o.tabs) || [];
   box.innerHTML = '';
   $('obcnt').textContent = list.length ? '· ' + list.length + '개' : '';
+  var tb = $('tabob'); if (tb) tb.textContent = list.length ? String(list.length) : '';   // 탭 라벨 옆 배지
   if (!list.length) { box.innerHTML = '<span class="ok">✔ 오늘 할 거 없어요</span>'; }
   var cur = -1;
   list.forEach(function (x) {
@@ -7209,6 +7294,7 @@ function show(o) {
   if (o.today) today(o.today); else if (o.outbox) outbox(o.outbox);
   var alts = ((o.msg && /저장했어요|옮겼어요/.test(o.msg)) || JUST) ? (o.alts || []) : [];
   $('altcard').style.display = alts.length ? '' : 'none';
+  if (alts.length) { try { $('altcard').scrollIntoView({ block: 'nearest' }); } catch (e) { } }   // 날짜 옮기기 버튼이 화면 밖이면 보이게
   var ab = $('alts'); ab.innerHTML = '';
   alts.forEach(function (a) {
     var b = document.createElement('button'); b.style.background = '#fff'; b.style.color = 'var(--alert)'; b.style.borderColor = 'var(--alert)';
@@ -7224,12 +7310,24 @@ function show(o) {
     o.status.forEach(function (x) {
       if (x.g !== lastG) { var h = document.createElement('div'); h.textContent = heads[x.g]; h.style.cssText = 'font-weight:900;font-size:14px;margin:12px 0 4px;color:var(--pink-deep);letter-spacing:.03em'; sb.appendChild(h); lastG = x.g; }
       var row = document.createElement('div'), left = x.goal ? x.goal - x.got : 0;
-      row.style.cssText = 'display:flex;gap:8px;padding:8px 4px;border-bottom:1.5px solid var(--pink-bg);font-size:14.5px' + (x.real ? ';background:var(--yellow);border-radius:8px;padding:8px' : '');
+      row.style.cssText = 'padding:8px 4px;border-bottom:1.5px solid var(--pink-bg);font-size:14.5px' + (x.real ? ';background:var(--yellow);border-radius:8px;padding:8px' : '');
+      var top = document.createElement('div');
+      top.style.cssText = 'display:flex;gap:8px;align-items:baseline';
       var a = document.createElement('span'); a.textContent = x.d; a.style.cssText = 'min-width:44px;color:var(--ink-soft);font-weight:700';
-      var b = document.createElement('span'); b.textContent = x.t; b.style.cssText = 'flex:1;font-weight:700';
+      var b = document.createElement('span'); b.textContent = x.t; b.style.cssText = 'flex:1;min-width:0;font-weight:700;word-break:break-all';
       var c = document.createElement('span'); c.textContent = x.done ? '마감 ' + x.got + '/' + x.goal : x.got + '/' + x.goal + (left > 0 ? ' (남은 ' + left + ')' : '');
       c.style.cssText = 'white-space:nowrap;font-weight:900;color:' + (x.done ? 'var(--ok)' : left > 0 && x.g === 0 ? 'var(--alert)' : 'var(--ink)');
-      row.appendChild(a); row.appendChild(b); row.appendChild(c); sb.appendChild(row);
+      top.appendChild(a); top.appendChild(b); top.appendChild(c); row.appendChild(top);
+      if (x.sheet || x.formEdit) {
+        var ln = document.createElement('div'); ln.className = 'stlnk';
+        [['📋 명단', x.sheet, 'l'], ['✏️ 폼 수정', x.formEdit, 'f']].forEach(function (p) {
+          if (!p[1]) return;
+          var la = document.createElement('a'); la.className = p[2]; la.href = p[1]; la.target = '_blank'; la.rel = 'noopener'; la.textContent = p[0];
+          ln.appendChild(la);
+        });
+        row.appendChild(ln);
+      }
+      sb.appendChild(row);
     });
   }
   var sel = $('run'); sel.innerHTML = '<option value="">자동으로 찾기 (모르면 이대로)</option>';
@@ -7238,8 +7336,17 @@ function show(o) {
   $('pick').textContent = sel.value ? '' : '💡 중복 확인과 추가 모집은 위에서 진행을 고르면 아래에 나타나요.';
   if (o.msg) say(o.msg);
   ['card3','card4','card5'].forEach(function (c) { $(c).style.display = sel.value ? '' : 'none'; });
-  if (!sel.value) { $('asg').textContent = ''; return; }
+  if (!sel.value) { $('asg').textContent = ''; if ($('runlnk')) $('runlnk').innerHTML = ''; return; }
   $('asg').innerHTML = o.assigned ? '<span class="ok">✔ 이 진행은 공지를 넣어 뒀어요. 다시 넣으면 새로 바뀌어요.</span>' : '아직 공지를 안 넣었어요.';
+  var rl = $('runlnk');
+  if (rl) {
+    rl.innerHTML = '';
+    [['📋 명단', o.sheet, 'l'], ['✏️ 폼 수정', o.formEdit, 'f']].forEach(function (p) {
+      if (!p[1]) return;
+      var la = document.createElement('a'); la.className = p[2]; la.href = p[1]; la.target = '_blank'; la.rel = 'noopener'; la.textContent = p[0];
+      rl.appendChild(la);
+    });
+  }
   var box = $('dups'); box.innerHTML = '';
   var nd = (o.dups || []).filter(function (x) { return x.why; }).length;
   if (!(o.dups || []).length) box.innerHTML = '<span class="hint">아직 응답이 없어요</span>';
