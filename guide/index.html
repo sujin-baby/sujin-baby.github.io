@@ -4635,6 +4635,15 @@ details.help-box summary {
   function render() {
     saveCur();
     shareSameProd();
+    // 상품명이 나중에 채워졌는데(기억해 둔 상품 정보·같은 상품의 다른 가이드) 대표 키워드가 비어 있으면 그 상품명으로 채운다
+    //  (#81 11/18 라이브: 상품명·판매처·번호는 기억에서 들어왔는데 공지 '🐥★키워드 :' 칸만 빈 채로 나감 — 수진 님이 직접 고친 키워드(kwAuto=false)는 건드리지 않음)
+    guides.forEach((g, i) => {
+      if (!g.kwAuto || String(g.keyword || "").trim() || !g.pname) return;
+      autoKeyword(g);
+      if (i !== cur) return;
+      if ($("keyword")) $("keyword").value = g.keyword || "";
+      if ($("guide") && !String($("guide").value || "").trim()) $("guide").value = g.guide || "";
+    });
     const t = type(), tk = $("takdae").checked, real = $("realship").checked;
     const date = shortDate(v("date"));
     const kws = guides.map(g => (g.keyword || "").trim()).filter((k, i, arr) => k && arr.indexOf(k) === i);
