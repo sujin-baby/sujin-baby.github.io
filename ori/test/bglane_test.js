@@ -23,5 +23,18 @@ G('globalThis.__ORI_T0 = Date.now() - 300000'); env.__ORI_NOTES = [];
 G('bgOverdue_([])');
 const notes = JSON.stringify(G('globalThis.__ORI_NOTES || []'));
 ok(/밀린 일/.test(notes) && /정리/.test(notes), '⚠ 밀린 일 ' + notes);
+// 15분 확인이 잠금을 기다리면(CF_WANT) 5분 실행은 단계 사이에서 멈추고, 멈춘 일은 끝난 걸로 안 적음
+env.__ran.length = 0;
+G('globalThis.__ORI_T0 = Date.now()');
+env.__props.set('BG_phototab', String(now - 60 * min)); env.__props.set('BG_dashstale', String(now - 6 * min)); env.__props.delete('CF_WANT');
+G("BG_TASKS.forEach(function (t) { if (t.k === 'phototab') t.run = function () { globalThis.__ran.push('phototab'); PropertiesService.getScriptProperties().setProperty('CF_WANT', String(Date.now())); bgYield_(); globalThis.__ran.push('phototab끝'); }; })");
+let thrown = null; try { G('bgLane_()'); } catch (e) { thrown = e; }
+ok(!thrown, '비켜 줄 때 오류 안 남 ' + thrown);
+ok(JSON.stringify(env.__ran) === JSON.stringify(['phototab']), '멈추고 다음 일 안 함 ' + JSON.stringify(env.__ran));
+ok(Number(env.__props.get('BG_phototab')) < now - 30 * min, '멈춘 일은 끝난 시각 안 적음');
+ok(G('!globalThis.__BG_LANE'), '표시 풀림');
+env.__ran.length = 0; G('bgLane_()');
+ok(env.__ran.length === 0, '기다리는 동안은 시작도 안 함');
+env.__props.delete('CF_WANT');
 if (fails.length) { console.log('✗ ' + fails.join('\n✗ ')); process.exit(1); }
 console.log('✓ 미뤄도 되는 일(5분 실행) 시험 통과');

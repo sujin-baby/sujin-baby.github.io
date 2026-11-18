@@ -3314,8 +3314,11 @@ function checkFull() {
   globalThis.__ORI_T0 = Date.now();
   // 0시대에는 폼 열기를 잠금 없이 먼저 (15분 확인이 마침 돌고 있어 잠금을 못 잡아도 0시에 바로 열리게)
   try { if (Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'H') === '0') openStartingForms_(readRuns_(), outboxRows_()); } catch (e) { note_('0시 폼 열기 실패: ' + e); }
+  // 5분 실행(미뤄도 되는 일)이 잠금을 잡고 있으면 다음 일 사이에서 비켜 주게 (11/18: 15분 확인이 잠금을 못 잡아 건너뛰면 안 됨)
+  try { PropertiesService.getScriptProperties().setProperty('CF_WANT', String(Date.now())); } catch (e) {}
   locked_(function () {
     ran = true;
+    try { PropertiesService.getScriptProperties().deleteProperty('CF_WANT'); } catch (e) {}
     try { checkFullInner_(); } catch (e) {
       if (e && e.yieldLock) { note_('✓ 직접 하신 일(폼수정 탭·새 진행 만들기 등) 먼저 하게 확인을 잠깐 멈춤 (1분 뒤 이어서)'); try { soonCheck_(); } catch (e2) {} }
       else note_('멈춤: ' + (e && e.message || e));
@@ -3750,22 +3753,38 @@ function slowTasks_(rr, listed) {
   rr = rr || readRuns_(); listed = listed || {};
   const rvN = function () { return Object.keys(PropertiesService.getScriptProperties().getProperties()).filter(function (k) { return /^(RVDONE_|RVRPT_|RVZIPURL_)/.test(k); }).length; }, rv0 = rvN();
   // 이번 확인에서 이미 했으면 안 함 (15분마다 한눈에 전에 함)
+  bgYield_();
   if (!globalThis.__RV_DONE_RUN) { try { subTime_('정리: 리뷰 완료', function () { reviewDone_(readRuns_()); }); } catch (e) { if (e && e.yieldLock) throw e; note_('리뷰 완료 확인 실패: ' + e); } }
   // 의뢰 리뷰가 다 끝나거나 압축 파일이 처음 생기면 한눈에 '리뷰 취합할 것'에 바로 보이게 다시 그림 (전엔 한눈에를 먼저 그려서 15~30분 늦게 떴음, 10/25)
+  bgYield_();
   if (rvN() !== rv0 && !late_(300)) { try { buildDashboard_(false); } catch (e) { note_('한눈에 탭 실패: ' + e); } }
+  bgYield_();
   try { subTime_('정리: 지난 명단 탭', function () { listTabsRecent_(rr, listed); }); } catch (e) { note_('지난 명단 탭 실패: ' + e); }
+  bgYield_();
   try { subTime_('정리: 블랙리스트', function () { blackSheet_(); }); } catch (e) { note_('블랙리스트 탭 만들기 실패: ' + e); }
+  bgYield_();
   try { subTime_('정리: 사용법 탭', function () { ensureUsageTab_(); }); } catch (e) { note_('사용법 탭 만들기 실패: ' + e); }
+  bgYield_();
   try { subTime_('정리: 명단 시트 표시', function () { cleanListSheetsOnce_(rr); }); } catch (e) { note_('명단 시트 표시 정리 실패: ' + e); }
+  bgYield_();
   try { subTime_('정리: 보낸 메시지', function () { pruneOutbox_(); }); } catch (e) { note_('보낸 메시지 정리 실패: ' + e); }
+  bgYield_();
   try { subTime_('정리: 폼수정 탭', function () { ensureEditTab_(); }); } catch (e) { note_('폼수정 탭 만들기 실패: ' + e); }
+  bgYield_();
   try { protectAutoCols_(); } catch (e) { note_('자동 칸 경고 걸기 실패: ' + e); }
+  bgYield_();
   try { moveCampFoldersOnce_(); } catch (e) { note_('월 폴더 정리 실패: ' + e); }
+  bgYield_();
   try { rvSentBackfill1_(); } catch (e) { note_('리뷰 보고 → 업체 전송 맞추기 실패: ' + e); }
+  bgYield_();
   try { rvSentFix2_(); } catch (e) { note_('실링팬 업체 전송 맞추기 실패: ' + e); }
+  bgYield_();
   try { rvCollBackfill1_(); } catch (e) { note_('리뷰 취합 날짜 맞추기 실패: ' + e); }
+  bgYield_();
   try { listRegroupAll1_(rr); } catch (e) { note_('명단 계좌 칸 묶음 되살리기 실패: ' + e); }
+  bgYield_();
   try { rvReportFix1_(); rvReportFix1_('RVRPTSPAN2'); } catch (e) { note_('리뷰 보고 글 고치기 실패: ' + e); }   // 2: '#실 실' 겹침 (11/8)
+  bgYield_();
   try { ensureInboxTrigger_(); } catch (e) { note_('받는 곳 5분 트리거 실패: ' + e); }
   PropertiesService.getScriptProperties().setProperty('SLOW_AT', String(Date.now()));
 }
@@ -4204,6 +4223,12 @@ const BG_TASKS = [
   { k: 'pay', every: 10, max: 150, label: '월급시트 이어서', due: function (p) { return !!p.getProperty('PAY_PENDING') && !!CONFIG.PAY_SHEET_ID; }, run: function () { const p = PropertiesService.getScriptProperties(); updatePay_(true); p.deleteProperty('PAY_PENDING'); } },
   { k: 'props', every: 120, max: 250, label: '속성 정리', run: function () { propsCleanup_(); } }
 ];
+// 5분 실행(미뤄도 되는 일) 중에 15분 확인이 잠금을 기다리면 단계 사이에서 멈춤 (멈춘 일은 끝난 걸로 안 적음)
+function bgYield_() {
+  if (!globalThis.__BG_LANE) return;
+  const cw = Number(PropertiesService.getScriptProperties().getProperty('CF_WANT') || 0);
+  if (cw && Date.now() - cw < 300000) throw { yieldLock: 1, cf: 1 };
+}
 function bgLast_(t, p) { return t.last ? t.last(p) : Number(p.getProperty('BG_' + t.k) || 0); }
 function bgOrder_(p, now) {
   return BG_TASKS.filter(function (t) { return !t.due || t.due(p); })
@@ -4213,13 +4238,17 @@ function bgOrder_(p, now) {
 }
 function bgRun_(t, p) {
   try { subTime_(t.label, t.run); }
-  catch (e) { if (e && e.yieldLock) throw e; note_(t.label + ' 실패: ' + (e && e.message || e)); }
-  finally { if (!t.last) p.setProperty('BG_' + t.k, String(Date.now())); }
+  catch (e) { if (e && e.yieldLock) throw e; note_(t.label + ' 실패: ' + (e && e.message || e)); }   // 비켜 준 일은 끝난 걸로 안 적음 → 다음에 먼저
+  if (!t.last) p.setProperty('BG_' + t.k, String(Date.now()));
 }
 function bgLane_() {
   const p = PropertiesService.getScriptProperties();
-  try { bgOrder_(p, Date.now()).forEach(function (x) { if (!late_(x.t.max || 240)) bgRun_(x.t, p); }); }   // 오래 걸리는 일은 일찍 시작할 수 있을 때만 (6분 제한)
-  catch (e) { if (e && e.yieldLock) return; throw e; }   // 직접 하신 일이 잠금을 기다리면 멈추고 넘김 (다음 5분에 이어서)
+  const cfWait = function () { const cw = Number(p.getProperty('CF_WANT') || 0); return cw && Date.now() - cw < 300000; };
+  if (cfWait()) return;   // 15분 확인이 잠금을 기다리는 중이면 이번엔 안 함
+  globalThis.__BG_LANE = true;
+  try { bgOrder_(p, Date.now()).forEach(function (x) { if (!late_(x.t.max || 240) && !cfWait()) bgRun_(x.t, p); }); }   // 오래 걸리는 일은 일찍 시작할 수 있을 때만 (6분 제한)
+  catch (e) { if (e && e.yieldLock) return; throw e; }   // 15분 확인·직접 하신 일이 잠금을 기다리면 멈추고 넘김 (다음 5분에 이어서)
+  finally { globalThis.__BG_LANE = false; }
 }
 // 15분 확인 끝: 5분 실행이 못 돌아 3배 넘게 밀린 일은 여기서 (시간이 남으면), 그래도 밀려 있으면 실행 기록에 ⚠
 function bgOverdue_(runs) {
