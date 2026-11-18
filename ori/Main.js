@@ -1925,7 +1925,7 @@ function diag_(p) {
   } catch (e) { out.asgErr = String(e); }
   if (p.fo) try {
     const seen = {}; out.formOpts = [];
-    readRuns_().forEach(function (r) { const fid = String(r['폼ID'] || ''); if (!fid || seen[fid] || r['진행 상태'] === '종료') return; seen[fid] = 1; try { out.formOpts.push(bareTitle_(r['명단 제목']) + ': ' + formChoices_(FormApp.openById(fid)).join(' / ')); } catch (e) { out.formOpts.push(bareTitle_(r['명단 제목']) + ': ' + e); }
+    readRuns_().forEach(function (r) { const fid = String(r['폼ID'] || ''); if (!fid || seen[fid] || r['진행 상태'] === '종료') return; seen[fid] = 1; try { const fm0 = FormApp.openById(fid); out.formOpts.push(bareTitle_(r['명단 제목']) + (fm0.isAcceptingResponses() ? ' [응답 받는 중]' : ' [응답 안 받음]') + ': ' + formChoices_(fm0).join(' / ')); } catch (e) { out.formOpts.push(bareTitle_(r['명단 제목']) + ': ' + e); }
       // 기대평 폼은 질문 목록도 (A·B묶음 질문 확인)
       if (isExpect_(r)) try { const fm = FormApp.openById(fid); out.formOpts.push('  ↳ 질문: ' + fm.getItems().map(function (it) { let q = it.getTitle(); try { if (it.getType() === FormApp.ItemType.MULTIPLE_CHOICE) { const mc = it.asMultipleChoiceItem(); q += (mc.isRequired() ? '*' : '') + ' {' + mc.getChoices().map(function (c) { return c.getValue(); }).join(' | ') + '}'; } } catch (e) {} return q; }).join(' / ') + ' · 응답받기=' + fm.isAcceptingResponses()); } catch (e) {} });
   } catch (e) { out.foErr = String(e); }
