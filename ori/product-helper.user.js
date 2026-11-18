@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         오리 상품정보 도우미
 // @namespace    https://sujin-baby.github.io/guide/
-// @version      195.1
+// @version      196.0
 // @description  쿠팡·네이버·토스·올리브영 화면 오른쪽 아래 단추로 상품 정보를 한 번에 가져와요 (오리방 체험단)
 // @author       오리방
 // @match        *://*.coupang.com/*
@@ -13,7 +13,7 @@
 // @noframes
 // ==/UserScript==
 /*
-  오리 상품정보 도우미 (생성기 v195)
+  오리 상품정보 도우미 (생성기 v196)
   - 생성기(guide/index.html)의 '상품 위치 찾기' 북마크 코드(bm-src)를 그대로 담고 있어요.
   - 상품 정보를 읽는 규칙을 고치면  node ori/tools/build_userscript.js  를 다시 돌려
     이 파일과 생성기 안의 스크립트(us-src)를 함께 맞춰 주세요. (안 맞으면 CI가 멈춥니다)
@@ -24,7 +24,7 @@
 (function () {
   "use strict";
   if (window.__ORI_HELPER__) return;
-  window.__ORI_HELPER__ = "195.1";
+  window.__ORI_HELPER__ = "196.0";
 
   /* 상품 정보 읽기 = 생성기 북마크 코드 그대로. oriMode: "info" 전체 / "pos" 위치 줄만 */
   async function ORI_RUN(oriMode) {
@@ -222,8 +222,18 @@
       /* 상품 페이지: 상품명, 판매처(스토어 이름), 상품번호, 썸네일 */
       const og = n => { const m = document.querySelector('meta[property="og:' + n + '"]'); return m ? (m.content || "") : ""; };
       const parts = document.title.split(/\s+:\s+/);
-      const name = (og("title") || parts[0] || "").split(/\s+:\s+/)[0].trim();
-      const seller = (parts.length > 1 ? parts[parts.length - 1] : og("site_name")).replace(/\s*[-|]?\s*네이버.*$/, "").trim();
+      /* 상품명·판매처: 모바일 스마트스토어는 og:title·title이 짧은 이름만 담기도 해서 화면 제목·구조화 데이터(JSON-LD)까지 봄 (11/18 #77)
+         - 상품명: og:title·title의 이름 → JSON-LD name → 화면 상품 제목 중 '첫 낱말이 같은' 가장 긴 것 ('에큐어 젊음크림 100ml' → '에큐어 젊음크림 노화억제크림 주름개선 탭력')
+         - 판매처: title 마지막 칸(스토어 이름) → 없으면 JSON-LD brand → 화면 브랜드 ('네이버 스마트스토어'만 읽어 빈칸이 되던 것) */
+      const ld = (() => { try { const out = []; document.querySelectorAll('script[type="application/ld+json"]').forEach(s => { try { const j = JSON.parse(s.textContent || "null"); (Array.isArray(j) ? j : [j]).forEach(o => { if (o && o["@graph"]) o["@graph"].forEach(x => out.push(x)); else out.push(o); }); } catch (e) {} }); return out.filter(o => o && /product/i.test(String(o["@type"] || "")))[0] || null; } catch (e) { return null; } })();
+      const ldName = String((ld && ld.name) || "").replace(/\s+/g, " ").trim();
+      const ldBrand = String((ld && ld.brand && (ld.brand.name || ld.brand)) || "").replace(/\s+/g, " ").trim();
+      const tName = (og("title") || parts[0] || "").split(/\s+:\s+/)[0].trim();
+      const domName = (() => { try { return [...document.querySelectorAll('h1, h2, h3, [class*="product-title"], [class*="prd_name"], [class*="productName"], [class*="prod_name"]')].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).filter(t => t.length >= 6 && t.length <= 200 && !/^(?:상품|카테고리|리뷰|구매|배송|판매|네이버|NAVER|전체)/.test(t)).sort((a, b) => b.length - a.length)[0] || ""; } catch (e) { return ""; } })();
+      const name = [tName, ldName, domName].filter(Boolean).reduce((a, b) => (b.length > a.length && (!tName || b.slice(0, 2) === tName.slice(0, 2)) ? b : a), tName || "");
+      let seller = (parts.length > 1 ? parts[parts.length - 1] : og("site_name")).replace(/\s*[-|]?\s*네이버.*$/, "").trim();
+      if (!seller) seller = ldBrand;
+      if (!seller) { try { seller = [...document.querySelectorAll('[class*="brand"], [class*="brandName"]')].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).filter(t => t.length >= 2 && t.length <= 30).sort((a, b) => a.length - b.length)[0] || ""; } catch (e) {} }
       let img = og("image"); if (img.indexOf("//") === 0) img = "https:" + img;
       const kwh = hv("kw") || sugKw(name).join("|");
       const html0 = document.documentElement.innerHTML;
