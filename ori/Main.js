@@ -1925,7 +1925,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'LEGMOVE1', 'LEGREN1', 'LEGPAY1', 'SLOW_I', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'LEGMOVE1', 'LEGREN1', 'LEGPAY1', 'SLOW_I', 'DASH_NEW_TRIED', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3599,8 +3599,17 @@ function checkFullInner_() {
   // 빨리 끝나고 꼭 해야 하는 것 먼저 (뒤에서 시간이 모자라도 이건 되게)
   // 새로 만든 진행이 한눈에 탭에 아직 없으면 먼저 다시 그림 (맨 끝 '한눈에' 단계까지 5분 넘게 걸려서, 10/20)
   try {
-    const shown = JSON.parse(PropertiesService.getScriptProperties().getProperty('DASH_TITLES') || '[]');
-    if (readRuns_().some(function (r) { return r['진행 상태'] !== '종료' && r['시트ID'] && !dashHidden_(r) && shown.indexOf(bareTitle_(r['명단 제목'])) === -1; })) { step_('한눈에(새 진행)'); buildDashboard_(false); }
+    // 한 번 다시 그렸는데도 한눈에 목록(DASH_TITLES)에 안 들어간 진행은 다음부터 이것 때문에 다시 안 그림 (11/18: 매번 90~120초씩 다시 그려서 다른 단계가 밀림)
+    const pp = PropertiesService.getScriptProperties();
+    const miss = function () { const shown = JSON.parse(pp.getProperty('DASH_TITLES') || '[]'); return readRuns_().filter(function (r) { return r['진행 상태'] !== '종료' && r['시트ID'] && !dashHidden_(r) && shown.indexOf(bareTitle_(r['명단 제목'])) === -1; }).map(function (r) { return bareTitle_(r['명단 제목']); }); };
+    let tried = []; try { tried = JSON.parse(pp.getProperty('DASH_NEW_TRIED') || '[]'); } catch (e) {}
+    const m0 = miss().filter(function (t) { return tried.indexOf(t) < 0; });
+    if (m0.length) {
+      step_('한눈에(새 진행)'); buildDashboard_(false);
+      const left = miss();
+      pp.setProperty('DASH_NEW_TRIED', JSON.stringify(left));
+      if (left.some(function (t) { return m0.indexOf(t) >= 0; })) note_('✓ 한눈에(새 진행) 다시 그렸는데 목록에 안 잡힘(맨 끝 한눈에 단계에서 그림): ' + left.join(', '));
+    }
   } catch (e) { note_('한눈에 탭(새 진행) 실패: ' + e); }
   cfAlways_(S, '보낼메시지, 폼 닫기', function () {
     try { tidyOutbox_(); } catch (e) { note_('보낼메시지 정리 실패: ' + e); }
@@ -3611,7 +3620,7 @@ function checkFullInner_() {
   //  순서: 폼 인원(인원·마감·명단 전달)을 알림보다 먼저 (11/18 사용자: 명단 전달이 늦음), 한눈에를 명단 전달 안전망보다 먼저. 방 공지가 먼저 있어야 폼 인원의 '방 공지 없음' 표시가 안 틀림
   cfRun_(S, [
     // (11/18 하루만, 사용자 승인) 레깅스 50 응답을 옛 폼(레깅스 30) → 새 폼으로. 다른 날엔 바로 끝남. 맨 앞(시간 넉넉할 때)
-    { n: '레깅스 50 옮기기', need: 150, run: function () { try { legRen1_(false); } catch (e) { note_('레깅스 30 되돌리기 실패: ' + e); } try { legPay1_(); } catch (e) {} const r = legMove_(false); if (r && r.stopped) throw { cfCut: 1 }; } },
+    { n: '레깅스 50 옮기기', need: 20, self: 1, run: function () { try { legRen1_(false); } catch (e) { note_('레깅스 30 되돌리기 실패: ' + e); } try { legPay1_(); } catch (e) {} const r = legMove_(false); if (r && r.stopped) throw { cfCut: 1 }; } },
     { n: '공지 모양', need: 20, run: function () {
       try { ensureRunNotices_(readRuns_()); } catch (e) { note_('방 공지 확인 실패: ' + e); }
       try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
