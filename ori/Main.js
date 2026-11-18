@@ -2052,14 +2052,27 @@ function refreshNotice_(r, d) {
 function runByRequest_(n) {
   return readRuns_().filter(function (x) { return String(x['요청ID']) === String(n); })[0] || null;
 }
-// 생성기 페이지를 다시 열면 요청ID가 새로 생겨서, 방제(끝 인원 수 빼고, #택·실 포함)와 진행일이 같은 1일차 진행을 같은 진행으로 봄
+// 생성기를 다시 열어 누른 '같은 의뢰서'인지 (11/18 사용자: 새 의뢰서 '레깅스 50'이 같은 날 '레깅스 30'(2일차)에 붙어 그 폼 링크를 돌려줌
+//  → 새 캠페인 응답이 옛 폼·명단 시트로 들어감. "의뢰서가 따로 오면 명단 시트를 따로 생성해야지")
+//  · 1일차끼리만 (다음 일차 진행은 절대 같은 진행으로 안 봄)
+//  · 두 의뢰서 원문이 다 있으면 원문이 같아야. 원문을 못 보면 방제 끝 인원 수까지 같아야
+function sameReqRun_(d, x) {
+  if (Number(d.day || 1) > 1 || Number(x['일차'] || 1) > 1) return false;
+  const norm = function (t) { return String(t || '').replace(/\s+/g, ''); };
+  let a = '', b = '';
+  try { a = reqRawOf_(String(d.n || '')); b = reqRawOf_(runNonceOf_([x])); } catch (e) {}
+  if (a && b) return norm(a) === norm(b);
+  return norm(bareTitle_(d.realship ? withSil_(d.title) : d.title)) === norm(bareTitle_(x['명단 제목']));
+}
+// 생성기 페이지를 다시 열면 요청ID가 새로 생겨서, 방제(끝 인원 수 빼고, #택·실 포함)와 진행일이 같은 1일차 진행을 같은 진행으로 봄 (같은 의뢰서일 때만: sameReqRun_)
 function runByTitle_(d) {
   const key = function (t) { return bareTitle_(t).replace(/\s+/g, '').replace(/\d+$/, ''); };
   const want = key(d.realship ? withSil_(d.title) : d.title);
   if (!want || !dateTok_(want)) return null;
   return readRuns_().filter(function (x) {
     return x['진행 상태'] !== '종료' && !/^(next|add)-/.test(String(x['요청ID'])) && key(x['명단 제목']) === want &&
-      (!/^\d{4}-\d{2}-\d{2}$/.test(String(d.date || '')) || !(x['진행일'] instanceof Date) || Utilities.formatDate(x['진행일'], CONFIG.TIMEZONE, 'yyyy-MM-dd') === d.date);
+      (!/^\d{4}-\d{2}-\d{2}$/.test(String(d.date || '')) || !(x['진행일'] instanceof Date) || Utilities.formatDate(x['진행일'], CONFIG.TIMEZONE, 'yyyy-MM-dd') === d.date) &&
+      sameReqRun_(d, x);
   })[0] || null;
 }
 // 방제가 바뀌어도(20자 줄임 등) 같은 날 같은 상품 링크로 만든 1일차 진행이면 같은 진행 (10/26)
@@ -2069,7 +2082,8 @@ function runByUrls_(d) {
   const props = PropertiesService.getScriptProperties();
   return readRuns_().filter(function (x) {
     return x['진행 상태'] !== '종료' && x['시트ID'] && !/^(next|add)-/.test(String(x['요청ID'])) && x['진행일'] instanceof Date &&
-      Utilities.formatDate(x['진행일'], CONFIG.TIMEZONE, 'yyyy-MM-dd') === d.date && String(props.getProperty('PURL_' + x['시트ID']) || '').trim() === u.slice(0, 2000);
+      Utilities.formatDate(x['진행일'], CONFIG.TIMEZONE, 'yyyy-MM-dd') === d.date && String(props.getProperty('PURL_' + x['시트ID']) || '').trim() === u.slice(0, 2000) &&
+      sameReqRun_(Object.assign({}, d, { title: x['명단 제목'], realship: false }), x) || false;
   })[0] || null;
 }
 function findRunByRequest_(n) { const r = runByRequest_(n); return r ? againResult_(r) : null; }
