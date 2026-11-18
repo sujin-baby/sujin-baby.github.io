@@ -1746,6 +1746,14 @@ https://www.coupang.com/vp/products/9812998435?vendorItemId=96299881395
   if (gs81[1].seller !== '김상사') throw new Error('Test 38 같은 상품번호인 둘째 가이드에 판매처가 안 채워짐: ' + gs81[1].seller);
   if (gs81[1].keyword !== '방한장갑') throw new Error('Test 38 둘째 가이드 키워드가 상품명에서 안 채워짐: ' + gs81[1].keyword);
 
+  // 4-1) 같은 상품을 아이템(옵션)만 달리해 나눈 두 가이드에서, 지금 보고 있는 가이드로 붙여넣으면 그 가이드에 들어감 (#81)
+  P.setGuides(h81.guides.map(g => Object.assign({}, g)));
+  P.setCur(1);
+  if (P.routePaste({ pno: '9812998435 - 9629***1395', site: 'coupang' }) !== 1) throw new Error('Test 38 가이드 2를 보고 있을 때 붙여넣기가 가이드 2로 안 감');
+  P.setCur(0);
+  if (P.routePaste({ pno: '9812998435 - 2653***9917', site: 'coupang' }) !== 0) throw new Error('Test 38 가이드 1로 안 감');
+  P.setGuides(gs81);   // 붙여넣기 시험 때문에 산 가이드를 되돌림
+
   // 5) 방제: #택11.19실/빈 김상사 장갑15 (실/빈·택 유지, 옵션 '라지'가 아니라 상품 품목명)
   const day81 = P.dayTotalOf(1);
   if (day81 !== '15') throw new Error('Test 38 1일차 인원은 15여야 함: ' + day81);

@@ -3888,6 +3888,8 @@ details.help-box summary {
       : /\d{8,}\s*-\s*\d{6,}/.test(pno) ? "쿠팡"
       : /^\s*\d{11,}\s*$/.test(pno) ? "네이버" : "";
     const idxOf = pred => { for (let i = 0; i < guides.length; i++) if (pred(guides[i], i)) return i; return -1; };
+    // 같은 상품을 아이템(옵션)만 달리해 두 가이드로 나눈 경우, 지금 보고 있는 가이드가 그 상품이면 거기 넣음 (#81, 11/18)
+    if (pid && String((guides[cur] || {}).url || "").indexOf(pid) !== -1) return cur;
     if (pid) { const i = idxOf(g => String(g.url || "").indexOf(pid) !== -1); if (i >= 0) return i; }   // 주소에 상품번호가 적혀 있으면 그 가이드
     if (!plat) return cur;
     const platOf = g => String((g && g.platform) || "").trim();
@@ -5705,7 +5707,7 @@ details.help-box summary {
   if (typeof globalThis !== "undefined") {
     globalThis.__PARSER__ = {
       parseAll, parseHead, setGuides: gs => { guides = gs; }, fieldsOf, parseOptions, parse, parseCoupang, optionText, optForGuide, colorHintOf, baseName, makeRoom, shortName, suggestKeywords, sugKw, kwList, reviewMix, isBlockedText, posText, okSeller, maskItem,
-      buildPlan, planRoomFrom, dayTotalOf, roomHasTak, takFixRoom, sheetBaseName, takAskNeeded, render, isSilbin, totalCount, platCountOf, routePaste, fillCoupang, autoKeyword, shareSameProd
+      buildPlan, planRoomFrom, dayTotalOf, roomHasTak, takFixRoom, sheetBaseName, takAskNeeded, render, isSilbin, totalCount, platCountOf, routePaste, fillCoupang, autoKeyword, shareSameProd, setCur: i => { cur = i; }
     };
   }
 })();
