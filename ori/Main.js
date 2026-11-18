@@ -1925,7 +1925,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'LEGMOVE1', 'LEGREN1', 'LEGPAY1', 'SLOW_I', 'DASH_NEW_TRIED', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'LEGMOVE1', 'LEGREN1', 'LEGPAY1', 'LEGPAY2', 'SLOW_I', 'DASH_NEW_TRIED', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3620,7 +3620,7 @@ function checkFullInner_() {
   //  순서: 폼 인원(인원·마감·명단 전달)을 알림보다 먼저 (11/18 사용자: 명단 전달이 늦음), 한눈에를 명단 전달 안전망보다 먼저. 방 공지가 먼저 있어야 폼 인원의 '방 공지 없음' 표시가 안 틀림
   cfRun_(S, [
     // (11/18 하루만, 사용자 승인) 레깅스 50 응답을 옛 폼(레깅스 30) → 새 폼으로. 다른 날엔 바로 끝남. 맨 앞(시간 넉넉할 때)
-    { n: '레깅스 50 옮기기', need: 20, self: 1, run: function () { try { legRen1_(false); } catch (e) { note_('레깅스 30 되돌리기 실패: ' + e); } try { legPay1_(); } catch (e) {} const r = legMove_(false); if (r && r.stopped) throw { cfCut: 1 }; } },
+    { n: '레깅스 50 옮기기', need: 20, self: 1, run: function () { try { legRen1_(false); } catch (e) { note_('레깅스 30 되돌리기 실패: ' + e); } try { legPay1_(); } catch (e) {} try { legPay2_(); } catch (e) {} const r = legMove_(false); if (r && r.stopped) throw { cfCut: 1 }; } },
     { n: '공지 모양', need: 20, run: function () {
       try { ensureRunNotices_(readRuns_()); } catch (e) { note_('방 공지 확인 실패: ' + e); }
       try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
@@ -8938,6 +8938,40 @@ function legPay1_() {
   props.setProperty('PAY_PENDING', '1');
   props.setProperty('LEGPAY1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 지움 ' + del.join(', '));
 }
+// (11/18) 월급시트 11월 116행(원래 '#11.18 실 탄탄상점 레깅스 30', 2일차)을 레깅스 50이 또 덮어씀(칩 링크를 못 읽어서) → 바로잡음
+//  ① '…레깅스 30' 줄이 없으면: '…레깅스 50'이면서 특이사항 '2일차'인 줄 이름을 '…레깅스 30'으로 (30 진행이 자기 줄로 다시 씀, 50은 새 줄)
+//  ② 이미 '…레깅스 30' 줄이 따로 생겼으면: '…레깅스 50' 줄 특이사항의 '2일차' → '1일차'
+//  그 뒤 두 줄 '같은 값' 기억 지우고 월급시트 다시 (PAY_PENDING)
+function legPay2_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('LEGPAY2') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  try {
+    const sh = payTab_(11, true), L = sh && payLayout_(sh);
+    if (!L || !L.note) throw new Error('11월 탭·칸 없음');
+    const last = sh.getLastRow(), n = last - L.head, ns = function (t) { return String(t || '').replace(/\s+/g, ''); };
+    const names = sh.getRange(L.head + 1, L.name, n, 1).getValues().map(function (x) { return ns(x[0]); });
+    const notes = sh.getRange(L.head + 1, L.note, n, 1).getValues().map(function (x) { return String(x[0]); });
+    const N30 = ns('#11.18 실 탄탄상점 레깅스 30'), N50 = ns('#11.18 실 탄탄상점 레깅스 50');
+    const i30 = names.map(function (x, i) { return x === N30 ? i : -1; }).filter(function (i) { return i >= 0; });
+    const i50 = names.map(function (x, i) { return x === N50 ? i : -1; }).filter(function (i) { return i >= 0; });
+    let msg = '';
+    if (!i30.length) {
+      const bad = i50.filter(function (i) { return /2일차/.test(notes[i]); });
+      if (bad.length !== 1) throw new Error('레깅스 50·2일차 줄이 ' + bad.length + '개');
+      sh.getRange(L.head + 1 + bad[0], L.name).setValue('#11.18 실 탄탄상점 레깅스 30');
+      msg = (L.head + 1 + bad[0]) + '행 이름 → 레깅스 30';
+    } else if (i30.length === 1) {
+      i50.filter(function (i) { return /2일차/.test(notes[i]); }).forEach(function (i) { sh.getRange(L.head + 1 + i, L.note).setValue(notes[i].replace('2일차', '1일차')); msg += (L.head + 1 + i) + '행 특이사항 1일차 '; });
+      msg = msg || '고칠 것 없음';
+    } else throw new Error('레깅스 30 줄이 ' + i30.length + '개');
+    let rs = {}; try { rs = JSON.parse(props.getProperty('PAY_ROWSIG') || '{}'); } catch (e) {}
+    Object.keys(rs).forEach(function (k) { if (ns(k).indexOf('탄탄상점레깅스') >= 0 && /11\.18/.test(k)) delete rs[k]; });
+    props.setProperty('PAY_ROWSIG', JSON.stringify(rs));
+    props.setProperty('PAY_PENDING', '1');
+    note_('✓ 월급시트 레깅스 30·50 줄 바로잡음: ' + msg);
+    props.setProperty('LEGPAY2', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + msg);
+  } catch (e) { props.setProperty('LEGPAY2', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
 function legRen1_(dry) {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('LEGREN1') || '');
   if (!dry && (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5)) return null;
@@ -11538,6 +11572,10 @@ function writePayRow_(r, name, remain, prevMonth, shared, ex, allRuns) {
     const dk0 = dateTok_(name);
     const others = (allRuns || []).filter(function (x) { return x['진행 상태'] !== '종료' && x['시트ID'] && String(x['시트ID']) !== sid && dateTok_(x['명단 제목']) === dk0; }).map(function (x) { return String(x['시트ID']); });
     if (others.length) links.forEach(function (u, i) { if (u && u.indexOf(sid) === -1 && others.some(function (o) { return u.indexOf(o) !== -1; })) foreign[i] = 1; });
+    // 계약 수량 칸이 파일 칩이면 링크를 못 읽음 → 다른 진행(지금 진행목록에 있는)의 이름과 똑같은 줄도 남의 줄 (11/18: 레깅스 50이 레깅스 30 줄을 또 덮어씀)
+    const mine = name.replace(/\s+/g, ''), otherNames = {};
+    (allRuns || []).forEach(function (x) { if (x.row !== r.row && x['진행 상태'] !== '종료') { const nm = payNameOf_(x).replace(/\s+/g, ''); if (nm !== mine) otherNames[nm] = 1; } });
+    names.forEach(function (nm, i) { if (nm && otherNames[nm]) foreign[i] = 1; });
   } catch (e) {}
   // 명단 시트 하나를 여러 날이 같이 쓰면 링크가 같으니 이름(날짜 들어간 방제)으로 먼저 찾음
   let byName = names.indexOf(name.replace(/\s+/g, ''));
