@@ -1315,3 +1315,46 @@ mark.hl-guilt,.hl-guilt{background:rgba(110,139,255,.18);color:#b9c8ff;border-bo
 
 /* OX 출처 줄 */
 .ox-src{font-size:9.5px;font-weight:700;color:var(--ink3);margin:-7px 0 10px;line-height:1.5;word-break:keep-all}
+
+/* ===== 2026-11-19 스테이지 맵: 지그재그 정리형(시안 2) ===== */
+/* UNIT 배너 — 불투명 다크 카드. 연결 점선은 이 배너를 지나지 않는다(app.js가 유닛 경계에서 선을 끊음) */
+.path-wrap{margin:8px -2px 0}
+.unit-banner{position:absolute;left:0;right:0;z-index:6;transform:none;display:flex;align-items:center;gap:8px;
+  height:36px;padding:0 10px;border-radius:12px;backdrop-filter:none;
+  background:#181e2b;border:1px solid #2a3346;border-left:3px solid var(--ubc,#6E8BFF);
+  color:#E8ECF4;font-weight:900;font-size:11.5px;box-shadow:0 10px 22px -18px #000}
+.unit-banner .ub-n{flex:0 0 auto;font-size:8.5px;letter-spacing:.5px;background:#232c3c;color:#8f9aad;padding:3px 6px;border-radius:6px}
+.unit-banner .ub-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;color:#E8ECF4}
+.unit-banner .ub-p{flex:0 0 auto;font-size:10px;color:#7f8a9d;font-weight:800;white-space:nowrap}
+
+/* 노드 — 다크 톤 통일, 링 색으로 상태 구분 */
+.node-wrap{gap:0}
+.node{width:52px;height:52px;border-radius:50%;background:#1a2130;border:3px solid #2b3547;
+  color:#e9edf5;font-size:17px;font-weight:900;box-shadow:none;display:grid;place-items:center}
+.node .num{position:relative;z-index:2;line-height:1}
+.node.done{background:#16202c;border-color:#34d399;color:#f2f6ff;box-shadow:none}
+.node.done .num{color:#f2f6ff}
+.node.master,.node.master.done{background:#241d09;border-color:#eab308;color:#e9c53f;box-shadow:none}
+.node.master .num{color:#e9c53f}
+.node.current{background:#1b2540;border-color:#6b86f5;color:#dbe6ff;
+  box-shadow:0 0 0 4px rgba(110,139,255,.10)}
+.node.current::after{inset:-6px;border-width:1.5px;border-color:#6b86f5;opacity:.32}
+.node.plan{background:#141a24;border-style:dashed;border-color:#303a4c;color:#5c6879}
+.node.plan .num{color:#5c6879}
+.node.plan.current{background:#1b2540;border-style:solid;border-color:#6e8bff}
+.node.today{outline:none}
+.node.done::before{content:none}          /* 기존 우상단 초록 체크 제거 */
+.node .crown{display:none}                /* 기존 왕관 제거 — 배지는 우하단 한 개 */
+.node.master::before{content:none}
+
+/* 배지 — 완료 ✓ / 마스터 ★ 한 개만, 우하단 */
+.nbadge{position:absolute;right:-5px;bottom:-5px;width:17px;height:17px;border-radius:50%;z-index:3;
+  background:#10b981;color:#052b1f;font-size:10px;font-weight:900;line-height:1;
+  display:grid;place-items:center;border:2px solid #0B0D10}
+.nbadge.star{background:#eab308;color:#2a1f05;font-size:9px}
+
+/* 노드 옆 짧은 제목 — 넘치면 말줄임, 390px에서 화면 밖으로 나가지 않음 */
+.nlabel{position:absolute;left:calc(100% + 9px);top:50%;transform:translateY(-50%);text-align:left;
+  font-size:11px;font-weight:700;line-height:1.2;letter-spacing:-.2px;color:#9aa4b4;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.nlabel.left{left:auto;right:calc(100% + 9px);text-align:right}

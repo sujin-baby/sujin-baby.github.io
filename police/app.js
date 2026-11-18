@@ -1248,96 +1248,122 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     return false;
   }
 
+  function shortLabel(t) {
+    var s = String(t || '').replace(/\s+/g, ' ').trim();
+    if (!s) return '';
+    s = s.replace(/\s*\(.*\)\s*$/, '');                   // 끝 괄호 설명((will have pp) 등) 제거
+    s = s.replace(/\s*\[.*\]\s*$/, '');                    // 끝 대괄호 설명 제거
+    s = s.replace(/\s*p\.?\s*\d+\s*~\s*\d+\s*$/i, '');   // 끝 페이지 표기(p6~14) 제거
+    s = s.replace(/\s*\d+\s*번\s*$/, '');                 // 끝 문제 번호(12번) 제거
+    s = s.replace(/^제\s*\d+\s*절\s+/, '');               // 앞머리 '제1절' 제거
+    return s.trim();
+  }
+
   function renderPath(c) {
     var path = $('#path'); path.innerHTML = '';
     var wrap = path.parentElement;
     var W = wrap.clientWidth || 360;
     var gp = isGP(c), today = todayStr(), doneSet = ckMap(c.id);
     var cur = nextLecture(c.id);
-    var list = [], y = 34, lastU = -2;
+    var NODE = 52, R = NODE / 2, GAP = 72, BAND = 74;
+    var list = [], y = 30, lastU = -2;
     c.lec.forEach(function (L) {
       var ui = unitIndex(c.id, L.n);
-      if (ui !== lastU) { list.push({ kind: 'banner', ui: ui, y: y }); y += 32; lastU = ui; }
-      list.push({ kind: 'node', L: L, y: y });
-      y += 74;
+      if (ui !== lastU) { list.push({ kind: 'banner', ui: ui, y: y }); y += BAND; lastU = ui; }
+      list.push({ kind: 'node', L: L, y: y, ui: ui });
+      y += GAP;
     });
-    var H = y + 24;
+    var lastY = list.length ? list[list.length - 1].y : 30;
+    var H = lastY + R + 26;
     path.style.height = H + 'px';
-    var pts = [], unitCount = {};
+
+    var unitCnt = {};
     c.lec.forEach(function (L) {
       var ui = unitIndex(c.id, L.n);
-      unitCount[ui] = (unitCount[ui] || 0) + 1;
+      if (!unitCnt[ui]) unitCnt[ui] = [0, 0];
+      unitCnt[ui][1]++;
+      if (doneSet[L.n]) unitCnt[ui][0]++;
     });
+
+    var mid = W / 2, amp = Math.min(58, W * 0.17), seq = 0, curY = 30, prevPt = null, segs = [];
     list.forEach(function (it) {
       if (it.kind === 'banner') {
         var u = c.units[it.ui];
         if (!u) return;
-        var nums = [];
-        c.lec.forEach(function (L) { if (L.n >= u.a && L.n <= u.b) nums.push(L.n); });
-        var doneN = nums.filter(function (n) { return doneSet[n]; }).length;
+        var cnt = unitCnt[it.ui] || [0, 0];
         var el = document.createElement('div');
         el.className = 'unit-banner';
-        el.style.top = (it.y - 15) + 'px';
+        el.style.top = it.y + 'px';
         el.style.setProperty('--ubc', SUBJ[S.subj].color);
         el.innerHTML = '<span class="ub-n">UNIT ' + (it.ui + 1) + '</span>' +
           '<span class="ub-t">' + esc(u.n) + '</span>' +
           '<span class="ub-p">' + (gp ? 'G-POINT ' + u.a + (u.b !== u.a ? '~' + u.b : '') : u.a + '~' + u.b + '강') +
-          ' · ' + doneN + '/' + nums.length + '</span>';
+          ' · ' + cnt[0] + '/' + cnt[1] + '</span>';
         path.appendChild(el);
+        prevPt = null;            // 유닛 경계에서는 연결 점선을 긋지 않는다
         return;
       }
       var L = it.L;
-      var x = W / 2 + Math.sin(it.y * 0.0125) * (W * 0.27);
+      var x = mid + Math.sin(seq * 1.15) * amp;
+      seq++;
+      var done = !!doneSet[L.n], mast = isMastered(c.id, L.n);
       var w = document.createElement('div');
       w.className = 'node-wrap';
       w.style.left = x + 'px'; w.style.top = it.y + 'px';
       var b = document.createElement('button');
       var cls = 'node';
-      if (doneSet[L.n]) cls += ' done';
-      else if (L.n === cur) cls += ' current';
+      if (done) cls += ' done';
       if (!L.up) cls += ' plan';
+      if (L.n === cur) cls += ' current';
+      if (mast) cls += ' master';
       if (doneSet[L.n] === today) cls += ' today';
-      if (isMastered(c.id, L.n)) cls += ' master';
       b.className = cls;
-      var inner = '<span class="num">' + L.n + '</span>';
-      if (isMastered(c.id, L.n)) inner += '<span class="crown">👑</span>';
-      b.innerHTML = inner;
-      b.setAttribute('aria-label', (gp ? 'G-POINT ' + L.n : L.n + '강') + (L.d ? ' · ' + L.d + ' 업로드' : ''));
+      b.innerHTML = '<span class="num">' + L.n + '</span>' +
+        (mast ? '<span class="nbadge star" aria-hidden="true">★</span>'
+              : done ? '<span class="nbadge" aria-hidden="true">✓</span>' : '');
+      b.setAttribute('aria-label', (gp ? 'G-POINT ' + L.n : L.n + '강') + (L.d ? ' · ' + L.d + ' 업로드' : '') +
+        (mast ? ' · 마스터' : done ? ' · 완료' : ''));
       b.onclick = function () { sfx('tap'); openSheet(c.id, L.n); };
       w.appendChild(b);
-      if (L.n === cur) {
-        var tg = document.createElement('span'); tg.className = 'node-tag'; tg.textContent = '여기서부터';
-        w.appendChild(tg);
-      } else if (L.n === 1) {
-        var t2 = document.createElement('span'); t2.className = 'node-tag gold'; t2.textContent = 'START';
-        w.appendChild(t2);
-      }
-      if (L.d) {
-        var dd = document.createElement('span'); dd.className = 'node-date'; dd.textContent = L.d;
-        w.appendChild(dd);
+      var lab = shortLabel(L.t);
+      if (lab) {
+        // 원이 오른쪽에 있으면 라벨은 왼쪽, 왼쪽에 있으면 라벨은 오른쪽 — 어느 쪽이든 화면 안에 들어온다
+        var toLeft = x > mid;
+        var sp = document.createElement('span');
+        sp.className = 'nlabel' + (toLeft ? ' left' : '');
+        sp.textContent = lab;
+        sp.style.maxWidth = Math.max(48, (toLeft ? x : W - x) - R - 14) + 'px';
+        w.appendChild(sp);
       }
       path.appendChild(w);
-      // 이전 노드와 연결
-      pts.push([x, it.y]);
+      if (prevPt) {
+        var dx = x - prevPt.x, dy = it.y - prevPt.y;
+        var len = Math.sqrt(dx * dx + dy * dy), t = R + 9;
+        if (len > t * 2 + 8) {
+          var ux = dx / len, uy = dy / len;
+          segs.push([prevPt.x + ux * t, prevPt.y + uy * t, x - ux * t, it.y - uy * t]);
+        }
+      }
+      prevPt = { x: x, y: it.y };
+      if (L.n === cur) curY = it.y;
     });
-    // 연결선
+
     var svg = $('#pathSvg');
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     svg.setAttribute('width', W);
-    if (pts.length) {
-      var d = pts.map(function (p, i) { return (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(' ');
-      var lastDone = -1;
-      c.lec.forEach(function (L, i) { if (doneSet[L.n]) lastDone = i; });
-      var dDone = '';
-      if (lastDone > 0) {
-        dDone = pts.slice(0, lastDone + 1).map(function (p, i) { return (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(' ');
-      }
-      svg.innerHTML = '<path d="' + d + '" fill="none" stroke="#dfe5f0" stroke-width="7" stroke-linecap="round" stroke-dasharray="1 13"/>' +
-        (dDone ? '<path d="' + dDone + '" fill="none" stroke="' + SUBJ[S.subj].color + '" stroke-width="7" stroke-linecap="round" stroke-opacity=".5"/>' : '');
+    if (segs.length) {
+      svg.innerHTML = segs.map(function (s) {
+        return '<path d="M' + s[0].toFixed(1) + ' ' + s[1].toFixed(1) + 'L' + s[2].toFixed(1) + ' ' + s[3].toFixed(1) +
+          '" fill="none" stroke="#3a4457" stroke-width="4" stroke-linecap="round" stroke-dasharray="0.1 10"/>';
+      }).join('');
+    } else {
+      svg.innerHTML = '';
     }
+
     if (!path._scrolled) {
       path._scrolled = true;
-      var target = 34 + (Math.min(cur, c.lec.length) - 1) * 74 - (window.innerHeight * 0.45);
+      var top = path.getBoundingClientRect().top + (window.scrollY || window.pageYOffset || 0);
+      var target = top + curY - (window.innerHeight * 0.45);
       setTimeout(function () { window.scrollTo({ top: Math.max(0, target), behavior: 'auto' }); }, 60);
     }
   }
