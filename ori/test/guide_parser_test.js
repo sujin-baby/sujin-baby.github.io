@@ -1889,6 +1889,22 @@ https://www.coupang.com/vp/products/9812998435?vendorItemId=96299881395
   if (warn39.indexOf(P.SILBIN_TAKN_TEXT) < 0) throw new Error('Test 39 화면 주의 문구(o-warn)가 안 뜸: ' + warn39.slice(0, 160));
   if (warn39.indexOf('⛔') >= 0) throw new Error('Test 39 실·빈인데 차단(⛔) 문구가 뜸: ' + warn39.slice(0, 160));
 
+  // 6) 상품명이 나중에(기억해 둔 상품 정보·같은 상품의 다른 가이드) 채워져도 대표 키워드가 비지 않음
+  //  (11/18 라이브 실측: 상품명·판매처·상품번호는 기억에서 들어왔는데 공지 '🐥★키워드 :' 칸만 빈 채로 나감)
+  const gk = Object.assign({}, hSbn.guides[0], { keyword: '', guide: '', kwAuto: true, pname: '제르넬 남성용 방한장갑 스마트폰 터치 기모 라이더 장갑', platform: '쿠팡', price: '9,900', option: '라지', seller: '김상사' });
+  P.setGuides([gk]);
+  ['keyword', 'guide', 'daily', 'total', 'price', 'ship', 'platform', 'seller', 'option', 'pname', 'url', 'pno', 'short', 'page', 'pageM', 'similar', 'photo', 'thumb'].forEach(k => { getElem(k).value = String(gk[k] === undefined || gk[k] === null ? '' : gk[k]); });
+  getElem('keyword').value = ''; getElem('guide').value = '';
+  P.render();
+  if (getElem('keyword').value !== '방한장갑') throw new Error('Test 39 상품명만 있을 때 대표 키워드가 안 채워짐: "' + getElem('keyword').value + '"');
+  if (String(getElem('o-notice').value).indexOf('🐥★키워드 : 방한장갑') < 0) throw new Error('Test 39 공지 키워드 칸이 빈 채로 나감');
+  // 수진 님이 키워드를 직접 비운 것(직접 고침)은 다시 채우지 않음
+  P.setGuides([Object.assign({}, gk, { keyword: '', kwAuto: false })]);
+  ['keyword', 'guide', 'daily', 'total', 'price', 'ship', 'platform', 'seller', 'option', 'pname', 'url', 'pno', 'short', 'page', 'pageM', 'similar', 'photo', 'thumb'].forEach(k => { getElem(k).value = ''; });
+  getElem('pname').value = gk.pname; getElem('platform').value = '쿠팡'; getElem('price').value = '9,900';
+  P.render();
+  if (getElem('keyword').value !== '') throw new Error('Test 39 직접 비운 키워드를 다시 채움: "' + getElem('keyword').value + '"');
+
   console.log('✓ 실·빈+택대+10번N 주의 문구·확인창·fname 시험 통과 (' + room39 + ' → fname "' + fname39 + '")');
 }
 
