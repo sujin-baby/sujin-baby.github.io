@@ -1253,7 +1253,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!s) return '';
     s = s.replace(/\s*\(.*\)\s*$/, '');                   // 끝 괄호 설명((will have pp) 등) 제거
     s = s.replace(/\s*\[.*\]\s*$/, '');                    // 끝 대괄호 설명 제거
-    s = s.replace(/\s*p\.?\s*\d+\s*~\s*\d+\s*$/i, '');   // 끝 페이지 표기(p6~14) 제거
+    s = s.replace(/\s*p\.?\s*\d+(\s*[,~\-]\s*\d+)?\s*$/i, '');   // 끝 페이지 표기(p6~14, p24,20) 제거
     s = s.replace(/\s*\d+\s*번\s*$/, '');                 // 끝 문제 번호(12번) 제거
     s = s.replace(/^제\s*\d+\s*절\s+/, '');               // 앞머리 '제1절' 제거
     return s.trim();
