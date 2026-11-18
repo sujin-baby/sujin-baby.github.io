@@ -1573,7 +1573,93 @@ console.log('-- Test 36: 6번 구매옵션이 비고 7번에 색상 이야기가
   console.log('✓ 7번 색상 안내 시 단일옵션 방지 시험 통과 (' + gC.option + ')');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (36개 샘플 전원 일치)');
+// ==========================================
+console.log('-- Test 37: 팀룸 #77 — 택대 + 실·배 혼합("실배 나머지 빈") + 쿠팡/네이버 다중 가이드 (11/18)');
+{
+  // 수진 님 제보 원문 (오리 팀룸 업무방 #77, 2/2 네이버 기준): 방제가 '#11.19 실 네쿠 젊음크림 5'로 나와
+  //  #택·실⁄빈이 빠지고, 쿠팡 칸에 네이버 상품번호(13267764523)가 들어가 ❗자리수 확인이 떴다
+  const req77 = `#입금대행 택대 네5 쿠5 실배 나머지 빈 39900
+
+1. 검색 키워드: 젊음크림
+2. 키워드 검색 시 현재 순위 : 쿠팡 1위, 스스 5위
+3. 총 결제하신 건수 : 20건 (쿠팡 10건, 스스 10건)
+4. 하루 구매하는건수 :플랫폼 각각 5건씩 2일 
+5. 상품주소(URL) :
+https://link.coupang.com/a/iLyEyCqBW0
+
+https://naver.me/GDQGBL7P
+
+6. 구매옵션 : 1개
+7. 포토제공 (몇명)  /포토없음  선택: 제품제공 후 포토리뷰 작성 요청
+8. 리뷰 가이드 : 참고용 전달
+9. 입금하실 입금자명 : 김규민`;
+
+  // 1) 실·빈 혼합 인식 — '실배 나머지 빈'은 실배송 단독도, 빈박스 단독도 아님
+  if (!P.isSilbin('실배 나머지 빈')) throw new Error('Test 37 "실배 나머지 빈"을 실·빈 혼합으로 못 읽음');
+  if (P.isSilbin('실배 9800')) throw new Error('Test 37 실배송 단독을 실·빈 혼합으로 오인식');
+  if (P.isSilbin('빈박스 5건')) throw new Error('Test 37 빈박스 단독을 실·빈 혼합으로 오인식');
+  if (P.isSilbin('실배송은 방에 인원이 다쓰셔야 페이백 요청됩니다')) throw new Error('Test 37 안내 문장을 실배송 표기로 오인식');
+
+  const h77 = P.parseAll(req77);
+  if (!h77.silbin) throw new Error('Test 37 #77 의뢰서를 실·빈 혼합으로 못 읽음');
+  if (h77.realship) throw new Error('Test 37 실·빈 혼합은 실배송 단독이 아님(realship=false)' + ' — 아니면 방제에 실이 붙고 택이 날아감');
+  if (!h77.takdae) throw new Error('Test 37 의뢰서 헤더 택대를 못 읽음');
+  if (h77.guides.length !== 2) throw new Error('Test 37 쿠팡·네이버 두 가이드로 나눠야 함, got: ' + h77.guides.length);
+  const [gC, gN] = h77.guides;
+  if (gC.platform !== '쿠팡' || gN.platform !== '네이버') throw new Error('Test 37 플랫폼 분리가 틀림: ' + gC.platform + '/' + gN.platform);
+
+  // 2) 플랫폼별 건수는 순위 줄('쿠팡 1위')이 아니라 건수 줄에서 (10/10), 하루는 '각각 5건씩' (5/5)
+  if (P.platCountOf('2. 키워드 검색 시 현재 순위 : 쿠팡 1위, 스스 5위', '쿠팡') !== '') throw new Error('Test 37 순위 줄 숫자를 건수로 잡음');
+  if (P.platCountOf('3. 총 결제하신 건수 : 20건 (쿠팡 10건, 스스 10건)', '쿠팡') !== '10') throw new Error('Test 37 쿠팡 건수 못 읽음');
+  if (P.platCountOf('3. 총 결제하신 건수 : 20건 (쿠팡 10건, 스스 10건)', '네이버') !== '10') throw new Error('Test 37 네이버(스스) 건수 못 읽음');
+  if (String(gC.total) !== '10' || String(gN.total) !== '10') throw new Error('Test 37 가이드별 총건수는 10/10이어야 함: ' + gC.total + '/' + gN.total);
+  if (String(gC.daily) !== '5' || String(gN.daily) !== '5') throw new Error('Test 37 하루 건수는 5/5여야 함: ' + gC.daily + '/' + gN.daily);
+
+  // 3) 6번 '1개'는 두 가이드 모두 옵션 '단일옵션' — 상품명으로 새지 않음
+  if (gC.option !== '단일옵션' || gN.option !== '단일옵션') throw new Error('Test 37 다중 가이드 옵션이 단일옵션이 아님: ' + gC.option + '/' + gN.option);
+  if (gC.pname || gN.pname) throw new Error('Test 37 단일옵션이 상품명으로 들어감: ' + JSON.stringify([gC.pname, gN.pname]));
+
+  // 4) 방제: #택11.19실/빈 네쿠 젊음크림10 (하루 인원 = 쿠팡 5 + 네이버 5 = 10)
+  getElem('req').value = req77;
+  getElem('t-ip').checked = true;
+  getElem('t-up').checked = false;
+  getElem('takdae').checked = true;
+  getElem('realship').checked = false;
+  getElem('fruit').checked = false;
+  getElem('cart').checked = false;
+  getElem('day').value = '1';
+  getElem('date').value = '2026-11-19';
+  getElem('slot').value = 'midnight';
+  P.setGuides(h77.guides.map(g => Object.assign({}, g, { keyword: '젊음크림', guide: '젊음크림', seller: '', pname: '' })));
+  ['keyword', 'guide', 'daily', 'total', 'price', 'ship', 'platform', 'seller', 'option', 'pname', 'url', 'pno', 'short', 'page', 'pageM', 'similar', 'photo', 'thumb'].forEach(k => { getElem(k).value = String(h77.guides[0][k] === undefined || h77.guides[0][k] === null ? '' : h77.guides[0][k]); });
+  const day1 = P.dayTotalOf(1);
+  if (day1 !== '10') throw new Error('Test 37 1일차 인원은 10(⑤+⑤)이어야 함: ' + day1);
+  const room77 = P.makeRoom('11.19', day1);
+  if (room77 !== '#택11.19실/빈 네쿠 젊음크림10') throw new Error('Test 37 #77 방제 실패: ' + room77 + ' (' + room77.length + '자)');
+  if (!P.roomHasTak(room77)) throw new Error('Test 37 실·빈 혼합 방제에서 택이 사라짐: ' + room77);
+  if (room77.length > 20) throw new Error('Test 37 방제가 20자를 넘음: ' + room77.length);
+
+  // 5) 붙여넣은 상품이 맞는 가이드로 감 (아이폰에서 탭을 안 바꿔도) — 네이버 번호가 쿠팡 칸을 덮어쓰지 않음
+  if (P.routePaste({ pno: '13267764523', thumb: 'https://phinf.pstatic.net/a.jpg' }) !== 1) throw new Error('Test 37 네이버 상품 정보가 네이버 가이드로 안감');
+  if (P.routePaste({ pno: '9463496930 - 2816***8459', thumb: 'https://thumbnail7.coupangcdn.com/a.jpg' }) !== 0) throw new Error('Test 37 쿠팡 상품 정보가 쿠팡 가이드로 안감');
+  if (P.routePaste({ pno: '13267764523' }) !== 1) throw new Error('Test 37 썸네일·사이트 표시가 없어도 상품번호 모양(네이버=숫자 하나)으로 못 찾음');
+
+  // 6) '에'로 시작하는 판매처(에큐어)가 조사로 오인돼 빈칸이 되지 않음
+  if (!P.okSeller('에큐어')) throw new Error('Test 37 "에큐어"가 판매처에서 걸러짐(조사 필터)');
+  if (P.okSeller('는 다를 수 있습니다')) throw new Error('Test 37 조사로 시작하는 문장은 판매처가 아님');
+
+  // 7) 공지에서 '(비슷한 상품 많으니 꼭 판매처, 가격 보고 구매해주세요!)' 문구 제거
+  P.setGuides([Object.assign({}, h77.guides[0], { keyword: '젊음크림', guide: '젊음크림', pname: '에큐어 젊음크림 팔자주름 크림', seller: '휴리진', option: '단일옵션', pno: '9463496930 - 2816***8459', platform: '쿠팡', price: '39900', page: '1p', similar: '1' })]);
+  ['keyword', 'guide', 'daily', 'total', 'price', 'ship', 'platform', 'seller', 'option', 'pname', 'url', 'pno', 'short', 'page', 'pageM', 'similar', 'photo', 'thumb'].forEach(k => { const g0 = { keyword: '젊음크림', guide: '젊음크림', pname: '에큐어 젊음크림 팔자주름 크림', seller: '휴리진', option: '단일옵션', pno: '9463496930 - 2816***8459', platform: '쿠팡', price: '39900', page: '1p', similar: '1' }; getElem(k).value = String(g0[k] === undefined ? '' : g0[k]); });
+  P.render();
+  const notice77 = String(getElem('o-notice').value || '');
+  if (/비슷한 상품 많으니/.test(notice77)) throw new Error('Test 37 공지에 "비슷한 상품 많으니…" 문구가 남아 있음');
+  if (/판매처, 가격 보고/.test(notice77)) throw new Error('Test 37 공지에 판매처·가격 보고 안내가 남아 있음');
+
+  console.log('✓ #77 택대·실⁄빈 혼합·네쿠 방제 및 다중 가이드 상품번호 분리 시험 통과 (' + room77 + ')');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (37개 샘플 전원 일치)');
 process.exit(0);
 
 

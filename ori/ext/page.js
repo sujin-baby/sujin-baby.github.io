@@ -210,9 +210,18 @@
     }
     const pm = L.pathname.match(/products\/(\d+)/);
     if (!pm) return { err: "네이버는 스마트스토어(또는 브랜드스토어) 상품 페이지에서 눌러 주세요." };
-    const parts = document.title.split(/\s+:\s+/);
-    const name = (og("title") || parts[0] || "").split(/\s+:\s+/)[0].trim();
-    const seller = (parts.length > 1 ? parts[parts.length - 1] : og("site_name")).replace(/\s*[-|]?\s*네이버.*$/, "").trim();
+    /* 상품명·판매처: 모바일 스마트스토어는 og:title·title이 짧은 이름만 담기도 해서 화면 제목·구조화 데이터(JSON-LD)까지 봄 (11/18 #77)
+       - 상품명: og:title·title의 이름 → JSON-LD name → 화면 상품 제목 중 '첫 낱말이 같은' 가장 긴 것
+       - 판매처: title 마지막 칸(스토어 이름) → 없으면 JSON-LD brand → 화면 브랜드 ('네이버 스마트스토어'만 읽어 빈칸이 되던 것) */
+    const ld = (() => { try { const out = []; document.querySelectorAll('script[type="application/ld+json"]').forEach(s => { try { const j = JSON.parse(s.textContent || "null"); (Array.isArray(j) ? j : [j]).forEach(o => { if (o && o["@graph"]) o["@graph"].forEach(x => out.push(x)); else out.push(o); }); } catch (e) {} }); return out.filter(o => o && /product/i.test(String(o["@type"] || "")))[0] || null; } catch (e) { return null; } })();
+    const ldName = String((ld && ld.name) || "").replace(/\s+/g, " ").trim();
+    const ldBrand = String((ld && ld.brand && (ld.brand.name || ld.brand)) || "").replace(/\s+/g, " ").trim();
+    const tName = (og("title") || parts[0] || "").split(/\s+:\s+/)[0].trim();
+    const domName = (() => { try { return [...document.querySelectorAll('h1, h2, h3, [class*="product-title"], [class*="prd_name"], [class*="productName"], [class*="prod_name"]')].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).filter(t => t.length >= 6 && t.length <= 200 && !/^(?:상품|카테고리|리뷰|구매|배송|판매|네이버|NAVER|전체)/.test(t)).sort((a, b) => b.length - a.length)[0] || ""; } catch (e) { return ""; } })();
+    const name = [tName, ldName, domName].filter(Boolean).reduce((a, b) => (b.length > a.length && (!tName || b.slice(0, 2) === tName.slice(0, 2)) ? b : a), tName || "");
+    let seller = (parts.length > 1 ? parts[parts.length - 1] : og("site_name")).replace(/\s*[-|]?\s*네이버.*$/, "").trim();
+    if (!seller) seller = ldBrand;
+    if (!seller) { try { seller = [...document.querySelectorAll('[class*="brand"], [class*="brandName"]')].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).filter(t => t.length >= 2 && t.length <= 30).sort((a, b) => a.length - b.length)[0] || ""; } catch (e) {} }
     /* 가격: 페이지 안 상품 데이터(할인가 → 판매가) → 화면에서 상품명 바로 뒤 가격 중 낮은 것(정가 줄 그은 것 말고 할인가) */
     let price = 0;
     const dm = html.match(/"discountedSalePrice"\s*:\s*(\d{3,})/) || html.match(/"mobileDiscountedSalePrice"\s*:\s*(\d{3,})/);
