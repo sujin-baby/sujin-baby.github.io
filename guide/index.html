@@ -232,7 +232,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v197 (상품명 끝 ', 1개, 100g' 원문 그대로)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v198 (#81 실·빈 혼합 인원·키워드, 옵션 이름 미유입)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -431,7 +431,7 @@ details.help-box summary {
             <span style="font-weight: 900; font-size: 14px; color: var(--pink-deep, #ff5fa8); display:flex; align-items:center; gap:5px;">
               <span>💬 AI 다이렉트 대화 · 공지 수정 요청</span>
             </span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v197</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v198</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 10px;">
             공지가 이상하게 나왔거나 수정이 필요한가요? 여기서 메시지를 보내면 <b>피클(생성기)</b>과 <b>클로드(시트)</b>에게 실시간으로 전달돼요!
@@ -2464,11 +2464,43 @@ details.help-box summary {
     // 장바구니건이 아니고, 한 가이드 내에 건수가 명시되거나 서로 다른 플랫폼 상품 URL이 여러 개 있는 경우 독립 가이드로 자동 분할 (대봉감 쿠팡/토스, 털깔창 쿠팡/네이버 등, 11/10 v169)
     const expanded = [];
     head.guides.forEach(g => {
-      const urls = lines(g.url).map(l => { const m = l.match(/^(.*?)\s*(https?:\/\/\S+)/); return m ? { label: m[1].trim(), url: m[2] } : null; }).filter(Boolean);
+      const uLines = lines(g.url);
+      // 상품주소 칸은 '5건 실배' / '10건 빈'처럼 건수·실·빈 표시를 주소 바로 위 줄에 적기도 한다 (#81, 11/18).
+      //  주소 줄에 이름표가 없으면 바로 위 줄을 그 주소의 이름표·건수로 읽음 (단, 위 줄이 주소나 '5. 상품주소(URL)' 같은 라벨이면 안 씀)
+      let urlIdx = -1;
+      const urls = uLines.map((l, li) => {
+        const m = l.match(/^(.*?)\s*(https?:\/\/\S+)/);
+        if (!m) return null;
+        urlIdx++;
+        const label = m[1].trim();
+        let prev = "";
+        if (!label) {
+          for (let k = li - 1; k >= 0; k--) {
+            const t = String(uLines[k] || "").trim();
+            if (!t) continue;
+            if (/https?:\/\//.test(t) || labelKey(t)) break;
+            prev = t; break;
+          }
+        }
+        // 주소 칸에 안 적힌 위줄 표기('5건 실배')는 파서가 따로 붙여 둔 것에서 (r.urlTags, #81)
+        if (!label && !prev) prev = String(((g.urlTags || [])[urlIdx]) || "").trim();
+        return { label: label, prev: prev, url: m[2] };
+      }).filter(Boolean);
       if (!head.cart && urls.length > 1) {
+        // 건수는 그 주소에 붙은 표기에서 먼저 읽음: '5건 실배'(위 줄) · '5건'(같은 줄) · 총 건수 옆 '(쿠팡 10건)'
+        const tagCount = s => {
+          const t = String(s || "").trim();
+          const m1 = t.match(/^(\d+)\s*(?:건|명|개)\s*(?:실배송|실배|실|빈박스|빈|구확|구매\s*확정)/);
+          if (m1) return m1[1];
+          const m2 = t.match(/(\d+)\s*(?:건|명|개)/);
+          return m2 ? m2[1] : "";
+        };
         let subCounts = urls.map((u, idx) => {
           const m = u.label.match(/(\d+)\s*(?:건|명|개)/);
           if (m) return m[1];
+          // 주소 위 줄의 '5건 실배'/'10건 빈' — 이 줄이 없으면 예전처럼 반반으로 쪼개져 5/10이 8/7이 됨 (#81)
+          const pc0 = tagCount(u.prev);
+          if (pc0) return pc0;
           const o = (g.optBase || [])[idx];
           if (o && o.qty) return o.qty;
           // 플랫폼별 건수는 건수 단위가 붙은 곳에서만 (순위 줄의 '쿠팡 1위'를 1건으로 잘못 읽지 않게, 11/18 #77)
@@ -2487,10 +2519,22 @@ details.help-box summary {
           const dailyTotal = Number((g.daily || "").match(/\d+/)?.[0] || 0);
           const dailyRange = (g.dailyRaw || g.daily || "").match(/(\d+)\s*[-~]\s*(\d+)/);
           const oneOpt = (g.optBase || []).length === 1 ? String(g.optBase[0].label || "").trim() : "";
+          // 주소 이름표에서 건수·실/빈 표시를 뺀 '상품 이름표'만 남김. '5건 실배'/'10건 빈'은 상품 이름이 아니고,
+          //  이름표가 없을 때 옵션 이름('라지')을 상품명·키워드로 쓰면 키워드가 '라지'가 된다 (#81, 11/18)
+          const tagName = s => String(s || "")
+            .replace(/https?:\/\/\S+/g, " ")
+            .replace(/^\s*\d+\s*(?:건|명|개)\s*/, "").replace(/\s*\d+\s*(?:건|명|개)\s*$/, "")
+            .trim()
+            .replace(/^(?:실배송|실배|실|빈박스|빈|박스|구확|구매\s*확정)$/, "")
+            .replace(/^(?:쿠팡|네이버|토스|스스|스마트스토어|올웨이즈|카카오톡딜|카카오)$/, "")
+            .replace(/^[:：\s]+|[:：\s]+$/g, "").trim();
+          const sharedOpt = (g.optBase || []).length === 1 ? String(g.optBase[0].label || "").trim() : "";
           urls.forEach((u, idx) => {
             const sub = Object.assign({}, g);
-            const opt = (g.optBase || [])[idx] || { label: u.label.replace(/\s*\d+\s*(?:건|명|개).*$/, "").trim(), qty: subCounts[idx] };
-            const cleanLabel = (opt.label || u.label).replace(/\s*\d+\s*(?:건|명|개).*$/, "").trim();
+            const urlName = tagName(u.label || u.prev);
+            // 상품마다 이름표가 하나씩 붙은 경우('1kg', '블랙')만 그 이름을 상품 이름으로 씀
+            const optByUrl = (g.optBase || []).length === urls.length ? (g.optBase || [])[idx] : null;
+            const cleanLabel = (urlName || (optByUrl && optByUrl.label) || "").replace(/\s*\d+\s*(?:건|명|개).*$/, "").trim();
             sub.url = (u.label ? u.label + " " : "") + u.url;
             sub.pno = urlInfo(u.url);
             sub.platform = platformOf(u.url);
@@ -2502,10 +2546,17 @@ details.help-box summary {
             } else if (/자율|다양|자유|선택/.test(oneOpt)) {
               sub.option = "자율";
               sub.optBase = [{ label: "자율", qty: "" }];
-            } else {
+            } else if (urlName && !/^[\d,]+\s*원?$/.test(urlName)) {
+              // 주소마다 다른 이름표(1kg·블랙 등)가 있으면 그 이름이 그 상품의 옵션·이름
               sub.pname = cleanLabel;
               sub.option = cleanLabel;
               sub.optBase = [{ label: cleanLabel, qty: subCounts[idx] }];
+            } else {
+              // 이름표가 없거나 같은 상품을 나눈 것(실·빈, 옵션 하나)이면 옵션은 상품 하나의 것 그대로 두고
+              //  상품명은 비워 둔다 — 상품 정보 붙여넣기·같은 상품번호 정보로 채움 (#81: '라지'가 상품명·키워드가 되던 것)
+              sub.pname = String(g.pname || "").trim() && !urlName ? String(g.pname || "").trim() : "";
+              sub.option = sharedOpt;
+              sub.optBase = [{ label: sharedOpt, qty: subCounts[idx] }];
             }
             sub.total = subCounts[idx];
             if (eachDm) {
@@ -2522,6 +2573,11 @@ details.help-box summary {
             sub.days = [{ n: sub.daily, br: [] }];
             if (head.headPrices && head.headPrices.length === urls.length) {
               sub.price = head.headPrices[idx];
+              // 위치의 '(안나오면 가격검색 … 9,900)'이 다른 상품 가격을 가리키지 않게 그 상품 가격으로 (#81)
+              const np = Number(String(sub.price).replace(/[^0-9]/g, ""));
+              if (np && /가격\s*검색/.test(String(sub.page || ""))) {
+                sub.page = String(sub.page).replace(/(가격\s*검색[^)\d]*)(\d{1,3}(?:,\d{3})+|\d{4,})/, (mm, a) => a + np.toLocaleString("ko-KR"));
+              }
             }
             if (sub.platform === "토스") sub.page = "1p";
             expanded.push(sub);
@@ -2542,8 +2598,9 @@ details.help-box summary {
       head.platform = "카카오톡딜";
     }
     // 헤더에 택대가 적혀 있으나 10번에 명시적으로 N이 있는 경우 충돌 플래그 설정 (11/12 오르베카 지적: 생성 전 오류 문구 차단)
+    //  실·빈 혼합은 실배송과 빈박스가 한 방에 섞인 진행이라 택배대행이 맞다 — 10번 N은 빈박스 쪽 표기이므로 충돌로 보지 않음 (#81, 11/18)
     const hasTakdaeN = head.guides.some(g => g.takdaeYN && /^(N|아니|부|false)/i.test(String(g.takdaeYN).trim()));
-    if (head.takdae && hasTakdaeN) {
+    if (head.takdae && hasTakdaeN && !head.silbin) {
       head.conflictTakdae = true;
     }
     head.takdae = head.takdae || head.takdaeField;
@@ -2573,11 +2630,12 @@ details.help-box summary {
   // 실·빈 혼합(실배송 + 빈박스·구확): 방제를 '실/빈' 한 방으로 잡고, 공지에 리뷰 배분을 넣지 않음 (11/17 v191)
   const SILBIN_RE = /실\s*빈\s*섞|실\s*[\/ㅣ|]\s*빈|실빈/;
   //  기존 표기 외에 '#입금대행 실5 텍5 구확10'처럼 실 건수와 구확·빈 건수를 함께 적은 줄도 혼합으로 봄
-  const SILBIN_HEAD_RE = /(?:^|[\s#(])실\s*(?:배송)?\s*[:：]?\s*\d+\s*(?:건|개|명)?/;
+  const SILBIN_HEAD_RE = /(?:^|[\s#(])(?:\d+\s*(?:건|개|명)?\s*)?실\s*(?:배송)?\s*[:：]?\s*\d+\s*(?:건|개|명)?/;
   //  한 줄에 실(배송)과 빈(박스)을 같이 적은 표기도 혼합 ('#입금대행 택대 네5 쿠5 실배 나머지 빈 39900', 11/18 #77)
   //   - '실배 9800'·'실배송 10명'처럼 실배송만 적은 줄, '빈박스 5건'처럼 빈박스만 적은 줄은 혼합이 아님
   //   - '실배송은 방에 인원이…'처럼 조사가 붙은 문장은 표기가 아니므로 뺌
-  const SILBIN_REAL_RE = /(?:^|[\s#(])실\s*(?:배(?:송)?)?\s*(?:\d+\s*(?:건|개|명|프로|%)?)?(?=[\s,;:：/)\]]|$)/;
+  //   - '#입금대행 택대 5건실 나머지 빈 9900 10900'처럼 실 건수에 '건'을 붙여 적은 표기도 읽음 (11/18 #81: '실\s*\d+'만 보던 규칙이 놓침)
+  const SILBIN_REAL_RE = /(?:^|[\s#(])(?:\d+\s*(?:건|개|명|프로|%)?\s*)?실\s*(?:배(?:송)?)?\s*(?:\d+\s*(?:건|개|명|프로|%)?)?(?=[\s,;:：/)\]]|$)/;
   const SILBIN_EMPTY_RE = /(?:^|[\s#(])빈\s*(?:박스)?\s*(?:\d+\s*(?:건|개|명)?)?(?=[\s,;:：/)\]]|$)|구확|구매\s*확정/;
   function isSilbin(text) {
     const t = String(text || "");
@@ -2958,11 +3016,20 @@ details.help-box summary {
     // https:// 없이 'coupang.com/vp/...'만 적은 의뢰서도 주소로 (10/22 저주파 발 마사지기: 주소를 못 읽어 키워드 없이 찾음)
     const src = (f.url || text).replace(/(^|[\s:：])((?:www\.|m\.|link\.)?(?:coupang\.com|coupa\.ng|smartstore\.naver\.com|brand\.naver\.com|naver\.me|oliveyoung\.co\.kr|toss\.im|store\.kakao\.com|kko\.to)\/)/gi, "$1https://$2");
     const urls = [];
+    // 주소 바로 위 줄의 건수·실/빈 표기('5건 실배', '10건 빈')는 그 주소의 상품 건수·표시임 (#81, 11/18)
+    let pendTag = "";
     src.split("\n").forEach(l => {
-      const re = /(https?:\/\/[^\s]+)/g; let um, last = 0;
-      while ((um = re.exec(l))) { urls.push({ label: l.slice(last, um.index).replace(/[:：\s]+$/, "").trim(), url: um[1] }); last = re.lastIndex; }
+      const re = /(https?:\/\/[^\s]+)/g; let um, last = 0, had = false;
+      while ((um = re.exec(l))) { urls.push({ label: l.slice(last, um.index).replace(/[:：\s]+$/, "").trim(), url: um[1], prev: last === 0 ? pendTag : "" }); last = re.lastIndex; had = true; }
+      if (had) pendTag = "";
+      else {
+        const t = l.trim();
+        pendTag = /^(?:\d+\s*(?:건|명|개)\s*)?(?:실배송|실배|실|빈박스|빈|구확|구매\s*확정)(?:\s*\d+\s*(?:건|명|개))?$/.test(t) ? t : "";
+      }
     });
     r.url = urls.map(u => (u.label ? u.label + " " : "") + u.url).join("\n");
+    // 주소 칸에는 안 남기고, 가이드 분할 때 건수로 쓰기 위한 위줄 표기 (주소 줄과 차례대로 맞춤)
+    r.urlTags = urls.map(u => u.label ? "" : (u.prev || ""));
     // 구매옵션에 상품 전체 제목이 함께 들어온 경우 분리 ("엔라지맨 밀크텐정 ... 2개, 30정")
     // 단, '화이트 / 스몰 / 20개'처럼 슬래시(/)가 있는 옵션 세부 속성은 상품명이 아니므로 분리 차단 (11/12 v178)
     const optRaw = String(f.option || "").trim();
@@ -3549,6 +3616,10 @@ details.help-box summary {
   // 키워드가 없으면 상품명으로 대표 키워드를 넣음 (짧은 상품명도). 서브 키워드는 키워드 찾기 상자에
   function autoKeyword(g) {
     if (!g.pname) return;
+    // 상품명이 옵션 이름 그대로면(라지·스몰·화이트 같은 사이즈/색상) 상품명이 아니라 옵션이므로 키워드로 쓰지 않음 (#81, 11/18)
+    const pnNorm = String(g.pname || "").replace(/\s+/g, "");
+    const VARIANT = /^(?:\d+(?:\.\d+)?\s*(?:kg|g|mg|ml|l|개|개입|팩|봉|입|매|박스|세트|병|캔|포|구|과|수|통|롤|호|mm|cm)?|(?:XS|S|M|L|XL|XXL|2XL|3XL|FREE|F)|라지|미디엄|스몰|빅|대형|중형|소형|특대|블랙|화이트|그레이|네이비|핑크|아이보리|베이지|옐로우|그린|블루|레드|검정|흰색|노랑|파랑|초록|빨강|브라운|카키|퍼플|민트|실버|골드)$/i;
+    if (VARIANT.test(pnNorm) && (g.optBase || []).some(o => String(o.label || "").replace(/\s+/g, "") === pnNorm)) return;
     const isTalkdeal = g.platform === "카카오톡딜" || /store\.kakao\.com|kko\.to/.test(g.url || "") || /톡딜/.test(String($("req").value || ""));
     // 톡딜은 키워드가 없으면 예외적 링크구매로 진행되므로 임의로 상품명 키워드를 자동 주입하지 않음 (11/14 수진 님 지침)
     if (isTalkdeal && g.kwAuto) return;
@@ -3817,6 +3888,8 @@ details.help-box summary {
       : /\d{8,}\s*-\s*\d{6,}/.test(pno) ? "쿠팡"
       : /^\s*\d{11,}\s*$/.test(pno) ? "네이버" : "";
     const idxOf = pred => { for (let i = 0; i < guides.length; i++) if (pred(guides[i], i)) return i; return -1; };
+    // 같은 상품을 아이템(옵션)만 달리해 두 가이드로 나눈 경우, 지금 보고 있는 가이드가 그 상품이면 거기 넣음 (#81, 11/18)
+    if (pid && String((guides[cur] || {}).url || "").indexOf(pid) !== -1) return cur;
     if (pid) { const i = idxOf(g => String(g.url || "").indexOf(pid) !== -1); if (i >= 0) return i; }   // 주소에 상품번호가 적혀 있으면 그 가이드
     if (!plat) return cur;
     const platOf = g => String((g && g.platform) || "").trim();
@@ -4270,13 +4343,27 @@ details.help-box summary {
       // 쿠팡+네이버 다중 플랫폼 자동 분할 건이면 '네쿠' 태그 부여 (11/10 v170)
       const hasN = guides.some(g => /네이버/.test(g.platform || g.type || "")), hasC = guides.some(g => /쿠팡/.test(g.platform || g.type || ""));
       const platTag = (hasN && hasC) ? "네쿠" : "";
-      const tries = many3 ? (platTag ? [[sh0, platTag, names[0] + "외"], [platTag, names[0] + "외"], [sh0, names[0] + "외"], [names[0] + "외"]] : [[sh0, names[0] + "외"], [names[0] + "외"]])
-        : platTag ? [[sh0, platTag].concat(names), [platTag].concat(names), [sh0].concat(names), names, [names[0] + "외"]]
-        : [[sh0].concat(names), names, [names[0] + "외"]];
-      for (const t of tries) {
-        const w = t.filter(Boolean), sp = [head, sil].concat(w, [cnt]).filter(Boolean).join(" "), gl = [head, sil].concat(w).filter(Boolean).join(" ") + cnt;
-        if (sp.length <= 20) return sp;
-        if (gl.length <= 20) return gl;
+      // 상품 이름이 길어 20자를 넘으면 업체명을 버리기 전에 상품명의 품목 명사만 남겨 봄 (방한장갑 → 장갑).
+      //  업체명(판매처)을 먼저 살리는 v193 규칙을 여러 상품 방제에도 그대로 적용 (#81: '#택11.19실/빈 김상사 장갑15')
+      const nmShort = g => {
+        const n0 = nm(g);
+        const pn = String(g.pname || "").replace(/\([^)]*\)/g, " ").replace(/\[[^\]]*\]/g, " ").trim();
+        const ws = pn ? pn.split(/[\s,/]+/).filter(Boolean) : [];
+        for (let i = ws.length - 1; i >= 0; i--) {
+          const w = ws[i];
+          if (/^[가-힣]{2,6}$/.test(w) && w !== n0 && !KW_STOP.test(w) && PROD_NOUN.test(w)) return w;
+        }
+        return n0;
+      };
+      let shortNames = guides.map(nmShort).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i);
+      const mkTry = (words, glueFirst) => { const w = words.filter(Boolean); return w.length ? { w: w, glue: !!glueFirst } : null; };
+      const tries = many3 ? (platTag ? [[sh0, platTag, names[0] + "외"], [platTag, names[0] + "외"], [sh0, names[0] + "외"], [names[0] + "외"]] : [[sh0, names[0] + "외"], [names[0] + "외"]]).map(t => mkTry(t))
+        : platTag ? [mkTry([sh0, platTag].concat(names)), mkTry([sh0, platTag].concat(shortNames), true), mkTry([platTag].concat(names)), mkTry([sh0].concat(names)), mkTry([sh0].concat(shortNames), true), mkTry(names), mkTry(shortNames), mkTry([names[0] + "외"])]
+        : [mkTry([sh0].concat(names)), mkTry([sh0].concat(shortNames), true), mkTry(names), mkTry(shortNames), mkTry([names[0] + "외"])];
+      for (const t of tries.filter(Boolean)) {
+        const w = t.w, sp = [head, sil].concat(w, [cnt]).filter(Boolean).join(" "), gl = [head, sil].concat(w).filter(Boolean).join(" ") + cnt;
+        // 줄인 이름는 건수를 붙여 쓴 모양을 먼저 (업체명·품목명이 다 살아남는 쪽)
+        for (const s of (t.glue ? [gl, sp] : [sp, gl])) if (s.length <= 20) return s;
       }
       return [head, sil, platTag, (names[0] || "") + "외", cnt].filter(Boolean).join(" ");
     }
@@ -4498,8 +4585,37 @@ details.help-box summary {
     }).catch(() => { gzMemo = { t: t, b: "" }; gzBusy = ""; });
     return null;
   }
+  // 같은 상품(상품번호가 같음)을 두 가이드로 나눈 진행(실·빈, 옵션별)은 판매처·상품명이 상품 하나의 정보라
+  //  비어 있는 쪽에 채워 준다 — 상품 정보 붙여넣기는 첫 가이드로만 가므로 두 번째 칸이 비어 공지에 빈 상품명이 나가던 것 (#81, 11/18)
+  function shareSameProd() {
+    if (!guides || guides.length < 2) return false;
+    const pidOf = g => {
+      const m = String(g.url || "").match(/products\/(\d{6,})/) || String(g.pno || "").match(/(\d{6,})/);
+      return m ? m[1] : "";
+    };
+    const pids = guides.map(pidOf);
+    let any = false;
+    guides.forEach((g, i) => {
+      if (!pids[i]) return;
+      const sib = guides.filter((o, j) => j !== i && pids[j] === pids[i]);
+      if (!sib.length) return;
+      let got = false;
+      ["pname", "seller"].forEach(k => {
+        if (String(g[k] || "").trim()) return;
+        const src = sib.find(o => String(o[k] || "").trim());
+        if (src) {
+          g[k] = src[k];
+          if (k === "pname" && src.pnameAuto) g.pnameAuto = true;
+          got = true; any = true;
+        }
+      });
+      if (got && !String(g.keyword || "").trim() && String(g.pname || "").trim()) autoKeyword(g);
+    });
+    return any;
+  }
   function render() {
     saveCur();
+    shareSameProd();
     const t = type(), tk = $("takdae").checked, real = $("realship").checked;
     const date = shortDate(v("date"));
     const kws = guides.map(g => (g.keyword || "").trim()).filter((k, i, arr) => k && arr.indexOf(k) === i);
@@ -5591,7 +5707,7 @@ details.help-box summary {
   if (typeof globalThis !== "undefined") {
     globalThis.__PARSER__ = {
       parseAll, parseHead, setGuides: gs => { guides = gs; }, fieldsOf, parseOptions, parse, parseCoupang, optionText, optForGuide, colorHintOf, baseName, makeRoom, shortName, suggestKeywords, sugKw, kwList, reviewMix, isBlockedText, posText, okSeller, maskItem,
-      buildPlan, planRoomFrom, dayTotalOf, roomHasTak, takFixRoom, sheetBaseName, takAskNeeded, render, isSilbin, totalCount, platCountOf, routePaste, fillCoupang
+      buildPlan, planRoomFrom, dayTotalOf, roomHasTak, takFixRoom, sheetBaseName, takAskNeeded, render, isSilbin, totalCount, platCountOf, routePaste, fillCoupang, autoKeyword, shareSameProd, setCur: i => { cur = i; }
     };
   }
 })();
