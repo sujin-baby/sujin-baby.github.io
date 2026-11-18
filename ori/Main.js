@@ -3501,16 +3501,23 @@ function cfDo_(S, name, fn, sig) {
   cfSave_(S);
   return true;
 }
+// 이 단계를 방금 했나 (8분 안, 진행 서명 같음, 그 뒤 직접 하신 일 없음, 응답 단계면 그 뒤 폼 응답 없음)
+function cfFresh_(st, sig, sub) {
+  const d = st && st.d || 0;
+  if (!d || Date.now() - d >= CF_FRESH || st.g !== sig) return false;
+  const p = PropertiesService.getScriptProperties();
+  if (Number(p.getProperty('CF_DIRTY_ALL') || 0) >= d) return false;
+  return !(sub && Number(p.getProperty('CF_DIRTY') || 0) >= d);
+}
 // 매번 하는 급하고 빠른 단계 (건너뛰거나 미루지 않음)
 function cfAlways_(S, name, fn) { cfDo_(S, name, fn, null); }
 // 나머지 단계: 건너뛸 것(방금 함) 빼고, 오래 밀린 것 먼저, 남은 시간 안에 끝날 것만. 못 한 건 1분 뒤 확인이 이어서
 function cfRun_(S, list) {
-  const props = PropertiesService.getScriptProperties(), now = Date.now(), sig = cfSig_(readRuns_());
-  const dirty = Number(props.getProperty('CF_DIRTY') || 0), dirtyAll = Number(props.getProperty('CF_DIRTY_ALL') || 0);
-  const skipped = [], deferred = [];
+  const now = Date.now(), sig = cfSig_(readRuns_());
+  const skipped = (globalThis.__CF_SKIP || []).slice(), deferred = [];
+  globalThis.__CF_SKIP = [];
   const todo = list.map(function (p, i) { return { p: p, i: i, st: S[p.n] = S[p.n] || {} }; }).filter(function (x) {
-    const d = x.st.d || 0;
-    const fresh = d && now - d < CF_FRESH && x.st.g === sig && dirtyAll < d && !(CF_SUB_PHASES.indexOf(x.p.n) >= 0 && dirty >= d);
+    const fresh = cfFresh_(x.st, sig, CF_SUB_PHASES.indexOf(x.p.n) >= 0);
     if (fresh) skipped.push(x.p.n);
     return !fresh;
   });
@@ -3523,7 +3530,7 @@ function cfRun_(S, list) {
   });
   let ranAny = false;
   todo.forEach(function (x) {
-    const need = Math.min(200, x.st.t != null ? x.st.t : (x.p.need || 30));
+    const need = x.p.self ? (x.p.need || 10) : Math.min(200, x.st.t != null ? x.st.t : (x.p.need || 30));
     // 이번 확인에서 아직 아무 단계도 못 했고 시간이 넉넉하면(2분 안) 예상 시간과 상관없이 시작 (안 그러면 큰 단계가 영영 못 돎)
     const must = !ranAny && cfElapsed_() < 120;
     if (!must && cfElapsed_() + need > CF_BUDGET) { deferred.push(x.p.n); return; }
@@ -3548,7 +3555,14 @@ function checkFullInner_() {
   // ── 매번 (급하고 빠른 것): 진행목록 정리, 다음 일차·다음 날 진행 만들기, 새 진행 한눈에, 보낼메시지·폼 열기
   cfAlways_(S, '진행목록', function () {
     try { removeOldUpdateTrigger_(); } catch (e) {}
-    try { subTime_('진행목록 정리', normalizeRuns_); } catch (e) { note_('진행목록 정리 실패: ' + e); }
+    // 진행목록 정리(서식·택배 옮김 칸 등, 20~90초)는 8분 안에 했고 진행이 그대로면 건너뜀 (1분 뒤 이어 하는 확인이 매번 다시 하던 것, 11/18)
+    const sig0 = cfSig_(readRuns_()), sN = S['진행목록 정리'] = S['진행목록 정리'] || {};
+    if (cfFresh_(sN, sig0, false)) (globalThis.__CF_SKIP = globalThis.__CF_SKIP || []).push('진행목록 정리');
+    else {
+      const t1 = Date.now();
+      try { subTime_('진행목록 정리', normalizeRuns_); } catch (e) { if (e && e.yieldLock) throw e; note_('진행목록 정리 실패: ' + e); }
+      sN.d = t1; sN.g = cfSig_(readRuns_()); sN.t = cfLearn_(sN.t, (Date.now() - t1) / 1000);
+    }
     // 진행일이 된 진행은 '진행예정' → '진행중' (11/2: 9시 현황 업데이트 때만 바뀌어서 새벽에 끝난 진행도 '진행예정'으로 남았음)
     try { readRuns_().forEach(function (r) { if (r['진행 상태'] === '진행예정' && r['진행일'] instanceof Date && r['진행일'] <= today_()) setRun_(r.row, '진행 상태', '진행중'); }); } catch (e) {}
     // (10/24) 밀린 월급시트·정리를 맨 앞에서 하던 것 없앰: 월급시트가 6분 안에 안 끝나서 확인이 매번 맨 앞에서 끊겼고,
@@ -3734,6 +3748,12 @@ function checkFullInner_() {
       if (Date.now() - Number(props.getProperty('ASSIGN_AT') || 0) > 30 * 60000 || props.getProperty('RUN_SIG') !== runSig) {
         try { refreshAssignFormulasOnce_(rr); props.setProperty('RUN_SIG', runSig); props.setProperty('ASSIGN_AT', String(Date.now())); } catch (e) { note_('배정 수식 갱신 실패: ' + e); }
       }
+    } },
+    // 미뤄도 되는 일(정리·한눈에 명단 다시 불러오기·포토전달 탭 등): 15분 확인이 이어서 돌면 5분 실행이 잠금을 못 잡아 밀려서(11/18 17분),
+    //  여기서도 때가 된 것을 오래 밀린 것부터, 남은 시간 안에 끝날 것만 (일마다 스스로 시간을 봐서 이 단계는 예상 시간 10초로 봄)
+    { n: '미뤄도 되는 일', need: 10, self: 1, run: function () {
+      const p = PropertiesService.getScriptProperties();
+      bgOrder_(p, Date.now()).forEach(function (x) { if (bgFits_(x.t, p)) bgRun_(x.t, p); });
     } },
     // 월급시트는 진행이 바뀌었을 때(인원·방제·날짜·상태·가격) 또는 30분마다. 나눠서 함 (못 한 건 PAY_PENDING → 다음 확인·5분 실행이 이어서)
     { n: '월급시트', need: 60, run: function () {
@@ -4373,7 +4393,7 @@ const BG_TASKS = [
   { k: 'dashstale', every: 5, max: 280, label: '한눈에 명단 다시 불러오기', run: function () { dashListStale_(); } },
   { k: 'phototab', every: 15, max: 250, label: '📷포토전달 탭', run: function () { photoTabBuild_(readRuns_()); } },
   { k: 'slow', every: 30, max: 150, label: '정리(취완·리뷰 독촉·리뷰 보고·폼수정 탭 등)', last: function (p) { return Number(p.getProperty('SLOW_AT') || 0); }, run: function () { slowTasks_(readRuns_(), {}); } },
-  { k: 'pay', every: 10, max: 150, label: '월급시트 이어서', due: function (p) { return !!p.getProperty('PAY_PENDING') && !!CONFIG.PAY_SHEET_ID; }, run: function () { const p = PropertiesService.getScriptProperties(); updatePay_(true); p.deleteProperty('PAY_PENDING'); } },
+  { k: 'pay', every: 10, max: 150, label: '월급시트 이어서', due: function (p) { return !!p.getProperty('PAY_PENDING') && !!CONFIG.PAY_SHEET_ID; }, run: function () { const p = PropertiesService.getScriptProperties(); try { updatePay_(true); p.deleteProperty('PAY_PENDING'); } catch (e) { if (e && e.payLate) note_('✓ 월급시트 나눠서 하는 중 (' + e.payLate + ', 다음에 이어서. 오류 아님)'); else throw e; } } },
   { k: 'props', every: 120, max: 250, label: '속성 정리', run: function () { propsCleanup_(); } }
 ];
 // 5분 실행(미뤄도 되는 일) 중에 15분 확인이 잠금을 기다리면 단계 사이에서 멈춤 (멈춘 일은 끝난 걸로 안 적음)
@@ -4389,9 +4409,14 @@ function bgOrder_(p, now) {
     .filter(function (x) { return x.r >= 1; })
     .sort(function (a, b) { return b.r - a.r; });
 }
+// 걸린 시간 기억(BG_T_): 남은 시간 안에 못 끝낼 일은 시작 안 함 (11/18: 월급시트 이어서 217초가 15분 확인 끝에서 시작돼 348초)
+function bgNeed_(t, p) { const v = Number(p.getProperty('BG_T_' + t.k)); return Math.min(200, isFinite(v) && v > 0 ? v : 30); }
+function bgFits_(t, p) { return !late_(t.max || 240) && cfElapsed_() + bgNeed_(t, p) <= CF_BUDGET; }
 function bgRun_(t, p) {
+  const t0 = Date.now();
   try { subTime_(t.label, t.run); }
   catch (e) { if (e && e.yieldLock) throw e; note_(t.label + ' 실패: ' + (e && e.message || e)); }   // 비켜 준 일은 끝난 걸로 안 적음 → 다음에 먼저
+  try { const v = Number(p.getProperty('BG_T_' + t.k)); p.setProperty('BG_T_' + t.k, String(cfLearn_(isFinite(v) && v > 0 ? v : null, (Date.now() - t0) / 1000))); } catch (e) {}
   if (!t.last) p.setProperty('BG_' + t.k, String(Date.now()));
 }
 function bgLane_() {
@@ -4399,7 +4424,7 @@ function bgLane_() {
   const cfWait = function () { const cw = Number(p.getProperty('CF_WANT') || 0); return cw && Date.now() - cw < 300000; };
   if (cfWait()) return;   // 15분 확인이 잠금을 기다리는 중이면 이번엔 안 함
   globalThis.__BG_LANE = true;
-  try { bgOrder_(p, Date.now()).forEach(function (x) { if (!late_(x.t.max || 240) && !cfWait()) bgRun_(x.t, p); }); }   // 오래 걸리는 일은 일찍 시작할 수 있을 때만 (6분 제한)
+  try { bgOrder_(p, Date.now()).forEach(function (x) { if (bgFits_(x.t, p) && !cfWait()) bgRun_(x.t, p); }); }   // 남은 시간 안에 끝날 일만 (6분 제한)
   catch (e) { if (e && e.yieldLock) return; throw e; }   // 15분 확인·직접 하신 일이 잠금을 기다리면 멈추고 넘김 (다음 5분에 이어서)
   finally { globalThis.__BG_LANE = false; }
 }
@@ -4407,10 +4432,11 @@ function bgLane_() {
 function bgOverdue_(runs) {
   const p = PropertiesService.getScriptProperties(), now = Date.now(), late = [];
   bgOrder_(p, now).filter(function (x) { return x.r >= 3; }).forEach(function (x) {
-    if (!late_(x.t.max || 240)) bgRun_(x.t, p);
-    else late.push(x.t.label + ' ' + Math.round((now - bgLast_(x.t, p)) / 60000) + '분째');
+    if (bgFits_(x.t, p)) bgRun_(x.t, p);
+    else late.push({ t: x.t, m: Math.round((now - bgLast_(x.t, p)) / 60000) });
   });
-  if (late.length) note_('⚠ 밀린 일: ' + late.join(', ') + ' (다음 5분 실행에서 먼저)');
+  // 2시간 넘게 밀린 것만 ⚠ (그 전엔 알림만: 5분 실행이 곧 함)
+  if (late.length) note_((late.some(function (x) { return x.m > 120; }) ? '⚠ ' : '✓ ') + '밀린 일: ' + late.map(function (x) { return x.t.label + ' ' + x.m + '분째'; }).join(', ') + ' (다음 5분 실행에서 먼저)');
 }
 function rvInboxTick_() {
   const lock = LockService.getScriptLock();
@@ -10945,7 +10971,7 @@ function updatePay_(resumable) {
   const fresh = function (rid, sig) { const o = rowSig[rid]; return o && o.s === sig && Date.now() - o.t < 24 * 3600000; };
   const saveSig = function () { try { const keep = {}; runs.forEach(function (r) { const k = r.row + '|' + nameOf(r); if (rowSig[k]) keep[k] = rowSig[k]; }); props.setProperty('PAY_ROWSIG', JSON.stringify(keep)); } catch (e) {} };
   const stop = function (what) { props.setProperty('PAY_PROG', JSON.stringify(prog)); saveSig(); throw { payLate: what }; };
-  const tooLate = function () { return resumable && late_(300); };
+  const tooLate = function () { return resumable && late_(280); };   // 한 줄 쓰기가 30초 넘기도 해서 (11/18), 15분 확인 6분 제한 안에
   const all = readRuns_().filter(function (r) { return r['시트ID'] && r['진행일'] instanceof Date; });
   const runs = all.filter(function (r) { return r['진행 상태'] !== '종료'; });
   // 스토어 왼쪽에 '진행일' 칸 (사용자 요청 10/19). 탭마다 한 번 (있으면 그대로)
@@ -11132,9 +11158,23 @@ function payChainRows_(c, tabs) {
   return rows;
 }
 function payStatusAll_(all) {
-  const tabs = {};
+  const tabs = {}, cache = {};
   // 하루짜리 의뢰도 (끝나면 완료보고 체크). 예전엔 2일 이상만 봐서 신발패드 문어괄사·노티아 대봉감·양모볼외가 빠졌음 (10/26)
-  chainsOf_(all).forEach(function (c) { if (c.runs.length) payStatusLink_(payChainRows_(c, tabs)); });
+  //  칸은 탭·열마다 한 번에 읽음(cache) (11/18: 줄마다 따로 읽어서 이 단계만 173초 → 15분 확인이 6분 제한 가까이)
+  chainsOf_(all).forEach(function (c) { if (c.runs.length) payStatusLink_(payChainRows_(c, tabs), false, cache); });
+}
+// 월급시트 칸 하나 읽기: cache가 있으면 그 탭 그 열을 한 번만 읽어 둠 (값·수식 따로). 없으면 그 칸만
+function payCell_(cache, sh, row, col, formula) {
+  const one = function () { const c = sh.getRange(row, col); return formula ? c.getFormula() : c.getValue(); };
+  if (!cache) return one();
+  const k = sh.getSheetId() + '_' + col + (formula ? 'f' : 'v');
+  if (!cache[k]) { const lr = Math.max(sh.getLastRow(), 1), rg = sh.getRange(1, col, lr, 1); cache[k] = (formula ? rg.getFormulas() : rg.getValues()).map(function (x) { return x[0]; }); }
+  return row - 1 < cache[k].length ? cache[k][row - 1] : one();
+}
+function payCellSet_(cache, sh, row, col, formula, v) {
+  if (!cache) return;
+  const a = cache[sh.getSheetId() + '_' + col + (formula ? 'f' : 'v')];
+  if (a && row - 1 < a.length) a[row - 1] = v;
 }
 
 // 월급시트 진행시간: 바로구매 → 긴급건, 별과 '구매' 글자는 뺌 (자정 ~ 오전 8시 20분)
@@ -11458,22 +11498,21 @@ function payNewRowFromAbove_(sh, row, L) {
 
 // 상태 칸: 의뢰가 다 끝나면(마지막 날 줄의 남은 = 0) 앞 날 줄도 '완료' (사용자 요청 10/18)
 //  사용자 수식 =IF(H5=0,"시작전",IF(N5=0,"완료",…))의 완료 조건만 IF(OR(N5=0,N마지막=0),"완료",…)로 바꿈. 마지막 날 줄은 원래 모양
-function payStatusLink_(rows, dry) {
+function payStatusLink_(rows, dry, cache) {
   if (!rows.length) return [];
   const last = rows[rows.length - 1], rep = [];
   // 의뢰가 다 끝나면(마지막 날 남은 = 0) 그 의뢰 모든 날 '완료보고' 체크 (표시만. 진행비는 10/18부터 그날 수량 × 500원이라 완료보고와 상관없음)
   //  줄마다 한 번만 체크 (사람이 체크를 풀면 다시 안 건드림). 지난달 탭 줄도 (11/12 피클 인계: 10월에 시작해 11/6에 끝난 백발백중
   //  10월 탭 줄이 같은 탭만 보는 조건에 걸려 완료보고가 계속 비어 있었음. 기억 키에 탭 번호가 있어서 탭마다 따로 한 번)
   try {
-    if (!dry && last.L.left && last.L.report && last.sh.getRange(last.row, last.L.left).getValue() === 0) {
+    if (!dry && last.L.left && last.L.report && payCell_(cache, last.sh, last.row, last.L.left) === 0) {
       const props = PropertiesService.getScriptProperties();
       rows.forEach(function (x) {
         if (!x.L.report) return;
-        const nm = String(x.sh.getRange(x.row, x.L.name).getValue()).replace(/\s+/g, '');
+        const nm = String(payCell_(cache, x.sh, x.row, x.L.name)).replace(/\s+/g, '');
         const key = 'PAYREP_' + x.sh.getSheetId() + '_' + nm;
         if (!nm || props.getProperty(key)) return;
-        const c = x.sh.getRange(x.row, x.L.report);
-        if (c.getValue() !== true) c.setValue(true);
+        if (payCell_(cache, x.sh, x.row, x.L.report) !== true) { x.sh.getRange(x.row, x.L.report).setValue(true); payCellSet_(cache, x.sh, x.row, x.L.report, false, true); }
         props.setProperty(key, '1');
       });
     }
@@ -11483,7 +11522,7 @@ function payStatusLink_(rows, dry) {
   rows.forEach(function (x) {
     if (!x.L.status) return;
     const same = x.sh.getName() === last.sh.getName();
-    const c = x.sh.getRange(x.row, x.L.status), f = c.getFormula();
+    const f = payCell_(cache, x.sh, x.row, x.L.status, true);
     const re = /IF\(\s*(?:OR\(\s*)?([A-Z]+)(\d+)\s*=\s*0\s*(?:,\s*(?:'(?:[^']|'')+'!|[^\s,()'!]+!)?(?:[A-Z]+\d+|#REF!)\s*=\s*0\s*\))?\s*,\s*"완료"/;
     const m = f.match(re);
     if (!m || Number(m[2]) !== x.row) { rep.push(x.sh.getName() + '!' + x.row + ' 안 맞음 ' + (m ? m[0] : '') + ' | ' + f.slice(0, 120)); return; }
@@ -11491,7 +11530,7 @@ function payStatusLink_(rows, dry) {
     const want = same && x.row === last.row ? 'IF(' + m[1] + m[2] + '=0,"완료"' : 'IF(OR(' + m[1] + m[2] + '=0,' + lastRef + '=0),"완료"';
     const nf = f.replace(re, want);
     rep.push(x.sh.getName() + '!' + x.row + (nf !== f ? ' 바꿈 → ' + want : ' 그대로'));
-    if (nf !== f && !dry) c.setFormula(nf);
+    if (nf !== f && !dry) { x.sh.getRange(x.row, x.L.status).setFormula(nf); payCellSet_(cache, x.sh, x.row, x.L.status, true, nf); }
   });
   return rep;
 }

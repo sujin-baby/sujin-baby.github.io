@@ -11,7 +11,7 @@ const stubs = ['removeOldUpdateTrigger_', 'normalizeRuns_', 'fixGold1110Once_', 
   'ensureMidnightTrigger_', 'ensureRunNotices_', 'fixMisroutedNotices_', 'morningCheck_', 'assignCleanDaily_', 'ensureSubmitTriggers_', 'fruitCheck_', 'takbaeCheck_',
   'photoWaitCheck_', 'photoAskCheck_', 'takLateCheck_', 'payChkRecheck1_', 'ensureListMsgs_', 'ensureReviewGuideMsgs_', 'adoptOrphanForms_', 'reviewDone_', 'buildDashboard_',
   'rvLooseCheck_', 'rvAiQueue_', 'rvInboxSort_', 'ensureInboxTrigger_', 'ensureUsageTab_', 'refreshAssignFormulasOnce_', 'updatePay_', 'bgOverdue_', 'refreshEditTab_',
-  'soonCheck_', 'ensureEditTab_', 'geminiKey_'].concat(onceFns);
+  'soonCheck_', 'ensureEditTab_', 'geminiKey_', 'bgRun_'].concat(onceFns);
 env.__STUBS = stubs;
 G(`globalThis.__NOW = Date.now(); Date.now = function () { return globalThis.__NOW; };
 globalThis.__CALLS = []; globalThis.__COST = {}; globalThis.__SEEN = [];
@@ -39,9 +39,11 @@ ok(['makeDueDays_', 'ensureRunNotices_', 'checkRun', 'fruitCheck_', 'ensureListM
 ok(idx(r.calls, 'ensureRunNotices_') < idx(r.calls, 'checkRun') && idx(r.calls, 'checkRun') < idx(r.calls, 'fruitCheck_') && idx(r.calls, 'fruitCheck_') < idx(r.calls, 'ensureListMsgs_') && idx(r.calls, 'reviewDone_') < idx(r.calls, 'buildDashboard_') && idx(r.calls, 'buildDashboard_') < idx(r.calls, 'ensureListMsgs_'), '1) 순서 ' + r.calls.join(','));
 ok(idx(r.calls, 'soonCheck_') < 0 && !r.notes.some(x => /이어서/.test(x)), '1) 안 미룸 ' + r.notes.join(' | '));
 ok(r.ph['폼 인원'] && r.ph['폼 인원'].d && !r.ph['폼 인원'].s && r.ph['한눈에'].d, '1) 끝난 시각 적음 ' + JSON.stringify(r.ph['폼 인원']));
+ok(idx(r.calls, 'bgRun_') >= 0 && idx(r.calls, 'bgRun_') > idx(r.calls, 'ensureUsageTab_'), '1) 미뤄도 되는 일도 남는 시간에 ' + r.calls.join(','));
 // 2) 1분 뒤 다시: 매번 할 것만, 나머지는 건너뜀
 adv(60); r = run();
 ok(idx(r.calls, 'makeDueDays_') >= 0 && idx(r.calls, 'tidyOutbox_') >= 0, '2) 매번 할 것은 함');
+ok(idx(r.calls, 'normalizeRuns_') < 0 && r.notes.some(x => /건너뜀: .*진행목록 정리/.test(x)), '2) 진행목록 정리도 방금 했으면 건너뜀 ' + r.notes.join(' | '));
 ok(idx(r.calls, 'ensureRunNotices_') < 0 && idx(r.calls, 'checkRun') < 0 && idx(r.calls, 'fruitCheck_') < 0 && idx(r.calls, 'buildDashboard_') < 0, '2) 방금 한 건 건너뜀 ' + r.calls.join(','));
 ok(r.notes.some(x => /방금 한 단계는 건너뜀/.test(x)), '2) 건너뜀 기록');
 // 3) 폼 응답이 들어옴 → 폼 인원·명단 시트·한눈에만 다시
@@ -49,7 +51,7 @@ adv(60); G('cfDirty_()'); adv(1); r = run();
 ok(idx(r.calls, 'checkRun') >= 0 && idx(r.calls, 'buildDashboard_') >= 0 && idx(r.calls, 'fruitCheck_') < 0 && idx(r.calls, 'ensureRunNotices_') < 0, '3) 응답 뒤 ' + r.calls.join(','));
 // 4) 직접 하신 일 → 전부 다시
 adv(60); G('cfDirty_(true)'); adv(1); r = run();
-ok(idx(r.calls, 'fruitCheck_') >= 0 && idx(r.calls, 'ensureRunNotices_') >= 0 && idx(r.calls, 'reviewDone_') >= 0, '4) 직접 하신 일 뒤 전부 ' + r.calls.join(','));
+ok(idx(r.calls, 'fruitCheck_') >= 0 && idx(r.calls, 'ensureRunNotices_') >= 0 && idx(r.calls, 'reviewDone_') >= 0 && idx(r.calls, 'normalizeRuns_') >= 0, '4) 직접 하신 일 뒤 전부 ' + r.calls.join(','));
 // 5) 8분 지나면 전부 다시
 adv(9 * 60); r = run();
 ok(idx(r.calls, 'fruitCheck_') >= 0 && idx(r.calls, 'buildDashboard_') >= 0, '5) 8분 뒤 전부');

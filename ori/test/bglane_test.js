@@ -36,5 +36,24 @@ ok(G('!globalThis.__BG_LANE'), '표시 풀림');
 env.__ran.length = 0; G('bgLane_()');
 ok(env.__ran.length === 0, '기다리는 동안은 시작도 안 함');
 env.__props.delete('CF_WANT');
+// 걸린 시간 기억: 남은 시간 안에 못 끝낼 일은 시작 안 함 (가벼운 건 함)
+env.__ran.length = 0;
+G("BG_TASKS.forEach(function (t) { t.run = (function (k) { return function () { globalThis.__ran.push(k); }; })(t.k); })");
+env.__props.set('BG_dashstale', String(now - 60 * min)); env.__props.set('SLOW_AT', String(now - 100 * min));
+env.__props.set('BG_T_slow', '190'); env.__props.set('BG_T_dashstale', '5');
+G('globalThis.__ORI_T0 = Date.now() - 120000');   // 120초 지남: 정리(190초) 못 끝냄, 명단 다시 불러오기(5초)는 됨
+G('bgLane_()');
+ok(env.__ran.indexOf('slow') < 0 && env.__ran.indexOf('dashstale') >= 0, '걸린 시간 보고 고름 ' + JSON.stringify(env.__ran));
+ok(Number(env.__props.get('BG_T_dashstale')) < 5, '걸린 시간 다시 적음 ' + env.__props.get('BG_T_dashstale'));
+// 월급시트 나눠서 하는 중(payLate)은 '실패'가 아님
+{
+  const env2 = H.makeEnv({ main: process.argv[2] }); const G2 = k => vm.runInContext(k, env2);
+  G2("CONFIG.PAY_SHEET_ID = 'x'; updatePay_ = function () { throw { payLate: '줄 4/120' }; }; globalThis.__ORI_NOTES = []; globalThis.__ORI_T0 = Date.now();");
+  env2.__props.set('PAY_PENDING', '1');
+  G2("bgRun_(BG_TASKS.filter(function (t) { return t.k === 'pay'; })[0], PropertiesService.getScriptProperties())");
+  const n2 = JSON.stringify(G2('globalThis.__ORI_NOTES'));
+  ok(/나눠서 하는 중/.test(n2) && !/실패/.test(n2), '월급시트 나눠서 하는 중 ' + n2);
+  ok(env2.__props.get('PAY_PENDING') === '1', '끝날 때까지 PAY_PENDING 그대로');
+}
 if (fails.length) { console.log('✗ ' + fails.join('\n✗ ')); process.exit(1); }
 console.log('✓ 미뤄도 되는 일(5분 실행) 시험 통과');

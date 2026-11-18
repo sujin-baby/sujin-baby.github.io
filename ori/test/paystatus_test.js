@@ -54,5 +54,33 @@ ok(reNew.test(src2), '새 달 탭 정규식에 다른 탭 참조');
   G('payStatusLink_')([{ sh: o2, L: LR, row: 10 }, { sh: n2, L: LR, row: 3 }]);
   ok(o2.cell['10,8'] === undefined && n2.cell['3,8'] === undefined, '안 끝난 의뢰는 체크 안 함');
 }
+// (11/18) 한 번에 읽기(cache): 결과는 줄마다 읽을 때와 똑같고, 읽기는 탭·열마다 한 번
+{
+  const mkS = (name, id, init) => { const cell = JSON.parse(JSON.stringify(init)), cnt = { one: 0, bulk: 0 };
+    const get = (r, c) => cell[r + ',' + c] || {};
+    return { getName: () => name, getSheetId: () => id, cell, cnt, getLastRow: () => 60,
+      getRange: (r, c, nr) => nr ? { getValues: () => { cnt.bulk++; return Array.from({ length: nr }, (_, i) => [get(r + i, c).v === undefined ? '' : get(r + i, c).v]); },
+                                     getFormulas: () => { cnt.bulk++; return Array.from({ length: nr }, (_, i) => [get(r + i, c).f || '']); } }
+        : { getValue: () => { cnt.one++; return get(r, c).v === undefined ? '' : get(r, c).v; }, getFormula: () => { cnt.one++; return get(r, c).f || ''; },
+            setValue: v => { cell[r + ',' + c] = Object.assign({}, get(r, c), { v }); }, setFormula: v => { cell[r + ',' + c] = Object.assign({}, get(r, c), { f: v }); } } }; };
+  const LC = { status: 17, name: 5, left: 15, report: 8 };
+  const initO = {}, initN = {};
+  [5, 9, 20, 33].forEach(r => { initO[r + ',17'] = { f: st(r, 'O' + r + '=0') }; initO[r + ',5'] = { v: '#10.' + r + ' 상품' }; initO[r + ',15'] = { v: 3 }; });
+  [12, 30].forEach(r => { initN[r + ',17'] = { f: st(r, 'O' + r + '=0') }; initN[r + ',5'] = { v: '#11.' + r + ' 상품' }; initN[r + ',15'] = { v: r === 30 ? 0 : 2 }; });
+  const run = (useCache) => {
+    const o = mkS('10월', 701, initO), n = mkS('11월', 702, initN), cache = useCache ? {} : undefined;
+    env.__props.clear && env.__props.clear();
+    // 의뢰 두 개: (10월 5·9 + 11월 30: 끝남) / (10월 20·33 + 11월 12: 진행 중)
+    G('payStatusLink_')([{ sh: o, L: LC, row: 5 }, { sh: o, L: LC, row: 9 }, { sh: n, L: LC, row: 30 }], false, cache);
+    G('payStatusLink_')([{ sh: o, L: LC, row: 20 }, { sh: o, L: LC, row: 33 }, { sh: n, L: LC, row: 12 }], false, cache);
+    return { o, n };
+  };
+  const A = run(false), B = run(true);
+  ok(JSON.stringify([A.o.cell, A.n.cell]) === JSON.stringify([B.o.cell, B.n.cell]), '한 번에 읽어도 결과 같음');
+  ok(A.o.cell['5,8'] && A.o.cell['5,8'].v === true && A.o.cell['20,8'] === undefined, '끝난 의뢰만 완료보고');
+  ok(B.o.cnt.one === 0 && B.n.cnt.one === 0, '칸 하나씩 안 읽음 ' + JSON.stringify([B.o.cnt, B.n.cnt]));
+  ok(B.o.cnt.bulk <= 4 && B.n.cnt.bulk <= 4, '탭·열마다 한 번 ' + JSON.stringify([B.o.cnt, B.n.cnt]));
+  ok(A.o.cnt.one >= 8, '예전 방식은 칸마다 ' + JSON.stringify(A.o.cnt));
+}
 console.log(fails.length ? 'XX 월급시트 상태 잇기 시험 실패:\n- ' + fails.join('\n- ') : '✓ 월급시트 상태: 다음 달 탭 마지막 줄로 이음 시험 통과');
 process.exit(fails.length ? 1 : 0);
