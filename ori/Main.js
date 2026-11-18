@@ -207,6 +207,13 @@ function chainsOf_(runs) {
 // 같은 진행인지 (방제 끝 숫자만 다를 때): 날짜(10.15)와 캠페인 이름이 같으면 같은 진행
 function dateTok_(t) { const m = String(t || '').match(/(\d{1,2})\.(\d{1,2})/); return m ? Number(m[1]) + '.' + Number(m[2]) : ''; }
 function sameRunTitle_(a, b) { return !!dateTok_(a) && dateTok_(a) === dateTok_(b) && campKey_(a) === campKey_(b); }
+// 이 명단 전달 글이 이 진행 것인지: 방제가 같은 진행(날짜·캠페인)이고, 글 속 명단 시트 링크가 있으면 그 시트가 이 진행 시트일 때만
+//  (11/18: 같은 날 '레깅스 30'(옛 의뢰)과 '레깅스 50'(새 의뢰)이 방제 숫자만 달라 한 명단 전달 글을 서로 번갈아 고쳐 씀 → 50 명단 자리에 30 명단 링크가 뜸)
+function listMsgMine_(text, r) {
+  if (!String(text).split('\n').some(function (l) { return l.trim() && sameRunTitle_(l, r['명단 제목']); })) return false;
+  const sid = String(r['시트ID'] || ''), ids = String(text).match(/spreadsheets\/d\/[\w-]+/g);
+  return !sid || !ids || ids.some(function (x) { return x.slice(15) === sid; });
+}
 function bareTitle_(t) { return String(t || '').replace(/\s*\([^)]*\)\s*$/, '').trim(); }
 
 // 진행 날짜 옮기기: 방제·명단 제목 날짜(#10.22 → #10.23), 진행 상태, 보낼메시지(안 보낸 것) 방·날짜·글 속 방제, 월급시트 줄 이름·진행일
@@ -4079,7 +4086,7 @@ function pendingListMsg_(r) {
   let hit = '';
   ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
     if (hit || v[2] !== '명단 전달' || v[5] !== '대기') return;
-    if (!String(v[4]).split('\n').some(function (l) { return l.trim() && sameRunTitle_(l, r['명단 제목']); })) return;
+    if (!listMsgMine_(v[4], r)) return;
     if (String(v[4]) !== want) obSet_(ob, v[0], 5, want);
     hit = want;
   });
@@ -4105,7 +4112,7 @@ function ensureListMsgs_(runs) {
     let found = false, want = null;
     v.forEach(function (x, i) {
       if (x[2] !== '명단 전달') return;
-      if (!String(x[4]).split('\n').some(function (l) { return l.trim() && sameRunTitle_(l, r['명단 제목']); })) return;
+      if (!listMsgMine_(x[4], r)) return;
       found = true;
       // 보낸 건 안 고침 → 대기인 것만 글을 새로 만들어 비교 (11/18: 이미 보낸 진행까지 매번 명단을 다시 읽어 100초 넘게 걸림)
       if (x[5] !== '대기') return;
@@ -9895,7 +9902,7 @@ function shrinkToGot_(r, blk) {
       const want = listMsgText_(me), ob = outboxSheet_(), ol = ob.getLastRow();
       let found = false;
       if (ol >= 2) ob.getRange(2, 1, ol - 1, 6).getValues().forEach(function (v) {
-        if (v[2] !== '명단 전달' || !String(v[4]).split('\n').some(function (l) { return l.trim() && sameRunTitle_(l, me['명단 제목']); })) return;
+        if (v[2] !== '명단 전달' || !listMsgMine_(v[4], me)) return;
         found = true;
         if (v[5] === '대기' && String(v[4]) !== want) obSet_(ob, v[0], 5, want);
       });
