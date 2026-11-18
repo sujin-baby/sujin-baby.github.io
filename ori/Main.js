@@ -8285,10 +8285,13 @@ function rvFull_(mine) {
   const total = (mine || []).reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0);
   return !!total && (mine || []).reduce(function (a, x) { return a + (Number(x['인원']) || 0); }, 0) >= total;
 }
-// 막힘을 알릴 때: 리뷰 취합을 한 날이 있거나(사용자가 끝났다고 보는 것) 마지막 진행이 7일 넘게 지남
+// 막힘을 알릴 때: 리뷰 취합을 한 날이 있거나(사용자가 끝났다고 보는 것), 사람 있는 진행이 모두 리뷰 기한(쿠팡·네이버 10일, 그 밖 13일)+3일(두 번째 독촉)이 지남
+//  (11/19: '마지막 진행 7일'로 했더니 아직 리뷰 기한 전인 11.12 의뢰들까지 23건이 한꺼번에 뜸)
 function rvStuckLate_(mine) {
-  const last = (mine || []).filter(function (r) { return r['진행일'] instanceof Date; }).map(function (r) { return dayStart_(r['진행일']); }).sort(function (a, b) { return b - a; })[0];
-  return (mine || []).some(function (r) { const x = r['리뷰 취합']; return x instanceof Date || String(x == null ? '' : x).trim() !== ''; }) || (!!last && today_().getTime() - last >= 7 * 86400000);
+  if ((mine || []).some(function (r) { const x = r['리뷰 취합']; return x instanceof Date || String(x == null ? '' : x).trim() !== ''; })) return true;
+  const ppl = (mine || []).filter(function (r) { return r['진행일'] instanceof Date && (Number(r['인원']) || 0) > 0; });
+  const t0 = today_().getTime();
+  return ppl.length > 0 && ppl.every(function (r) { const D = !r['플랫폼'] || /쿠팡|네이버/.test(String(r['플랫폼'])) ? 10 : 13; return t0 >= dayStart_(r['진행일']) + (D + 3) * 86400000; });
 }
 // 리뷰이미지 폴더 사진 수 (종류 폴더별, '압축 제외' 폴더 빼고)
 function rvImgCount_(img) {

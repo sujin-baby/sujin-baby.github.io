@@ -31,7 +31,11 @@ env.__props.forEach((v, k) => { if (/^RVSEEN_/.test(k)) env.__props.delete(k); }
 G('reviewDone_(readRuns_())');
 ok(todos().length === 1, '할 일 두 번 ' + todos().length);
 // 리뷰 취합도 안 했고 최근 진행이면(아직 진행 중으로 봄) 안 띄움
-ok(G("rvStuckLate_([{ '진행일': today_(), '리뷰 취합': '' }])") === false && G("rvStuckLate_([{ '진행일': new Date(today_().getTime() - 8 * 86400000), '리뷰 취합': '' }])") === true, '늦음 판단');
+const late = (d, extra) => G("rvStuckLate_([" + JSON.stringify(Object.assign({ '리뷰 취합': '', '인원': 5 }, extra || {})).replace('"D"', 'new Date(today_().getTime() - ' + d + ' * 86400000)') + "])");
+ok(late(0, { '진행일': 'D' }) === false, '오늘 진행은 안 띄움');
+ok(late(8, { '진행일': 'D' }) === false, '리뷰 기한(10일)+3일 전이면 안 띄움 (11.12 의뢰 23건 소동)');
+ok(late(13, { '진행일': 'D' }) === true, '쿠팡 기한 10일+3일 지나면 띄움');
+ok(late(13, { '진행일': 'D', '플랫폼': '오늘의집' }) === false && late(16, { '진행일': 'D', '플랫폼': '오늘의집' }) === true, '다른 플랫폼은 13일+3일');
 // 사진 수 문구
 ok(/리뷰이미지 사진 30장\(포토 8·텍스트 22\) \/ 40명 → 10장 모자람/.test(G("rvStuckText_(readRuns_(), { un: [], n: 0, ppl: 40, ph: { 포토: 8, 텍스트: 22, 별점: 0, 기타: 0 } })")), '사진 수 문구 ' + G("rvStuckText_(readRuns_(), { un: [], n: 0, ppl: 40, ph: { 포토: 8, 텍스트: 22, 별점: 0, 기타: 0 } })"));
 // 마지막 사람 체크 → 막힘 지우고 의뢰 끝(업체 전달 줄)
