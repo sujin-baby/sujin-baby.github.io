@@ -32,6 +32,13 @@ ok(by('a3').copy === '김철수, 이영희' && by('a3').over === true, '독촉�
 ok(by('a5').copy === '[전원 리뷰완료] #11.16 실 밴드 4 페이백 요청드립니다!\n\n명단시트: https://x', '페이백 한 줄 띄움');
 ok(by('a6').copy === '' && /밴드/.test(by('a6').msg), '리뷰비 요청은 탭에서 복사 ' + JSON.stringify(by('a6')));
 ok(by('a4').todo === true, '할 일 표시');
+// 11/19: 할 일 서브 탭 목록 (전체 + 메시지 탭 이름 그대로, 취왖은 리뷰비로 합쳐져 빠짐)
+const gp = (o && o.groups) || [];
+ok(gp.map(g => g.label).join('|') === '방공지|명단전달|할일|가이드|취합|독촉|리뷰비', '서브 탭 이름·순서 ' + JSON.stringify(gp.map(g => g.label)));
+ok(gp.length === G('MSGV_GROUPS.length') - 1 && gp.every(g => typeof g.i === 'number' && g.i >= 0 && g.i < G('MSGV_GROUPS.length')), '서브 탭 인덱스 ' + JSON.stringify(gp.map(g => g.i)));
+ok(gp.every(g => G('MSGV_GROUPS[' + g.i + '].key') !== 'done'), '취완 탭은 서브 탭에 없음');
+ok(o.items.every(x => gp.some(g => g.i === x.g)), '모든 항목의 g가 서브 탭 중 하나 ' + JSON.stringify(o.items.map(x => x.g)));
+ok(gp.filter(g => g.i === by('a3').g)[0].label === '독촉' && gp.filter(g => g.i === by('a4').g)[0].label === '할일' && gp.filter(g => g.i === by('a6').g)[0].label === '리뷰비' && gp.filter(g => g.i === by('a1').g)[0].label === '방공지', '항목 → 서브 탭 이름');
 ok(by('a1').list === 'https://docs.google.com/spreadsheets/d/S1/edit' && by('a1').rvimg === 'https://drive.google.com/drive/folders/IMGF1', '명단·리뷰이미지 링크 ' + JSON.stringify([by('a1').list, by('a1').rvimg]));
 ok(by('a6').rvimg === 'https://drive.google.com/drive/folders/IMGF1', '리뷰비 줄도 리뷰이미지 ' + by('a6').rvimg);
 // 페이지에서 보냄 → 탭에서 체크한 것과 같게 (체크 시각)

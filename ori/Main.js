@@ -5106,11 +5106,18 @@ function markMsgSide_(id, st) {
 // 진행 도우미 '오늘 할 것' (11/16 사용자 승인): 메시지 탭 8개에 흩어진 안 보낸 것 중 오늘·지난 날짜 것만 탭 순서대로 한 화면에.
 //  복사 글은 탭에서 복사하는 것과 같게 (리뷰 독촉 = 이름만, 페이백 = 한 줄 띄움). 리뷰비 요청은 리뷰비 시트 수식 때문에 탭에서 E~K 복사 (탭 열기)
 function todayItems_(runs) {
-  const ob = outboxSheet_(), last = ob.getLastRow(), out = { items: [], later: 0, tabs: [] };
+  const ob = outboxSheet_(), last = ob.getLastRow(), out = { items: [], later: 0, tabs: [], groups: [] };
   try {
     const ids = JSON.parse(PropertiesService.getScriptProperties().getProperty('MSGV_IDS') || '{}') || {}, url = adminSs_().getUrl();
     out.tabs = MSGV_GROUPS.map(function (g) { return ids[g.key] ? url + '#gid=' + ids[g.key] : ''; });
   } catch (e) {}
+  // 할 일 서브 탭 (11/19 사용자: 체험단 시트처럼 메시지 탭별로 나눠 보기) — 화면은 이 목록으로 알약 탭을 그림
+  //  이름은 메시지 탭 이름 그대로(이모지 빼고). 긴 '리뷰…' 들은 390px 두 줄에 들어가게 '리뷰'를 떼고 짧게 (리뷰비는 이미 짧아 그대로)
+  //  취완은 리뷰비 탭으로 합쳐져 있어(11/16) 따로 두지 않음
+  out.groups = MSGV_GROUPS.map(function (g, i) {
+    const lb = String(g.base).replace(/^[^가-힣A-Za-z0-9]+/, '');
+    return { i: i, key: g.key, label: lb.length > 3 && lb.indexOf('리뷰') === 0 ? lb.slice(2) : lb, merged: !!g.merged || '' };
+  }).filter(function (g) { return !g.merged; });
   if (last < 2) return out;
   const t0 = dayStart_(today_()), known = {};
   let other = 0;
@@ -7071,6 +7078,34 @@ const TOOLS_HTML = String.raw`
   .stlnk a.l { background: var(--mint); }
   .stlnk a.f { background: var(--lav-bg); }
   .stlnk:empty { display: none; }
+  /* 할 일 서브 탭 (11/19 사용자: 체험단 시트처럼 메시지 탭별로 나눠 보기) — 390px에서 두 줄 알약 */
+  .subtabs { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 2px; }
+  .subtabs button.sb {
+    flex: 0 0 auto; width: auto; min-width: 0; margin: 0; padding: 9px 8px;
+    display: inline-flex; align-items: center; gap: 4px;
+    border: 1.5px solid var(--pink-line); border-radius: 999px;
+    background: #fff; color: var(--ink-soft);
+    box-shadow: none; font-size: 12px; font-weight: 900; line-height: 1.25;
+    letter-spacing: -0.02em; white-space: nowrap;
+  }
+  .subtabs button.sb .n {
+    flex: none; min-width: 16px; padding: 0 4px; border-radius: 999px;
+    background: var(--pink-bg); color: var(--pink-deep);
+    font-size: 10.5px; font-weight: 900; line-height: 15px; text-align: center;
+  }
+  .subtabs button.sb.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .subtabs button.sb.on .n { background: var(--pink); color: var(--ink); }
+  .subtabs button.sb.zero { opacity: .5; }
+  .subtabs button.sb.zero.on { opacity: 1; }
+  .subtabs button.sb:active { transform: none; box-shadow: none; }
+  .subempty { text-align: center; color: var(--ink-soft); font-size: 13px; font-weight: 700; padding: 20px 6px 14px; }
+  .subempty a {
+    display: block; width: -moz-fit-content; width: fit-content;
+    margin: 10px auto 0; padding: 7px 13px;
+    border-radius: 999px; border: 1.5px solid var(--ink);
+    background: var(--mint); color: var(--ink);
+    font-size: 12.5px; font-weight: 900; text-decoration: none;
+  }
 </style>
 
 <div class="win-bar">
@@ -7104,6 +7139,7 @@ const TOOLS_HTML = String.raw`
 <div class="pane" id="pane-todo" role="tabpanel">
   <div class="card">
     <h2>📋 오늘 할 것 <span id="obcnt"></span></h2>
+    <div class="subtabs" id="obsub" role="tablist" aria-label="할 일 종류"></div>
     <p class="hint">메시지 탭 8개에서 오늘·지난 날짜 안 보낸 것만 모았어요. <b>[복사]</b> → 카톡에 붙여넣고 보낸 뒤 <b>[보냄 ✔]</b>을 눌러 주세요.</p>
     <div id="ob"></div>
   </div>
@@ -7243,12 +7279,50 @@ function roomBits(x, K, EXEC, c, before, linkEl) {
 }
 function outbox(list) { today({ items: (list || []).map(function (x) { return Object.assign({ g: 0, gname: '', copy: x.msg }, x); }) }); }
 // 오늘 할 것 (11/16): 메시지 탭 8개의 안 보낸 것 중 오늘·지난 날짜 것만 탭 순서대로. [복사]는 복사만, [보냄 ✔]을 눌러야 보냄 체크 (실수로 체크되지 않게)
+// 11/19 사용자: 체험단 시트처럼 메시지 탭별 서브 탭(전체 + 방공지·명단전달·할일·리뷰가이드·리뷰취합·리뷰독촉·리뷰비)으로 나눠 보기. 고른 탭은 다시 그려도 그대로
+var TODO = { all: [], tabs: [], grp: [], later: 0 }, todoSub = '';
 function today(o) {
-  var box = $('ob'), list = (o && o.items) || [], tabs = (o && o.tabs) || [];
+  TODO.all = (o && o.items) || []; TODO.tabs = (o && o.tabs) || []; TODO.grp = (o && o.groups) || []; TODO.later = (o && o.later) || 0;
+  todoBars(); todoPaint();
+}
+// 서브 탭 알약: 안 보낸 개수 배지를 붙이고, 0건은 흐리게 (눌러서 빈 상태도 볼 수 있게)
+function todoBars() {
+  var bar = $('obsub'); if (!bar) return;
+  bar.innerHTML = '';
+  var grp = TODO.grp || [];
+  if (!grp.length) { bar.style.display = 'none'; todoSub = ''; return; }
+  bar.style.display = '';
+  if (!grp.some(function (g) { return String(g.i) === String(todoSub); })) todoSub = '';
+  var cnt = {}; TODO.all.forEach(function (x) { cnt[x.g] = (cnt[x.g] || 0) + 1; });
+  var add = function (i, label, n) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'sb' + (String(i) === String(todoSub) ? ' on' : '') + (n ? '' : ' zero');
+    b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(i) === String(todoSub) ? 'true' : 'false');
+    b.appendChild(document.createTextNode(label));
+    var s = document.createElement('span'); s.className = 'n'; s.textContent = String(n || 0); b.appendChild(s);
+    b.onclick = function () { todoSub = String(i); todoBars(); todoPaint(); };
+    bar.appendChild(b);
+  };
+  add('', '전체', TODO.all.length);
+  grp.forEach(function (g) { add(g.i, g.label || ('탭 ' + (g.i + 1)), cnt[g.i] || 0); });
+}
+function todoPaint() {
+  var box = $('ob'); if (!box) return;
+  var tabs = TODO.tabs, sel = todoSub, list = TODO.all;
+  if (sel !== '') list = list.filter(function (x) { return String(x.g) === String(sel); });
   box.innerHTML = '';
-  $('obcnt').textContent = list.length ? '· ' + list.length + '개' : '';
-  var tb = $('tabob'); if (tb) tb.textContent = list.length ? String(list.length) : '';   // 탭 라벨 옆 배지
-  if (!list.length) { box.innerHTML = '<span class="ok">✔ 오늘 할 거 없어요</span>'; }
+  $('obcnt').textContent = TODO.all.length ? (sel === '' ? '· ' + TODO.all.length + '개' : '· ' + list.length + ' / ' + TODO.all.length + '개') : '';
+  var tb = $('tabob'); if (tb) tb.textContent = TODO.all.length ? String(TODO.all.length) : '';   // 탭 라벨 옆 배지 (전체 개수)
+  if (!list.length) {
+    if (!TODO.all.length) { box.innerHTML = '<span class="ok">✔ 오늘 할 거 없어요</span>'; }
+    else {
+      var em = document.createElement('div'); em.className = 'subempty';
+      em.appendChild(document.createTextNode('이 탭에는 오늘 할 일이 없어요.'));
+      var g0 = (TODO.grp || []).filter(function (g) { return String(g.i) === String(sel); })[0];
+      if (tabs[Number(sel)]) { var la = document.createElement('a'); la.href = tabs[Number(sel)]; la.target = '_blank'; la.rel = 'noopener'; la.textContent = (g0 ? g0.label + ' ' : '') + '시트 탭 열기'; em.appendChild(la); }
+      box.appendChild(em);
+    }
+  }
   var cur = -1;
   list.forEach(function (x) {
     if (x.g !== cur && x.gname) {
@@ -7285,7 +7359,7 @@ function today(o) {
     };
     box.appendChild(c);
   });
-  if (o && o.later) { var lt = document.createElement('p'); lt.className = 'hint'; lt.textContent = '내일 이후 보낼 것 ' + o.later + '개는 그날 여기에 나와요.'; box.appendChild(lt); }
+  if (TODO.later) { var lt = document.createElement('p'); lt.className = 'hint'; lt.textContent = '내일 이후 보낼 것 ' + TODO.later + '개는 그날 여기에 나와요.'; box.appendChild(lt); }
 }
 function show(o) {
   if (o.today) today(o.today); else if (o.outbox) outbox(o.outbox);
