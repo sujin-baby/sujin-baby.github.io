@@ -7314,7 +7314,7 @@ function show(o) {
       var top = document.createElement('div');
       top.style.cssText = 'display:flex;gap:8px;align-items:baseline';
       var a = document.createElement('span'); a.textContent = x.d; a.style.cssText = 'min-width:44px;color:var(--ink-soft);font-weight:700';
-      var b = document.createElement('span'); b.textContent = x.t; b.style.cssText = 'flex:1;min-width:0;font-weight:700;word-break:break-all';
+      var b = document.createElement('span'); b.textContent = x.t; b.style.cssText = 'flex:1;min-width:0;font-weight:700;word-break:keep-all;overflow-wrap:break-word';
       var c = document.createElement('span'); c.textContent = x.done ? '마감 ' + x.got + '/' + x.goal : x.got + '/' + x.goal + (left > 0 ? ' (남은 ' + left + ')' : '');
       c.style.cssText = 'white-space:nowrap;font-weight:900;color:' + (x.done ? 'var(--ok)' : left > 0 && x.g === 0 ? 'var(--alert)' : 'var(--ink)');
       top.appendChild(a); top.appendChild(b); top.appendChild(c); row.appendChild(top);
