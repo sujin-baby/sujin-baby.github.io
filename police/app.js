@@ -1685,7 +1685,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       var d = document.createElement('div');
       d.className = 'wrong-item';
       d.innerHTML = '<span class="wi-tag">' + esc(qLabel(q)) + ' · ' + (S.wrong[q.i].c || 1) + '번 틀림</span>' +
-        esc(q.q) + '<div class="wi-e">정답: ' + esc(q.o[q.a]) + '<br>' + esc(q.e) + '</div>';
+        '<div class="wi-q">' + stemFlat(q.q) + '</div>' +
+        '<div class="wi-e">정답: ' + esc(q.o[q.a]) + '<br>' + esc(expShort(q)) + '</div>';
       wl.appendChild(d);
     });
     var nW = D.questions.filter(function (q) { return S.wrong[q.i]; }).length;
@@ -1970,6 +1971,89 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     document.body.style.overflow = '';
   }
 
+  /* ============================================================
+     문제 본문 가독성 — 질문 문장과 박스형 보기(ㄱㄴㄷㄹ · ㉠㉡㉢㉣ · 가나다라) 분리
+     · 질문 문장은 읽기 편한 크기로, 보기는 어두운 카드 안에 한 줄씩 따로
+     · 일반 문제·미니 모의고사·오답노트 어디서든 stemHtml() 하나로 같은 모양
+     ============================================================ */
+  var STEM_FAMS = [
+    { m: ['㉠', '㉡', '㉢', '㉣', '㉤', '㉥', '㉦', '㉧', '㉨'], dot: false, min: 2, kind: '' },
+    { m: ['ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ'], dot: true, min: 2, kind: 'jamo' },
+    { m: ['가', '나', '다', '라', '마', '바', '사', '아'], dot: true, min: 3, kind: 'word' }
+  ];
+  function stemMarks(s, fam) {
+    var out = [], from = 0;
+    for (var k = 0; k < fam.m.length; k++) {
+      var mk = fam.m[k], pos = -1, end = -1;
+      for (var i = from; i + mk.length <= s.length; i++) {
+        if (s.substr(i, mk.length) !== mk) continue;
+        var before = i === 0 ? ' ' : s.charAt(i - 1);
+        if (!/[\s)\]」』\u3000]/.test(before)) continue;          /* 낱말 가운데 'ㄱ'·'다'는 제외 */
+        var after = s.substr(i + mk.length, 4), len = mk.length;
+        if (fam.dot) {
+          var d = after.match(/^\s*\./);
+          if (!d) continue;
+          len += d[0].length;
+        } else if (after && !/[\s([\u3000]/.test(after.charAt(0))) continue;
+        pos = i; end = i + len; break;
+      }
+      if (pos < 0) break;
+      out.push({ m: mk, start: pos, end: end });
+      from = end;
+    }
+    return out;
+  }
+  function stemParts(txt) {
+    var s = String(txt || '');
+    var best = null;
+    for (var f = 0; f < STEM_FAMS.length; f++) {
+      var fam = STEM_FAMS[f], hits = stemMarks(s, fam);
+      if (hits.length < fam.min) continue;
+      var lead = s.slice(0, hits[0].start).trim();
+      var items = [];
+      for (var i = 0; i < hits.length; i++) {
+        var t = s.slice(hits[i].end, i + 1 < hits.length ? hits[i + 1].start : s.length).trim();
+        t = t.replace(/(\s*[㉠-㉨])+\s*$/, '').replace(/(\s*[ㄱ-ㅎ]\s*\.\s*)+$/, '').trim();  /* 끝에 붙은 '㉠ ㉡ ㉢' 표 머리줄 제거 */
+        if (!t.length) continue;
+        items.push({ m: hits[i].m + (fam.dot ? '.' : ''), t: t });
+      }
+      if (items.length < fam.min) continue;
+      var cand = { lead: lead, items: items };
+      if (!best || cand.items.length > best.items.length) best = cand;
+    }
+    return best;
+  }
+  /* 목록용 간단형: 오답노트처럼 좁은 카드에서는 박스 대신 한 줄짜리 항목으로 */
+  function stemFlat(txt) {
+    var s = String(txt || '');
+    var p = stemParts(s);
+    if (!p) return esc(s);
+    var h = p.lead ? '<span class="wi-lead">' + esc(p.lead) + '</span>' : '';
+    p.items.forEach(function (it) {
+      h += '<span class="wi-ol"><b>' + esc(it.m) + '</b>' + esc(it.t) + '</span>';
+    });
+    return h;
+  }
+  /* 해설 첫 줄(핵심)만 짧게 */
+  function expShort(q) {
+    var raw = String((q && q.e) || '').split(/\n/)[0].replace(/^\[(핵심|정답|해설)\]\s*/, '').trim();
+    return raw || ('정답: ' + (q && q.o && q.o[q.a] ? q.o[q.a] : ''));
+  }
+
+  function stemHtml(txt) {
+    var s = String(txt || '');
+    var p = stemParts(s);
+    if (!p) return '<h2 class="q-text">' + esc(s) + '</h2>';
+    var h = '';
+    if (p.lead) h += '<h2 class="q-text">' + esc(p.lead) + '</h2>';
+    h += '<div class="q-box">';
+    p.items.forEach(function (it) {
+      h += '<div class="q-bi"><span class="q-bk">' + esc(it.m) + '</span>' +
+        '<span class="q-bt">' + esc(it.t) + '</span></div>';
+    });
+    return h + '</div>';
+  }
+
   function renderQ() {
     var it = QS.items[QS.i], q = it.q;
     QS.locked = false; QS.sel = -1; QS.hintUsed = !!it.hintUsed; QS.hintGone = -1;
@@ -1985,7 +2069,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (it.boss) h += '<div class="boss-head"><span class="bh-ico">👾</span><span><b>오늘의 보스 문제</b><i>3연속 정답 기념 · 맞히면 +' + BOSS_BONUS + ' P</i></span></div>';
     h += '<div class="q-tags"><span class="q-tag">' + esc(tag) + '</span><span class="q-src ' + badge.k + '">' + esc(badge.t) + '</span>' +
       '<button class="hint-btn" id="qHint">🎟️ 힌트 -' + HINT_COST + ' P</button></div>' +
-      '<h2 class="q-text">' + esc(q.q) + '</h2>' +
+      stemHtml(q.q) +
       '<div id="hintBox"></div><div class="opts">';
     it.order.forEach(function (oi, idx) {
       h += '<button class="opt" data-i="' + oi + '"><span class="k">' + keys[idx] + '</span><span>' + esc(q.o[oi]) + '</span></button>';
@@ -2306,7 +2390,17 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (sm) { src = sm[1].trim(); raw = raw.slice(0, sm.index).trim(); }
     var tr = '', tm = raw.match(/\(([^()]{12,})\)\s*$/);
     if (tm && /[가-힣]/.test(tm[1]) && /다[.)]?\s*$/.test(tm[1].trim())) { tr = tm[1].trim(); raw = raw.slice(0, tm.index).trim(); }
-    var sents = raw.replace(/([.!?])\s+(?=[^\s])/g, '$1\n').split(/\n+/).map(function (x) { return x.trim(); }).filter(Boolean);
+    /* 선지별 해설(①~④ · ㉠~㉣ · ㄱ.) 줄은 한 덩어리로 두고, 나머지는 문장 단위로 끊어 읽기 좋게 */
+    var OPT_LINE = /^(?:[①-④]|[㉠-㉣]|[ㄱㄴㄷㄹ]\s*\.|[가나다라]\s*\.)/;
+    var sents = [];
+    raw.split(/\n+/).forEach(function (line) {
+      line = line.trim();
+      if (!line) return;
+      if (OPT_LINE.test(line)) { sents.push(line); return; }
+      line.replace(/([.!?])\s+(?=[^\s])/g, '$1\n').split(/\n+/).forEach(function (x) {
+        x = x.trim(); if (x) sents.push(x);
+      });
+    });
     var isPol = q.s !== 'gtelp';
     var T = function (s) { return isPol ? hlText(s) : esc(s); };
     var h = '';
@@ -2326,6 +2420,10 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       return !(hasAns && /^정답\s*[OX0-9①-④][.)]?$/.test(s.trim()));
     });
     body.forEach(function (s, i) {
+      var op = optLineHtml(s, T, '①②③④'.charAt(Number(q.a) || 0));
+      if (op) { h += op; return; }
+      var tg = s.match(/^\[(정답|핵심|해설|포인트|주의|비교)\]\s*([\s\S]*)$/);
+      if (tg && tg[2].trim()) { h += '<p class="fb-key"><span class="fb-tag">' + esc(tg[1]) + '</span>' + T(tg[2].trim()) + '</p>'; return; }
       /* 정답 줄과 거의 같은 문장을 핵심 박스로 또 보여주면 두 번 읽게 되니 일반 문단으로만 */
       var sN = norm(s);
       if (hasAns && body.length > 1 && sN.length > 10 && (sN === ansN || sN.indexOf(ansN) >= 0 || ansN.indexOf(sN) >= 0)) {
@@ -2339,6 +2437,20 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (tr) h += '<div class="fb-tr"><b>해석</b>' + esc(tr) + '</div>';
     if (src) h += '<div class="fb-src">' + esc(src) + '</div>';
     return h;
+  }
+
+  /* <div class="fb-op"> 선지 한 줄 카드 */
+  function optLineHtml(s, T, rightKey) {
+    var mm = String(s).match(/^(?:([①-④])|([㉠-㉣])|([ㄱㄴㄷㄹ가나다라])\s*(\.))\s*(?:\(([OX])\))?\s*([\s\S]*)$/);
+    if (!mm) return '';
+    var k = mm[1] || mm[2] || (mm[3] + '.');
+    var ox = mm[5] || '';
+    var rest = (mm[6] || '').trim();
+    if (!rest) return '';
+    return '<div class="fb-op' + (rightKey && k === rightKey ? ' right' : '') + '">' +
+      '<span class="fb-opk">' + esc(k) + '</span>' +
+      (ox ? '<span class="fb-ox ' + (ox === 'O' ? 'o' : 'x') + '">' + ox + '</span>' : '') +
+      '<span class="fb-ot">' + T(rest) + '</span></div>';
   }
 
   /* 경찰 과목 해설의 함정·숫자 자동 하이라이트 */
@@ -3895,7 +4007,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     });
     h += '<button class="mini-opt" data-exall="1"><span class="mo-top"><b>전체 ' + ex.length + '문항 모의고사</b>' +
       '<i>형사법 → 경찰학 → 범죄학 · 100분 · 제출 후 일괄 채점</i></span><span class="mo-go">시작 ›</span></button>';
-    h += '</div><p class="note-mini">형사법·범죄학은 공개된 해설 자료가 없어 정답만 수록돼 있어요. 경찰학 37문항에는 장정훈 해설지 해설이 붙어 있어요.</p>';
+    h += '</div><p class="note-mini">형사법·범죄학 60문항은 공개 해설지가 없어 쟁점별 조문·판례·이론으로 직접 정리한 해설을, 경찰학 40문항은 장정훈 해설지 내용을 붙였어요. 해설은 선지별 ①②③④로 끊어 보여 줘요.</p>';
     $('#sheetIn').innerHTML = h;
     $('#sheet').classList.remove('hidden');
     $$('#sheetIn [data-exsub]').forEach(function (b) {
@@ -4001,7 +4113,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var done = MINI.items.filter(function (x) { return x.pick != null; }).length;
     var h = '<div class="q-tags"><span class="q-tag">' + esc(qTag(q)) + '</span>' +
       '<span class="q-src ' + badge.k + '">' + esc(badge.t) + '</span></div>' +
-      '<h2 class="q-text">' + esc(q.q) + '</h2><div class="opts mini-opts">';
+      stemHtml(q.q) + '<div class="opts mini-opts">';
     q.o.forEach(function (o, i) {
       h += '<button class="opt' + (it.pick === i ? ' picked' : '') + '" data-i="' + i + '">' +
         '<span class="k">' + keys[i] + '</span><span>' + esc(o) + '</span></button>';
@@ -4170,6 +4282,16 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     });
     return e;
   }
+  /* 검색 결과 카드의 메타 줄: 과목 · 단원 · 출처 — 같은 말을 두 번 쓰지 않게 */
+  function searchMeta(q) {
+    var out = [SUBJ[q.s] ? SUBJ[q.s].name : ''];
+    if (q.gp) out.push('G-POINT ' + q.gp);
+    else { var u = unitName(q.c, q.u); if (u) out.push(u); }
+    var src = String(q.src || '');
+    var head = out.join(' · ');
+    if (src && head.indexOf(src) < 0) out.push(src);
+    return out.filter(Boolean).join(' · ');
+  }
   function searchProblems(toks) {
     var out = [];
     D.questions.forEach(function (q) {
@@ -4276,7 +4398,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         var q = r.q;
         h += '<button class="s-item" data-qid="' + esc(q.i) + '"><span class="s-k">' + esc(SUBJ[q.s].name) + '</span>' +
           '<span class="s-b"><b>' + hlEsc(cutTxt(q.q, 90), toks) + '</b>' +
-          '<i>' + esc(qTag(q)) + ' · ' + esc(q.src || '출처 미상') + '</i>' +
+          '<i>' + esc(searchMeta(q)) + '</i>' +
           (r.why ? '<em class="s-why">' + hlEsc(r.why, toks) + '</em>' : '') + '</span><span class="s-go">›</span></button>';
       });
       h += '</div>';
