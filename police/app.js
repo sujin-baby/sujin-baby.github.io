@@ -19,6 +19,13 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     SUBJ[s.id] = s;
     s.courses.forEach(function (c) { c.subj = s; COURSE[c.id] = c; });
   });
+  /* 2026년 2차 순경 기출 100문항: 강좌 목록에는 넣지 않고 문제 은행(COURSE)에만 등록한다.
+     → 미니 모의고사·키워드 검색·오답노트·약점 단원에서 과목 기출로 함께 잡힌다. */
+  (D.examCourses || []).forEach(function (c) {
+    if (!SUBJ[c.sub]) return;
+    c.subj = SUBJ[c.sub];
+    COURSE[c.id] = c;
+  });
   var QBY = {};   // course -> unit -> [q]
   D.questions.forEach(function (q) {
     (QBY[q.c] = QBY[q.c] || {});
@@ -74,6 +81,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!S.dday) S.dday = DTARGET;
     if (!S.planLog) S.planLog = {};
     if (!S.dayGoal) S.dayGoal = 30;   /* 오늘 목표 문제 수 (기본 30) */
+    if (!S.miniBest) S.miniBest = {}; /* 미니 모의고사 개인 최고 */
+    if (!S.miniRuns) S.miniRuns = 0;
     D.subjects.forEach(function (s) {
       if (!S.course[s.id] || !COURSE[S.course[s.id]]) S.course[s.id] = s.defaultCourse || s.courses[0].id;
     });
@@ -1541,6 +1550,10 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (sp) sp.textContent = (S.speedBest || 0) ? '최고 ' + S.speedBest + '문제 · 60초' : '60초 동안 최대한 많이';
     var ox = $('#mOxTxt');
     if (ox) ox.textContent = (S.oxBest || 0) ? '최고 ' + S.oxBest + '문장 · 5분' : '기출 선지 한 문장씩 O/X';
+    var mb = $('#mMiniTxt');
+    if (mb) mb.textContent = S.miniRuns ? '지금까지 ' + S.miniRuns + '회 · 타이머 · OMR' : '타이머 · OMR · 제출 후 일괄 채점';
+    var eb = $('#mExamTxt');
+    if (eb) { var exn = examBank(null).length; eb.textContent = exn ? exn + '문항 · 형사법 40 · 경찰학 40 · 범죄학 20' : '기출 데이터 확인 중'; }
     var isGp = S.subj === 'gtelp';
     var oxBtn = $('#mOx'); if (oxBtn) oxBtn.classList.toggle('hidden', isGp);
     var wHead = $('#weakTop') && $('#weakTop').previousElementSibling;
@@ -1689,7 +1702,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       pool = poolForLecture(opt.cid, opt.n);
       title = COURSE[opt.cid].name + ' ' + opt.n + (isGP(COURSE[opt.cid]) ? ' 포인트' : '강');
     } else if (mode === 'ids') {
-      pool = D.questions.filter(function (q) { return opt.ids.indexOf(q.i) >= 0 && inScope(q); });
+      pool = D.questions.filter(function (q) { return opt.ids.indexOf(q.i) >= 0 && (opt.noScope || inScope(q)); });
       title = opt.title || '틀린 문제 다시 풀기';
     } else if (mode === 'gp') {
       pool = opt.ids && opt.ids.length
@@ -1730,7 +1743,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     }
     /* G-POINT를 누르면 그 포인트 기출을 한 문제씩이 아니라 전부 이어서 푼다 */
     var n = mode === 'lecture' ? Math.min(pool.length, 6) : mode === 'gp' ? pool.length : Math.min(pool.length, S.qlen);
-    if (mode === 'ids') n = Math.min(pool.length, 20);
+    if (mode === 'ids') n = Math.min(pool.length, opt.n || 20);
     if (mode === 'speed') n = Math.min(pool.length, 60);
     if (mode === 'weakUnit') n = Math.min(pool.length, 20);
     var pick;
@@ -2022,6 +2035,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
 
   function goPrev() {
+    if (MINI && !MINI.over) { miniGo(-1); return; }
     if (!QS || QS.finished || QS.speed || QS.i <= 0) return;
     clearTimeout(QS._t);
     $('#qFb').classList.add('hidden');
@@ -2469,7 +2483,10 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
 
   function closeQuiz() {
     speedStop();
-    document.body.classList.remove('fever', 'boss');
+    if (MINI) { clearInterval(MINI.timer); MINI = null; }
+    document.body.classList.remove('fever', 'boss', 'mini');
+    var _qc = $('#qCombo'); if (_qc) _qc.classList.remove('hidden');
+    var _qt = $('#qTimer'); if (_qt) { _qt.textContent = '⏱ 60'; _qt.classList.remove('warn'); }
     document.body.style.overflow = '';
     $('#quiz').classList.add('hidden');
     $('#qBody').innerHTML = '';
@@ -2563,7 +2580,10 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   if (_oxClose) _oxClose.onclick = function () { sfx('tap'); closeOx(); renderAll(); };  
   window.addEventListener('resize', function () { syncTopHeight(); });
   window.addEventListener('load', function () { syncTopHeight(); });
-  $('#qClose').onclick = function () { closeQuiz(); renderAll(); };
+  $('#qClose').onclick = function () {
+    if (MINI) { closeMini(); renderAll(); return; }
+    closeQuiz(); renderAll();
+  };
   $('#fbNext').onclick = nextQ;
   var _fbPrev = $('#fbPrev'); if (_fbPrev) _fbPrev.onclick = goPrev;
   var _qPrev = $('#qPrev'); if (_qPrev) _qPrev.onclick = goPrev;
@@ -2610,6 +2630,35 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   if (_shieldBar) _shieldBar.onclick = function () { buyShield(); };
   var _bClose = $('#bClose');
   if (_bClose) _bClose.onclick = function () { closeBlank(); renderAll(); };
+  /* 미니 모의고사 · 2026년 2차 기출 · 키워드 검색 진입 */
+  var _mMini = $('#mMini');
+  if (_mMini) _mMini.onclick = function () { sfx('tap'); openMiniSheet(); };
+  var _mExam = $('#mExamBank');
+  if (_mExam) _mExam.onclick = function () { sfx('tap'); openExamBankSheet(); };
+  var _sBtn = $('#searchBtn');
+  if (_sBtn) _sBtn.onclick = function () { sfx('tap'); openSearch(); };
+  $$('[data-search]').forEach(function (b) { b.onclick = function () { sfx('tap'); openSearch(); }; });
+  var _sClose = $('#sClose');
+  if (_sClose) _sClose.onclick = function () { closeSearch(); };
+  var _sInput = $('#sInput');
+  if (_sInput) {
+    _sInput.addEventListener('input', function () {
+      clearTimeout(SEARCH.t);
+      var v = this.value;
+      SEARCH.t = setTimeout(function () { renderSearch(v); }, 110);
+    });
+    _sInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); renderSearch(this.value); }
+      if (e.key === 'Escape') { closeSearch(); }
+    });
+  }
+  $$('#sTabs [data-f]').forEach(function (b) {
+    b.onclick = function () {
+      SEARCH.f = b.getAttribute('data-f');
+      $$('#sTabs [data-f]').forEach(function (x) { x.classList.toggle('on', x === b); });
+      renderSearch(); sfx('tap');
+    };
+  });
   window.addEventListener('resize', function () {
     if (!$('#view-stage').classList.contains('hidden')) renderStage();
   });
@@ -2617,34 +2666,208 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
 
   /* ---------- 📂 미래인재경찰 자료실 (구글 드라이브 jinleeda1) ---------- */
   var LIB = [
-    { sub: '범죄학 · 박상민', rows: [
-      { t: '1강 보충자료 01', k: '문제+해설', s: '26.11.12 · 박상민 범죄학 기본이론 1강', u: 'https://drive.google.com/file/d/1WnoUATIwOrAXde-lKQ-lh6KApwA41MvS/view' },
-      { t: '범죄학 일반', k: '문제', s: '초시생존 범죄학 일반론', u: 'https://drive.google.com/file/d/1CPtZvY_FFZ43O5MJ8Ygrz3DLPDoKNjGe/view' },
-      { t: '범죄학 일반', k: '해설', s: '초시생존 범죄학 일반론', u: 'https://drive.google.com/file/d/1nWRJ-XL9nVJDMx9sj7AVXVGHYQBdOmYt/view' },
+    { sub: "공통 · 2026년 2차 기출 (헌법 제외)", rows: [
+      { t: "2026년 2차 순경 문제", k: "기출", s: "헌법 1~20번 제거본 · 형사법 40 · 경찰학 40 · 범죄학 20", u: "https://drive.google.com/file/d/1pQhCmGnsticR4aYVTyJdHy4cG0_4rTNS/view" },
+      { t: "2026년 2차 순경 가답안", k: "가답안", s: "헌법 열 제거본 · 형사법·경찰학·범죄학 정답", u: "https://drive.google.com/file/d/1bgG4O5g80qD-kbj4p7MxS6FoezSvqjaU/view" },
+      { t: "2026년 2차 채용시험 해설지", k: "해설", s: "장정훈 경찰학 40문항 해설 (미래인재 자료실)", u: "https://drive.google.com/file/d/14xVzfFLogc8q0z3ARmtp8bzBgMye3Azf/view" },
     ] },
-    { sub: '형사법 · 신광은', rows: [
-      { t: '각론', k: '문제', s: '신광은 초시생 기초다지기', u: 'https://drive.google.com/file/d/1Nmje3RTBa7tikMel4k95rTvQFyaplTqC/view' },
-      { t: '각론', k: '해설', s: '신광은 초시생 기초다지기', u: 'https://drive.google.com/file/d/1qHuqa5inrYdCuonDc_dSmQlHVn8cc0Dr/view' },
-      { t: '수사', k: '문제', s: '신광은 초시생 기초다지기', u: 'https://drive.google.com/file/d/1DVYva1VgTArolrpe_7oeKeFQen4-ehuS/view' },
-      { t: '수사', k: '해설', s: '신광은 초시생 기초다지기', u: 'https://drive.google.com/file/d/1aAkstnzu1pvZcRVBtycIr83cuupcoJ-Q/view' },
-      { t: '증거', k: '문제', s: '신광은 초시생 기초다지기', u: 'https://drive.google.com/file/d/1RSC2dHtYuexYQ7K86ZNGmEoHYs-S-PSB/view' },
-      { t: '증거', k: '해설', s: '신광은 초시생 기초다지기', u: 'https://drive.google.com/file/d/1KHMy9osqJ66-_acFGfkj0SPkTakEa_Sj/view' },
-      { t: '총론', k: '문제', s: '신광은 초시생 기초다지기', u: 'https://drive.google.com/file/d/1gCkIXUjctQo0aS4PTEk1s_I7oDKhl0X/view' },
-      { t: '총론', k: '해설', s: '신광은 초시생 기초다지기', u: 'https://drive.google.com/file/d/1yIdhn2tB9dks8w_6Tqs9XOGa1nLlxMIZ/view' },
+    { sub: "범죄학 · 박상민", rows: [
+      { t: "1강 보충자료 01", k: "문제+해설", s: "26.11.12 · 박상민 범죄학 기본이론 1강", u: "https://drive.google.com/file/d/1WnoUATIwOrAXde-lKQ-lh6KApwA41MvS/view" },
+      { t: "범죄학 일반", k: "문제", s: "초시생존 범죄학 일반론", u: "https://drive.google.com/file/d/1CPtZvY_FFZ43O5MJ8Ygrz3DLPDoKNjGe/view" },
+      { t: "범죄학 일반", k: "해설", s: "초시생존 범죄학 일반론", u: "https://drive.google.com/file/d/1nWRJ-XL9nVJDMx9sj7AVXVGHYQBdOmYt/view" },
     ] },
-    { sub: '경찰학 · 장정훈', rows: [
-      { t: '경찰학의 기초이론', k: '문제', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1Ah90hszEWxQeDv_NlWhAdq-Lof6XRqsM/view' },
-      { t: '경찰학의 기초이론', k: '해설', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1xVtaZsOkVJ-PnusRhKqudZgGZqQQhASZ/view' },
-      { t: '경찰행정법', k: '문제', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1Cj3-FzbtESgLyIUWrZhnbTPLXoHaF9bF/view' },
-      { t: '경찰행정법', k: '해설', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1ERVvHflVHrQh5KJ_cEm9LI5Z4augHZQT/view' },
-      { t: '경찰행정학', k: '문제', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/18PyPuXb3_pMICOlHxRouOEa-aN7wuV2p/view' },
-      { t: '경찰행정학', k: '해설', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1tgjCGtqyVlA2dWWIqcbBLggRlwFQbsV3/view' },
-      { t: '분야별 경찰활동', k: '문제', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1rcmktHAaTTaBpuZQwEsVQxo_rbNjMXMm/view' },
-      { t: '분야별 경찰활동', k: '해설', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1VDBFCCyj5_EXd1ZMJ8xsYJZspOiyYq5-/view' },
-      { t: '한국경찰의 역사와 비교경찰', k: '문제', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1djNOYxe7ANZzZ7NMk9rNL_xvDvzpBXlO/view' },
-      { t: '한국경찰의 역사와 비교경찰', k: '해설', s: '장정훈 초시생 기초다지기', u: 'https://drive.google.com/file/d/1gl_-Bg1lBmbOpFyfqwHebQtbbXXcFs7a/view' },
+    { sub: "형사법 · 신광은 초시생 기초다지기", rows: [
+      { t: "각론", k: "문제", s: "신광은 초시생 기초다지기", u: "https://drive.google.com/file/d/1Nmje3RTBa7tikMel4k95rTvQFyaplTqC/view" },
+      { t: "각론", k: "해설", s: "신광은 초시생 기초다지기", u: "https://drive.google.com/file/d/1qHuqa5inrYdCuonDc_dSmQlHVn8cc0Dr/view" },
+      { t: "수사", k: "문제", s: "신광은 초시생 기초다지기", u: "https://drive.google.com/file/d/1DVYva1VgTArolrpe_7oeKeFQen4-ehuS/view" },
+      { t: "수사", k: "해설", s: "신광은 초시생 기초다지기", u: "https://drive.google.com/file/d/1aAkstnzu1pvZcRVBtycIr83cuupcoJ-Q/view" },
+      { t: "증거", k: "문제", s: "신광은 초시생 기초다지기", u: "https://drive.google.com/file/d/1RSC2dHtYuexYQ7K86ZNGmEoHYs-S-PSB/view" },
+      { t: "증거", k: "해설", s: "신광은 초시생 기초다지기", u: "https://drive.google.com/file/d/1KHMy9osqJ66-_acFGfkj0SPkTakEa_Sj/view" },
+      { t: "총론", k: "문제", s: "신광은 초시생 기초다지기", u: "https://drive.google.com/file/d/1gCkIXUjctQo0aS4PTEk1s_I7oDKhl0X/view" },
+      { t: "총론", k: "해설", s: "신광은 초시생 기초다지기", u: "https://drive.google.com/file/d/1yIdhn2tB9dks8w_6Tqs9XOGa1nLlxMIZ/view" },
     ] },
-  ];   /* 헌법 자료는 뺐다 · 자료실은 지금 고른 과목 것만 보여준다 */
+    { sub: "경찰학 · 장정훈 초시생 기초다지기", rows: [
+      { t: "경찰학의 기초이론", k: "문제", s: "장정훈 초시생 기초다지기", u: "https://drive.google.com/file/d/1Ah90hszEWxQeDv_NlWhAdq-Lof6XRqsM/view" },
+      { t: "경찰학의 기초이론", k: "해설", s: "장정훈 초시생 기초다지기", u: "https://drive.google.com/file/d/1xVtaZsOkVJ-PnusRhKqudZgGZqQQhASZ/view" },
+      { t: "경찰행정법", k: "문제", s: "장정훈 초시생 기초다지기", u: "https://drive.google.com/file/d/1Cj3-FzbtESgLyIUWrZhnbTPLXoHaF9bF/view" },
+      { t: "경찰행정법", k: "해설", s: "장정훈 초시생 기초다지기", u: "https://drive.google.com/file/d/1ERVvHflVHrQh5KJ_cEm9LI5Z4augHZQT/view" },
+      { t: "경찰행정학", k: "문제", s: "장정훈 초시생 기초다지기", u: "https://drive.google.com/file/d/18PyPuXb3_pMICOlHxRouOEa-aN7wuV2p/view" },
+      { t: "경찰행정학", k: "해설", s: "장정훈 초시생 기초다지기", u: "https://drive.google.com/file/d/1tgjCGtqyVlA2dWWIqcbBLggRlwFQbsV3/view" },
+      { t: "분야별 경찰활동", k: "문제", s: "장정훈 초시생 기초다지기", u: "https://drive.google.com/file/d/1rcmktHAaTTaBpuZQwEsVQxo_rbNjMXMm/view" },
+      { t: "분야별 경찰활동", k: "해설", s: "장정훈 초시생 기초다지기", u: "https://drive.google.com/file/d/1VDBFCCyj5_EXd1ZMJ8xsYJZspOiyYq5-/view" },
+      { t: "한국경찰의 역사와 비교경찰", k: "문제", s: "장정훈 초시생 기초다지기", u: "https://drive.google.com/file/d/1djNOYxe7ANZzZ7NMk9rNL_xvDvzpBXlO/view" },
+      { t: "한국경찰의 역사와 비교경찰", k: "해설", s: "장정훈 초시생 기초다지기", u: "https://drive.google.com/file/d/1gl_-Bg1lBmbOpFyfqwHebQtbbXXcFs7a/view" },
+    ] },
+    { sub: "경찰학 · 장정훈 기출총정리", rows: [
+      { t: "기출 모의고사 01회", k: "문제", s: "26.11.10 · 경찰학 기출 모의고사 01회(문제)", u: "https://drive.google.com/file/d/1pXms9WUmNRguM5jGIHw_36q6on2l9ALD/view" },
+      { t: "기출 모의고사 02회", k: "문제", s: "26.11.16 · 경찰학 기출 모의고사 02회(문제)", u: "https://drive.google.com/file/d/1VoJNo2aZwhLLHjLqbY5rK-5DLAyMlunR/view" },
+      { t: "기출 모의고사 03회", k: "문제", s: "26.11.17 · 경찰학 기출 모의고사 03회(문제)", u: "https://drive.google.com/file/d/1tAj16YYyMzdveQFlYDoSV5DI1M75HQMK/view" },
+      { t: "제76기 경위공채 해설지", k: "해설", s: "26.11.09 · 경찰학 제76기 경위공채 해설지", u: "https://drive.google.com/file/d/17Iu1RtBMFKZxjiCptiqv1tYgQBg2D45F/view" },
+      { t: "기출 모의고사 01회", k: "해설", s: "26.11.10 · 경찰학 기출 모의고사 01회(해설)", u: "https://drive.google.com/file/d/1LuKAprsqa-5TLkjgIPmPjYQsV19Nxctg/view" },
+      { t: "기출 모의고사 02회", k: "해설", s: "26.11.16 · 경찰학 기출 모의고사 02회(해설)", u: "https://drive.google.com/file/d/1Njhy2DwvUHndb8KZYoSaf-uFf63l6z5x/view" },
+      { t: "기출 모의고사 03회", k: "해설", s: "26.11.17 · 경찰학 기출 모의고사 03회(해설)", u: "https://drive.google.com/file/d/1mUBuiHsD1XtoR4VXD8l1cItrpNm5Adz3/view" },
+      { t: "2026 최신기출문제집(추록)(구판)", k: "추록", s: "2026 최신기출문제집(추록)(구판)", u: "https://drive.google.com/file/d/1rNEja0HSvdWOBg330b57RFmNT1ldYCtD/view" },
+      { t: "2027 최신기출문제집(추록)", k: "추록", s: "26.11.09 · 경찰학 2027 최신기출문제집(추록)", u: "https://drive.google.com/file/d/1WjYaLOt91-F9QGfxWu05zyy57M1fO8LH/view" },
+      { t: "기출 총정리 추가자료", k: "추록", s: "26.11.16 · 경찰학 기출 총정리 추가자료", u: "https://drive.google.com/file/d/1sy4nA8wVzwM_47Z8ZD0w42248dCZenZG/view" },
+      { t: "네친구 추가추록과 기출추록", k: "추록", s: "26.11.16 · 경찰학 네친구 추가추록과 기출추록", u: "https://drive.google.com/file/d/1fEpC8mT0ur41JYG9ow715XN2znyfN-nx/view" },
+      { t: "기출총정리 수업자료", k: "기출", s: "26.11.10 · 경찰학 기출총정리 수업자료", u: "https://drive.google.com/file/d/1rQkc9aOb-tjMJ6jhxBjT9bTvdCFI3DVc/view" },
+    ] },
+    { sub: "경찰학 · 장정훈 올인원 9~11월", rows: [
+      { t: "26년 2차 공채시험 등 문제", k: "문제", s: "26.11.13 · 경찰학 26년 2차 공채시험 등 문제", u: "https://drive.google.com/file/d/14tiAqRiGGNdxAKnHLWN9LaFIQbELu3J3/view" },
+      { t: "모의고사 01회", k: "문제", s: "26.10.01 · 경찰학 올인원 모의고사 01회(문제)", u: "https://drive.google.com/file/d/1L0P2kq2NWsbMfXg8mhr_29C1lYocTny6/view" },
+      { t: "모의고사 02회", k: "문제", s: "26.10.10 · 경찰학 올인원 모의고사 02회(문제)", u: "https://drive.google.com/file/d/1gYjbzda3TZP1dNn79DMRs3k0v5tR4t_u/view" },
+      { t: "모의고사 03회", k: "문제", s: "26.10.23 · 경찰학 올인원 모의고사 03회(문제)", u: "https://drive.google.com/file/d/1P-Gk6-lUP8cM-3xkmkpPX1zoXxO_hZ-X/view" },
+      { t: "모의고사 01회", k: "해설", s: "26.10.01 · 경찰학 올인원 모의고사 01회(해설)", u: "https://drive.google.com/file/d/1du9cW4Qb0zUHjgz3BkEalDRk8sgOz47A/view" },
+      { t: "모의고사 02회", k: "해설", s: "26.10.10 · 경찰학 올인원 모의고사 02회(해설)", u: "https://drive.google.com/file/d/1dTYvqBdR0Tb-E5okT7KGQMcwyLzAnpRr/view" },
+      { t: "모의고사 03회", k: "해설", s: "26.10.23 · 경찰학 올인원 모의고사 03회(해설)", u: "https://drive.google.com/file/d/1KvuyZ-pEjCKjl915Wl-97MPuK9HZlXNu/view" },
+      { t: "OX 01회", k: "OX", s: "26.09.10 · 올인원 OX 복습자료 01회", u: "https://drive.google.com/file/d/1cRwcbtQEEW1q4_KvGML9C5O3JYA8OY9r/view" },
+      { t: "OX 02회", k: "OX", s: "26.09.11 · 경찰학 올인원 OX 복습자료 02회", u: "https://drive.google.com/file/d/1VHIOVHtFnR9xYu8WjTY4s2ft_KUGNsBi/view" },
+      { t: "OX 03회", k: "OX", s: "26.09.17 · 올인원 OX 복습자료 03회", u: "https://drive.google.com/file/d/1wIozMMa1YWGVqhsAPoL26h819UdoeK1b/view" },
+      { t: "OX 04회", k: "OX", s: "26.09.18 · 경찰학 올인원 OX 복습자료 04회", u: "https://drive.google.com/file/d/1OjwHlohWT9K_Ac5pqiPwXLFBHio7plTr/view" },
+      { t: "OX 05회", k: "OX", s: "26.10.01 · 경찰학 올인원 OX 복습자료 05회", u: "https://drive.google.com/file/d/1ThKNn-QJZN7AJJCCtxzkRM2jlhf66zp1/view" },
+      { t: "OX 06회", k: "OX", s: "26.10.02 · 경찰학 올인원 OX 복습자료 06회", u: "https://drive.google.com/file/d/1oTdZU1qw8_zzrhrhV_075kapadPfBati/view" },
+      { t: "OX 07회", k: "OX", s: "26.10.03 · 경찰학 올인원 OX 복습자료 07회", u: "https://drive.google.com/file/d/1AAUQXgINFdp7BwzTbCxPdhB95hdvwC1S/view" },
+      { t: "OX 08회", k: "OX", s: "26.10.08 · 올인원 OX 복습자료 08회", u: "https://drive.google.com/file/d/13IvlwNVAmlFOAFpHXk6FtMQi42MMNded/view" },
+      { t: "OX 09회", k: "OX", s: "26.10.09 · 올인원 OX 복습자료 09회", u: "https://drive.google.com/file/d/1CpdNVwzn5fq50GHlioNi3MJkfipk17PM/view" },
+      { t: "OX 10회", k: "OX", s: "26.10.10 · 올인원 OX 복습자료 10회", u: "https://drive.google.com/file/d/1l-WmEXyDWiUquvGW9yjYi_9_7AvuFyUK/view" },
+      { t: "OX 11회", k: "OX", s: "26.10.12 · 올인원 OX 복습자료 11회", u: "https://drive.google.com/file/d/1IlKZr-5FS_oAlpTv4Vgembs84lu_I2Au/view" },
+      { t: "OX 12회", k: "OX", s: "26.10.13 · 올인원 OX 복습자료 12회", u: "https://drive.google.com/file/d/1-I1k2wNM_FcWhuLPqhMVeRcyQkEdpd02/view" },
+      { t: "OX 13회", k: "OX", s: "26.10.22 · 경찰학 올인원 OX 복습자료 13회", u: "https://drive.google.com/file/d/1ejRLQ8-xUvdB3WuZb_jJtFxuzf0IWM1x/view" },
+      { t: "OX 14회", k: "OX", s: "26.10.23 · 경찰학 올인원 OX 복습자료 14회", u: "https://drive.google.com/file/d/1DO0qy2R0BGPyvHCLJv_-4C4mZmFhjZuU/view" },
+      { t: "OX 15회", k: "OX", s: "26.10.29 · 올인원 OX 복습자료 15회", u: "https://drive.google.com/file/d/16STY-51VStB-3OdKxmNea2iaCLK7Q8W_/view" },
+      { t: "OX 16회", k: "OX", s: "26.10.30 · 경찰학 올인원 OX 복습자료 16회", u: "https://drive.google.com/file/d/1AGtJUIv9M3QdmWQGLzI4gzQqbwp38Ao8/view" },
+      { t: "OX 17회", k: "OX", s: "26.11.12 · 경찰학 올인원 OX 복습자료 17회", u: "https://drive.google.com/file/d/1V2Jo-kZCAz2wq6jVe3aB0C35CwvARXKK/view" },
+      { t: "OX 18회", k: "OX", s: "26.11.13 · 경찰학 올인원 OX 복습자료 18회", u: "https://drive.google.com/file/d/1JAKxoVu-jvsz7QCGKWl9GfaRn9CLdgTY/view" },
+      { t: "빈칸자료 01회", k: "빈칸", s: "26.09.11 · 경찰학 올인원 빈칸자료 01회", u: "https://drive.google.com/file/d/1-VbGPnxNl2bE-aTf6FndGU1mHKe5okGV/view" },
+      { t: "빈칸자료 02회", k: "빈칸", s: "26.09.17 · 올인원 빈칸자료 02회", u: "https://drive.google.com/file/d/14G6fMNncZbiHh9fTzwHeyAW1bav8M5ir/view" },
+      { t: "빈칸자료 03회", k: "빈칸", s: "26.09.18 · 경찰학 올인원 빈칸자료 03회", u: "https://drive.google.com/file/d/1Vk6erLiOrIxaQui02HHEsQUsuELKGfkq/view" },
+      { t: "빈칸자료 04회", k: "빈칸", s: "26.10.01 · 경찰학 올인원 빈칸자료 04회", u: "https://drive.google.com/file/d/1ViPwbaBbximHHXhLGCrMzGv_H_AHBc3B/view" },
+      { t: "빈칸자료 05회", k: "빈칸", s: "26.10.02 · 경찰학 올인원 빈칸자료 05회", u: "https://drive.google.com/file/d/1rqak0n1GMMfJ4lzSDR9a15hoLXmTOxAs/view" },
+      { t: "빈칸자료 06회", k: "빈칸", s: "26.10.03 · 경찰학 올인원 빈칸자료 06회", u: "https://drive.google.com/file/d/12ExPIRmCQshuPDH-30NTQ0nHreUZIbJp/view" },
+      { t: "빈칸자료 07회", k: "빈칸", s: "26.10.08 · 올인원 빈칸자료 07회", u: "https://drive.google.com/file/d/14eI9HZ2Md3XBu3PXodxVMLtD3hW2bOVZ/view" },
+      { t: "빈칸자료 08회", k: "빈칸", s: "26.10.09 · 올인원 빈칸자료 08회", u: "https://drive.google.com/file/d/1_b8Svdnb3gr3xKiKbaXmqEQe38FlZtwL/view" },
+      { t: "빈칸자료 09회", k: "빈칸", s: "26.10.10 · 올인원 빈칸자료 09회", u: "https://drive.google.com/file/d/1_VuYQtvFp4cJuYlMjKtXskAk56q_iGBh/view" },
+      { t: "빈칸자료 10회", k: "빈칸", s: "26.10.12 · 올인원 빈칸자료 10회", u: "https://drive.google.com/file/d/1NmguFNWB6niIdjx5rqFskVSCdxktk_NZ/view" },
+      { t: "빈칸자료 11회", k: "빈칸", s: "26.10.13 · 올인원 빈칸자료 11회", u: "https://drive.google.com/file/d/1HUUM-ZY8X_pD9SqiGlKryYs2E-6Vx1_h/view" },
+      { t: "빈칸자료 12회", k: "빈칸", s: "26.10.22 · 경찰학 올인원 빈칸자료 12회", u: "https://drive.google.com/file/d/1n6PAVR_hrf4tFBUHrJD4VpYj992Upwd3/view" },
+      { t: "빈칸자료 13회", k: "빈칸", s: "26.10.23 · 경찰학 올인원 빈칸자료 13회", u: "https://drive.google.com/file/d/1kp4zdGcyusELz88pBEhPnUPZjvyBVAQE/view" },
+      { t: "빈칸자료 14회", k: "빈칸", s: "26.10.29 · 올인원 빈칸자료 14회", u: "https://drive.google.com/file/d/1jmH_l5OEJLlgpL5p9NJ_GjKmN-_H6JQ1/view" },
+      { t: "빈칸자료 15회", k: "빈칸", s: "26.10.30 · 경찰학 올인원 빈칸자료 15회", u: "https://drive.google.com/file/d/14QwpFXWbcrgUGXdBdMY-h82N2L7Azt1A/view" },
+      { t: "빈칸자료 16회", k: "빈칸", s: "26.10.30 · 경찰학 올인원 빈칸자료 16회", u: "https://drive.google.com/file/d/1wKCZWFIXiSfDJPgx01pjXut8hWC4Ked4/view" },
+      { t: "빈칸자료 17회", k: "빈칸", s: "26.11.13 · 경찰학 올인원 빈칸자료 17회", u: "https://drive.google.com/file/d/1ikTVCEas2vhkgOHYWcaAzb4lkFBuMaim/view" },
+      { t: "개정사항", k: "추록", s: "26.10.22 · 경찰학 올인원 개정사항", u: "https://drive.google.com/file/d/1W7t45eKC52Oi_i2E05k__RGSaJbAidyP/view" },
+      { t: "2027 경찰학[기본서] 추록", k: "추록", s: "26.11.12 · 경찰학 2027 경찰학[기본서] 추록", u: "https://drive.google.com/file/d/1GhKbVpQfvdaNJJGOkESEP1KlHtQq82Mt/view" },
+      { t: "암기자료", k: "암기", s: "26.09.17 · 올인원 암기자료", u: "https://drive.google.com/file/d/1DZ6wl_KREk7E2RAJ9HRzNWZcUw7IcdkQ/view" },
+      { t: "암기자료", k: "암기", s: "26.09.18 · 경찰학 올인원 암기자료", u: "https://drive.google.com/file/d/1sKZplaikmu5qZFv8V8IoY0V-1J9Gur7P/view" },
+    ] },
+    { sub: "경찰학 · 장정훈 올인원 7~8월", rows: [
+      { t: "모의고사 05회", k: "문제", s: "26.07.20 · 경찰학 올인원 모의고사 05회(문제)", u: "https://drive.google.com/file/d/1SF1rBXJSwMlya5t-tO81Dcce2Qh5EV_t/view" },
+      { t: "모의고사 06회", k: "문제", s: "26.08.03 · 경찰학 올인원 모의고사 06회(문제)", u: "https://drive.google.com/file/d/149b0CvDZtTN66V7UV-mOLIyWpyZfT479/view" },
+      { t: "모의고사 07회", k: "문제", s: "26.08.17 · 경찰학 올인원 모의고사 07회(문제)", u: "https://drive.google.com/file/d/1Tb_9i5f0x8LtuqRvayGWv8_JMYDmTvxj/view" },
+      { t: "모의고사 05회", k: "해설", s: "26.07.20 · 경찰학 올인원 모의고사 05회(해설)", u: "https://drive.google.com/file/d/1-D1STrMPVICo3mkKp0ul1NjPV4fJ0L_D/view" },
+      { t: "모의고사 06회", k: "해설", s: "26.08.03 · 경찰학 올인원 모의고사 06회(해설)", u: "https://drive.google.com/file/d/1R9d5sN69rsAJ2Yhkh0bgHX0_tE7NzAvi/view" },
+      { t: "모의고사 07회", k: "해설", s: "26.08.17 · 경찰학 올인원 모의고사 07회(해설)", u: "https://drive.google.com/file/d/14uL5-Ab1YSjPQKG140Go-xNSLwLOBgsw/view" },
+      { t: "OX 19회", k: "OX", s: "26.07.13 · 경찰학 올인원 OX 복습자료 19회", u: "https://drive.google.com/file/d/1e7JC74FX9sGvWRbZLNLgiATbLX3RZbES/view" },
+      { t: "OX 20회", k: "OX", s: "26.07.15 · 올인원 OX 복습자료 20회", u: "https://drive.google.com/file/d/1lNcWPYITqaTPtuH_TpCZpIkfqpRN9nqd/view" },
+      { t: "OX 21회", k: "OX", s: "26.07.17 · 경찰학 올인원 OX 복습자료 21회", u: "https://drive.google.com/file/d/1pN-jPImFlJ3oGSQB2TClVDuC4pj9w0Yu/view" },
+      { t: "OX 22회", k: "OX", s: "26.07.20 · 올인원 OX 복습자료 22회", u: "https://drive.google.com/file/d/1jAMSIvMPE2HZmfGk2LQX78iJC8dXOhdg/view" },
+      { t: "OX 23회", k: "OX", s: "26.07.22 · 경찰학 올인원 OX 복습자료 23회", u: "https://drive.google.com/file/d/14sNOifJyMRq7x8WVHBwxavFO1gffIm6c/view" },
+      { t: "OX 24회", k: "OX", s: "26.07.25 · 올인원 OX 복습자료 24회", u: "https://drive.google.com/file/d/1TzMgMvWiWp6F-D6F668EPay2pmBIdgPj/view" },
+      { t: "OX 25회", k: "OX", s: "26.07.27 · 경찰학 올인원 OX 복습자료 25회", u: "https://drive.google.com/file/d/1U6dUiOxn_qNbmD5cxkMVwe9OqH2IgiuC/view" },
+      { t: "OX 26회", k: "OX", s: "26.07.29 · 경찰학 올인원 OX 복습자료 26회", u: "https://drive.google.com/file/d/1NyoODMNKRXpLzFCZhX1V3Z5vw2xa8lsV/view" },
+      { t: "OX 27회", k: "OX", s: "26.08.03 · 올인원 OX 복습자료 27회", u: "https://drive.google.com/file/d/1lEg51K8VPRELvk21o_S2fEfM0tT6_3KS/view" },
+      { t: "OX 28회", k: "OX", s: "26.08.10 · 올인원 OX 복습자료 28회", u: "https://drive.google.com/file/d/1aMJj1Rc5h0mfUmKAzT491fvHBUDg4eQq/view" },
+      { t: "OX 29회", k: "OX", s: "26.08.11 · 경찰학 OX 복습자료 29회", u: "https://drive.google.com/file/d/1m3xIpTCisQyOVD8yacfUgVnqE3iVuS82/view" },
+      { t: "OX 30회", k: "OX", s: "26.08.15 · 경찰학 올인원 OX 복습자료 30회", u: "https://drive.google.com/file/d/1YR94ybdd1Vh_Mne3IA6cGPSqAhX7vos3/view" },
+      { t: "OX 31회", k: "OX", s: "26.08.17 · 경찰학 올인원 OX 복습자료 31회", u: "https://drive.google.com/file/d/1W82tr8V0VhnfXZCpL57NAUUYPJH4cHt4/view" },
+      { t: "빈칸자료 18회", k: "빈칸", s: "26.07.13 · 경찰학 올인원 빈칸자료 18회", u: "https://drive.google.com/file/d/1tKpw9ltxTqGLXBeICvzrp-QjeJuI-plo/view" },
+      { t: "빈칸자료 19회", k: "빈칸", s: "26.07.15 · 올인원 빈칸자료 19회", u: "https://drive.google.com/file/d/1XFkoCw4CQz9dQ4-7CFRa7JQnQ6xTHhdn/view" },
+      { t: "빈칸자료 20회", k: "빈칸", s: "26.07.17 · 경찰학 올인원 빈칸자료 20회", u: "https://drive.google.com/file/d/1kp3x9O_jEkmxQPyKYdw8McS2IOHoa8KK/view" },
+      { t: "빈칸자료 21회", k: "빈칸", s: "26.07.20 · 올인원 빈칸자료 21회", u: "https://drive.google.com/file/d/1Z0TcTvOP7-AUaEeGd0lG54KzvhSegODF/view" },
+      { t: "빈칸자료 22회", k: "빈칸", s: "26.07.22 · 경찰학 올인원 빈칸자료 22회", u: "https://drive.google.com/file/d/1RuZS-tQ4bgO3mWYBTyeZWGML0xIqXwTP/view" },
+      { t: "빈칸자료 23회", k: "빈칸", s: "26.07.25 · 올인원 빈칸자료 23회", u: "https://drive.google.com/file/d/1m8dze90DCTyfmZ-KummwtiY5-kkHeMX2/view" },
+      { t: "빈칸자료 24회", k: "빈칸", s: "26.07.27 · 경찰학 올인원 빈칸자료 24회", u: "https://drive.google.com/file/d/1_5uncIEFcZEApdnHMUgVlw3msiCXdwgx/view" },
+      { t: "빈칸자료 25회", k: "빈칸", s: "26.07.29 · 경찰학 올인원 빈칸자료 25회", u: "https://drive.google.com/file/d/1aFyBYZCF7CBL3_lcmULHVDxHdAtfvV_j/view" },
+      { t: "빈칸자료 26회", k: "빈칸", s: "26.08.03 · 올인원 빈칸자료 26회", u: "https://drive.google.com/file/d/1xz8IZlaU4qdd4UVqDqU6E9UQEvM4yZUw/view" },
+      { t: "빈칸자료 27회", k: "빈칸", s: "26.08.10 · 올인원 빈칸자료 27회", u: "https://drive.google.com/file/d/16b2hGLSok1TzuEC9f6UsVcFnktNZSNsw/view" },
+      { t: "빈칸자료 28회", k: "빈칸", s: "26.08.11 · 경찰학 올인원 빈칸자료 28회", u: "https://drive.google.com/file/d/1oA3nbDzAaBtdWj8_iI_92umYxLuL00D_/view" },
+      { t: "빈칸자료 29회", k: "빈칸", s: "26.08.15 · 경찰학 올인원 빈칸자료 29회", u: "https://drive.google.com/file/d/1VIFn7sGBVz6F-zbv1Byd-LIX-OyFlbcM/view" },
+      { t: "빈칸자료 30회", k: "빈칸", s: "26.08.17 · 경찰학 올인원 빈칸자료 30회", u: "https://drive.google.com/file/d/1-SUx7m6knr1dd6gHNnTm2xeTb3y2zee7/view" },
+      { t: "자료(개정법령)", k: "추록", s: "26.07.22 · 올인원 자료(개정법령)", u: "https://drive.google.com/file/d/1zzBlsxvgXIGPz5Z88r8MRU-fnwJZbrsT/view" },
+    ] },
+    { sub: "형사법 · 신광은 기출OX·기출총정리", rows: [
+      { t: "26년 2차대비 진도별 기출 OX 강의계획서 및 진도표(총론)", k: "계획서", s: "26.03.30 · 형사법 26년 2차대비 진도별 기출 OX 강의계획서 및 진도표(총론)", u: "https://drive.google.com/file/d/1KiguoFNmOXCcIRX3mRZmnXeiEfkIQ-b-/view" },
+      { t: "26년 2차대비 기출 OX 각론 진도표", k: "계획서", s: "26.05.12 · 형사법 26년 2차대비 기출 OX 각론 진도표", u: "https://drive.google.com/file/d/1Io8WX5O716Bh_zhK4vOacyhvcXu_SH3n/view" },
+      { t: "기출총정리 강의계획서(총론·각론·수사증거)", k: "계획서", s: "26.11.13 · 형사법 기출총정리 강의계획서(총론·각론·수사증거)", u: "https://drive.google.com/file/d/1aeOGSfqC2CiCdgtGThBFpsu9vl9MankC/view" },
+    ] },
+    { sub: "형사법 · 신광은 형법총론", rows: [
+      { t: "OX 총론 1회 법률주의 유추해석금지원칙", k: "문제", s: "26.09.07 · 형사법 올인원 OX 총론 1회 법률주의 유추해석금지원칙 (문제)", u: "https://drive.google.com/file/d/1v0zpxq-QVG2sFW82oCFyDmbRE3BCBoAo/view" },
+      { t: "OX 총론 2회 소급효금지원칙 보호주의에의한보충", k: "문제", s: "26.09.08 · 형사법 올인원 OX 총론 2회 소급효금지원칙 보호주의에의한보충 (문제)", u: "https://drive.google.com/file/d/1U59K-W4Z_MVYtHJ7uEH34qHvNrx4Dhg4/view" },
+      { t: "OX 총론 3회 소추조건, 범죄의 종류, 법인의 범죄능력", k: "문제", s: "26.09.14 · 형사법 올인원 OX 총론 3회 소추조건, 범죄의 종류, 법인의 범죄능력 (문제)", u: "https://drive.google.com/file/d/1DHhfWtX14b6P-sCfPlOoTlw0e-hijXXm/view" },
+      { t: "OX 총론 4회 부작위범, 인과관계, 구성요건적고의", k: "문제", s: "26.09.14 · 형사법 올인원 OX 총론 4회 부작위범, 인과관계, 구성요건적고의 (문제)", u: "https://drive.google.com/file/d/1aO9OvhYydzVwzIgwBKGxF_LYQ7Dnp21Y/view" },
+      { t: "위클리 테스트 총론 1회 형법서론 범죄의 종류", k: "문제", s: "26.09.14 · 형사법 올인원 위클리 테스트 총론 1회 형법서론 범죄의 종류 (문제)", u: "https://drive.google.com/file/d/1Im_qRQl7RG5MqdcFgwvuvqwXxQb1aKCA/view" },
+      { t: "OX 총론 5회 구성요건적 고의 결과적 가중범", k: "문제", s: "26.09.15 · 형사법 올인원 OX 총론 5회 구성요건적 고의 결과적 가중범 (문제)", u: "https://drive.google.com/file/d/1S4yDYqAXNRYOoU6HEROPYB84vxVeSV8z/view" },
+      { t: "OX 총론 6회 진정 결과적 가중범 피해자의 승낙", k: "문제", s: "26.09.15 · 형사법 올인원 OX 총론 6회 진정 결과적 가중범 피해자의 승낙 (문제)", u: "https://drive.google.com/file/d/1G1pIL1EPWJ794U-dz9XKFm76nj_rZoV7/view" },
+      { t: "위클리 테스트 총론 2회 범죄능력 구성요건적 착오", k: "문제", s: "26.09.15 · 형사법 올인원 위클리 테스트 총론 2회 범죄능력 구성요건적 착오 (문제)", u: "https://drive.google.com/file/d/1wUEjofGd-DWfOAhVuKy0bjljChoE0ihv/view" },
+      { t: "OX 총론 7회 상당성 반무의식상태설", k: "문제", s: "26.09.21 · 형사법 올인원 OX 총론 7회 상당성 반무의식상태설 (문제)", u: "https://drive.google.com/file/d/1GlqQKXMPhZMbjitLT0L46JZx-bkkeDEx/view" },
+      { t: "위클리 테스트 총론 3회 과실범 피해자의 승낙", k: "문제", s: "26.09.21 · 형사법 올인원 위클리 테스트 총론 3회 과실범 피해자의 승낙 (문제)", u: "https://drive.google.com/file/d/1WnqcgkUMhU1PairNJZXRRawozhaCWdDu/view" },
+      { t: "OX 총론 8회 오인에정당한이유가있는때 장애미수", k: "문제", s: "26.09.28 · 형사법 올인원 OX 총론 8회 오인에정당한이유가있는때 장애미수 (문제)", u: "https://drive.google.com/file/d/16cy_sGPbs5KAyTldS7R1zq83Jsl-lHrR/view" },
+      { t: "위클리 테스트 총론 4회 정당행위~공범과 신분", k: "문제", s: "26.09.28 · 형사법 올인원 위클리 테스트 총론 4회 정당행위~공범과 신분 (문제)", u: "https://drive.google.com/file/d/1HhtJnXW2R4eoHJUqsSQYquR6Am904kiI/view" },
+      { t: "OX 총론 9회 불능미수 공동의 실행행위", k: "문제", s: "26.09.29 · 형사법 올인원 OX 총론 9회 불능미수 공동의 실행행위 (문제)", u: "https://drive.google.com/file/d/1RzVtQsT318yaCJIJS1c0qqEjlSca1aYk/view" },
+      { t: "OX 총론 10회 합동범과 동시범 공범과 신분", k: "문제", s: "26.10.05 · 형사법 올인원 OX 총론 10회 합동범과 동시범 공범과 신분 (문제)", u: "https://drive.google.com/file/d/1hAVz0lvSNmAou0JnPQ4DSjHE1nW89waN/view" },
+      { t: "OX 총론 11회 죄수론", k: "문제", s: "26.10.06 · 형사법 올인원 OX 총론 11회 죄수론(문제)", u: "https://drive.google.com/file/d/1LCg38l5NP5NXZwFF1ZU-lVjO69ecXRwg/view" },
+      { t: "OX 총론 12회 형벌론", k: "문제", s: "26.10.05 · 형사법 올인원 OX 총론 12회 형벌론 (문제)", u: "https://drive.google.com/file/d/1GQ6d3D7rBQyerr9WlpECkQvv4LPw_XJ9/view" },
+      { t: "OX 총론 1회 법률주의 유추해석금지원칙", k: "정답", s: "26.09.07 · 형사법 올인원 OX 총론 1회 법률주의 유추해석금지원칙 (정답)", u: "https://drive.google.com/file/d/1U_MzWQegkyZum4N--YCQJ5MNtWpZGvZk/view" },
+      { t: "OX 총론 2회 소급효금지원칙 보호주의에의한보충", k: "정답", s: "26.09.08 · 형사법 올인원 OX 총론 2회 소급효금지원칙 보호주의에의한보충 (정답)", u: "https://drive.google.com/file/d/1rfvWnV_xXPw0S60p7M-KkOtx7Pts2Fjx/view" },
+      { t: "OX 총론 3회 소추조건, 범죄의 종류, 법인의 범죄능력", k: "정답", s: "26.09.14 · 형사법 올인원 OX 총론 3회 소추조건, 범죄의 종류, 법인의 범죄능력 (정답)", u: "https://drive.google.com/file/d/1dpZTZ2ch201mGsnY4qzn82pV4_vSjpeO/view" },
+      { t: "OX 총론 4회 부작위범, 인과관계, 구성요건적고의", k: "정답", s: "26.09.14 · 형사법 올인원 OX 총론 4회 부작위범, 인과관계, 구성요건적고의 (정답)", u: "https://drive.google.com/file/d/1x5449MGl2dxEL449_RXviWGdSsLzsaie/view" },
+      { t: "OX 총론 5회 구성요건적 고의 결과적 가중범", k: "정답", s: "26.09.15 · 형사법 올인원 OX 총론 5회 구성요건적 고의 결과적 가중범 (정답)", u: "https://drive.google.com/file/d/1HUC0PZr9UUVmQ-r2-ILHmQ7I7ZbUmoWW/view" },
+      { t: "OX 총론 6회 진정 결과적 가중범 피해자의 승낙", k: "정답", s: "26.09.15 · 형사법 올인원 OX 총론 6회 진정 결과적 가중범 피해자의 승낙 (정답)", u: "https://drive.google.com/file/d/1NCaLLXS3SUjFgh2OFNsq45mzuIPJNW_A/view" },
+      { t: "OX 총론 7회 상당성 반무의식상태설", k: "정답", s: "26.09.21 · 형사법 올인원 OX 총론 7회 상당성 반무의식상태설 (정답)", u: "https://drive.google.com/file/d/1DnbN3RW_oLiesqGF9LCFxjxc0_qzx_Kg/view" },
+      { t: "OX 총론 8회 오인에정당한이유가있는때 장애미수", k: "정답", s: "26.09.28 · 형사법 올인원 OX 총론 8회 오인에정당한이유가있는때 장애미수 (정답)", u: "https://drive.google.com/file/d/1feMji0TK-d_l2AqigfuQ-slVoqQMjmGt/view" },
+      { t: "OX 총론 9회 불능미수 공동의 실행행위", k: "정답", s: "26.09.29 · 형사법 올인원 OX 총론 9회 불능미수 공동의 실행행위 (정답)", u: "https://drive.google.com/file/d/1SjP3ttR-QWw0RaikBFHTvUGLc22nGfe-/view" },
+      { t: "OX 총론 10회 합동범과 동시범 공범과 신분", k: "정답", s: "26.10.05 · 형사법 올인원 OX 총론 10회 합동범과 동시범 공범과 신분 (정답)", u: "https://drive.google.com/file/d/1zNqS1RAdBeJOZfq8Kc1_JjxSeF7Qm5fi/view" },
+      { t: "위클리 테스트 총론 1회 형법서론 범죄의 종류", k: "해설", s: "26.09.14 · 형사법 올인원 위클리 테스트 총론 1회 형법서론 범죄의 종류 (해설)", u: "https://drive.google.com/file/d/1KljpdXKR8gVCd1ID-JFQf5x63VPEDWtw/view" },
+      { t: "위클리 테스트 총론 2회 범죄능력 구성요건적 착오", k: "해설", s: "26.09.15 · 형사법 올인원 위클리 테스트 총론 2회 범죄능력 구성요건적 착오 (해설)", u: "https://drive.google.com/file/d/18QORBZN10oinnwgdfYw_JdyCJ5Js62U_/view" },
+      { t: "위클리 테스트 총론 3회 과실범 피해자의 승낙", k: "해설", s: "26.09.21 · 형사법 올인원 위클리 테스트 총론 3회 과실범 피해자의 승낙 (해설)", u: "https://drive.google.com/file/d/1FVrSo22LtHKsMk5MOcUsLRH-h6VwQosL/view" },
+      { t: "위클리 테스트 총론 4회 정당행위~공범과 신분", k: "해설", s: "26.09.28 · 형사법 올인원 위클리 테스트 총론 4회 정당행위~공범과 신분 (해설)", u: "https://drive.google.com/file/d/1VUra8UpDuoCHuqM6Y7Pl8iOYb7uZy00U/view" },
+      { t: "OX 총론 11회 죄수론", k: "해설", s: "26.10.06 · 형사법 올인원 OX 총론 11회 죄수론(해설)", u: "https://drive.google.com/file/d/1-B_zCobltN3DmX93ZpC4BPxGRRferVj7/view" },
+      { t: "OX 총론 12회 형벌론", k: "해설", s: "26.10.05 · 형사법 올인원 OX 총론 12회 형벌론 (해설)", u: "https://drive.google.com/file/d/13eZ-jbFcP3tcgNveEjJ63GobRnnmvBXS/view" },
+      { t: "2026 기본서 총론 개정판 교재 수정사항", k: "추록", s: "26.09.07 · 형사법 2026 기본서 총론 개정판 교재 수정사항", u: "https://drive.google.com/file/d/1LT3_jLTMQxRy29c_yfKJPzOLVCND4Snu/view" },
+      { t: "26년 9월 형사법 올인원 강의계획서(총론, 수사증거)", k: "계획서", s: "26.09.07 · 형사법 26년 9월 형사법 올인원 강의계획서(총론, 수사증거)", u: "https://drive.google.com/file/d/1SvAFMQ9JEvsODWqzsArRwsZDArPHrEr9/view" },
+      { t: "26년 9월 형사법 올인원 개강자료 - 구속영장 압수수색영장 수사과정확인서 피의", k: "계획서", s: "26.09.07 · 형사법 26년 9월 형사법 올인원 개강자료 - 구속영장 압수수색영장 수사과정확인서 피의자신문조서", u: "https://drive.google.com/file/d/1c1VZ7bbnMi48SLmYHfrtei2BW4IRi0TY/view" },
+      { t: "26년 9월 형사법 올인원 개강자료 - 단권화요령 (칼라인쇄)", k: "계획서", s: "26.09.07 · 형사법 26년 9월 형사법 올인원 개강자료 - 단권화요령 (칼라인쇄)", u: "https://drive.google.com/file/d/1ne9hRDDAHVD103787-MOvN5xkM3F-3Au/view" },
+    ] },
+    { sub: "형사법 · 신광은 형법각론", rows: [
+      { t: "OX 각론 1회(살인죄~학대죄)", k: "문제", s: "26.11.10 · 형사법 올인원 OX 각론 1회(살인죄~학대죄)(문제)", u: "https://drive.google.com/file/d/1dTbNce9XibVehyU22EKjlq0xD2CqA0Zc/view" },
+      { t: "OX 각론 2회(협박죄~미성년자·심신미약자 간음·추행죄)", k: "문제", s: "26.11.10 · 형사법 올인원 OX 각론 2회(협박죄~미성년자·심신미약자 간음·추행죄)(문제)", u: "https://drive.google.com/file/d/178HNKpP56sCIYfeKBwBRM_YKjrbVgi9u/view" },
+      { t: "위클리 테스트 각론 1회(살인죄~강간강제추행죄)", k: "문제", s: "26.11.10 · 형사법 올인원 위클리 테스트 각론 1회(살인죄~강간강제추행죄)(문제)", u: "https://drive.google.com/file/d/1UBMQ1wn_8uFRQsivEOmzYHsn84cWz0ot/view" },
+      { t: "OX 각론 3회(명예에 관한 죄~주거침입죄)", k: "문제", s: "26.11.16 · 형사법 올인원 OX 각론 3회(명예에 관한 죄~주거침입죄)(문제)", u: "https://drive.google.com/file/d/10ItEV6q2onxIOZ7C55MX56hEUcehPGsF/view" },
+      { t: "위클리 테스트 각론 2회(명예죄~퇴거불응죄)", k: "문제", s: "26.11.16 · 형사법 올인원 위클리 테스트 각론 2회(명예죄~퇴거불응죄)(문제)", u: "https://drive.google.com/file/d/1Cso3gDlt9Cn5w0x574FSxBQZBnPra6Hi/view" },
+      { t: "OX 각론 1회(살인죄~학대죄)", k: "정답", s: "26.11.10 · 형사법 올인원 OX 각론 1회(살인죄~학대죄)(정답)", u: "https://drive.google.com/file/d/1Ulei5nCuL_qlyt9VX4_Fhqx1eA_E2xqI/view" },
+      { t: "OX 각론 2회(협박죄~미성년자·심신미약자 간음·추행죄)", k: "정답", s: "26.11.10 · 형사법 올인원 OX 각론 2회(협박죄~미성년자·심신미약자 간음·추행죄)(정답)", u: "https://drive.google.com/file/d/19vpxZb1p-noWXSOKheZmwTpkh-Wy1aHu/view" },
+      { t: "OX 각론 3회(명예에 관한 죄~주거침입죄)", k: "정답", s: "26.11.16 · 형사법 올인원 OX 각론 3회(명예에 관한 죄~주거침입죄)(정답)", u: "https://drive.google.com/file/d/1CEXD0GcFvr-SEF7hOY7v7GTgDntf_RNu/view" },
+      { t: "위클리 테스트 각론 1회(살인죄~강간강제추행죄)", k: "해설", s: "26.11.10 · 형사법 올인원 위클리 테스트 각론 1회(살인죄~강간강제추행죄)(해설)", u: "https://drive.google.com/file/d/1teWWXJKUeoaldIQ8zpAgPH0mX9n_4LGO/view" },
+      { t: "위클리 테스트 각론 2회(명예죄~퇴거불응죄)", k: "해설", s: "26.11.16 · 형사법 올인원 위클리 테스트 각론 2회(명예죄~퇴거불응죄)(해설)", u: "https://drive.google.com/file/d/1swbAiwdwV-7s_EhrWEl1l01QrZF-9xcK/view" },
+      { t: "26년 11월 형사법 올인원 강의계획서 [형법 각론]", k: "계획서", s: "26.11.10 · 26년 11월 형사법 올인원 강의계획서 [형법 각론]", u: "https://drive.google.com/file/d/1v62oOHkoBAj_hTOhSY5PTAkfyxKeTcyx/view" },
+    ] },
+    { sub: "형사법 · 신광은 형소법·수사·증거", rows: [
+      { t: "OX 수사 8회(불기소처분에 대한 불복~거증책임)", k: "문제", s: "26.02.03 · 형사법 올인원 OX 수사 8회(불기소처분에 대한 불복~거증책임)(문제)", u: "https://drive.google.com/file/d/1Sthmh6G7aZ2O8jkv0NvbHu0iqWDOu5Rl/view" },
+      { t: "OX 증거 9회(증거능력관련문제~전문증거)", k: "문제", s: "26.02.05 · 형사법 올인원 OX 증거 9회(증거능력관련문제~전문증거)(문제)", u: "https://drive.google.com/file/d/1ScwlRZ0pA1INipJ1-0Yhaezo5FRlbdDL/view" },
+      { t: "위클리 테스트 5회(경찰의수사종결~진술조서적용범위)", k: "문제", s: "26.02.10 · 형사법 올인원 위클리 테스트 5회(경찰의수사종결~진술조서적용범위)(문제)", u: "https://drive.google.com/file/d/1RNlTCEIjhkGHK3IYXxqbjmSaOjAdetLH/view" },
+      { t: "위클리 테스트 6회(진술조서 증거능력 인정범위~증거 끝)", k: "문제", s: "26.02.18 · 형사법 올인원 위클리 테스트 6회(진술조서 증거능력 인정범위~증거 끝)(문제)", u: "https://drive.google.com/file/d/1IW8sh4v5hutrBZVc3mS26kCdxSZ_3My6/view" },
+      { t: "OX 증거 10회(전문법칙의예외이론~참고하기)", k: "문제", s: "26.02.06 · 형사법 올인원 OX 증거 10회(전문법칙의예외이론~참고하기)(문제)", u: "https://drive.google.com/file/d/17SOtctg_g4giPCrnl3BPFKksZnLCo99s/view" },
+      { t: "OX 증거 11회(314조~동의의주체와상대방)", k: "문제", s: "26.02.10 · 형사법 올인원 OX 증거 11회(314조~동의의주체와상대방)(문제)", u: "https://drive.google.com/file/d/1nx6SAo7ApoZ0K5t_PZRXH1J06SqnixCP/view" },
+      { t: "OX 증거 12회(자유심증주의~공판조서의 증명력)", k: "문제", s: "26.02.12 · 형사법 올인원 OX 증거 12회(자유심증주의~공판조서의 증명력)(문제)", u: "https://drive.google.com/file/d/1bfjpDPC9nJja30-4opZKr3_wGC-9Vwhv/view" },
+      { t: "OX 수사 8회(불기소처분에 대한 불복~거증책임)", k: "정답", s: "26.02.03 · 형사법 올인원 OX 수사 8회(불기소처분에 대한 불복~거증책임)(정답)", u: "https://drive.google.com/file/d/1w9dVlUMopsI-vD-KqLDq96Lx-nXnF-BO/view" },
+      { t: "OX 증거 9회(증거능력관련문제~전문증거)", k: "정답", s: "26.02.05 · 형사법 올인원 OX 증거 9회(증거능력관련문제~전문증거)(정답)", u: "https://drive.google.com/file/d/1xAvaf2xqR1oJOLqJ4IGOAiXhNqsDN6KN/view" },
+      { t: "OX 증거 10회(전문법칙의예외이론~참고하기)", k: "정답", s: "26.02.06 · 형사법 올인원 OX 증거 10회(전문법칙의예외이론~참고하기)(정답)", u: "https://drive.google.com/file/d/1gs3LXwxrBiJObDs7nP9HAJmv1aSk2KBa/view" },
+      { t: "OX 증거 11회(314조~동의의주체와상대방)", k: "정답", s: "26.02.10 · 형사법 올인원 OX 증거 11회(314조~동의의주체와상대방)(정답)", u: "https://drive.google.com/file/d/1tnIQ36SMSlprI0Iu4HnFVExAPg-l0PSj/view" },
+      { t: "OX 증거 12회(자유심증주의~공판조서의 증명력)", k: "정답", s: "26.02.12 · 형사법 올인원 OX 증거 12회(자유심증주의~공판조서의 증명력)(정답)", u: "https://drive.google.com/file/d/1DGaGUnGrbDJyQDEkC3am1erBo8M7Y2zT/view" },
+      { t: "위클리 테스트 5회(경찰의수사종결~진술조서적용범위)", k: "해설", s: "26.02.10 · 형사법 올인원 위클리 테스트 5회(경찰의수사종결~진술조서적용범위)(해설)", u: "https://drive.google.com/file/d/1eXaCpGIubgkk8YUsxxKBrzCxVXUlx7PL/view" },
+      { t: "위클리 테스트 6회(진술조서 증거능력 인정범위~증거 끝", k: "해설", s: "26.02.18 · 형사법 올인원 위클리 테스트 6회(진술조서 증거능력 인정범위~증거 끝(해설)", u: "https://drive.google.com/file/d/1_qQnF9fldNZo1byuIbRBj8LBy3E9gK0-/view" },
+    ] },
+  ];   /* 통합 시험지는 헌법 1~20번을 뺀 편집본 링크만 넣었다 · 자료실은 지금 고른 과목 것만 보여준다 */
 
   /* ============================================================
      2026-11-17 개편 모듈
@@ -3155,7 +3378,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   /* 고른 과목(형사법·경찰학·범죄학) 자료만 */
   function libGroups() {
     var nm = SUBJ[S.subj] ? SUBJ[S.subj].name : '';
-    return LIB.filter(function (g) { return nm && g.sub.indexOf(nm) === 0; });
+    return LIB.filter(function (g) { return nm && (g.sub.indexOf(nm) === 0 || g.sub.indexOf('공통') === 0); });
   }
   function libRow(it) {
     var kc = it.k === '해설' ? 'a' : 'q';
@@ -3169,18 +3392,21 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var groups = libGroups();
     var h = '<a class="lib-all" href="' + LIB_FOLDER + '" target="_blank" rel="noopener">' +
       '<b>📂 구글 드라이브 폴더 전체 열기</b><i>미래인재경찰 자료실 ↗</i></a>' +
-      '<p class="lib-sub">내 드라이브(jinleeda1@gmail.com)에만 있는 파일이라, 폰의 구글 계정이 같아야 바로 열려요.</p>';
+      '<p class="lib-sub">내 드라이브(jinleeda1@gmail.com)에만 있는 파일이라, 폰의 구글 계정이 같아야 바로 열려요. 2026년 2차 통합 시험지는 <b>헌법 1~20번을 뺀 편집본</b>만 올렸어요.</p>';
     if (!groups.length) {
       h += '<div class="lib-group"><div class="lib-gh">' + esc(s ? s.name : '') + ' <span>0개</span></div>' +
         '<p class="lib-sub">' + esc(s ? s.name : '지금 과목') + ' 자료는 아직 없어요. 자료실은 형사법·경찰학·범죄학 강의 자료만 모아 둬요.</p></div>';
       return h;
     }
-    var tot = 0;
+    var tot = 0, openedSub = 0;
     groups.forEach(function (g) {
       tot += g.rows.length;
-      h += '<div class="lib-group"><div class="lib-gh">' + esc(g.sub) + ' <span>' + g.rows.length + '개</span></div>';
+      var open = g.sub.indexOf('공통') === 0 || (g.sub.indexOf((s ? s.name : '') + ' · ') === 0 && openedSub++ === 0);
+      h += '<details class="lib-group"' + (open ? ' open' : '') + '><summary class="lib-gh">' + esc(g.sub) +
+        ' <span>' + g.rows.length + '개</span><i class="lib-chev">▾</i></summary>' +
+        '<div class="lib-rows">';
       g.rows.forEach(function (r) { h += libRow(r); });
-      h += '</div>';
+      h += '</div></details>';
     });
     h += '<p class="lib-sub" style="margin-top:10px">' + esc(s ? s.name : '') + ' 자료 ' + tot + '개 · 원본은 학원 교재 자료라 공개 저장소에는 올리지 않았어요.</p>';
     return h;
@@ -3605,6 +3831,509 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     });
     h += '</div><p class="lib-sub" style="margin-top:10px">· 기준(4분 40초·4.2kg·32kg·72kg·23cm·16/15회)은 경찰청 발표 자료 기준이고, 루틴은 그 코스를 겨냥한 연습 제안이에요.</p>';
     return h;
+  }
+
+  /* ============================================================
+     🎯 미니 모의고사 — 타이머 · OMR · 제출 후 일괄 채점
+     · 푸는 동안 정답·해설을 보여 주지 않는다
+     · 제출하면 총점·소요 시간·오답 목록·문항별 해설을 한 번에
+     · 틀린 문항은 오답노트(S.wrong)에 그대로 쌓인다
+     ============================================================ */
+  var MINI = null;
+  function examBank(sid) {
+    return D.questions.filter(function (q) {
+      var c = COURSE[q.c];
+      return c && c.exam && (!sid || q.s === sid);
+    });
+  }
+  function miniCfgs() {
+    return [
+      { id: 'gt10', grp: '지텔프', name: '지텔프 문법 10문제', sub: '10문제 · 8분 · G-POINT 랜덤', n: 10, sec: 45, kind: 'gt' },
+      { id: 'gt26', grp: '지텔프', name: '지텔프 실전 26문제', sub: '26문제 · 20분 · 실전 문법', n: 26, sec: 46, kind: 'gt' },
+      { id: 'pol10', grp: '경찰', name: '경찰 3과목 10문제', sub: '10문제 · 10분 · 형사법·경찰학·범죄학', n: 10, sec: 60, kind: 'pol' },
+      { id: 'pol20', grp: '경찰', name: '경찰 3과목 20문제', sub: '20문제 · 20분 · 형사법·경찰학·범죄학', n: 20, sec: 60, kind: 'pol' },
+      { id: 'ex100', grp: '경찰', name: '2026년 2차 실전 100문항', sub: '형사법 40 · 경찰학 40 · 범죄학 20 · 100분', n: 100, sec: 60, kind: 'exam' }
+    ];
+  }
+  function openMiniSheet() {
+    var h = '<button class="sheet-close" data-close="1">✕</button>' +
+      '<div class="sheet-num">실전 감각</div><div class="sheet-title">🎯 미니 모의고사</div>' +
+      '<div class="sheet-meta">타이머가 돌아가고, 푸는 동안에는 정답·해설이 뜨지 않아요. 끝나고 <b>제출 및 일괄 채점</b>을 누르면 총점·소요 시간·오답·문항별 해설을 한 번에 볼 수 있어요.</div>' +
+      '<div class="mini-pick">';
+    miniCfgs().forEach(function (c) {
+      var best = (S.miniBest || {})[c.id];
+      h += '<button class="mini-opt" data-mini="' + c.id + '">' +
+        '<span class="mo-top"><b>' + esc(c.name) + '</b><i>' + esc(c.sub) + '</i></span>' +
+        '<span class="mo-go">' + (best ? '최고 ' + best + '/' + c.n + ' ›' : '시작 ›') + '</span></button>';
+    });
+    h += '</div><p class="note-mini">경찰 10·20문제는 배운 진도에서 먼저 내고, 모자라면 기출 전체에서 채워요. <b>2026년 2차 100문항</b>은 실제 시험 순서(형사법 → 경찰학 → 범죄학) 그대로 나가요.</p>';
+    $('#sheetIn').innerHTML = h;
+    $('#sheet').classList.remove('hidden');
+    $$('#sheetIn [data-mini]').forEach(function (b) {
+      b.onclick = function () {
+        var id = b.getAttribute('data-mini');
+        var cfg = miniCfgs().filter(function (x) { return x.id === id; })[0];
+        closeSheet();
+        startMini(cfg);
+      };
+    });
+  }
+  function openExamBankSheet() {
+    var ex = examBank(null);
+    var by = {};
+    ex.forEach(function (q) { by[q.s] = (by[q.s] || 0) + 1; });
+    var h = '<button class="sheet-close" data-close="1">✕</button>' +
+      '<div class="sheet-num">2026년 2차 순경 공채</div>' +
+      '<div class="sheet-title">📝 2026년 2차 기출 ' + ex.length + '문항</div>' +
+      '<div class="sheet-meta">헌법 1~20번은 빼고 형사법·경찰학·범죄학만 넣었어요. 문항마다 출처(2026년 2차 순경 공채 …번)가 붙어 있어요.</div>' +
+      '<div class="mini-pick">';
+    [['crim', '형사법'], ['pol', '경찰학'], ['cri', '범죄학']].forEach(function (s) {
+      if (!by[s[0]]) return;
+      h += '<button class="mini-opt" data-exsub="' + s[0] + '">' +
+        '<span class="mo-top"><b>' + s[1] + ' ' + by[s[0]] + '문항</b><i>한 문제씩 풀기 · 정답·해설 바로 보기</i></span>' +
+        '<span class="mo-go">풀기 ›</span></button>';
+    });
+    h += '<button class="mini-opt" data-exall="1"><span class="mo-top"><b>전체 ' + ex.length + '문항 모의고사</b>' +
+      '<i>형사법 → 경찰학 → 범죄학 · 100분 · 제출 후 일괄 채점</i></span><span class="mo-go">시작 ›</span></button>';
+    h += '</div><p class="note-mini">형사법·범죄학은 공개된 해설 자료가 없어 정답만 수록돼 있어요. 경찰학 37문항에는 장정훈 해설지 해설이 붙어 있어요.</p>';
+    $('#sheetIn').innerHTML = h;
+    $('#sheet').classList.remove('hidden');
+    $$('#sheetIn [data-exsub]').forEach(function (b) {
+      b.onclick = function () {
+        var sid = b.getAttribute('data-exsub');
+        var ids = examBank(sid).map(function (q) { return q.i; });
+        closeSheet();
+        startSession('ids', {
+          ids: ids, n: ids.length, noScope: true,
+          title: '2026년 2차 기출 · ' + (SUBJ[sid] ? SUBJ[sid].name : '') + ' ' + ids.length + '문항'
+        });
+      };
+    });
+    var all = $('#sheetIn [data-exall]');
+    if (all) all.onclick = function () { closeSheet(); startMini(miniCfgs().filter(function (x) { return x.id === 'ex100'; })[0]); };
+  }
+  function startMini(cfg) {
+    if (!cfg) return;
+    var picked = [], note = '';
+    if (cfg.kind === 'gt') {
+      picked = qs(D.questions.filter(function (q) { return q.s === 'gtelp' && q.gp; }), cfg.n);
+      note = 'G-POINT 랜덤';
+    } else if (cfg.kind === 'exam') {
+      picked = examBank(null).slice(0, cfg.n);
+      note = '2026년 2차 기출';
+    } else {
+      /* 실전 모의고사이므로 2지선다 OX 문항은 빼고 실제 시험형 4지선다만 낸다 */
+      var is4 = function (q) { return (q.o || []).length === 4; };
+      var ins = D.questions.filter(function (q) { return q.s !== 'gtelp' && !q.gp && is4(q) && inScope(q); });
+      var all = D.questions.filter(function (q) { return q.s !== 'gtelp' && !q.gp && is4(q) && !(COURSE[q.c] && COURSE[q.c].exam); });
+      if (ins.length >= cfg.n) { picked = qs(ins, cfg.n); note = '배운 진도'; }
+      else {
+        picked = shuffle(ins.slice());
+        picked = picked.concat(qs(all.filter(function (q) { return picked.indexOf(q) < 0; }), cfg.n - picked.length));
+        note = '배운 진도 + 기출';
+      }
+    }
+    picked = picked.filter(Boolean);
+    if (picked.length < 2) { toast('출제할 문제가 부족해요'); return; }
+    var sec = cfg.sec * picked.length;
+    document.body.style.overflow = 'hidden';
+    document.body.classList.add('mini');
+    document.body.classList.remove('fever', 'boss');
+    $('#quiz').classList.remove('hidden');
+    $('#qFb').classList.add('hidden');
+    $('#qCombo').classList.add('hidden');
+    $('#qTitle').innerHTML = '🎯 미니 모의고사 · ' + esc(cfg.name);
+    $('#qBar').style.width = '0%';
+    MINI = {
+      cfg: cfg, items: picked.map(function (q) { return { q: q, pick: null }; }),
+      i: 0, note: note, over: false, confirm: false, sec: sec,
+      startedAt: Date.now(), end: Date.now() + sec * 1000, timer: null, result: null
+    };
+    clearInterval(MINI.timer);
+    MINI.timer = setInterval(miniTick, 250);
+    miniTick();
+    renderMini();
+    sfx('tap');
+  }
+  function fmtDur(s) {
+    s = Math.max(0, Math.round(s));
+    return Math.floor(s / 60) + ':' + pad(s % 60);
+  }
+  function cutTxt(s, n) {
+    s = String(s || '').replace(/\s+/g, ' ').trim();
+    return s.length > n ? s.slice(0, n - 1) + '…' : s;
+  }
+  function miniTick() {
+    if (!MINI || MINI.over) return;
+    var left = Math.max(0, Math.ceil((MINI.end - Date.now()) / 1000));
+    var el = $('#qTimer');
+    if (el) {
+      el.textContent = '⏳ ' + Math.floor(left / 60) + ':' + pad(left % 60);
+      el.classList.toggle('warn', left <= 60);
+    }
+    if (left <= 0) { toast('시간이 끝났어요 · 자동 제출'); miniSubmit(true); }
+  }
+  function miniGo(d) {
+    if (!MINI || MINI.over) return;
+    var n = MINI.i + d;
+    if (n < 0 || n >= MINI.items.length) return;
+    MINI.i = n; renderMini(); sfx('tap');
+  }
+  function miniPick(i) {
+    if (!MINI || MINI.over) return;
+    var cur = MINI.i;
+    MINI.items[cur].pick = i;
+    MINI.confirm = false;
+    sfx('tap');
+    renderMini();
+    if (cur < MINI.items.length - 1) {
+      setTimeout(function () {
+        if (MINI && !MINI.over && MINI.i === cur && MINI.items[cur].pick === i) { MINI.i = cur + 1; renderMini(); }
+      }, 170);
+    }
+  }
+  function renderMini() {
+    if (!MINI || MINI.over) return;
+    var it = MINI.items[MINI.i], q = it.q, tot = MINI.items.length;
+    $('#qCount').textContent = (MINI.i + 1) + '/' + tot;
+    $('#qBar').style.width = (MINI.i / tot * 100) + '%';
+    var badge = srcBadge(q), keys = ['A', 'B', 'C', 'D'];
+    var done = MINI.items.filter(function (x) { return x.pick != null; }).length;
+    var h = '<div class="q-tags"><span class="q-tag">' + esc(qTag(q)) + '</span>' +
+      '<span class="q-src ' + badge.k + '">' + esc(badge.t) + '</span></div>' +
+      '<h2 class="q-text">' + esc(q.q) + '</h2><div class="opts mini-opts">';
+    q.o.forEach(function (o, i) {
+      h += '<button class="opt' + (it.pick === i ? ' picked' : '') + '" data-i="' + i + '">' +
+        '<span class="k">' + keys[i] + '</span><span>' + esc(o) + '</span></button>';
+    });
+    h += '</div>';
+    h += '<div class="mini-omr"><div class="mo-head"><b>답안 표시</b><span>' + done + ' / ' + tot + ' 표시 · ' + esc(MINI.note) + '</span></div><div class="omr-grid">';
+    MINI.items.forEach(function (x, j) {
+      h += '<button class="omr-b' + (x.pick != null ? ' done' : '') + (j === MINI.i ? ' on' : '') + '" data-j="' + j + '">' + (j + 1) + '</button>';
+    });
+    h += '</div></div>';
+    h += '<div class="mini-actions"><button class="btn ghost" id="mPrev"' + (MINI.i === 0 ? ' disabled' : '') + '>← 이전</button>' +
+      '<button class="btn ghost" id="mNext"' + (MINI.i === tot - 1 ? ' disabled' : '') + '>다음 →</button></div>' +
+      '<button class="btn primary wide" id="mSubmit">제출 및 일괄 채점</button>' +
+      '<p class="mini-note">정답은 제출할 때 한꺼번에 채점해요. 표시하지 않은 문항은 제출 전에 알려 드려요.</p>';
+    $('#qBody').innerHTML = h;
+    $('#qBody').scrollTop = 0;
+    $$('#qBody .opt').forEach(function (b) {
+      b.onclick = function () { miniPick(Number(b.getAttribute('data-i'))); };
+    });
+    $$('#qBody .omr-b').forEach(function (b) {
+      b.onclick = function () { MINI.i = Number(b.getAttribute('data-j')); renderMini(); sfx('tap'); };
+    });
+    var pv = $('#mPrev'); if (pv) pv.onclick = function () { miniGo(-1); };
+    var nx = $('#mNext'); if (nx) nx.onclick = function () { miniGo(1); };
+    var sb = $('#mSubmit'); if (sb) sb.onclick = function () { miniSubmit(false); };
+  }
+  function miniSubmit(force) {
+    if (!MINI || MINI.over) return;
+    var un = MINI.items.filter(function (x) { return x.pick == null; }).length;
+    if (!force && un && !MINI.confirm) {
+      MINI.confirm = true;
+      var btn = $('#mSubmit');
+      if (btn) btn.textContent = '그래도 제출 (' + un + '문항 비어 있음)';
+      toast('아직 ' + un + '문항이 비어 있어요 · 한 번 더 누르면 제출');
+      return;
+    }
+    MINI.over = true;
+    clearInterval(MINI.timer); MINI.timer = null;
+    var _toast = $('#toast'); if (_toast) _toast.classList.add('hidden');
+    var timeUp = Date.now() >= MINI.end;
+    var elapsed = Math.min(MINI.sec, Math.round((Date.now() - MINI.startedAt) / 1000));
+    var day = dayRec(), ok = 0, wrongIds = [], tot = MINI.items.length, earned = 0;
+    MINI.items.forEach(function (it) {
+      var q = it.q;
+      if (it.pick == null) {
+        var w0 = S.wrong[q.i] || { c: 0 };
+        S.wrong[q.i] = { c: (w0.c || 0) + 1, d: todayStr() };
+        wrongIds.push(q.i);
+        it.gain = 0;
+        return;
+      }
+      var right = it.pick === q.a;
+      S.ans++; day.ans = (day.ans || 0) + 1;
+      var uk = q.c + ':' + q.u;
+      var u = S.unit[uk] || (S.unit[uk] = { a: 0, ok: 0 });
+      u.a++;
+      var nk = q.gp ? (q.c + ':gp' + q.gp) : (q.c + ':u' + q.u);
+      var nd = S.node[nk] || (S.node[nk] = { a: 0, ok: 0 });
+      nd.a++;
+      if (right) {
+        ok++; S.ok++; u.ok++; nd.ok++; day.ok = (day.ok || 0) + 1;
+        S.qok[q.i] = (S.qok[q.i] || 0) + 1;
+        delete S.wrong[q.i];
+        S.xp += 10; day.xp = (day.xp || 0) + 10;
+        earned += 10; it.gain = 10;
+      } else {
+        var w = S.wrong[q.i] || { c: 0 };
+        S.wrong[q.i] = { c: (w.c || 0) + 1, d: todayStr() };
+        wrongIds.push(q.i);
+        S.xp += 3; day.xp = (day.xp || 0) + 3;
+        earned += 3; it.gain = 3;
+      }
+    });
+    var acc = tot ? Math.round(ok / tot * 100) : 0;
+    var bonus = acc === 100 ? 20 : 10;
+    S.xp += bonus; day.xp = (day.xp || 0) + bonus;
+    S.miniRuns = (S.miniRuns || 0) + 1;
+    S.miniBest = S.miniBest || {};
+    var mk = MINI.cfg.id;
+    var prevBest = S.miniBest[mk] || 0;
+    if (ok > prevBest) S.miniBest[mk] = ok;
+    touchStreak();
+    save();
+    MINI.result = { ok: ok, tot: tot, acc: acc, elapsed: elapsed, timeUp: timeUp, bonus: bonus, earned: earned + bonus, prevBest: prevBest, wrongIds: wrongIds };
+    renderMiniResult();
+    renderHud(); renderReview(); renderStats(); renderQuest(); renderMascot(); renderChallenges(); renderPass(); renderDash();
+    checkPromotion();
+    sfx(acc >= 80 ? 'done' : 'tap');
+    if (acc >= 80) confetti(60);
+  }
+  function renderMiniResult() {
+    if (!MINI || !MINI.result) return;
+    var r = MINI.result, tot = r.tot, ok = r.ok;
+    var timer = $('#qTimer');
+    if (timer) { timer.textContent = '⏱ ' + fmtDur(r.elapsed); timer.classList.remove('warn'); }
+    $('#qCount').textContent = '채점 완료';
+    $('#qBar').style.width = '100%';
+    var msg = r.acc === 100 ? '전부 맞혔어요! 실전 감각 최고예요' : r.acc >= 80 ? '합격권이에요. 틀린 것만 확인해요' : r.acc >= 50 ? '조금만 더. 오답부터 다시' : '틀린 문제는 오답노트에 담아뒀어요';
+    var avg = tot ? Math.round(r.elapsed / tot) : 0;
+    var list = '';
+    MINI.items.forEach(function (x, idx) {
+      var q = x.q, right = x.pick === q.a;
+      var pickTxt = x.pick == null ? '표시 없음' : String(q.o[x.pick]);
+      list += '<details class="mi-item ' + (right ? 'ok' : 'no') + '"' + (right ? '' : ' open') + '>' +
+        '<summary><span class="mi-no">' + (idx + 1) + '</span>' +
+        '<span class="mi-st">' + esc(cutTxt(q.q, 64)) + '</span>' +
+        '<span class="mi-res">' + (x.pick == null ? '–' : right ? 'O' : 'X') + '</span></summary>' +
+        '<div class="mi-body">' +
+        '<div class="mi-row"><span>내 답</span><b class="' + (right ? 'ok' : 'no') + '">' + esc(cutTxt(pickTxt, 90)) + '</b></div>' +
+        '<div class="mi-row"><span>정답</span><b class="ok">' + esc(cutTxt(String(q.o[q.a] || ''), 120)) + '</b></div>' +
+        expHtml(q) +
+        '<div class="mi-src">📌 ' + esc(q.src || qLabel(q)) + '</div>' +
+        '</div></details>';
+    });
+    var h = '<div class="summary mini-sum">' +
+      '<div class="sum-emoji">' + (r.acc >= 80 ? '🎉' : r.acc >= 50 ? '💪' : '🌱') + '</div>' +
+      '<h2>' + ok + ' / ' + tot + ' 정답</h2>' +
+      '<p>' + esc(MINI.cfg.name) + ' · ' + fmtDur(r.elapsed) + ' 사용' + (r.timeUp ? ' (시간 종료)' : '') + '</p>' +
+      '<div class="mini-score"><b>' + r.acc + '%</b><span>정답률 · 1문항 평균 ' + avg + '초</span></div>' +
+      '<div class="rows">' +
+      '<div class="row"><span>소요 시간</span><i>' + fmtDur(r.elapsed) + ' / ' + fmtDur(MINI.sec) + '</i></div>' +
+      '<div class="row"><span>틀린 문항</span><i>' + r.wrongIds.length + '개 (오답노트 저장)</i></div>' +
+      '<div class="row"><span>얻은 P</span><i>+' + r.earned + ' P</i></div>' +
+      '<div class="row"><span>이 조건 최고</span><i>' + Math.max(r.prevBest, ok) + ' / ' + tot + '</i></div>' +
+      '</div>' +
+      (r.wrongIds.length ? '<button class="btn ghost wide" id="mRetryWrong">🩹 틀린 ' + r.wrongIds.length + '문항 다시 풀기</button>' : '') +
+      '<button class="btn primary wide" id="mAgain">같은 조건으로 한 번 더</button>' +
+      '<button class="btn ghost wide" id="mHome">닫기</button>' +
+      '</div>' +
+      '<h3 class="mini-h">문항별 채점 · 해설 <span>틀린 문항은 펼쳐져 있어요</span></h3>' +
+      '<div class="mini-breakdown">' + list + '</div>';
+    $('#qBody').innerHTML = h;
+    $('#qBody').scrollTop = 0;
+    $('#qFb').classList.add('hidden');
+    var wrongNow = r.wrongIds.slice(), cfgNow = MINI.cfg;
+    var rw = $('#mRetryWrong');
+    if (rw) rw.onclick = function () { closeMini(); startSession('ids', { ids: wrongNow, n: wrongNow.length, noScope: true, title: '미니 모의고사 오답 ' + wrongNow.length + '문항' }); };
+    var ag = $('#mAgain');
+    if (ag) ag.onclick = function () { closeMini(); startMini(cfgNow); };
+    var hm = $('#mHome');
+    if (hm) hm.onclick = function () { closeMini(); renderAll(); };
+  }
+  function closeMini() {
+    if (MINI) { clearInterval(MINI.timer); MINI = null; }
+    document.body.classList.remove('mini', 'fever', 'boss');
+    document.body.style.overflow = '';
+    $('#quiz').classList.add('hidden');
+    $('#qBody').innerHTML = '';
+    var qc = $('#qCombo'); if (qc) qc.classList.remove('hidden');
+    var qt = $('#qTimer'); if (qt) { qt.textContent = '⏱ 60'; qt.classList.remove('warn'); }
+    var qb = $('#qBar'); if (qb) qb.style.width = '0%';
+  }
+
+  /* ============================================================
+     🔎 통합 키워드 검색 — 문제 · 암기표 · 자료실
+     ============================================================ */
+  var SEARCH = { f: 'all', t: null };
+  function searchTokens(kw) {
+    return String(kw || '').toLowerCase().replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  }
+  function hlEsc(s, toks) {
+    var e = esc(s);
+    toks.forEach(function (t) {
+      if (!t) return;
+      var re = new RegExp('(' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+      e = e.replace(re, '<mark>$1</mark>');
+    });
+    return e;
+  }
+  function searchProblems(toks) {
+    var out = [];
+    D.questions.forEach(function (q) {
+      var stem = String(q.q || '').toLowerCase();
+      var optsRaw = (q.o || []).join(' ');
+      var explRaw = String(q.e || '');
+      var opts = optsRaw.toLowerCase();
+      var expl = explRaw.toLowerCase();
+      var meta = ((q.src || '') + ' ' + qLabel(q)).toLowerCase();
+      var all = stem + ' ' + opts + ' ' + expl + ' ' + meta;
+      if (!toks.every(function (t) { return all.indexOf(t) >= 0; })) return;
+      var score = 0, why = '';
+      toks.forEach(function (t) {
+        if (stem.indexOf(t) >= 0) score += 3;
+        else if (opts.indexOf(t) >= 0) score += 2;
+        else if (expl.indexOf(t) >= 0) score += 1;
+      });
+      /* 본문에 없고 해설·보기에서만 걸린 경우, 왜 나왔는지 한 줄 보여준다 */
+      if (!toks.every(function (t) { return stem.indexOf(t) >= 0; })) {
+        var miss = toks.filter(function (t) { return stem.indexOf(t) < 0; })[0];
+        var inExpl = expl.indexOf(miss) >= 0;
+        var srcRaw = inExpl ? explRaw : optsRaw;
+        var at = (inExpl ? expl : opts).indexOf(miss);
+        if (at >= 0) why = (inExpl ? '해설: ' : '보기: ') + '…' + srcRaw.slice(Math.max(0, at - 24), at + 56).replace(/\s+/g, ' ').trim() + '…';
+      }
+      out.push({ q: q, score: score, why: why });
+    });
+    out.sort(function (a, b) { return b.score - a.score; });
+    return out.slice(0, 40);
+  }
+  function searchMemos(toks) {
+    var out = [];
+    GP_TABLE.forEach(function (grp) {
+      grp.rows.forEach(function (r) {
+        var all = (grp.g + ' ' + r[0] + ' ' + r[1] + ' ' + r[2] + ' G-POINT ' + r[0]).toLowerCase();
+        if (!toks.every(function (t) { return all.indexOf(t) >= 0; })) return;
+        out.push({ kind: 'gp', n: Number(r[0]), g: grp.g, cond: r[1], ans: r[2] });
+      });
+    });
+    Object.keys(LAW_TABLE).forEach(function (sid) {
+      LAW_TABLE[sid].forEach(function (grp, gi) {
+        grp.rows.forEach(function (r) {
+          var all = ((SUBJ[sid] ? SUBJ[sid].name : '') + ' ' + grp.g + ' ' + r.join(' ')).toLowerCase();
+          if (!toks.every(function (t) { return all.indexOf(t) >= 0; })) return;
+          out.push({ kind: 'law', sub: sid, gi: gi, g: grp.g, cond: r[0], ans: r[1], src: r[2], tip: r[3] });
+        });
+      });
+    });
+    return out.slice(0, 30);
+  }
+  function searchLibs(toks) {
+    var out = [];
+    LIB.forEach(function (g) {
+      g.rows.forEach(function (r) {
+        var all = (g.sub + ' ' + r.t + ' ' + r.s + ' ' + r.k).toLowerCase();
+        if (!toks.every(function (t) { return all.indexOf(t) >= 0; })) return;
+        out.push({ g: g.sub, r: r });
+      });
+    });
+    return out.slice(0, 30);
+  }
+  function openSearch() {
+    var el = $('#search');
+    if (!el) return;
+    el.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    renderSearch($('#sInput') ? $('#sInput').value : '');
+    var inp = $('#sInput');
+    if (inp) setTimeout(function () { try { inp.focus(); } catch (e) {} }, 80);
+  }
+  function closeSearch() {
+    var el = $('#search');
+    if (el) el.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+  function renderSearch(kw) {
+    var inp = $('#sInput');
+    if (kw != null && inp && inp.value !== kw) inp.value = kw;
+    kw = inp ? inp.value : (kw || '');
+    var toks = searchTokens(kw);
+    var body = $('#sBody');
+    if (!body) return;
+    if (!toks.length) {
+      body.innerHTML = '<div class="s-empty"><b>무엇을 찾을까요?</b>' +
+        '<p>문제 본문·보기·해설, 조문·숫자·두문자 암기표, G-POINT, 자료실 PDF를 한 번에 뒤져요.</p>' +
+        '<div class="s-chips">' + ['불심검문', '가정법', '공소시효', '장정훈', '2026년 2차', '공무집행방해'].map(function (k) {
+          return '<button class="s-chip" data-kw="' + esc(k) + '">' + esc(k) + '</button>';
+        }).join('') + '</div></div>';
+      $$('#sBody [data-kw]').forEach(function (b) {
+        b.onclick = function () { if (inp) { inp.value = b.getAttribute('data-kw'); } renderSearch(); sfx('tap'); };
+      });
+      return;
+    }
+    var qs_ = searchProblems(toks), ms = searchMemos(toks), ls = searchLibs(toks);
+    var f = SEARCH.f;
+    var h = '<div class="s-count">‘<b>' + esc(kw) + '</b>’ 결과 · 문제 ' + qs_.length + ' · 암기표 ' + ms.length + ' · 자료실 ' + ls.length + '</div>';
+    if (!qs_.length && !ms.length && !ls.length) {
+      body.innerHTML = h + '<div class="s-empty"><b>결과가 없어요</b><p>다른 낱말로 찾아보세요. 띄어쓰기로 여러 낱말을 함께 넣으면 그 말이 모두 든 것만 보여줘요.</p></div>';
+      return;
+    }
+    if ((f === 'all' || f === 'q') && qs_.length) {
+      h += '<div class="s-sec"><div class="s-head">① 문제 <b>' + qs_.length + '</b><i>누르면 바로 풀어요</i></div>';
+      qs_.forEach(function (r) {
+        var q = r.q;
+        h += '<button class="s-item" data-qid="' + esc(q.i) + '"><span class="s-k">' + esc(SUBJ[q.s].name) + '</span>' +
+          '<span class="s-b"><b>' + hlEsc(cutTxt(q.q, 90), toks) + '</b>' +
+          '<i>' + esc(qTag(q)) + ' · ' + esc(q.src || '출처 미상') + '</i>' +
+          (r.why ? '<em class="s-why">' + hlEsc(r.why, toks) + '</em>' : '') + '</span><span class="s-go">›</span></button>';
+      });
+      h += '</div>';
+    }
+    if ((f === 'all' || f === 'memo') && ms.length) {
+      h += '<div class="s-sec"><div class="s-head">② 암기표 <b>' + ms.length + '</b><i>누르면 문제·표로 이동</i></div>';
+      ms.forEach(function (m) {
+        if (m.kind === 'gp') {
+          h += '<button class="s-item" data-gpn="' + m.n + '"><span class="s-k gp">GP ' + m.n + '</span>' +
+            '<span class="s-b"><b>' + hlEsc(m.cond, toks) + '</b><i>G-POINT ' + m.n + ' · ' + esc(m.ans) + '</i></span><span class="s-go">›</span></button>';
+        } else {
+          h += '<button class="s-item" data-lawsub="' + m.sub + '" data-lawgi="' + m.gi + '"><span class="s-k law">' + esc(SUBJ[m.sub] ? SUBJ[m.sub].name : '') + '</span>' +
+            '<span class="s-b"><b>' + hlEsc(m.cond, toks) + '</b><i>' + esc(m.g) + ' · ' + hlEsc(m.ans, toks) + (m.src ? ' · ' + esc(m.src) : '') + '</i></span><span class="s-go">›</span></button>';
+        }
+      });
+      h += '</div>';
+    }
+    if ((f === 'all' || f === 'lib') && ls.length) {
+      h += '<div class="s-sec"><div class="s-head">③ 자료실 PDF <b>' + ls.length + '</b><i>누르면 드라이브로 열려요</i></div>';
+      ls.forEach(function (x) {
+        h += '<a class="s-item" href="' + esc(x.r.u) + '" target="_blank" rel="noopener"><span class="s-k lib">' + esc(x.r.k) + '</span>' +
+          '<span class="s-b"><b>' + hlEsc(x.r.t, toks) + '</b><i>' + esc(x.g) + ' · ' + hlEsc(x.r.s, toks) + '</i></span><span class="s-go">↗</span></a>';
+      });
+      h += '</div>';
+    }
+    body.innerHTML = h;
+    $$('#sBody [data-qid]').forEach(function (b) {
+      b.onclick = function () {
+        var id = b.getAttribute('data-qid');
+        var q = D.questions.filter(function (x) { return x.i === id; })[0];
+        if (!q) return;
+        closeSearch();
+        startSession('ids', { ids: [id], n: 1, noScope: true, title: '검색 · ' + qTag(q) });
+      };
+    });
+    $$('#sBody [data-gpn]').forEach(function (b) {
+      b.onclick = function () {
+        var n = Number(b.getAttribute('data-gpn'));
+        closeSearch();
+        if (S.subj !== 'gtelp') { S.subj = 'gtelp'; save(); renderAll(); }
+        startSession('gp', { n: n });
+      };
+    });
+    $$('#sBody [data-lawsub]').forEach(function (b) {
+      b.onclick = function () {
+        var sid = b.getAttribute('data-lawsub'), gi = b.getAttribute('data-lawgi');
+        closeSearch();
+        S.subj = sid; save();
+        openMemo('law');
+        renderAll();
+        setTimeout(function () {
+          var t = $('#law-g' + gi);
+          if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 120);
+      };
+    });
   }
 
   /* ---------- boot ---------- */
