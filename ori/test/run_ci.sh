@@ -13,5 +13,5 @@ npx -y eslint@8.57.0 --no-eslintrc --env es2021 --parser-options ecmaVersion:202
 echo "== 단위 시험"
 export TZ=Asia/Seoul
 node ori/test/ci_test.js
-for t in seller coupang_here takday pay selfcheck roomlink html userscript asgclean expcount noprice zip guide_parser dashopen orphan synclist fdesc rvai rvinbox usage pricechange guide_ratio rvassign msgview editrun paynewrow roomdone paygroup reqraw rvcart formlink listgrp nagsync zipsoon takcut noticeprod carry paystatus seolren chain_sheet geochidel msgpair payrepair room20 singren storedup zeroprod zipshort rvloose today rvphoto dashstale cabletak propclean plantitle exp2tak seolresume phototab listwarn bglane cfphase; do echo "-- $t"; node "ori/test/${t}_test.js" "$M"; done
+for t in seller coupang_here takday pay selfcheck roomlink html userscript asgclean expcount noprice zip guide_parser dashopen orphan synclist fdesc rvai rvinbox usage pricechange guide_ratio rvassign msgview editrun paynewrow roomdone paygroup reqraw rvcart formlink listgrp nagsync zipsoon takcut noticeprod carry paystatus seolren chain_sheet geochidel msgpair payrepair room20 singren storedup zeroprod zipshort rvloose today rvphoto dashstale cabletak propclean plantitle exp2tak seolresume phototab listwarn bglane cfphase safenet; do echo "-- $t"; node "ori/test/${t}_test.js" "$M"; done
 echo "✓ 모든 시험 통과"

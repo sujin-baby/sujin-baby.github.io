@@ -33,10 +33,10 @@ env.__props.set('DASH_TITLES', JSON.stringify(['#11.18 가 10', '#11.18 나 10',
 const run = (t0back) => { G('__CALLS.length = 0; __SEEN.length = 0; globalThis.__ORI_NOTES = []; globalThis.__ORI_T0 = __NOW - ' + (t0back || 0) * 1000 + ';'); G('checkFullInner_()'); return { calls: G('__CALLS.slice()'), notes: G('(globalThis.__ORI_NOTES || []).slice()'), ph: JSON.parse(env.__props.get('CF_PH') || '{}') }; };
 const idx = (a, n) => a.indexOf(n);
 const adv = s => G('__NOW += ' + s * 1000);
-// 1) 처음: 전부, 정해진 순서 (공지 모양 → 폼 인원 → 알림 → 명단 전달 → 리뷰 확인 → 한눈에)
+// 1) 처음: 전부, 정해진 순서 (공지 모양 → 폼 인원 → 알림 → 리뷰 확인 → 한눈에 → 명단 전달 안전망)
 let r = run();
 ok(['makeDueDays_', 'ensureRunNotices_', 'checkRun', 'fruitCheck_', 'ensureListMsgs_', 'reviewDone_', 'buildDashboard_', 'ensureUsageTab_'].every(n => idx(r.calls, n) >= 0), '1) 다 돎 ' + r.calls.join(','));
-ok(idx(r.calls, 'ensureRunNotices_') < idx(r.calls, 'checkRun') && idx(r.calls, 'checkRun') < idx(r.calls, 'fruitCheck_') && idx(r.calls, 'fruitCheck_') < idx(r.calls, 'ensureListMsgs_') && idx(r.calls, 'reviewDone_') < idx(r.calls, 'buildDashboard_'), '1) 순서 ' + r.calls.join(','));
+ok(idx(r.calls, 'ensureRunNotices_') < idx(r.calls, 'checkRun') && idx(r.calls, 'checkRun') < idx(r.calls, 'fruitCheck_') && idx(r.calls, 'fruitCheck_') < idx(r.calls, 'ensureListMsgs_') && idx(r.calls, 'reviewDone_') < idx(r.calls, 'buildDashboard_') && idx(r.calls, 'buildDashboard_') < idx(r.calls, 'ensureListMsgs_'), '1) 순서 ' + r.calls.join(','));
 ok(idx(r.calls, 'soonCheck_') < 0 && !r.notes.some(x => /이어서/.test(x)), '1) 안 미룸 ' + r.notes.join(' | '));
 ok(r.ph['폼 인원'] && r.ph['폼 인원'].d && !r.ph['폼 인원'].s && r.ph['한눈에'].d, '1) 끝난 시각 적음 ' + JSON.stringify(r.ph['폼 인원']));
 // 2) 1분 뒤 다시: 매번 할 것만, 나머지는 건너뜀

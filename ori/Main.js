@@ -3574,7 +3574,7 @@ function checkFullInner_() {
     try { ensureMidnightTrigger_(); } catch (e) { note_('0시 확인 예약 실패: ' + e); }
   });
   // ── 나머지: 지난번 걸린 시간으로 남은 시간 안에 끝날 것만 시작, 못 한 건 1분 뒤 확인이 이어서 (cfRun_ 설명)
-  //  순서: 폼 인원(인원·마감·명단 전달)을 알림보다 먼저 (11/18 사용자: 명단 전달이 늦음). 방 공지가 먼저 있어야 폼 인원의 '방 공지 없음' 표시가 안 틀림
+  //  순서: 폼 인원(인원·마감·명단 전달)을 알림보다 먼저 (11/18 사용자: 명단 전달이 늦음), 한눈에를 명단 전달 안전망보다 먼저. 방 공지가 먼저 있어야 폼 인원의 '방 공지 없음' 표시가 안 틀림
   cfRun_(S, [
     { n: '공지 모양', need: 20, run: function () {
       try { ensureRunNotices_(readRuns_()); } catch (e) { note_('방 공지 확인 실패: ' + e); }
@@ -3690,14 +3690,6 @@ function checkFullInner_() {
       cfCut_();
       try { payChkRecheck1_(runs); } catch (e) { note_('결제금액 확인 다시 보기 실패: ' + e); }
     } },
-    { n: '명단 전달·리뷰 가이드', need: 90, run: function () {
-      runs = readRuns_();
-      try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
-      cfCut_();
-      try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
-      cfCut_();
-      try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
-    } },
     // 리뷰 체크 확인(취완·독촉·리뷰 보고)은 15분마다 (11/2 사용자 요청). 한눈에를 그리기 전에 해서 '리뷰 취합할 것'이 바로 보이게
     { n: '리뷰 확인', need: 30, run: function () {
       try { subTime_('리뷰 확인', function () { reviewDone_(readRuns_()); }); globalThis.__RV_DONE_RUN = 1; } catch (e) { if (e && e.yieldLock) throw e; note_('리뷰 완료 확인 실패: ' + e); }
@@ -3716,6 +3708,15 @@ function checkFullInner_() {
           note_(left.length ? '⚠ 한눈에 오류 칸(' + bad.slice(0, 3).join(', ') + ')을 다시 그렸는데 ' + left.length + '개 남음: ' + left.slice(0, 3).join(', ') + why : '✓ 한눈에 오류 칸 ' + bad.length + '개(' + bad.slice(0, 3).join(', ') + ') 다시 그려서 고침');
         }
       } catch (e) { if (e && e.yieldLock) throw e; note_('한눈에 오류 칸 확인 실패: ' + e); }
+    } },
+    // 명단 전달·리뷰 가이드 안전망 (마감 때 바로 넣으므로 보통 할 게 없음): 한눈에 뒤 (11/18 194초 걸려 한눈에가 두 번 밀림)
+    { n: '명단 전달·리뷰 가이드', need: 90, run: function () {
+      runs = readRuns_();
+      try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
+      cfCut_();
+      try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
+      cfCut_();
+      try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
     } },
     { n: '리뷰 사진', need: 30, run: function () {
       // 진행 중 의뢰 리뷰이미지에 바로 올린 사진도 대기열로 (11/15)
@@ -4061,13 +4062,15 @@ function ensureListMsgs_(runs) {
     if (r['진행 상태'] === '종료' || !(r['마감 시각'] instanceof Date) || !r['시트 링크']) return;
     if (Utilities.formatDate(r['마감 시각'], CONFIG.TIMEZONE, 'yyyyMMdd') !== tk) return;
     if (PropertiesService.getScriptProperties().getProperty('NOLISTMSG_' + bareTitle_(r['명단 제목']).replace(/\s+/g, ''))) return;   // 인원을 줄여서 끝낸 진행: 보낸 메시지를 고치는 할 일로 대신
-    const want = listMsgText_(r);
-    let found = false;
+    let found = false, want = null;
     v.forEach(function (x, i) {
       if (x[2] !== '명단 전달') return;
       if (!String(x[4]).split('\n').some(function (l) { return l.trim() && sameRunTitle_(l, r['명단 제목']); })) return;
       found = true;
-      if (x[5] === '대기' && String(x[4]) !== want) obSet_(ob, x[0], 5, want);
+      // 보낸 건 안 고침 → 대기인 것만 글을 새로 만들어 비교 (11/18: 이미 보낸 진행까지 매번 명단을 다시 읽어 100초 넘게 걸림)
+      if (x[5] !== '대기') return;
+      if (want === null) want = listMsgText_(r);
+      if (String(x[4]) !== want) obSet_(ob, x[0], 5, want);
     });
     if (!found) { queueListMsgs_(r, true); note_('✓ 명단 전달 메시지 넣음: ' + bareTitle_(r['명단 제목'])); }
   });
@@ -4203,6 +4206,7 @@ function receivers_(r, w) {
 function ensureReviewGuideMsgs_(runs) {
   const props = PropertiesService.getScriptProperties(), now = Date.now();
   let assign = null;
+  const obc = {};   // 보낼메시지는 이번에 한 번만 읽음 (진행마다 다시 맞추기에서 읽어서 느렸음, 11/18)
   const namesOf = function (x) {
     if (!assign) { assign = []; try { const as = assignSheet_(), al = as.getLastRow(); if (al >= 2) assign = as.getRange(2, 1, al - 1, 4).getValues(); } catch (e) {} }
     const out = [];
@@ -4215,7 +4219,7 @@ function ensureReviewGuideMsgs_(runs) {
       if (r['진행 상태'] === '종료' || !(r['마감 시각'] instanceof Date) || now - r['마감 시각'].getTime() > 2 * 86400000) return;
       // V2(10/19): 카톡 이름 대신 수령인(계정) 이름으로. 예전(카톡 이름) 메시지가 아직 대기면 새 글로 바꿈, 보냈으면 그대로
       const key0 = 'RVMSG_' + String(r['명단 제목']).replace(/\s+/g, ''), key = 'RVMSG2_' + String(r['명단 제목']).replace(/\s+/g, '');
-      if (props.getProperty(key)) { try { refreshGuide_(r, k, c); } catch (e) { note_('리뷰 가이드 다시 맞추기 실패: ' + e); } return; }
+      if (props.getProperty(key)) { try { refreshGuide_(r, k, c, runs, obc); } catch (e) { note_('리뷰 가이드 다시 맞추기 실패: ' + e); } return; }
       // 방제를 바꿔도 같은 날 같은 명단이면 한 번만 (10/21 부유단감 두 번 들어간 것)
       const keyD = 'RVMSGD_' + r['시트ID'] + '_' + Utilities.formatDate(r['진행일'] instanceof Date ? r['진행일'] : new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
       if (props.getProperty(keyD)) { props.setProperty(key, '1'); return; }
@@ -4290,17 +4294,19 @@ function savePhotoUsed_(sid, add, drop) {
   props.setProperty('RV_' + sid, JSON.stringify(rv));
 }
 // 대기 중인 리뷰 가이드: 명단(수령인)이 처음 만들 때와 달라졌고 글을 손으로 안 고쳤으면 지금 명단으로 다시 (사용자 요청 10/27: 한눈에 명단이 최종)
-function refreshGuide_(r, k, c) {
+// runs·obc(보낼메시지 한 번 읽은 것)는 ensureReviewGuideMsgs_가 넘김 (없으면 여기서 읽음)
+function refreshGuide_(r, k, c, runs, obc) {
   const props = PropertiesService.getScriptProperties();
   const keyD = 'RVMSGD_' + r['시트ID'] + '_' + Utilities.formatDate(r['진행일'] instanceof Date ? r['진행일'] : new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
   const old = props.getProperty('RVTXT_' + keyD), sig0 = props.getProperty('RVSIG_' + keyD);
   if (!old || sig0 === null) return;
   const room = String(r['카톡방'] || bareTitle_(r['명단 제목']));
-  const ob = outboxSheet_(), ol = ob.getLastRow();
-  if (ol < 2) return;
-  const row = ob.getRange(2, 1, ol - 1, 6).getValues().filter(function (v) { return v[2] === '방 공지' && v[5] === '대기' && String(v[4]) === old; })[0];
+  obc = obc || {};
+  const ob = obc.ob || (obc.ob = outboxSheet_());
+  if (!obc.v) { const ol = ob.getLastRow(); obc.v = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues() : []; }
+  const row = obc.v.filter(function (v) { return v[2] === '방 공지' && v[5] === '대기' && String(v[4]) === old; })[0];
   if (!row) return;   // 보냈거나 손으로 고쳤으면 그대로
-  const runs = readRuns_();
+  runs = runs || readRuns_();
   const ppl = receivers_(r, windowOf_(runs, r));
   const sig = ppl.map(function (p) { return p.nm + '/' + p.opt; }).join('|');
   if (!ppl.length || sig === sig0) return;
@@ -4314,7 +4320,7 @@ function refreshGuide_(r, k, c) {
   const dm = rv.dayMix && rv.dayMix[bareTitle_(r['명단 제목']).replace(/\s+/g, '')];
   const res = dm ? reviewGuideMsg_(Object.assign({}, rv, { mix: dm }), ppl, [counts[k]], 0) : reviewGuideMsg_(rv, ppl, counts, k);
   if (!res.msg || res.photoWait) return;
-  obSet_(ob, row[0], 5, res.msg);
+  obSet_(ob, row[0], 5, res.msg); row[4] = res.msg;   // 읽어 둔 것도 맞춤
   props.setProperty('RVTXT_' + keyD, res.msg); props.setProperty('RVSIG_' + keyD, sig);
   savePhotoUsed_(first['시트ID'], res.photoOpts || [], ph); props.setProperty('RVPH_' + keyD, JSON.stringify(res.photoOpts || []));
   note_('✓ 리뷰 가이드 명단 다시 맞춤: ' + room + ' (' + ppl.map(function (p) { return p.nm; }).join(' ') + ')');
