@@ -51,7 +51,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     ans: 0, ok: 0, muted: false, subj: 'cri', course: {}, qlen: 10, mix: false, days: {},
     dday: DTARGET, ddayNote: '예상일', unit: {}, node: {}, qok: {}, gpSeeded: false, goal: { xp: 50, q: 10 }, bestCombo: 0,
     planLog: {}, planSubj: '', planPerDay: 2, speedBest: 0,
-    xpSpent: 0, shields: {}, cards: {}, rewardData: {}, gpLast: {}, bossWins: 0
+    xpSpent: 0, shields: {}, cards: {}, gpLast: {}, bossWins: 0
   };
   try {
     var raw = localStorage.getItem(SKEY);
@@ -93,7 +93,6 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (typeof S.xpSpent !== 'number') S.xpSpent = 0;
     if (!S.shields) S.shields = {};
     if (!S.cards) S.cards = {};
-    if (!S.rewardData) S.rewardData = {};
     if (!S.gpLast) S.gpLast = {};
     // 배분 방식이 바뀌면(업로드 반영·하루 1~2강) 예전에 저장된 오늘 몫을 버리고 다시 계산한다
     if (S.planVer !== 3) { S.planLog = {}; S.planVer = 3; }
@@ -939,18 +938,13 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       var cls = 'rank-item' + (i <= rk.i ? ' got' : '');
       html += '<div class="' + cls + '"><span>' + r.e + '</span><b>' + r.n + '</b><i>' + r.xp + ' P</i></div>';
     });
-    html += '</div>' + rewardHtml();
+    html += '</div>' + xpSpendHtml();
     html += '<button class="btn primary" data-close="1" style="margin-top:12px">확인</button>';
     return html;
-  }
-  function bindRankSheet() {
-    $$('#sheetIn .rank-item').forEach(function () {});
-    bindRewards($('#sheetIn'));
   }
   function openRankSheet(rank, promoted) {
     $('#sheetIn').innerHTML = rankSheetHtml(rank, promoted);
     $('#sheet').classList.remove('hidden');
-    bindRankSheet();
   }
   /* 헤더 실제 높이를 CSS 변수로 넘겨 과목 탭이 그 아래에 정확히 붙게 한다(카드가 반쯤 비치는 겹침 방지) */
   function syncTopHeight() {
@@ -1939,7 +1933,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
 
   function renderQ() {
     var it = QS.items[QS.i], q = it.q;
-    QS.locked = false; QS.sel = -1; QS.hintUsed = false; QS.hintGone = -1;
+    QS.locked = false; QS.sel = -1; QS.hintUsed = !!it.hintUsed; QS.hintGone = -1;
     document.body.classList.toggle('boss', !!it.boss);
     $('#qBar').style.width = (QS.i / QS.items.length * 100) + '%';
     $('#qCount').textContent = (QS.i + 1) + '/' + QS.items.length;
@@ -1966,6 +1960,48 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     });
     var hb = $('#qHint');
     if (hb) hb.onclick = useHint;
+    if (it.hintHtml && it.hintUsed) {
+      var hbx = $('#hintBox');
+      if (hbx) { hbx.innerHTML = it.hintHtml; hbx.classList.add('show'); }
+      if (hb) { hb.disabled = true; hb.textContent = '💡 힌트 확인함'; }
+    }
+    /* 이미 푼 문제로 돌아온 경우: 그때 고른 보기·정답·해설을 그대로 되살린다 (재채점·P 중복 지급 없음) */
+    if (it.resp) restoreAnswer(it, q);
+    syncQNav();
+  }
+
+  /* ============================================================
+     ← 이전 / 다음 →
+     · 지나간 문제를 다시 열어 내가 고른 보기·정답·해설을 그대로 본다
+     · 되살리기만 하고 answer()를 다시 부르지 않으므로 P·통계가 두 번 쌓이지 않는다
+     ============================================================ */
+  function restoreAnswer(it, q) {
+    var r = it.resp;
+    QS.locked = true;
+    $$('#qBody .opt').forEach(function (b) {
+      var i = Number(b.getAttribute('data-i'));
+      b.disabled = true;
+      if (i === q.a) b.classList.add('ok');
+      else if (i === r.oi) b.classList.add('no');
+    });
+    if (!QS.speed) fb(r.right, q, r.gain, r.bonus);
+    QS.sel = r.oi;
+  }
+
+  function syncQNav() {
+    var p = $('#qPrev');
+    if (p) p.disabled = !(QS && QS.i > 0 && !QS.finished && !QS.speed);
+    var f = $('#fbPrev');
+    if (f) f.style.display = (QS && QS.i > 0 && !QS.speed) ? '' : 'none';
+  }
+
+  function goPrev() {
+    if (!QS || QS.finished || QS.speed || QS.i <= 0) return;
+    clearTimeout(QS._t);
+    $('#qFb').classList.add('hidden');
+    QS.i--;
+    renderQ();
+    sfx('tap');
   }
 
   /* ============================================================
@@ -2054,6 +2090,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (xpAvail() < HINT_COST) { toast('힌트권에는 ' + HINT_COST + ' P가 필요해요 · 지금 ' + xpAvail() + ' P'); return; }
     if (!spendXp(HINT_COST)) return;
     QS.hintUsed = true;
+    it.hintUsed = true;
     var h = hintFor(q);
     var box = $('#hintBox');
     if (box) {
@@ -2063,6 +2100,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         (h.s ? '<p class="hint-sub">' + esc(h.s) + '</p>' : '') +
         '</div>';
       box.classList.add('show');
+      it.hintHtml = box.innerHTML;
       /* 힌트를 열면 상단 배지가 반쯤 잘린 채로 남지 않게 스크롤을 정리한다 */
       var bd = $('#qBody');
       if (bd) {
@@ -2104,8 +2142,9 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
 
   function answer(oi, btn) {
     if (QS.locked) return;
-    QS.locked = true;
     var it = QS.items[QS.i], q = it.q;
+    if (it.resp) return;                 /* 이미 푼 문제는 다시 채점하지 않는다 */
+    QS.locked = true;
     var right = oi === q.a;
     $$('#qBody .opt').forEach(function (b) {
       var i = Number(b.getAttribute('data-i'));
@@ -2150,6 +2189,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       } else if (QS.combo === 3 && !QS.bossDone && QS.bossPool && QS.bossPool.length) {
         QS.bossDone = true;
         QS.pendingBoss = QS.bossPool[0];
+        QS.pendingAt = QS.i;      /* 이 문제에서 '다음 →'을 눌렀을 때만 보스를 끼워 넣는다 */
         comboBanner('👾 보스 등장!', true);
       }
       if (!QS.speed) confetti(bonus ? 34 : 22);
@@ -2176,6 +2216,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     }
     QS.best = Math.max(QS.best || 0, QS.combo);
     if (QS.combo > (S.bestCombo || 0)) { S.bestCombo = QS.combo; }
+    it.resp = { oi: oi, right: right, gain: (right ? total : 3), bonus: (right ? bonus : 0) };
+    syncQNav();
     save();
     renderHud(); renderQuest(); renderMascot(); renderChallenges(); renderPass(); renderDash();
     checkPromotion();
@@ -2190,7 +2232,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       '<span class="fb-xp">+' + gain + ' P</span>';
     el.querySelector('.fb-text').innerHTML = expHtml(q, QS && QS.items[QS.i]);
     var b = $('#fbNext');
-    b.textContent = QS.i + 1 >= QS.items.length ? '결과 보기' : '다음 문제';
+    b.textContent = QS.i + 1 >= QS.items.length ? '결과 보기 →' : '다음 문제 →';
+    syncQNav();
     /* 해설이 패널에 다 안 들어가면 스크롤 안내(아래 흐림) 표시 */
     requestAnimationFrame(function () {
       var sc = $('#qFb .fb-scroll');
@@ -2318,20 +2361,25 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
 
   function nextQ() {
+    if (!QS) return;
+    clearTimeout(QS._t);
     $('#qFb').classList.add('hidden');
     document.body.classList.remove('boss');
-    if (QS.pendingBoss) {
+    if (QS.pendingBoss && QS.pendingAt === QS.i) {
       var bq = QS.pendingBoss;
       QS.pendingBoss = null;
       var order = bq.o.map(function (_, i) { return i; });
       shuffle(order);
       QS.items.splice(QS.i + 1, 0, { q: bq, order: order, boss: true });
     }
-    if (QS.i + 1 >= QS.items.length) return finish();
+    if (QS.i + 1 >= QS.items.length) { if (!QS.finished) finish(); return; }
     QS.i++; renderQ();
   }
 
   function finish() {
+    if (!QS || QS.finished) return;
+    QS.finished = true;
+    syncQNav();
     if (QS.speed) return finishSpeed();
     document.body.classList.remove('fever');
     var tot = QS.items.length, ok = QS.ok, acc = Math.round(ok / tot * 100);
@@ -2491,6 +2539,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   window.addEventListener('load', function () { syncTopHeight(); });
   $('#qClose').onclick = function () { closeQuiz(); renderAll(); };
   $('#fbNext').onclick = nextQ;
+  var _fbPrev = $('#fbPrev'); if (_fbPrev) _fbPrev.onclick = goPrev;
+  var _qPrev = $('#qPrev'); if (_qPrev) _qPrev.onclick = goPrev;
   $('#stWrongGo').onclick = function () { startSession('wrong'); };
   $('#sheet').addEventListener('click', closeSheetIfBg);
   $('#reset').onclick = function () {
@@ -2499,7 +2549,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       xp: 0, streak: { n: 0, last: '', best: 0 }, checked: {}, wrong: {}, ans: 0, ok: 0,
       muted: S.muted, subj: S.subj, course: {}, qlen: 10, mix: false, days: {},
       dday: DTARGET, ddayNote: '예상일', unit: {}, node: {}, qok: {}, gpSeeded: true, goal: { xp: 50, q: 10 },
-      planLog: {}, planSubj: 'done', xpSpent: 0, shields: {}, cards: {}, rewardData: {}, gpLast: {}, bossWins: 0,
+      planLog: {}, planSubj: 'done', xpSpent: 0, shields: {}, cards: {}, gpLast: {}, bossWins: 0,
       dayGoal: S.dayGoal || 30, oxBest: 0, oxRuns: 0
     };
     scopeCache = null;
@@ -2578,7 +2628,6 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
      · 암기·자료 탭 (카드 / G-POINT 표 / 자료실)
      ============================================================ */
   var HINT_COST = 30, SHIELD_COST = 80, BOSS_BONUS = 30;
-  var REWARD_DEFS = ['야식 한 끼', '휴식 타임 30분', '카페 음료 한 잔', '하루 편하게 쉬기'];
 
   function xpAvail() { return Math.max(0, (S.xp || 0) - (S.xpSpent || 0)); }
   function spendXp(n) {
@@ -3325,58 +3374,13 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     BQ = null;
   }
 
-  /* ---------- 계급 · 보상 게이지 ---------- */
-  function rewardHtml() {
-    var xp = S.xp || 0, step = 500, earned = Math.floor(xp / step);
-    var h = '<div class="rw-sec"><div class="rw-h"><b>🎁 코코 응원 쿠폰</b><i>500 ' + XP_LABEL + '마다 한 장 · 다음까지 ' + (step - xp % step) + '</i></div>' +
-      '<div class="rw-bar"><i style="width:' + ((xp % step) / step * 100) + '%"></i></div>';
-    var max = Math.max(4, Math.min(earned + 1, 12));
-    for (var i = 1; i <= max; i++) {
-      var need = i * step, got = i <= earned;
-      var rd = (S.rewardData || {})[i] || {};
-      var lab = rd.label || REWARD_DEFS[(i - 1) % REWARD_DEFS.length];
-      h += '<div class="rw-row' + (got ? '' : ' dim') + (rd.done ? ' done' : '') + '">' +
-        '<span class="rw-xp">' + need + '</span>' +
-        '<span class="rw-lab" data-edit="' + i + '">' + esc(lab) + '</span>' +
-        '<button class="rw-btn" data-rw="' + i + '"' + (got ? '' : ' disabled') + '>' +
-        (rd.done ? '받음 ✓' : (got ? '받기' : '잠금')) + '</button></div>';
-    }
-    h += '<div class="xp-use"><span>🎟️ 힌트권 · ' + HINT_COST + ' ' + XP_LABEL + '</span><span>🛡️ 출석 방패 · ' + SHIELD_COST + ' ' + XP_LABEL + '</span></div>' +
+  /* ---------- 계급 시트: 포인트 쓰기 ---------- */
+  function xpSpendHtml() {
+    var xp = S.xp || 0;
+    return '<div class="xp-sec">' +
+      '<div class="xp-use"><span>🎟️ 힌트권 · ' + HINT_COST + ' ' + XP_LABEL + '</span><span>🛡️ 출석 방패 · ' + SHIELD_COST + ' ' + XP_LABEL + '</span></div>' +
       '<div class="sheet-note" style="margin-top:6px">힌트권은 보기를 지우지 않고, 그 문제의 쟁점(지텔프는 G-POINT 번호와 공식)을 알려줘요 · 한 문제당 1회</div>' +
       '<div class="sheet-note" style="margin-top:8px">쓸 수 있는 ' + XP_LABEL + ' ' + xpAvail() + ' · 누적 ' + xp + ' (계급은 누적으로 올라가요)</div></div>';
-    return h;
-  }
-  function bindRewards(root) {
-    $$('.rw-btn', root).forEach(function (b) {
-      b.onclick = function () {
-        var i = Number(b.getAttribute('data-rw'));
-        var need = i * 500;
-        if ((S.xp || 0) < need) { toast(need + ' ' + XP_LABEL + '까지 ' + (need - (S.xp || 0)) + ' 남았어요'); return; }
-        S.rewardData = S.rewardData || {};
-        var rd = S.rewardData[i] || (S.rewardData[i] = {});
-        rd.done = !rd.done;
-        save(); sfx(rd.done ? 'ok' : 'tap');
-        if (rd.done) confetti(40);
-        var nx = rankOf(S.xp || 0);
-        $('#sheetIn').innerHTML = rankSheetHtml(nx.r, false);
-        bindRankSheet();
-      };
-    });
-    $$('.rw-lab', root).forEach(function (b) {
-      b.onclick = function () {
-        var i = Number(b.getAttribute('data-edit'));
-        S.rewardData = S.rewardData || {};
-        var rd = S.rewardData[i] || (S.rewardData[i] = {});
-        var cur = rd.label || REWARD_DEFS[(i - 1) % REWARD_DEFS.length];
-        var v = window.prompt('이 보상을 무엇으로 할까요? (예: 야식 한 끼, 휴식 30분)', cur);
-        if (!v) return;
-        rd.label = String(v).slice(0, 24);
-        save();
-        var nx = rankOf(S.xp || 0);
-        $('#sheetIn').innerHTML = rankSheetHtml(null, false);
-        bindRankSheet();
-      };
-    });
   }
 
   /* ---------- 첫 화면 타일 · 방패 ---------- */
