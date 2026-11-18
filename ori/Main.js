@@ -1925,7 +1925,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'LEGMOVE1', 'LEGREN1', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'LEGMOVE1', 'LEGREN1', 'LEGPAY1', 'SLOW_I', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3611,7 +3611,7 @@ function checkFullInner_() {
   //  순서: 폼 인원(인원·마감·명단 전달)을 알림보다 먼저 (11/18 사용자: 명단 전달이 늦음), 한눈에를 명단 전달 안전망보다 먼저. 방 공지가 먼저 있어야 폼 인원의 '방 공지 없음' 표시가 안 틀림
   cfRun_(S, [
     // (11/18 하루만, 사용자 승인) 레깅스 50 응답을 옛 폼(레깅스 30) → 새 폼으로. 다른 날엔 바로 끝남. 맨 앞(시간 넉넉할 때)
-    { n: '레깅스 50 옮기기', need: 150, run: function () { try { legRen1_(false); } catch (e) { note_('레깅스 30 되돌리기 실패: ' + e); } const r = legMove_(false); if (r && r.stopped) throw { cfCut: 1 }; } },
+    { n: '레깅스 50 옮기기', need: 150, run: function () { try { legRen1_(false); } catch (e) { note_('레깅스 30 되돌리기 실패: ' + e); } try { legPay1_(); } catch (e) {} const r = legMove_(false); if (r && r.stopped) throw { cfCut: 1 }; } },
     { n: '공지 모양', need: 20, run: function () {
       try { ensureRunNotices_(readRuns_()); } catch (e) { note_('방 공지 확인 실패: ' + e); }
       try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
@@ -3941,41 +3941,30 @@ function protectAutoCols_() {
 // 30분 정리: 다 끝나야 시각을 적음 (중간에 끊기면 다음 확인에서 다시)
 function slowTasks_(rr, listed) {
   rr = rr || readRuns_(); listed = listed || {};
+  // 단계마다: 15분 확인이 기다리면 비켜 줌, 6분 제한에 가까우면 여기까지 적고(SLOW_I) 멈춤 → 다음에 그 단계부터 (11/18: 정리 한 번에 228초라 시작할 틈이 없어 2시간 넘게 밀림)
+  const sp = PropertiesService.getScriptProperties(), i0 = Number(sp.getProperty('SLOW_I') || 0);
+  let k = -1;
+  const go = function () { k++; if (k < i0) return false; bgYield_(); if (globalThis.__ORI_T0 && cfElapsed_() > 250) { sp.setProperty('SLOW_I', String(k)); throw { bgLate: 1 }; } return true; };
   const rvN = function () { return Object.keys(PropertiesService.getScriptProperties().getProperties()).filter(function (k) { return /^(RVDONE_|RVRPT_|RVZIPURL_)/.test(k); }).length; }, rv0 = rvN();
   // 이번 확인에서 이미 했으면 안 함 (15분마다 한눈에 전에 함)
-  bgYield_();
-  if (!globalThis.__RV_DONE_RUN) { try { subTime_('정리: 리뷰 완료', function () { reviewDone_(readRuns_()); }); } catch (e) { if (e && e.yieldLock) throw e; note_('리뷰 완료 확인 실패: ' + e); } }
+  if (go()) if (!globalThis.__RV_DONE_RUN) { try { subTime_('정리: 리뷰 완료', function () { reviewDone_(readRuns_()); }); } catch (e) { if (e && e.yieldLock) throw e; note_('리뷰 완료 확인 실패: ' + e); } }
   // 의뢰 리뷰가 다 끝나거나 압축 파일이 처음 생기면 한눈에 '리뷰 취합할 것'에 바로 보이게 다시 그림 (전엔 한눈에를 먼저 그려서 15~30분 늦게 떴음, 10/25)
-  bgYield_();
-  if (rvN() !== rv0 && !late_(300)) { try { buildDashboard_(false); } catch (e) { note_('한눈에 탭 실패: ' + e); } }
-  bgYield_();
-  try { subTime_('정리: 지난 명단 탭', function () { listTabsRecent_(rr, listed); }); } catch (e) { note_('지난 명단 탭 실패: ' + e); }
-  bgYield_();
-  try { subTime_('정리: 블랙리스트', function () { blackSheet_(); }); } catch (e) { note_('블랙리스트 탭 만들기 실패: ' + e); }
-  bgYield_();
-  try { subTime_('정리: 사용법 탭', function () { ensureUsageTab_(); }); } catch (e) { note_('사용법 탭 만들기 실패: ' + e); }
-  bgYield_();
-  try { subTime_('정리: 명단 시트 표시', function () { cleanListSheetsOnce_(rr); }); } catch (e) { note_('명단 시트 표시 정리 실패: ' + e); }
-  bgYield_();
-  try { subTime_('정리: 보낸 메시지', function () { pruneOutbox_(); }); } catch (e) { note_('보낸 메시지 정리 실패: ' + e); }
-  bgYield_();
-  try { subTime_('정리: 폼수정 탭', function () { ensureEditTab_(); }); } catch (e) { note_('폼수정 탭 만들기 실패: ' + e); }
-  bgYield_();
-  try { protectAutoCols_(); } catch (e) { note_('자동 칸 경고 걸기 실패: ' + e); }
-  bgYield_();
-  try { moveCampFoldersOnce_(); } catch (e) { note_('월 폴더 정리 실패: ' + e); }
-  bgYield_();
-  try { rvSentBackfill1_(); } catch (e) { note_('리뷰 보고 → 업체 전송 맞추기 실패: ' + e); }
-  bgYield_();
-  try { rvSentFix2_(); } catch (e) { note_('실링팬 업체 전송 맞추기 실패: ' + e); }
-  bgYield_();
-  try { rvCollBackfill1_(); } catch (e) { note_('리뷰 취합 날짜 맞추기 실패: ' + e); }
-  bgYield_();
-  try { listRegroupAll1_(rr); } catch (e) { note_('명단 계좌 칸 묶음 되살리기 실패: ' + e); }
-  bgYield_();
-  try { rvReportFix1_(); rvReportFix1_('RVRPTSPAN2'); } catch (e) { note_('리뷰 보고 글 고치기 실패: ' + e); }   // 2: '#실 실' 겹침 (11/8)
-  bgYield_();
-  try { ensureInboxTrigger_(); } catch (e) { note_('받는 곳 5분 트리거 실패: ' + e); }
+  if (go()) if (rvN() !== rv0 && !late_(300)) { try { buildDashboard_(false); } catch (e) { note_('한눈에 탭 실패: ' + e); } }
+  if (go()) try { subTime_('정리: 지난 명단 탭', function () { listTabsRecent_(rr, listed); }); } catch (e) { note_('지난 명단 탭 실패: ' + e); }
+  if (go()) try { subTime_('정리: 블랙리스트', function () { blackSheet_(); }); } catch (e) { note_('블랙리스트 탭 만들기 실패: ' + e); }
+  if (go()) try { subTime_('정리: 사용법 탭', function () { ensureUsageTab_(); }); } catch (e) { note_('사용법 탭 만들기 실패: ' + e); }
+  if (go()) try { subTime_('정리: 명단 시트 표시', function () { cleanListSheetsOnce_(rr); }); } catch (e) { note_('명단 시트 표시 정리 실패: ' + e); }
+  if (go()) try { subTime_('정리: 보낸 메시지', function () { pruneOutbox_(); }); } catch (e) { note_('보낸 메시지 정리 실패: ' + e); }
+  if (go()) try { subTime_('정리: 폼수정 탭', function () { ensureEditTab_(); }); } catch (e) { note_('폼수정 탭 만들기 실패: ' + e); }
+  if (go()) try { protectAutoCols_(); } catch (e) { note_('자동 칸 경고 걸기 실패: ' + e); }
+  if (go()) try { moveCampFoldersOnce_(); } catch (e) { note_('월 폴더 정리 실패: ' + e); }
+  if (go()) try { rvSentBackfill1_(); } catch (e) { note_('리뷰 보고 → 업체 전송 맞추기 실패: ' + e); }
+  if (go()) try { rvSentFix2_(); } catch (e) { note_('실링팬 업체 전송 맞추기 실패: ' + e); }
+  if (go()) try { rvCollBackfill1_(); } catch (e) { note_('리뷰 취합 날짜 맞추기 실패: ' + e); }
+  if (go()) try { listRegroupAll1_(rr); } catch (e) { note_('명단 계좌 칸 묶음 되살리기 실패: ' + e); }
+  if (go()) try { rvReportFix1_(); rvReportFix1_('RVRPTSPAN2'); } catch (e) { note_('리뷰 보고 글 고치기 실패: ' + e); }   // 2: '#실 실' 겹침 (11/8)
+  if (go()) try { ensureInboxTrigger_(); } catch (e) { note_('받는 곳 5분 트리거 실패: ' + e); }
+  sp.deleteProperty('SLOW_I');
   PropertiesService.getScriptProperties().setProperty('SLOW_AT', String(Date.now()));
 }
 
@@ -4414,7 +4403,7 @@ function rvMoveFix1_() {
 const BG_TASKS = [
   { k: 'dashstale', every: 5, max: 280, label: '한눈에 명단 다시 불러오기', run: function () { dashListStale_(); } },
   { k: 'phototab', every: 15, max: 250, label: '📷포토전달 탭', run: function () { photoTabBuild_(readRuns_()); } },
-  { k: 'slow', every: 30, max: 150, label: '정리(취완·리뷰 독촉·리뷰 보고·폼수정 탭 등)', last: function (p) { return Number(p.getProperty('SLOW_AT') || 0); }, run: function () { slowTasks_(readRuns_(), {}); } },
+  { k: 'slow', every: 30, max: 200, self: 1, need: 40, label: '정리(취완·리뷰 독촉·리뷰 보고·폼수정 탭 등)', last: function (p) { return Number(p.getProperty('SLOW_AT') || 0); }, run: function () { slowTasks_(readRuns_(), {}); } },
   { k: 'pay', every: 10, max: 150, label: '월급시트 이어서', due: function (p) { return !!p.getProperty('PAY_PENDING') && !!CONFIG.PAY_SHEET_ID; }, run: function () { const p = PropertiesService.getScriptProperties(); try { updatePay_(true); p.deleteProperty('PAY_PENDING'); } catch (e) { if (e && e.payLate) note_('✓ 월급시트 나눠서 하는 중 (' + e.payLate + ', 다음에 이어서. 오류 아님)'); else throw e; } } },
   { k: 'props', every: 120, max: 250, label: '속성 정리', run: function () { propsCleanup_(); } }
 ];
@@ -4432,12 +4421,16 @@ function bgOrder_(p, now) {
     .sort(function (a, b) { return b.r - a.r; });
 }
 // 걸린 시간 기억(BG_T_): 남은 시간 안에 못 끝낼 일은 시작 안 함 (11/18: 월급시트 이어서 217초가 15분 확인 끝에서 시작돼 348초)
-function bgNeed_(t, p) { const v = Number(p.getProperty('BG_T_' + t.k)); return Math.min(200, isFinite(v) && v > 0 ? v : 30); }
+function bgNeed_(t, p) { if (t.self) return t.need || 30; const v = Number(p.getProperty('BG_T_' + t.k)); return Math.min(200, isFinite(v) && v > 0 ? v : 30); }
 function bgFits_(t, p) { return !late_(t.max || 240) && cfElapsed_() + bgNeed_(t, p) <= CF_BUDGET; }
 function bgRun_(t, p) {
   const t0 = Date.now();
   try { subTime_(t.label, t.run); }
-  catch (e) { if (e && e.yieldLock) throw e; note_(t.label + ' 실패: ' + (e && e.message || e)); }   // 비켜 준 일은 끝난 걸로 안 적음 → 다음에 먼저
+  catch (e) {
+    if (e && e.yieldLock) throw e;
+    if (e && e.bgLate) return;   // 시간이 모자라 단계 사이에서 멈춤 (끝난 걸로 안 적음 → 다음에 이어서)
+    note_(t.label + ' 실패: ' + (e && e.message || e));
+  }   // 비켜 준 일은 끝난 걸로 안 적음 → 다음에 먼저
   try { const v = Number(p.getProperty('BG_T_' + t.k)); p.setProperty('BG_T_' + t.k, String(cfLearn_(isFinite(v) && v > 0 ? v : null, (Date.now() - t0) / 1000))); } catch (e) {}
   if (!t.last) p.setProperty('BG_' + t.k, String(Date.now()));
 }
@@ -8925,6 +8918,17 @@ function legDelOld_(oldR, pend) {
 const LEG_NEW_NAMES = ['이혜린', '황성례', '권용인', '김현진', '성시윤', '고다경', '워니', '류가영', '조혜선', '김혜란', '이효주', '전보미', '김혜진', '권나은', '구본미', '박연정', '구익영',
   '김병수', '김호림', '조현아', '유미나', 'DamiU', '김경미', '강서이', '강하서', 'MJ', '한이슬', '김지영', '강현주', '영순', '이현지', '연이', '정수아', '이현주', '박혜진', '구유진', '윤유선',
   '최윤석', '김하늘', '한지수', '서림', '이성현', '김진향', '오주연'];
+// (11/18) 레깅스 50 진행이 고치기 전에 116행(레깅스 30 줄)에 써서 '같은 값이라 안 씀'(PAY_ROWSIG)으로 남아 월급시트에 자기 줄이 안 생김 → 그 기억만 지우고 월급시트 다시
+function legPay1_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('LEGPAY1')) return;
+  let rs = {}; try { rs = JSON.parse(props.getProperty('PAY_ROWSIG') || '{}'); } catch (e) {}
+  const del = Object.keys(rs).filter(function (k) { return String(k).replace(/\s+/g, '').indexOf('탄탄상점레깅스') >= 0 && /11\.18/.test(k); });
+  del.forEach(function (k) { delete rs[k]; });
+  props.setProperty('PAY_ROWSIG', JSON.stringify(rs));
+  props.setProperty('PAY_PENDING', '1');
+  props.setProperty('LEGPAY1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 지움 ' + del.join(', '));
+}
 function legRen1_(dry) {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('LEGREN1') || '');
   if (!dry && (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5)) return null;
