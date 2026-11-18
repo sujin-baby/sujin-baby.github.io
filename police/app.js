@@ -2441,7 +2441,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
 
   /* <div class="fb-op"> 선지 한 줄 카드 */
   function optLineHtml(s, T, rightKey) {
-    var mm = String(s).match(/^(?:([①-④])|([㉠-㉣])|([ㄱㄴㄷㄹ가나다라])\s*(\.))\s*(?:\(([OX])\))?\s*([\s\S]*)$/);
+    /* 기호 뒤에 공백·괄호가 와야 선지 카드로 본다. '㉠은 …'처럼 조사가 바로 붙은 문장은 일반 문단으로 */
+    var mm = String(s).match(/^(?:([①-④])|([㉠-㉣])|([ㄱㄴㄷㄹ가나다라])\s*(\.))(?=[\s(\[])\s*(?:\(([OX])\))?\s*([\s\S]*)$/);
     if (!mm) return '';
     var k = mm[1] || mm[2] || (mm[3] + '.');
     var ox = mm[5] || '';
