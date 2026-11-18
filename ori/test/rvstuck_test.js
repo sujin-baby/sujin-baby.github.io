@@ -9,7 +9,7 @@ env.__ss.sheets['진행목록'] = new H.Sheet('진행목록', [LH.slice(),
   mk({ '진행일': day(-9), '명단 제목': '#택' + md(day(-9)) + ' 과일쏙 사과외 2 (뽀짝오리)', '카톡방': '#택' + md(day(-9)) + ' 과일쏙 사과외 2', '시트ID': 'S1', '시트 링크': 'https://x/S1', '진행 상태': '진행중', '인원': 2, '목표인원': 2, '총건수': 4, '마감 시각': at(-9, 1), '캠페인': '과일쏙 사과외', '리뷰 취합': day(-2) }),
   mk({ '진행일': day(-8), '명단 제목': '#택' + md(day(-8)) + ' 과일쏙 사과외 2 (뽀짝오리)', '카톡방': '#택' + md(day(-8)) + ' 과일쏙 사과외 2', '시트ID': 'S1', '시트 링크': 'https://x/S1', '진행 상태': '진행중', '인원': 2, '목표인원': 2, '총건수': 4, '마감 시각': at(-8, 1), '캠페인': '과일쏙 사과외' })]);
 const list = new H.Sheet('명단', [['과일쏙'], ['타임스탬프', '수령인', '옵션', ''],
-  [at(-9, 0.5), '가', '빨강', true], [at(-9, 0.7), '나', '빨강', true], [at(-8, 0.5), '김현아', '빨강', false], [at(-8, 0.6), '라', '빨강', true]]);
+  [at(-9, 0.5), '가', '빨강', true], [at(-9, 0.7), '나', '빨강', true], [at(-8, 0.5), '홍길동', '빨강', false], [at(-8, 0.6), '라', '빨강', true]]);
 const RP = Object.getPrototypeOf(list.getRange(1, 1));
 RP.getNotes = function () { return this.getValues().map(r => r.map(() => '')); };
 const lss = { getName: () => '과일쏙 명단', getSheetByName: n => n === '명단' ? list : null, getUrl: () => 'https://x/S1', getSheets: () => [list], getId: () => 'S1' };
@@ -21,11 +21,11 @@ let err = '';
 try { G('reviewDone_(readRuns_())'); } catch (e) { err = String(e.stack || e); }
 ok(!err, '오류 ' + err);
 const st = env.__props.get('RVSTUCK_S1');
-ok(st && JSON.parse(st).n === 1 && JSON.parse(st).un[0] === '김현아(' + md(day(-8)) + ')', '막힘 저장 ' + st);
+ok(st && JSON.parse(st).n === 1 && JSON.parse(st).un[0] === '홍길동(' + md(day(-8)) + ')', '막힘 저장 ' + st);
 ok(!env.__props.get('RVRPT_S1'), '아직 의뢰 끝 아님');
-ok(todos().length === 1 && /리뷰 확인 안 된 1명: 김현아/.test(todos()[0]) && /리뷰 취합 안 한 날: /.test(todos()[0]), '할 일 한 번 ' + JSON.stringify(todos()));
+ok(todos().length === 1 && /리뷰 확인 안 된 1명: 홍길동/.test(todos()[0]) && /리뷰 취합 안 한 날: /.test(todos()[0]), '할 일 한 번 ' + JSON.stringify(todos()));
 let items = G('rvItems_(readRuns_(), PropertiesService.getScriptProperties())');
-ok(items.length === 1 && items[0].type === 'stuck' && /^⚠ 업체 전달 못 함: 과일쏙 사과외 .*김현아/.test(items[0].label), '한눈에 빨간 줄 ' + JSON.stringify(items));
+ok(items.length === 1 && items[0].type === 'stuck' && /^⚠ 업체 전달 못 함: 과일쏙 사과외 .*홍길동/.test(items[0].label), '한눈에 빨간 줄 ' + JSON.stringify(items));
 // 다시 봐도 할 일은 한 번만
 env.__props.forEach((v, k) => { if (/^RVSEEN_/.test(k)) env.__props.delete(k); });
 G('reviewDone_(readRuns_())');
@@ -49,5 +49,10 @@ G('reviewDone_(readRuns_())');   // RVSEEN_ 저장
 env.__props.delete('RVSTUCK_S1');
 G('reviewDone_(readRuns_())');
 ok(env.__props.get('RVSTUCK_S1') && env.__props.get('RVSTUCK_S1').charAt(0) === '{', '본 의뢰도 한 번 다시 ' + env.__props.get('RVSTUCK_S1'));
+// (11/19 피클) 리뷰 확인이 시간을 넘기면 멈추고(RV_CUR) 다음엔 거기서부터
+G('globalThis.__ORI_T0 = Date.now() - 300000');
+ok(G('reviewDone_(readRuns_())') === true && env.__props.get('RV_CUR') === 'S1', '시간 넘으면 멈춤 ' + env.__props.get('RV_CUR'));
+G('globalThis.__ORI_T0 = Date.now()');
+ok(G('reviewDone_(readRuns_())') === false && !env.__props.get('RV_CUR'), '다음엔 이어서 끝냄');
 console.log(fails.length ? 'XX 업체 전달 막힘 시험 실패:\n- ' + fails.join('\n- ') : '✓ 업체 전달 막힘 알림 시험 통과');
 process.exit(fails.length ? 1 : 0);
