@@ -1919,7 +1919,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3468,15 +3468,10 @@ function checkFullInner_() {
   if (!late_(150)) { try { propsCleanup_(); } catch (e) { note_('속성 정리 실패: ' + e); } }
   if (!props.getProperty('NPROD_CLEAN_V1')) try { props.setProperty('NPROD_CLEAN_V1', '1'); Object.keys(props.getProperties()).forEach(function (k) { if (/^NPROD_/.test(k) && k !== 'NPROD_CLEAN_V1') props.deleteProperty(k); }); } catch (e) {}   // 옛 공지 상품 기억(영구) 지움 → 6시간 캐시로 (표시 이름도 NPROD_로 시작해서 같이 지워지던 것 10/30)
   const runs = readRuns_(), times = {};
-  // 정리(지난 명단 탭·보낸 메시지·사용법 탭 등)가 2시간 넘게 밀렸으면 이번엔 맨 앞에서 (11/17: 확인이 매번 4분 50초쯤 걸려 맨 뒤 정리가 3시간 넘게 못 돌았음)
-  { const sa0 = Date.now() - Number(props.getProperty('SLOW_AT') || 0); if (sa0 > 120 * 60000 && !late_(60)) { step_('정리(밀려서 먼저)'); try { slowTasks_(runs, {}); } catch (e) { if (e && e.yieldLock) throw e; note_('정리 실패: ' + e); } } }
-  // 한눈에 명단 칸 덜 불러온 것 다시 불러오기를 앞에서 (11/18: 맨 뒤라 확인이 길면 건너뛰어져 목쿠션 5번째 사람이 1시간 넘게 안 보였음). 한 번 읽기라 빠름
-  try { subTime_('한눈에 명단 칸 확인', function () { dashListStale_(runs); }); globalThis.__DASHSTALE_RUN = 1; } catch (e) { note_('한눈에 명단 칸 확인 실패: ' + e); }
   step_('알림');
   try { subTime_('알림: 안 산 사람', function () { fruitCheck_(runs); }); } catch (e) { note_('안 산 사람 확인 실패: ' + e); }
   try { subTime_('알림: 택배시트', function () { takbaeCheck_(runs); }); } catch (e) { note_('택배시트 알림 실패: ' + e); }
   try { subTime_('알림: 포토대기', function () { photoWaitCheck_(runs); }); } catch (e) { note_('포토대기 알림 실패: ' + e); }
-  try { if (!late_(240)) subTime_('📷포토전달 탭', function () { photoTabBuild_(runs); }); } catch (e) { note_('포토전달 탭 실패: ' + e); }
   try { subTime_('알림: 포토 요청', function () { photoAskCheck_(runs); }); } catch (e) { note_('포토 요청 알림 실패: ' + e); }
   try { subTime_('알림: 2시 이후 구매', function () { takLateCheck_(runs); }); } catch (e) { note_('2시 이후 구매 알림 실패: ' + e); }
   try { payChkRecheck1_(runs); } catch (e) { note_('결제금액 확인 다시 보기 실패: ' + e); }
@@ -3512,6 +3507,7 @@ function checkFullInner_() {
   try { dolge20_(); } catch (e) {}
   try { daedi60_(); } catch (e) {}
   try { foldClean1_(); } catch (e) {}
+  try { cableFmt1_(); } catch (e) {}
   try { if (!props.getProperty('EDITC1')) { ensureEditTab_(); props.setProperty('EDITC1', Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm')); } } catch (e) { note_('폼수정 날짜 칸 실패: ' + e); }   // (11/18 한 번) C1 날짜 고르기 바로 (정리가 밀려 늦게 생기던 것)
   try { upAcctOpen1_(); } catch (e) {}
   try { exp135_(); } catch (e) {}
@@ -3695,8 +3691,9 @@ function checkFullInner_() {
   if (geminiKey_() && !late_(200)) { try { subTime_('리뷰 사진 진행 중', function () { rvLooseCheck_(readRuns_()); }); } catch (e) { note_('진행 중 리뷰 사진 확인 실패: ' + e); } }
   // 리뷰 사진 AI 분류가 남은 의뢰가 있으면 이어서 (10/31)
   if (props.getProperty('RVAI_Q') && !late_(200)) { step_('리뷰 사진 AI'); rvAiQueue_(); }
-  if (geminiKey_()) { try { ensureInboxTrigger_(); } catch (e) {} }
-  if (!late_(200) && !globalThis.__DASHSTALE_RUN) { try { subTime_('한눈에 명단 칸 확인', function () { dashListStale_(); }); } catch (e) { note_('한눈에 명단 칸 확인 실패: ' + e); } }
+  try { ensureInboxTrigger_(); } catch (e) {}
+  // 미뤄도 되는 일(정리·한눈에 명단 다시 불러오기·포토전달 탭·월급시트 이어하기)은 5분 실행(bgLane_)이 '가장 오래 밀린 것부터' 함 (11/18). 거기서도 3배 넘게 밀렸으면 여기서
+  try { bgOverdue_(runs); } catch (e) { note_('밀린 일 확인 실패: ' + e); }
   if (geminiKey_() && !late_(200)) { try { subTime_('리뷰 사진 받는 곳', function () { rvInboxSort_(null); }); } catch (e) { note_('리뷰 사진 받는 곳 실패: ' + e); } }
   // 사용법 탭 글이 바뀌었으면 바로 (정리는 30분마다라 새 칸이 늦게 생김. 같으면 속성 하나만 보고 끝)
   try { ensureUsageTab_(); } catch (e) {}
@@ -4195,9 +4192,48 @@ function rvMoveFix1_() {
   try { rvCountDirs_(src, 1); rvCountDirs_(dst, rvCartOf_(to)); } catch (e) {}
   note_('✓ 시온스 발마사지기 사진 ' + n + '장 제자리로 옮김 (양모볼외 리뷰이미지에 잘못 들어갔던 것)');
 }
+/* ---------------- 미뤄도 되는 일: 5분 실행에서 '가장 오래 밀린 것부터' (11/18) ----------------
+ *  15분 확인은 한 번에 6분까지라 맨 뒤 일(정리, 한눈에 명단 다시 불러오기 …)이 확인이 길어질 때마다 몇 시간씩 밀렸음.
+ *  → 그런 일은 5분마다 도는 실행(리뷰 사진 받는 곳)이 맡고, 순서는 고정이 아니라 (지난번부터 지난 시간 ÷ 원하는 간격)이 큰 것부터.
+ *  15분 확인은 폼 인원·마감·명단·공지처럼 바로 해야 하는 일만. 5분 실행도 못 돌아 3배 넘게 밀리면 15분 확인이 대신 하고 실행 기록에 ⚠
+ */
+const BG_TASKS = [
+  { k: 'dashstale', every: 5, max: 280, label: '한눈에 명단 다시 불러오기', run: function () { dashListStale_(); } },
+  { k: 'phototab', every: 15, max: 250, label: '📷포토전달 탭', run: function () { photoTabBuild_(readRuns_()); } },
+  { k: 'slow', every: 30, max: 150, label: '정리(취완·리뷰 독촉·리뷰 보고·폼수정 탭 등)', last: function (p) { return Number(p.getProperty('SLOW_AT') || 0); }, run: function () { slowTasks_(readRuns_(), {}); } },
+  { k: 'pay', every: 10, max: 150, label: '월급시트 이어서', due: function (p) { return !!p.getProperty('PAY_PENDING') && !!CONFIG.PAY_SHEET_ID; }, run: function () { const p = PropertiesService.getScriptProperties(); updatePay_(true); p.deleteProperty('PAY_PENDING'); } },
+  { k: 'props', every: 120, max: 250, label: '속성 정리', run: function () { propsCleanup_(); } }
+];
+function bgLast_(t, p) { return t.last ? t.last(p) : Number(p.getProperty('BG_' + t.k) || 0); }
+function bgOrder_(p, now) {
+  return BG_TASKS.filter(function (t) { return !t.due || t.due(p); })
+    .map(function (t) { return { t: t, r: (now - bgLast_(t, p)) / (t.every * 60000) }; })
+    .filter(function (x) { return x.r >= 1; })
+    .sort(function (a, b) { return b.r - a.r; });
+}
+function bgRun_(t, p) {
+  try { subTime_(t.label, t.run); }
+  catch (e) { if (e && e.yieldLock) throw e; note_(t.label + ' 실패: ' + (e && e.message || e)); }
+  finally { if (!t.last) p.setProperty('BG_' + t.k, String(Date.now())); }
+}
+function bgLane_() {
+  const p = PropertiesService.getScriptProperties();
+  try { bgOrder_(p, Date.now()).forEach(function (x) { if (!late_(x.t.max || 240)) bgRun_(x.t, p); }); }   // 오래 걸리는 일은 일찍 시작할 수 있을 때만 (6분 제한)
+  catch (e) { if (e && e.yieldLock) return; throw e; }   // 직접 하신 일이 잠금을 기다리면 멈추고 넘김 (다음 5분에 이어서)
+}
+// 15분 확인 끝: 5분 실행이 못 돌아 3배 넘게 밀린 일은 여기서 (시간이 남으면), 그래도 밀려 있으면 실행 기록에 ⚠
+function bgOverdue_(runs) {
+  const p = PropertiesService.getScriptProperties(), now = Date.now(), late = [];
+  bgOrder_(p, now).filter(function (x) { return x.r >= 3; }).forEach(function (x) {
+    if (!late_(x.t.max || 240)) bgRun_(x.t, p);
+    else late.push(x.t.label + ' ' + Math.round((now - bgLast_(x.t, p)) / 60000) + '분째');
+  });
+  if (late.length) note_('⚠ 밀린 일: ' + late.join(', ') + ' (다음 5분 실행에서 먼저)');
+}
 function rvInboxTick_() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;   // 15분 확인이 도는 중이면 그쪽에서 함
+  globalThis.__ORI_LOCK = true;   // 안에서 locked_를 부르는 일(정리 등)이 같은 잠금을 다시 기다리지 않게
   try { rvMoveFix1_(); } catch (e) { try { note_('시온스 사진 옮기기 실패: ' + e.message); } catch (e2) {} }
   try { globalThis.__ORI_T0 = Date.now(); rvInboxSort_(null); } catch (e) { try { note_('리뷰 사진 받는 곳(5분) 실패: ' + e); } catch (e2) {} }
   // 명단 시트 리뷰 확인 체크 → 5분 안에 취완·리뷰비·페이백 요청 (11/8 사용자: 시온스 발마사지기 다 체크했는데 리뷰비 요청이 너무 늦게 뜸)
@@ -4207,7 +4243,9 @@ function rvInboxTick_() {
   try { if (!late_(160)) rvLooseCheck_(readRuns_()); } catch (e) {}
   // AI 분류 대기열도 이어서 (1분 연쇄 트리거도 이 길로 들어옴, 11/7)
   try { if (PropertiesService.getScriptProperties().getProperty('RVAI_Q') && !late_(200)) rvAiQueue_(); } catch (e) { try { note_('리뷰 사진 AI(연쇄) 실패: ' + e); } catch (e2) {} }
-  finally { lock.releaseLock(); }
+  // 미뤄도 되는 일: 가장 오래 밀린 것부터, 남은 시간만큼 (11/18 사용자: 15분 확인 뒤쪽 일이 계속 밀리던 것)
+  try { bgLane_(); } catch (e) { try { note_('5분 실행(미뤄도 되는 일) 실패: ' + e); } catch (e2) {} }
+  finally { globalThis.__ORI_LOCK = false; lock.releaseLock(); }
 }
 // 받는 곳에서 사진이 들어간 의뢰(RVZIPSOON_) → 5분마다 보고 글 확인 (11/9 나주배: 리뷰가 다 끝난 의뢰인데 사진을 올리고 보고 글이 30분 넘게 늦게 뜸, 30분 정리에서만 봐서)
 //  rvZip_가 사진이 10분 동안 안 바뀌면 보고 글을 넣음 → 마지막 사진 뒤 10~15분. 보고 글이 생기거나, 업체에 보냈거나, 3시간 지나면 표시 지움
@@ -4249,7 +4287,7 @@ function rvQuickCheck_() {
 }
 // 키가 있으면 5분마다 받는 곳 확인 트리거 (트리거는 계정당 20개 한도라 19개 넘으면 안 만듦 → 15분 확인에서만)
 function ensureInboxTrigger_() {
-  if (!geminiKey_()) return;
+  // (11/18) 5분 실행은 미뤄도 되는 일(bgLane_)도 맡아서 Gemini 열쇠가 없어도 켬
   const ts = ScriptApp.getProjectTriggers();
   if (ts.some(function (t) { return t.getHandlerFunction() === 'onAdminEdit' && t.getEventType() === ScriptApp.EventType.CLOCK; })) return;
   if (ts.length >= 19) return;
@@ -8530,6 +8568,31 @@ function foldClean1_() {
     }
     props.setProperty('FOLDCLEAN1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 빈 폴더 ' + n + '개 휴지통, 남긴 폴더 ' + kept + '개');
   } catch (e) { props.setProperty('FOLDCLEAN1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/18 한 번, 사용자: '#택11.18실/빈 김상사케이블타이5 이런식으로 다 택 붙여') 김상사 케이블타이 진행 방제를 모두 '#택M.D실/빈 김상사케이블타이5'로 (20자). 명단 시트 이름은 그대로
+function cableFmt1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('CABLEFMT1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  const out = [];
+  try {
+    const want = function (r) { const d = r['진행일']; return '#택' + (d.getMonth() + 1) + '.' + d.getDate() + '실/빈 김상사케이블타이' + ((bareTitle_(r['명단 제목']).match(/(\d+)\s*$/) || [, '5'])[1]); };
+    readRuns_().filter(function (r) { return campKey_(r['명단 제목']) === '김상사케이블타이' && r['진행일'] instanceof Date; }).forEach(function (r0) {
+      const r = readRuns_().filter(function (x) { return x.row === r0.row; })[0] || r0, nt = want(r);
+      if (bareTitle_(r['명단 제목']) === nt) return;
+      globalThis.__NO_FILE_RENAME = true;
+      try { out.push(renameRun_(r, nt, '사용자 11/18: 방제에 택') ? nt : nt + ' 안 바뀜'); } finally { globalThis.__NO_FILE_RENAME = false; }
+    });
+    // 일정 탭 방제도 같은 모양으로 (이미 만든 일정이라 보기만)
+    const ps = planSheet_(), pl = ps.getLastRow();
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x, i) {
+      if (campKey_(String(x[4])) !== '김상사케이블타이' || !(x[3] instanceof Date)) return;
+      const nt = '#택' + (x[3].getMonth() + 1) + '.' + x[3].getDate() + '실/빈 김상사케이블타이' + ((String(x[4]).match(/(\d+)\s*$/) || [, '5'])[1]);
+      if (String(x[4]) !== nt) ps.getRange(i + 2, 5, 1, 2).setValues([[nt, nt + ' (뽀짝오리)']]);
+    });
+    const bad = out.filter(function (x) { return / 안 바뀜$/.test(x); });
+    props.setProperty('CABLEFMT1', (bad.length ? st + ' 실패(' : '✓ ') + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '이미 됨') + (bad.length ? ')' : ''));
+    if (out.length) { try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); } }
+  } catch (e) { props.setProperty('CABLEFMT1', (st + ' 실패(' + (e && e.message || e) + ') ' + out.join(', ')).slice(-400)); }
 }
 function daedi60_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('DAEDI60') || '');
