@@ -1776,7 +1776,139 @@ https://www.coupang.com/vp/products/9812998435?vendorItemId=96299881395
   console.log('✓ #81 실·빈("5건실 나머지 빈") 방제·인원 5/10·가격 1:1·옵션 라지 미유입 시험 통과 (' + room81 + ')');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (38개 샘플 전원 일치)');
+// ==========================================
+console.log('-- Test 39: 실·빈 혼합 + 헤더 택대 + 10번 N — 값은 택대 Y 유지, 주의 문구·폼 생성 전 확인창, fname 끝 숫자 (11/18 v199)');
+{
+  // 수진 님 지시: "택대가 맞는데 폼생성전 나한테 주의 혹은 확인해주세요 문구 뜨게해 제대로고쳤나재확인꼼꼼히"
+  const reqSilbinN = `#입금대행 택대 5건실 나머지 빈  9900 10900
+
+1. 검색 키워드(미노출시 저희가  키워드땁니다):
+2. 키워드 검색 시 현재 순위 :모르시면 비워두세요
+3. 총 결제하신 건수 : 15
+4. 하루 진행 건수 : 15
+5. 상품주소(URL) : 
+5건 실배
+https://www.coupang.com/vp/products/9812998435?itemId=29388465518
+
+10건 빈
+https://www.coupang.com/vp/products/9812998435?vendorItemId=96299881395
+6. 구매옵션 : 라지 /  9,900원
+7. 포토제공 (몇명)  /포토없음  선택: 포토 5명
+8. 리뷰 가이드 : 원고제공
+9. 입금하실 입금자명 : 김상사(김성열)
+10.택배대행 Y/N: N`;
+  const hSbn = P.parseAll(reqSilbinN);
+  if (!hSbn.silbin) throw new Error('Test 39 실·빈 혼합으로 못 읽음');
+  if (!hSbn.takdae) throw new Error('Test 39 헤더 택대를 못 읽음 (값은 택대 Y로 유지돼야 함)');
+  if (hSbn.conflictTakdae) throw new Error('Test 39 실·빈 혼합은 11/12 차단 규칙(conflictTakdae)이 아니라 주의·확인 대상');
+  if (!hSbn.silbinTakN) throw new Error('Test 39 실·빈+택대+10번N 주의 플래그(silbinTakN)가 안 섰음');
+
+  // 1) 일반(실·빈 아님)은 11/12 규칙 그대로 차단, 실·빈이 아니면 주의 플래그도 안 섬
+  const reqNormalN = `#입금대행 택대 11500
+
+1. 검색 키워드 : 발마사지기
+2. 총 구매 건수 : 10건
+3. 일 진행 건수 : 10
+4. 상품주소(URL) : https://www.coupang.com/vp/products/9778569271?itemId=29274107751
+5. 구매옵션 : 1개 11,500원
+6. 포토제공 : 유
+7. 리뷰 가이드 : 좋아요
+8. 입금하실 입금자명 : 김상사
+10.택배대행 Y/N: N`;
+  const hNormalN = P.parseAll(reqNormalN);
+  if (!hNormalN.conflictTakdae) throw new Error('Test 39 실·빈이 아닌 택대+10번N은 기존처럼 차단(conflictTakdae)이어야 함');
+  if (hNormalN.silbinTakN) throw new Error('Test 39 실·빈이 아닌데 주의 플래그가 섰음');
+
+  // 2) 정상 택대 Y는 주의 문구도 확인창도 없음
+  const reqNormalY = reqNormalN.replace('10.택배대행 Y/N: N', '10.택배대행 Y/N: Y');
+  const hNormalY = P.parseAll(reqNormalY);
+  if (hNormalY.silbinTakN || hNormalY.conflictTakdae) throw new Error('Test 39 정상 택대 Y에 주의·차단 플래그가 섰음');
+  getElem('takdae').checked = true;
+  getElem('realship').checked = false;
+  P.setHead(hNormalY);
+  if (P.silbinTakNNote() !== '') throw new Error('Test 39 정상 택대 Y인데 주의 문구가 뜸');
+  if (P.silbinTakNAsk() !== '') throw new Error('Test 39 정상 택대 Y인데 폼 생성 전 확인창이 뜸');
+
+  // 3) 실·빈 + 택대 + 10번N: 화면 주의 문구 (문구 그대로) + 확인창
+  P.setHead(hSbn);
+  getElem('takdae').checked = true;
+  const note = P.silbinTakNNote();
+  if (note !== P.SILBIN_TAKN_TEXT) throw new Error('Test 39 주의 문구가 다름: ' + note);
+  if (!/헤더는 '택대'인데 10번 택배대행이 'N'/.test(note)) throw new Error('Test 39 주의 문구에 헤더/10번 표기가 빠짐: ' + note);
+  if (!/실·빈 혼합이라 택대로 유지됨/.test(note)) throw new Error('Test 39 주의 문구에 실·빈 유지 안내가 빠짐: ' + note);
+  if (!/확인해 주세요/.test(note)) throw new Error('Test 39 주의 문구에 확인 요청이 빠짐: ' + note);
+  const ask = P.silbinTakNAsk();
+  if (!ask) throw new Error('Test 39 실·빈+택대+10번N인데 폼 생성 전 확인창 문구가 없음');
+  if (!/10번 택배대행은 \[N\]/.test(ask)) throw new Error('Test 39 확인창에 10번 N 안내가 빠짐: ' + ask);
+  if (!/택대로 유지하고/.test(ask)) throw new Error('Test 39 확인창에 택대 유지 안내가 빠짐: ' + ask);
+  if (!/\[취소\]/.test(ask)) throw new Error('Test 39 확인창에 취소(중단) 안내가 빠짐: ' + ask);
+  // 택배대행 체크를 끄면(수진 님이 직접 고른 것) 주의 문구는 내리고 확인창은 '택 없이'로
+  getElem('takdae').checked = false;
+  if (P.silbinTakNNote() !== '') throw new Error('Test 39 택배대행 체크를 껐는데 주의 문구가 남음');
+  if (!/체크가 꺼져 있어 #택 없이/.test(P.silbinTakNAsk())) throw new Error('Test 39 택배대행을 끈 상태의 확인창 문구가 틀림');
+  getElem('takdae').checked = true;
+
+  // 4) fname: 붙여 쓴 건수 방제에서 끝 숫자를 통째로 떼고 넘김 ('장갑1'처럼 잘리지 않게)
+  if (P.sheetBaseName('#택11.19실/빈 네쿠 젊음크림10', '10') !== '#택 실/빈 네쿠 젊음크림') throw new Error('Test 39 fname(네쿠) 실패: ' + P.sheetBaseName('#택11.19실/빈 네쿠 젊음크림10', '10'));
+  if (P.sheetBaseName('#택11.19실/빈 김상사 장갑15', '15') !== '#택 실/빈 김상사 장갑') throw new Error('Test 39 fname(장갑) 실패: ' + P.sheetBaseName('#택11.19실/빈 김상사 장갑15', '15'));
+  if (P.sheetBaseName('#택11.19실/빈 김상사 장갑15', '5') !== '#택 실/빈 김상사 장갑') throw new Error('Test 39 fname: 인원이 달라도 끝 숫자가 통째로 빠져야 함(장갑1 금지): ' + P.sheetBaseName('#택11.19실/빈 김상사 장갑15', '5'));
+  if (P.sheetBaseName('#택11.17 실 에스지엠컴퍼니문풍지외4', '4') !== '#택 실 에스지엠컴퍼니문풍지외') throw new Error('Test 39 fname(외4) 실패: ' + P.sheetBaseName('#택11.17 실 에스지엠컴퍼니문풍지외4', '4'));
+  if (P.sheetBaseName('#택11.17 실 문풍지 풍선 4', '4') !== '#택 실 문풍지 풍선') throw new Error('Test 39 fname(띄어 쓴 4) 실패: ' + P.sheetBaseName('#택11.17 실 문풍지 풍선 4', '4'));
+
+  // 5) 폼 생성 링크에 그 fname이 실제로 실려 나가는지 (#81 방제 그대로 render)
+  getElem('req').value = reqSilbinN;
+  getElem('t-ip').checked = true;
+  getElem('t-up').checked = false;
+  getElem('takdae').checked = true;
+  getElem('realship').checked = false;
+  getElem('fruit').checked = false;
+  getElem('cart').checked = false;
+  getElem('day').value = '1';
+  getElem('date').value = '2026-11-19';
+  getElem('slot').value = 'midnight';
+  const gsSbn = [Object.assign({}, hSbn.guides[0], { keyword: '방한장갑', guide: '방한장갑', seller: '김상사', pname: '제르넬 남성용 방한장갑', option: '라지', price: '9,900', platform: '쿠팡', pno: '9812998435 - 2653***9917', page: '1p' })];
+  P.setGuides(gsSbn);
+  ['keyword', 'guide', 'daily', 'total', 'price', 'ship', 'platform', 'seller', 'option', 'pname', 'url', 'pno', 'short', 'page', 'pageM', 'similar', 'photo', 'thumb'].forEach(k => { getElem(k).value = String(gsSbn[0][k] === undefined || gsSbn[0][k] === null ? '' : gsSbn[0][k]); });
+  const room39 = P.makeRoom('11.19', P.dayTotalOf(1));
+  getElem('o-room').value = room39;
+  P.render();
+  const href39 = String(getElem('make-run').href || '');
+  const fnameQs = (href39.match(/[&?]fname=([^&]*)/) || [])[1] || '';
+  const fname39 = decodeURIComponent(fnameQs).replace(/\+/g, ' ');
+  if (!/^#택11\.19실\/빈 김상사 /.test(room39)) throw new Error('Test 39 실·빈+택대 방제가 택을 잃음: ' + room39);
+  if (/[0-9]{1,2}\.[0-9]{1,2}/.test(fname39) || /\d$/.test(fname39)) throw new Error('Test 39 폼 생성 링크의 fname에 날짜·끝 숫자가 남음: "' + fname39 + '" (방제 ' + room39 + ')');
+  if (fname39.indexOf('김상사') < 0 || !/^#택 실\/빈 /.test(fname39)) throw new Error('Test 39 폼 생성 링크의 fname이 방제와 다름: "' + fname39 + '" (방제 ' + room39 + ')');
+  // 2일차(10명) 방제도 이름에서는 건수가 통째로 빠짐
+  if (P.sheetBaseName('#택11.20실/빈 김상사 방한장갑10', '10') !== '#택 실/빈 김상사 방한장갑') throw new Error('Test 39 2일차 fname이 틀림: ' + P.sheetBaseName('#택11.20실/빈 김상사 방한장갑10', '10'));
+  getElem('day').value = '1';
+  getElem('o-room').value = room39;
+  P.render();
+  // 실·빈이면 방제는 택 유지 + 실/빈 (차단 ⛔ 문구가 아니라 ⚠️ 주의 문구)
+  if (!/^#택11\.19실\/빈 김상사 /.test(room39)) throw new Error('Test 39 실·빈+택대 방제가 택을 잃음: ' + room39);
+  const warn39 = String(getElem('o-warn').textContent || '');
+  if (warn39.indexOf(P.SILBIN_TAKN_TEXT) < 0) throw new Error('Test 39 화면 주의 문구(o-warn)가 안 뜸: ' + warn39.slice(0, 160));
+  if (warn39.indexOf('⛔') >= 0) throw new Error('Test 39 실·빈인데 차단(⛔) 문구가 뜸: ' + warn39.slice(0, 160));
+
+  // 6) 상품명이 나중에(기억해 둔 상품 정보·같은 상품의 다른 가이드) 채워져도 대표 키워드가 비지 않음
+  //  (11/18 라이브 실측: 상품명·판매처·상품번호는 기억에서 들어왔는데 공지 '🐥★키워드 :' 칸만 빈 채로 나감)
+  const gk = Object.assign({}, hSbn.guides[0], { keyword: '', guide: '', kwAuto: true, pname: '제르넬 남성용 방한장갑 스마트폰 터치 기모 라이더 장갑', platform: '쿠팡', price: '9,900', option: '라지', seller: '김상사' });
+  P.setGuides([gk]);
+  ['keyword', 'guide', 'daily', 'total', 'price', 'ship', 'platform', 'seller', 'option', 'pname', 'url', 'pno', 'short', 'page', 'pageM', 'similar', 'photo', 'thumb'].forEach(k => { getElem(k).value = String(gk[k] === undefined || gk[k] === null ? '' : gk[k]); });
+  getElem('keyword').value = ''; getElem('guide').value = '';
+  P.render();
+  if (getElem('keyword').value !== '방한장갑') throw new Error('Test 39 상품명만 있을 때 대표 키워드가 안 채워짐: "' + getElem('keyword').value + '"');
+  if (String(getElem('o-notice').value).indexOf('🐥★키워드 : 방한장갑') < 0) throw new Error('Test 39 공지 키워드 칸이 빈 채로 나감');
+  // 수진 님이 키워드를 직접 비운 것(직접 고침)은 다시 채우지 않음
+  P.setGuides([Object.assign({}, gk, { keyword: '', kwAuto: false })]);
+  ['keyword', 'guide', 'daily', 'total', 'price', 'ship', 'platform', 'seller', 'option', 'pname', 'url', 'pno', 'short', 'page', 'pageM', 'similar', 'photo', 'thumb'].forEach(k => { getElem(k).value = ''; });
+  getElem('pname').value = gk.pname; getElem('platform').value = '쿠팡'; getElem('price').value = '9,900';
+  P.render();
+  if (getElem('keyword').value !== '') throw new Error('Test 39 직접 비운 키워드를 다시 채움: "' + getElem('keyword').value + '"');
+
+  console.log('✓ 실·빈+택대+10번N 주의 문구·확인창·fname 시험 통과 (' + room39 + ' → fname "' + fname39 + '")');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (39개 샘플 전원 일치)');
 process.exit(0);
 
 
