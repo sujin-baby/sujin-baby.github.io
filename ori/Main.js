@@ -3606,6 +3606,8 @@ function checkFullInner_() {
   // ── 나머지: 지난번 걸린 시간으로 남은 시간 안에 끝날 것만 시작, 못 한 건 1분 뒤 확인이 이어서 (cfRun_ 설명)
   //  순서: 폼 인원(인원·마감·명단 전달)을 알림보다 먼저 (11/18 사용자: 명단 전달이 늦음), 한눈에를 명단 전달 안전망보다 먼저. 방 공지가 먼저 있어야 폼 인원의 '방 공지 없음' 표시가 안 틀림
   cfRun_(S, [
+    // (11/18 하루만, 사용자 승인) 레깅스 50 응답을 옛 폼(레깅스 30) → 새 폼으로. 다른 날엔 바로 끝남. 맨 앞(시간 넉넉할 때)
+    { n: '레깅스 50 옮기기', need: 150, run: function () { legMove_(false); } },
     { n: '공지 모양', need: 20, run: function () {
       try { ensureRunNotices_(readRuns_()); } catch (e) { note_('방 공지 확인 실패: ' + e); }
       try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
@@ -8803,10 +8805,10 @@ function foldClean1_() {
 //  · 11/18 안에는 옛 폼으로 늦게 들어온 것도 확인 때마다 옮김 (LEGMOVE1 기록에 누적)
 //  dry: 읽기만 (점검 &legplan=1)
 const LEG_OLD_REQ = 'npb3d175-2', LEG_NEW_REQ = 'src3cf7o', LEG_NEW_SID = '1LHU3jWeO2T93AcG1nwz5Wco5x2CvxRBJ_tlm8WRisY4';
-function legMove_(dry) {
+function legMove_(dry, anyDay) {
   const props = PropertiesService.getScriptProperties(), out = { plan: [], prob: [] };
   const today = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
-  if (!dry && today !== '20261118') return null;
+  if (!dry && !anyDay && today !== '20261118') return null;   // anyDay: 시험용
   const runs = readRuns_();
   const oldR = runs.filter(function (x) { return String(x['요청ID']) === LEG_OLD_REQ; })[0], newR = runs.filter(function (x) { return String(x['요청ID']) === LEG_NEW_REQ; })[0];
   if (!oldR || !newR) { out.prob.push('진행 못 찾음 old=' + !!oldR + ' new=' + !!newR); return out; }
@@ -8832,15 +8834,32 @@ function legMove_(dry) {
     pairs.forEach(function (x) { if (/수령인|계정명/.test(x[0])) a = key(x[1]); else if (/전화|연락처|휴대폰/.test(x[0])) p = String(x[1]).replace(/\D/g, ''); });
     return a && p ? a + '|' + p : '';
   };
+  // 새 폼에 넣었는데 옛 것을 아직 못 지운 것(LEGMV_PEND: 응답 번호·시각): 하나 넣을 때마다 적어 둠 → 중간에 끊겨도 다음에 옛 것부터 지움 (두 폼에 같은 사람이 남지 않게)
+  const pk = 'LEGMV_PEND';
+  let pend = []; try { pend = JSON.parse(props.getProperty(pk) || '[]') || []; } catch (e) {}
+  let deleted = 0;
+  const flushDel = function () {
+    if (!pend.length) return;
+    const ids = {}; pend.forEach(function (x) { ids[x.id] = 1; });
+    // 폼 응답은 응답 번호로 정확히 (deleteRunTimes_는 1.5초 안에 들어온 두 응답을 못 가려서 14:30:21·14:30:22 같은 건 하나가 남음)
+    of.getResponses().forEach(function (fr) { if (ids[fr.getId()]) of.deleteResponse(fr.getId()); });
+    SpreadsheetApp.flush();
+    legDelOld_(oldR, pend);   // 응답 탭·명단 탭 줄도 하나씩 정확히 지우고 인원 다시 셈
+    deleted += pend.length; pend = []; props.deleteProperty(pk);
+  };
+  if (!dry) flushDel();
   const have = {}; nf.getResponses().forEach(function (fr) { const g = sig(fr.getItemResponses().map(function (ir) { return [ir.getItem().getTitle(), ir.getResponse()]; })); if (g) have[g] = 1; });
   const cut = new Date('2026-11-18T10:00:00+09:00').getTime();
   const moved = [], del = [];
+  let stopped = false;
   of.getResponses().filter(function (fr) { return fr.getTimestamp().getTime() >= cut; }).forEach(function (fr) {
+    if (stopped) return;
+    if (!dry && globalThis.__ORI_T0 && cfElapsed_() > 200) { stopped = true; return; }   // 지우기·한눈에 그릴 시간 남김 (남은 건 다음 확인)
     const irs = fr.getItemResponses(), pairs = irs.map(function (ir) { return [ir.getItem().getTitle(), ir.getResponse()]; });
     const who = Utilities.formatDate(fr.getTimestamp(), CONFIG.TIMEZONE, 'HH:mm:ss') + ' ' + pairs.filter(function (x) { return /수령인|계정명|닉네임/.test(x[0]); }).map(function (x) { return x[1]; }).join('/');
     try {
       const g = sig(pairs);
-      if (g && have[g]) { out.plan.push(who + ' → 새 폼에 이미 있음(옛 것만 지움)'); del.push(fr.getTimestamp()); return; }
+      if (g && have[g]) { out.plan.push(who + ' → 새 폼에 이미 있음(옛 것만 지움)'); if (!dry) { pend.push({ id: fr.getId(), t: fr.getTimestamp().getTime() }); props.setProperty(pk, JSON.stringify(pend)); del.push(who); } return; }
       const nr = nf.createResponse();
       irs.forEach(function (ir) {
         const v = ir.getResponse();
@@ -8851,23 +8870,49 @@ function legMove_(dry) {
         nr.withItemResponse(mk(it, v));
       });
       out.plan.push(who);
-      if (!dry) { nr.submit(); if (g) have[g] = 1; moved.push(who); del.push(fr.getTimestamp()); }
+      if (!dry) { nr.submit(); pend.push({ id: fr.getId(), t: fr.getTimestamp().getTime() }); props.setProperty(pk, JSON.stringify(pend)); moved.push(who); del.push(who); }
     } catch (e) { out.prob.push(who + ': ' + (e && e.message || e)); }
   });
   if (dry) return out;
-  if (del.length) {
-    SpreadsheetApp.flush();
-    const msg = deleteRunTimes_(oldR, del);
-    note_('✓ 레깅스 50 응답 옮김 ' + moved.length + '명 (옛 폼에서 ' + del.length + '개 지움): ' + moved.join(', ') + (out.prob.length ? ' / 못 옮김: ' + out.prob.join(', ') : ''));
-    try { syncList_(SpreadsheetApp.openById(LEG_NEW_SID)); } catch (e) {}
+  flushDel();
+  if (moved.length || deleted) {
+    note_('✓ 레깅스 50 응답 옮김 ' + moved.length + '명 (옛 폼에서 ' + deleted + '개 지움): ' + moved.join(', ') + (out.prob.length ? ' / 못 옮김: ' + out.prob.join(', ') : '') + (stopped ? ' (남은 건 다음 확인에서)' : ''));
+    try { SpreadsheetApp.flush(); syncList_(SpreadsheetApp.openById(LEG_NEW_SID)); } catch (e) {}
     cfDirty_(true);
-    void msg;
   }
-  if (del.length || out.prob.length) {
+  if (moved.length || deleted || out.prob.length) {
     const st = String(props.getProperty('LEGMOVE1') || '');
-    props.setProperty('LEGMOVE1', (st + ' / ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'HH:mm') + ' 옮김 ' + moved.length + ' 지움 ' + del.length + (out.prob.length ? ' 못 옮김 ' + out.prob.join('; ') : '')).slice(-1500));
+    props.setProperty('LEGMOVE1', (st + ' / ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'HH:mm') + ' 옮김 ' + moved.length + ' 지움 ' + deleted + (out.prob.length ? ' 못 옮김 ' + out.prob.join('; ') : '') + (stopped ? ' (이어서)' : '')).slice(-1500));
   }
   return out;
+}
+// 옛 명단 시트에서 옮긴 응답 줄 지우기: 응답마다 시각이 가장 가까운(1.5초 안) 줄 하나씩만 (옆 사람 줄은 안 지움). 옛 폼 응답 탭·값 명단 탭
+function legDelOld_(oldR, pend) {
+  const lss = SpreadsheetApp.openById(oldR['시트ID']);
+  const pick = function (vals, base) {   // vals: 시각 칸 값들, base: 첫 줄 번호 → 지울 줄 번호들
+    const used = {}, rows = [];
+    pend.forEach(function (x) {
+      let bi = -1, bd = 1500;
+      vals.forEach(function (v, i) { if (used[i] || !(v instanceof Date)) return; const dd = Math.abs(v.getTime() - x.t); if (dd < bd) { bd = dd; bi = i; } });
+      if (bi >= 0) { used[bi] = 1; rows.push(base + bi); }
+    });
+    return rows.sort(function (a, b) { return b - a; });
+  };
+  lss.getSheets().filter(function (t) { return String(t.getFormUrl() || '').indexOf(String(oldR['폼ID'])) >= 0; }).forEach(function (raw) {
+    const lr = raw.getLastRow(); if (lr < 2) return;
+    pick(raw.getRange(2, 1, lr - 1, 1).getValues().map(function (v) { return v[0]; }), 2).forEach(function (row) { raw.deleteRow(row); });
+  });
+  try {
+    const lt = lss.getSheetByName(LIST_TAB);
+    if (lt && PropertiesService.getScriptProperties().getProperty('LISTV_' + lss.getId()) && lt.getLastRow() >= 3) {
+      const hd = lt.getRange(2, 1, 1, Math.max(lt.getLastColumn(), 1)).getValues()[0].map(function (x) { return String(x).trim(); });
+      const cT = hd.indexOf('타임스탬프') + 1;
+      if (cT) pick(lt.getRange(3, cT, lt.getLastRow() - 2, 1).getValues().map(function (v) { return v[0]; }), 3).forEach(function (row) { lt.deleteRow(row); });
+    }
+  } catch (e) { note_('레깅스 30 명단 탭 줄 지우기 실패: ' + e); }
+  SpreadsheetApp.flush();
+  const runs = readRuns_(), me = runs.filter(function (x) { return String(x['요청ID']) === LEG_OLD_REQ; })[0] || oldR;
+  setRun_(me.row, '인원', runCount_(runs, me));
 }
 function cableFmt1_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('CABLEFMT1') || '');
