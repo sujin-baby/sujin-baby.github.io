@@ -5254,7 +5254,7 @@ function propsCleanup_(runs) {
     // 한 번에 조금씩 (11/16: 한꺼번에 지우다 15분 확인이 6분 제한에 걸려 끊김 → 보고·나머지 단계가 안 돎). 남으면 다음 확인에서 이어서
     if (n >= 120 || Date.now() - t0 > 20000 || late_(200)) { left++; return; }
     let del = false, m;
-    if ((m = k.match(/^(?:LISTK_|LISTH_|RVSEEN_|RVQMOD_|THUMB_)([-\w]{25,})$/))) del = !live[m[1]];
+    if ((m = k.match(/^(?:LISTK_|LISTH_|RVSEEN_|RVQMOD_|THUMB_|RVSTUCK_|RVSTUCKMSG_)([-\w]{25,})$/))) del = !live[m[1]];
     else if ((m = k.match(/^(?:RVTXT_|RVSIG_)RVMSGD_[-\w]+_(\d{8})$/))) del = m[1] < old30;
     else if (/^MSGV_S_/.test(k)) del = Number(all[k]) < s3;
     if (del) { try { props.deleteProperty(k); n++; } catch (e) {} }
@@ -7921,6 +7921,7 @@ function reviewDone_(runs, only) {
     const nr = rvNagRooms_();
     Object.keys(bySheet).forEach(function (sid) { if (bySheet[sid].some(function (r) { return nr[String(r['카톡방'] || bareTitle_(r['명단 제목']))]; })) props.deleteProperty('RVSEEN_' + sid); });
   } catch (e) {}
+  let stuckN = 0;
   Object.keys(bySheet).forEach(function (sid) {
     if (only && only.indexOf(sid) < 0) return;   // 5분 확인: 명단 시트가 바뀐 의뢰만
     yieldIfWanted_();   // 새 진행 만들기 같은 직접 하는 일이 기다리면 의뢰 하나 끝날 때마다 바로 넘김 (11/2: 리뷰 확인 76초 동안 새 진행이 기다림)
@@ -7933,7 +7934,11 @@ function reviewDone_(runs, only) {
     try { const f = DriveApp.getFileById(sid); mod = f.getLastUpdated().getTime(); fname = f.getName(); } catch (e) {}
     const sig = ['rv3', mod, Utilities.formatDate(new Date(Date.now() - 5 * 3600000), CONFIG.TIMEZONE, 'yyyyMMdd'), pend[campKey_(mine[0]['캠페인'] || mine[0]['명단 제목'])] ? 1 : 0]
       .concat(mine.map(function (r) { return [r.row, r['마감 시각'] instanceof Date ? r['마감 시각'].getTime() : '', r['인원'], r['총건수']].join(','); })).join('|');
-    if (mod && props.getProperty(seenK) === sig) {
+    // 업체 전달 막힘 이유를 아직 안 본 의뢰(인원은 다 모였는데 리뷰가 안 끝남)는 한 번 다시 봄 (11/18)
+    //  늦은 의뢰만, 한 번에 3개까지 (처음 배포 때 명단 시트를 한꺼번에 열어 리뷰 확인이 길어지지 않게)
+    const stuckNew = stuckN < 3 && !props.getProperty('RVRPT_' + sid) && props.getProperty('RVSTUCK_' + sid) == null && rvFull_(mine) && !rvSentAny_(mine) && rvStuckLate_(mine);
+    if (stuckNew) { stuckN++; props.setProperty('RVSTUCK_' + sid, '-'); }
+    if (mod && props.getProperty(seenK) === sig && !stuckNew) {
       if (!props.getProperty('RVRPT_' + sid)) return;
       if (rvSentAny_(mine)) { if (!props.getProperty('RVCHKCLEAN_' + sid)) { props.setProperty('RVCHKCLEAN_' + sid, '1'); try { rvCheckMsgSync_(rvBase_(fname), ''); } catch (e) {} } return; }   // 업체에 보낸 의뢰는 리뷰이미지 폴더를 다시 안 뒤짐, 남은 '리뷰 사진 확인' 할 일은 한 번 지움 (11/7 속도: 리뷰 압축 55초가 보낸 의뢰까지 15개를 매번 봐서)
       try {
@@ -8066,6 +8071,25 @@ function reviewDone_(runs, only) {
       // 구매확정만 의뢰는 리뷰 캡처가 없음 → 캡처 올리기·압축 없이 보고 글 바로
       let rvKind = ''; try { rvKind = (JSON.parse(props.getProperty('RV_' + sid) || '{}') || {}).kind || ''; } catch (e) {}
       const capF = rvKind === 'confirm' ? null : folder;
+      // 업체 전달 막힘 (11/18 사용자: 과일쏙 못난이사과외 취완·리뷰비까지 했는데 업체 전달에 안 뜸 → 왜 안 뜨는지 알려야 빠뜨린 곳을 찾음)
+      //  인원은 다 모였는데 리뷰 확인 체크가 안 된 사람이 있으면: 그 사람(진행 날짜)·리뷰이미지 사진 수를 RVSTUCK_에 → 한눈에 '리뷰 취합할 것'에 빨간 줄, 할 일 한 번
+      try {
+        const sk = 'RVSTUCK_' + sid;
+        if (!allDone && total && got >= total && !rvSentAny_(mine)) {
+          const cNm = (function () { let i = hdr.findIndex(function (h) { return /수령인|계정명/.test(h); }); if (i < 0) i = hdr.findIndex(function (h) { return /이름|성함/.test(h) && !MATCH.nick.test(h); }); return i; })();
+          const un = live.filter(function (i) { return v[i][cc] !== true; }).map(function (i) {
+            const t = v[i][cT].getTime(), r = mine.filter(function (m) { const w = windowOf_(runs, m); return t >= w.from && t < w.to; })[0];
+            return (cNm >= 0 ? String(v[i][cNm]).trim() : '?') + (r && r['진행일'] instanceof Date ? '(' + (r['진행일'].getMonth() + 1) + '.' + r['진행일'].getDate() + ')' : '');
+          });
+          let ph = null; if (capF && capF.img) try { ph = rvImgCount_(capF.img); } catch (e) {}
+          const o = { un: un.slice(0, 20), n: un.length, ppl: live.length, ph: ph, pend: !!pend[campKey_(mine[0]['캠페인'] || mine[0]['명단 제목'])] };
+          props.setProperty(sk, JSON.stringify(o));
+          if (!init && rvStuckLate_(mine) && !props.getProperty('RVSTUCKMSG_' + sid)) {
+            props.setProperty('RVSTUCKMSG_' + sid, '1');
+            queueMsg_('내 할 일', '[업체 전달 못 함] ' + rvStuckText_(mine, o) + '\n→ 그분 리뷰를 확인하고 명단 시트 체크칸에 체크하면 업체 전달(📦리뷰취합)에 떠요', '할 일');
+          }
+        } else if (props.getProperty(sk) != null) props.deleteProperty(sk);
+      } catch (e) { note_('업체 전달 막힘 확인 실패 ' + sid + ': ' + e.message); }
       if (allDone && !props.getProperty(rk)) {
         props.setProperty(rk, '1');
         // 리뷰이미지 폴더가 있으면 보고 글은 압축 파일이 생길 때 링크와 같이 넣음 (먼저 보내고 나중에 링크 글이 또 가지 않게, 10/26)
@@ -8138,6 +8162,42 @@ function rvReportMsg_(link, mine, name, cnt) {
   return lines.join('\n');
 }
 function rvReportLine_(name) { return '안녕하세요 ' + String(name).replace(/\s*\(응답\)\s*$/, '').trim() + ' 리뷰완료되어 보고드립니다 !'; }
+// 의뢰 인원이 다 모였는지 (총건수 = 진행들 중 가장 큰 값, 인원 = 합)
+function rvFull_(mine) {
+  const total = (mine || []).reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0);
+  return !!total && (mine || []).reduce(function (a, x) { return a + (Number(x['인원']) || 0); }, 0) >= total;
+}
+// 막힘을 알릴 때: 리뷰 취합을 한 날이 있거나(사용자가 끝났다고 보는 것) 마지막 진행이 7일 넘게 지남
+function rvStuckLate_(mine) {
+  const last = (mine || []).filter(function (r) { return r['진행일'] instanceof Date; }).map(function (r) { return dayStart_(r['진행일']); }).sort(function (a, b) { return b - a; })[0];
+  return (mine || []).some(function (r) { const x = r['리뷰 취합']; return x instanceof Date || String(x == null ? '' : x).trim() !== ''; }) || (!!last && today_().getTime() - last >= 7 * 86400000);
+}
+// 리뷰이미지 폴더 사진 수 (종류 폴더별, '압축 제외' 폴더 빼고)
+function rvImgCount_(img) {
+  const by = { 포토: 0, 텍스트: 0, 별점: 0, 기타: 0 }, seen = {};
+  const walk = function (fo, depth, type) {
+    if (depth > 0 && RV_SKIP_RE.test(fo.getName())) return;
+    const t = rvTypeOf_(fo.getName()) || type, fi = fo.getFiles();
+    while (fi.hasNext()) { const x = fi.next(); if (!/^image\//.test(x.getMimeType()) || seen[x.getId()]) continue; seen[x.getId()] = 1; by[t || '기타']++; }
+    if (depth < 4) { const di = fo.getFolders(); while (di.hasNext()) walk(di.next(), depth + 1, t); }
+  };
+  walk(img, 0, '');
+  return by;
+}
+// '과일쏙 못난이사과외 (11.4~11.9) — 리뷰 확인 안 된 2명: 김현아(11.5) 이민선(11.5) · 리뷰 취합 안 한 날: 11.5 · 리뷰이미지 사진 30장(포토 8·텍스트 22) / 40명'
+function rvStuckText_(mine, o) {
+  const f = function (r) { return (r['진행일'].getMonth() + 1) + '.' + r['진행일'].getDate(); };
+  const ds = (mine || []).filter(function (r) { return r['진행일'] instanceof Date; });
+  const ppl = ds.filter(function (r) { return (Number(r['인원']) || 0) > 0; }), sp = ppl.length ? ppl : ds;
+  const span = !sp.length ? '' : f(sp[0]) === f(sp[sp.length - 1]) ? f(sp[0]) : f(sp[0]) + '~' + f(sp[sp.length - 1]);
+  const parts = [];
+  if (o.n) parts.push('리뷰 확인 안 된 ' + o.n + '명: ' + o.un.join(' ') + (o.n > o.un.length ? ' …' : ''));
+  const noColl = ppl.filter(function (r) { const x = r['리뷰 취합']; return !(x instanceof Date || String(x == null ? '' : x).trim() !== ''); }).map(f);
+  if (noColl.length && noColl.length < ppl.length) parts.push('리뷰 취합 안 한 날: ' + noColl.join(', '));
+  if (o.ph) { const tot = o.ph['포토'] + o.ph['텍스트'] + o.ph['별점'] + o.ph['기타']; parts.push('리뷰이미지 사진 ' + tot + '장(' + ['포토', '텍스트', '별점', '기타'].filter(function (k) { return o.ph[k]; }).map(function (k) { return k + ' ' + o.ph[k]; }).join('·') + ') / ' + o.ppl + '명' + (tot < o.ppl ? ' → ' + (o.ppl - tot) + '장 모자람' : '')); }
+  if (o.pend) parts.push('일정 탭에 아직 대기 중인 다음 진행이 있음');
+  return campOf_((mine[0] || {})['명단 제목']) + (span ? ' (' + span + ')' : '') + ' — ' + (parts.join(' · ') || '리뷰 확인이 다 안 됨');
+}
 function rvTypeOf_(folderName) { const m = String(folderName || '').trim().match(/^(포토|텍스트|별점)/); return m ? m[1] : ''; }
 // 장바구니건 상품 수 (1 = 아님). 생성기가 넘긴 CART_<시트ID>
 function rvCartOf_(sid) { return Number(PropertiesService.getScriptProperties().getProperty('CART_' + sid)) || 1; }
@@ -11866,6 +11926,13 @@ function rvItems_(allRuns, props) {
     //  글자로 적힌 날짜(예: '11/4')도 보낸 걸로 봄
     const sentVals = mine.map(function (r) { return r['업체 전송']; }).filter(function (v) { return v instanceof Date || String(v == null ? '' : v).trim() !== ''; });
     const sentAt = sentVals.filter(function (v) { return v instanceof Date; }).sort(function (a, b) { return b - a; })[0] || (sentVals.length ? new Date(0) : null);
+    // 업체 전달 막힘 (11/18): 인원은 다 모였는데 리뷰 확인이 안 끝나 '의뢰 끝'이 안 된 것 → 왜 안 뜨는지 빨간 줄 (체크칸 없음)
+    const stk = all['RVSTUCK_' + sid];
+    if (!all['RVRPT_' + sid] && !sentVals.length && stk && stk.charAt(0) === '{' && rvStuckLate_(mine)) {
+      let so = {}; try { so = JSON.parse(stk); } catch (e) {}
+      items.push({ type: 'stuck', sid: sid, label: '⚠ 업체 전달 못 함: ' + rvStuckText_(mine, so), at: '', sheet: String(mine[0]['시트 링크'] || ''), folder: all['RVIMG_' + sid] ? 'https://drive.google.com/drive/folders/' + all['RVIMG_' + sid] : String(mine[0]['폴더 링크'] || '') });
+      return;
+    }
     if (!all['RVRPT_' + sid] || (sentAt && dayStart_(sentAt) < t0)) return;
     const f = function (r) { return (r['진행일'].getMonth() + 1) + '.' + r['진행일'].getDate(); };
     // 날짜 범위는 사람이 있는 진행만 (11/5 피클 인계: 취소·종료된 0명 줄 '#11.02 밀크텐정 2' 때문에 10.30~11.2로 보였음)
@@ -12187,13 +12254,16 @@ function buildDashboard_(force) {
     sh.getRange(rt, 1, 1, 5).setValues([['보냄', '리뷰 취합할 것 (의뢰 리뷰가 다 끝난 것 · 업체에 보내면 체크 → 다음 날 사라짐)', '체크한 날', '명단', '사진 올릴 곳']]).setFontWeight('bold').setBackground('#e6f4ea');
     rvItems.forEach(function (it, i) {
       const rr = rt + 1 + i;
+      if (it.type === 'stuck') { sh.getRange(rr, 2).setValue(it.label).setHorizontalAlignment('left').setFontWeight('bold').setFontColor('#cc0000').setWrap(true); }
+      else {
       rvMap[rr] = it.type === 'req' ? { type: 'req', sid: it.sid, label: String(it.label).slice(0, 40) } : { type: 'day', title: it.title };
       sh.getRange(rr, 1).insertCheckboxes().setValue(!!it.at);
       sh.getRange(rr, 2).setValue(it.label).setHorizontalAlignment('left');
+      }
       if (it.type === 'req') sh.getRange(rr, 2).setFontWeight('bold').setFontColor('#1e5631');
       if (it.at) sh.getRange(rr, 3).setValue(new Date(it.at + 'T00:00:00')).setNumberFormat('M/d');
       if (it.sheet) sh.getRange(rr, 4).setFormula('=HYPERLINK(' + q(it.sheet) + ',"명단")');
-      if (it.folder) sh.getRange(rr, 5).setFormula('=HYPERLINK(' + q(it.folder) + ',' + q(it.type === 'req' ? '리뷰이미지' : '폴더') + ')');
+      if (it.folder) sh.getRange(rr, 5).setFormula('=HYPERLINK(' + q(it.folder) + ',' + q(it.type !== 'day' ? '리뷰이미지' : '폴더') + ')');
     });
     sh.getRange(rt, 1, rvItems.length + 1, 5).setBorder(true, true, true, true, true, true, '#cfe8d6', SpreadsheetApp.BorderStyle.SOLID).setVerticalAlignment('middle');
   }
