@@ -373,6 +373,9 @@ function renameRun_(r, title, why) {
   // 다른 진행(다른 상품)의 방제로는 절대 안 바꿈 (10/23: 한눈에 탭 방제 칸에 속눈썹영양제 방제가 들어가 기대평 진행 이름·보낼메시지 방이 속눈썹으로 바뀐 것)
   const other = readRuns_().filter(function (x) { return x.row !== r.row && x['진행 상태'] !== '종료' && (bareTitle_(x['명단 제목']) === title || sameRunTitle_(x['명단 제목'], title)) && campKey_(x['명단 제목']) !== campKey_(r['명단 제목']); })[0];
   if (other) { note_('⛔ 방제 안 바꿈: ' + bareTitle_(r['명단 제목']) + ' → ' + title + ' (다른 진행 ' + bareTitle_(other['명단 제목']) + '의 방제라서)' + (why ? ' [' + why + ']' : '')); return false; }
+  // 다른 진행이 지금 쓰는 방제와 똑같이는 절대 안 바꿈 (11/18: '레깅스 30'이 새 의뢰 '레깅스 50'과 같은 방제가 돼 카톡방·배정·월급시트 줄이 섞임)
+  const same = readRuns_().filter(function (x) { return x.row !== r.row && x['진행 상태'] !== '종료' && bareTitle_(x['명단 제목']) === title; })[0];
+  if (same) { note_('⛔ 방제 안 바꿈: ' + bareTitle_(r['명단 제목']) + ' → ' + title + ' (진행목록 ' + same.row + '행 진행이 이미 이 방제)' + (why ? ' [' + why + ']' : '')); return false; }
   // 같은 상품의 다른 날 진행이 아직 그 방 이름(같은 날짜)을 쓰고 있으면 안 바꿈: 바꾸면 두 진행의 보낼메시지가 한 방으로 섞임 (10/24 #10.26 공지 사라진 원인)
   const twin = readRuns_().filter(function (x) { return x.row !== r.row && x['진행 상태'] !== '종료' && campKey_(x['명단 제목']) === campKey_(r['명단 제목']) && dateTok_(x['명단 제목']) === dateTok_(title) && dateTok_(title) !== dateTok_(r['명단 제목']); })[0];
   if (twin) { note_('⛔ 방제 안 바꿈: ' + bareTitle_(r['명단 제목']) + ' → ' + title + ' (같은 날짜 진행 ' + bareTitle_(twin['명단 제목']) + '이 아직 있어서)' + (why ? ' [' + why + ']' : '')); return false; }
@@ -1753,6 +1756,7 @@ function diag_(p) {
   // &resp=요청ID: 그 진행 명단 시트의 폼 응답 (시각, 닉네임, 수령인, 전화 뒤 4자리, 옵션) — 중복·두 번 낸 사람 찾기 (읽기만)
   // &legplan=1: 레깅스 50 응답 옮기기 미리보기 (읽기만)
   if (p.legplan) try { out.legplan = legMove_(true); } catch (e) { out.legplanErr = String(e && e.stack || e); }
+  if (p.legren) try { out.legren = legRen1_(true); } catch (e) { out.legrenErr = String(e && e.stack || e); }
   if (p.resp) try {
     const rr = runByRequest_(p.resp) || readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']).indexOf(String(p.resp)) >= 0 && x['시트ID']; })[0]; out.resp = [];   // 요청ID가 없는 진행은 방제 글자로
     if (rr) SpreadsheetApp.openById(rr['시트ID']).getSheets().filter(function (t) { return !!t.getFormUrl(); }).forEach(function (t) {
@@ -1921,7 +1925,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'LEGMOVE1', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'LEGMOVE1', 'LEGREN1', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3607,7 +3611,7 @@ function checkFullInner_() {
   //  순서: 폼 인원(인원·마감·명단 전달)을 알림보다 먼저 (11/18 사용자: 명단 전달이 늦음), 한눈에를 명단 전달 안전망보다 먼저. 방 공지가 먼저 있어야 폼 인원의 '방 공지 없음' 표시가 안 틀림
   cfRun_(S, [
     // (11/18 하루만, 사용자 승인) 레깅스 50 응답을 옛 폼(레깅스 30) → 새 폼으로. 다른 날엔 바로 끝남. 맨 앞(시간 넉넉할 때)
-    { n: '레깅스 50 옮기기', need: 150, run: function () { legMove_(false); } },
+    { n: '레깅스 50 옮기기', need: 150, run: function () { try { legRen1_(false); } catch (e) { note_('레깅스 30 되돌리기 실패: ' + e); } const r = legMove_(false); if (r && r.stopped) throw { cfCut: 1 }; } },
     { n: '공지 모양', need: 20, run: function () {
       try { ensureRunNotices_(readRuns_()); } catch (e) { note_('방 공지 확인 실패: ' + e); }
       try { fixMisroutedNotices_(readRuns_()); } catch (e) { note_('방 공지 카톡방 확인 실패: ' + e); }
@@ -8875,6 +8879,7 @@ function legMove_(dry, anyDay) {
   });
   if (dry) return out;
   flushDel();
+  out.stopped = stopped;
   if (moved.length || deleted) {
     note_('✓ 레깅스 50 응답 옮김 ' + moved.length + '명 (옛 폼에서 ' + deleted + '개 지움): ' + moved.join(', ') + (out.prob.length ? ' / 못 옮김: ' + out.prob.join(', ') : '') + (stopped ? ' (남은 건 다음 확인에서)' : ''));
     try { SpreadsheetApp.flush(); syncList_(SpreadsheetApp.openById(LEG_NEW_SID)); } catch (e) {}
@@ -8913,6 +8918,65 @@ function legDelOld_(oldR, pend) {
   SpreadsheetApp.flush();
   const runs = readRuns_(), me = runs.filter(function (x) { return String(x['요청ID']) === LEG_OLD_REQ; })[0] || oldR;
   setRun_(me.row, '인원', runCount_(runs, me));
+}
+// (11/18) 옛 '#11.18 실 탄탄상점 레깅스 30'(2일차, 요청 npb3d175-2)이 한눈에 다시 그리기에서 새 의뢰 '레깅스 50' 방제로 잘못 바뀐 것 되돌림
+//  (사용자: "오전명단30") 진행목록 방제·목표 30·카톡방, 그 진행 리뷰 가이드(대기) 방, 배정 탭 줄(레깅스 30 사람 묶음만 30으로, 레깅스 50 사람 묶음은 그대로)
+//  배정 줄 묶음: 같은 제목 줄이 이어진 덩어리마다 사용자가 준 레깅스 50 명단과 겹치는 비율로 가림. dry: 읽기만 (점검 &legren=1)
+const LEG_NEW_NAMES = ['이혜린', '황성례', '권용인', '김현진', '성시윤', '고다경', '워니', '류가영', '조혜선', '김혜란', '이효주', '전보미', '김혜진', '권나은', '구본미', '박연정', '구익영',
+  '김병수', '김호림', '조현아', '유미나', 'DamiU', '김경미', '강서이', '강하서', 'MJ', '한이슬', '김지영', '강현주', '영순', '이현지', '연이', '정수아', '이현주', '박혜진', '구유진', '윤유선',
+  '최윤석', '김하늘', '한지수', '서림', '이성현', '김진향', '오주연'];
+function legRen1_(dry) {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('LEGREN1') || '');
+  if (!dry && (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5)) return null;
+  const out = { run: '', ob: [], as: [], prob: [] };
+  try {
+    const T30 = '#11.18 실 탄탄상점 레깅스 30', T50 = '#11.18 실 탄탄상점 레깅스 50';
+    const runs = readRuns_();
+    const oldR = runs.filter(function (x) { return String(x['요청ID']) === LEG_OLD_REQ; })[0], newR = runs.filter(function (x) { return String(x['요청ID']) === LEG_NEW_REQ; })[0];
+    if (!oldR || !newR) throw new Error('진행 못 찾음');
+    const nick = (String(oldR['명단 제목']).match(/\s*\([^)]*\)\s*$/) || [''])[0];
+    const runFix = bareTitle_(oldR['명단 제목']) === T50;
+    out.run = runFix ? oldR.row + '행 ' + T50 + ' → ' + T30 + ' / 목표 ' + oldR['목표인원'] + ' → 30 / 카톡방 ' + oldR['카톡방'] + ' → ' + T30 : '진행목록은 이미 ' + bareTitle_(oldR['명단 제목']);
+    // 옛 진행 리뷰 가이드(대기): 그 진행이 넣은 글(RVTXT_)과 같은 것만
+    const g = props.getProperty('RVTXT_RVMSGD_' + oldR['시트ID'] + '_20261118');
+    const ob = outboxSheet_(), ol = ob.getLastRow(), v = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues() : [];
+    const obIds = [];
+    v.forEach(function (x) { if (x[2] === '방 공지' && String(x[3]) === T50 && x[5] === '대기' && g && String(x[4]) === g) { obIds.push(x[0]); out.ob.push(x[0] + ' ' + String(x[4]).slice(0, 30)); } });
+    // 배정 탭
+    const as = assignSheet_(), al = as.getLastRow(), av = al >= 2 ? as.getRange(2, 1, al - 1, 7).getValues() : [];
+    const TT = T50 + nick, nn = function (t) { return String(t || '').replace(/\s+/g, '').toLowerCase(); };
+    const want = {}; LEG_NEW_NAMES.forEach(function (x) { want[nn(x)] = 1; });
+    // 레깅스 50 묶음 = 그 공지 첫 이름(이혜린) 줄부터, 50 명단에 있는 이름이 이어지는 데까지 (성시윤처럼 두 명단에 다 있는 이름이 있어서 이름만으로는 못 가림)
+    const tt = [];
+    av.forEach(function (x, i) { if (String(x[0]) === TT) tt.push(i); });
+    const a0 = tt.filter(function (i) { return nn(av[i][1]) === nn(LEG_NEW_NAMES[0]); });
+    if (a0.length !== 1) throw new Error('레깅스 50 첫 이름 줄이 ' + a0.length + '개');
+    let e0 = a0[0];
+    while (e0 + 1 < av.length && String(av[e0 + 1][0]) === TT && want[nn(av[e0 + 1][1])]) e0++;
+    const blocks = [{ start: a0[0], end: e0, isNew: true }];
+    let cur = null;
+    tt.forEach(function (i) {
+      if (i >= a0[0] && i <= e0) { cur = null; return; }
+      if (cur && cur.end === i - 1) cur.end = i; else { cur = { start: i, end: i, isNew: false }; blocks.push(cur); }
+    });
+    blocks.forEach(function (b) {
+      const nm = av.slice(b.start, b.end + 1).map(function (x) { return String(x[1]); });
+      out.as.push((b.start + 2) + '~' + (b.end + 2) + '행 ' + nm.length + '줄 → ' + (b.isNew ? '레깅스 50 그대로(새 명단 시트)' : '레깅스 30으로') + ': ' + nm.slice(0, 5).join(' ') + (nm.length > 5 ? ' …' : ''));
+    });
+    if (!dry) {
+      // 다 확인한 뒤에 씀 (위에서 이상하면 아무것도 안 바꾸고 실패로 적음)
+      if (runFix) { setRun_(oldR.row, '명단 제목', T30 + nick); setRun_(oldR.row, '목표인원', 30); setRun_(oldR.row, '카톡방', T30); }
+      obIds.forEach(function (id) { obSet_(ob, id, 4, T30); });
+      blocks.filter(function (b) { return !b.isNew; }).forEach(function (b) { as.getRange(b.start + 2, 1, b.end - b.start + 1, 1).setValue(T30 + nick); as.getRange(b.start + 2, 7, b.end - b.start + 1, 1).setValue(String(oldR['시트ID'])); });
+      blocks.filter(function (b) { return b.isNew; }).forEach(function (b) { as.getRange(b.start + 2, 7, b.end - b.start + 1, 1).setValue(String(newR['시트ID'])); });
+      SpreadsheetApp.flush();
+      try { refreshAssignFormulasOnce_(readRuns_()); } catch (e) { note_('배정 수식 다시 맞추기 실패: ' + e); }
+      cfDirty_(true);
+      note_('✓ 레깅스 30 되돌림: ' + out.run + ' / 리뷰 가이드 ' + out.ob.length + '개 방 30으로 / 배정 ' + out.as.join(' | '));
+      props.setProperty('LEGREN1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + out.run + ' / 가이드 ' + out.ob.length + ' / 배정 ' + out.as.join(' | '));
+    }
+  } catch (e) { out.prob.push(String(e && e.message || e)); if (!dry) props.setProperty('LEGREN1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+  return out;
 }
 function cableFmt1_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('CABLEFMT1') || '');
@@ -11455,11 +11519,19 @@ function writePayRow_(r, name, remain, prevMonth, shared, ex, allRuns) {
   const sid = String(r['시트ID']);
   const linkOf = function (rt) { try { if (rt.getLinkUrl()) return rt.getLinkUrl(); const runs = rt.getRuns(); for (let i = 0; i < runs.length; i++) if (runs[i].getLinkUrl()) return runs[i].getLinkUrl(); } catch (e) {} return ''; };
   const links = L.qty ? sh.getRange(L.head + 1, L.qty, Math.max(last - L.head, 1), 1).getRichTextValues().map(function (x) { return x[0] ? linkOf(x[0]) : ''; }) : [];
+  // 같은 날 다른 명단 시트(다른 의뢰서) 진행의 줄: 이름이 같거나 비슷해도 이 진행 줄로 안 씀 (11/18 레깅스 30·50: 같은 날 같은 상품의 두 의뢰가 한 줄을 서로 덮어씀)
+  const foreign = {};
+  try {
+    const dk0 = dateTok_(name);
+    const others = (allRuns || []).filter(function (x) { return x['진행 상태'] !== '종료' && x['시트ID'] && String(x['시트ID']) !== sid && dateTok_(x['명단 제목']) === dk0; }).map(function (x) { return String(x['시트ID']); });
+    if (others.length) links.forEach(function (u, i) { if (u && u.indexOf(sid) === -1 && others.some(function (o) { return u.indexOf(o) !== -1; })) foreign[i] = 1; });
+  } catch (e) {}
   // 명단 시트 하나를 여러 날이 같이 쓰면 링크가 같으니 이름(날짜 들어간 방제)으로 먼저 찾음
   let byName = names.indexOf(name.replace(/\s+/g, ''));
+  if (byName !== -1 && foreign[byName]) byName = -1;
   // 방제 끝 숫자를 고친 경우: 같은 날짜·캠페인 줄을 찾아 캠페인명을 새 이름으로
   let renamed = false;
-  if (byName === -1) { byName = names.findIndex(function (nm) { return nm && sameRunTitle_(nm, name); }); renamed = byName !== -1; }
+  if (byName === -1) { byName = names.findIndex(function (nm, i) { return nm && !foreign[i] && sameRunTitle_(nm, name); }); renamed = byName !== -1; }
   // 캠페인명 앞뒤에 업체명 등을 붙이거나 뺀 경우(차량용 거치대 → 더호 차량용 거치대): 같은 날짜, 이름이 서로 포함, 스토어 같음,
   //  진행목록 어느 진행 것도 아닌 줄이 딱 하나면 그 줄을 새 이름으로 씀 (11/15: 새 줄이 생겨 같은 날 두 줄·진행비 두 번)
   if (byName === -1 && allRuns) {
@@ -11910,7 +11982,8 @@ function buildDashboard_(force) {
     let changed = false;
     sh.getRange(2, 2, Math.min(sh.getLastRow() - 1, 60), 1).getValues().forEach(function (v, i) {
       const t = String(v[0]).trim();
-      if (!t || t.charAt(0) === '■' || t === written[i] || written.indexOf(t) >= 0) return;   // 지난번에 스크립트가 쓴 값이 자리만 밀린 것은 고친 게 아님 (예전 이름으로 되돌리던 것)
+      if (!t || t.charAt(0) === '■' || t === written[i] || written.indexOf(t) >= 0) return;   // 지난번에 스크립트가 쓴 값이 자리만 밀린 것은 고친 게 아님
+      if (runs.some(function (x) { return x['진행 상태'] !== '종료' && bareTitle_(x['명단 제목']) === t; })) return;   // 다른 진행의 방제 그대로면 고친 게 아님 (11/18: 새 '레깅스 50' 방제로 같은 날 '레깅스 30'이 바뀜) (예전 이름으로 되돌리던 것)
       const r = runs.filter(function (x) { return sameRunTitle_(x['명단 제목'], t) && bareTitle_(x['명단 제목']) !== t; })[0];
       if (r && renameRun_(r, t, '한눈에 탭 값')) changed = true;
     });
