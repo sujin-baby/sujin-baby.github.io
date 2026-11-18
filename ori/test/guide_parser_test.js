@@ -1671,7 +1671,104 @@ https://naver.me/GDQGBL7P
   console.log('✓ #77 택대·실⁄빈 혼합·네쿠 방제 및 다중 가이드 상품번호 분리 시험 통과 (' + room77 + ')');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (37개 샘플 전원 일치)');
+// ==========================================
+console.log('-- Test 38: 팀룸 #81 — "5건실 나머지 빈" 실·빈 혼합 + 주소 위 줄 건수(5/10) + 옵션(라지)이 키워드로 새지 않기 (11/18)');
+{
+  // 수진 님 제보 원문 (오리 팀룸 업무방 #81, 1/2 쿠팡 기준): 방제가 '#택11.19 김상사 라지 15'로 나오고,
+  //  키워드·상품명이 '라지'가 되고, 공지 인원이 15를 반반 쪼개 '쿠팡 (8명)/(7명)'이 됨
+  const req81 = `#입금대행 택대 5건실 나머지 빈  9900 10900
+
+1. 검색 키워드(미노출시 저희가  키워드땁니다):
+2. 키워드 검색 시 현재 순위 :모르시면 비워두세요
+3. 총 결제하신 건수 : 15
+4. 하루 진행 건수 : 15
+5. 상품주소(URL) : 
+5건 실배
+https://www.coupang.com/vp/products/9812998435?itemId=29388465518
+
+10건 빈
+https://www.coupang.com/vp/products/9812998435?vendorItemId=96299881395
+6. 구매옵션 : 라지 /  9,900원
+7. 포토제공 (몇명)  /포토없음  선택: 포토 5명
+8. 리뷰 가이드 : 원고제공
+9. 입금하실 입금자명 : 김상사(김성열)
+10.택배대행 Y/N: N`;
+
+  // 1) 실·빈 혼합 인식 — '5건실'(건수를 실 앞에 붙인 표기)도 실배송 표기로 읽어야 함
+  if (!P.isSilbin('#입금대행 택대 5건실 나머지 빈  9900 10900')) throw new Error('Test 38 "5건실 나머지 빈"을 실·빈 혼합으로 못 읽음');
+  if (P.isSilbin('5건 실배')) throw new Error('Test 38 "5건 실배"(실배송 단독)를 실·빈 혼합으로 오인식');
+  if (P.isSilbin('10건 빈')) throw new Error('Test 38 "10건 빈"(빈박스 단독)을 실·빈 혼합으로 오인식');
+
+  const h81 = P.parseAll(req81);
+  if (!h81.silbin) throw new Error('Test 38 #81 의뢰서를 실·빈 혼합으로 못 읽음');
+  if (!h81.takdae) throw new Error('Test 38 의뢰서 헤더 택대를 못 읽음');
+  // 실·빈 혼합은 실배송이 섞여 있어 택대 유지가 맞고, 10번 N을 충돌로 띄우지 않음 (#81)
+  if (h81.conflictTakdae) throw new Error('Test 38 실·빈 혼합인데 택배대행 충돌로 표시됨');
+  if (h81.realship) throw new Error('Test 38 실·빈 혼합은 실배송 단독이 아님(realship=false)');
+  if (h81.guides.length !== 2) throw new Error('Test 38 상품 두 개로 나눠야 함, got: ' + h81.guides.length);
+  const [gA, gB] = h81.guides;
+
+  // 2) 주소 바로 위 줄의 '5건 실배' / '10건 빈'에서 건수·가격을 1:1로 (예전엔 15를 반반 쪼개 8/7)
+  if (String(gA.total) !== '5' || String(gB.total) !== '10') throw new Error('Test 38 가이드별 총건수는 5/10이어야 함: ' + gA.total + '/' + gB.total);
+  if (String(gA.daily) !== '5' || String(gB.daily) !== '10') throw new Error('Test 38 하루 건수는 5/10이어야 함: ' + gA.daily + '/' + gB.daily);
+  if (String(gA.price) !== '9900' || String(gB.price) !== '10900') throw new Error('Test 38 가격은 9900/10900이어야 함: ' + gA.price + '/' + gB.price);
+  if (!/9,900/.test(String(gA.page)) || !/10,900/.test(String(gB.page))) throw new Error('Test 38 위치의 가격검색 안내가 상품 가격과 다름: ' + gA.page + ' / ' + gB.page);
+
+  // 3) 옵션 '라지'는 두 가이드의 옵션일 뿐, 상품명·키워드로 새지 않음
+  if (gA.option !== '라지' || gB.option !== '라지') throw new Error('Test 38 옵션은 둘 다 라지여야 함: ' + gA.option + '/' + gB.option);
+  if (gA.optBase[0].qty !== '5' || gB.optBase[0].qty !== '10') throw new Error('Test 38 옵션별 인원은 5/10이어야 함: ' + JSON.stringify([gA.optBase, gB.optBase]));
+  if (gA.pname || gB.pname) throw new Error('Test 38 옵션 이름(라지)이 상품명으로 들어감: ' + JSON.stringify([gA.pname, gB.pname]));
+  if (String(gA.keyword) === '라지' || String(gB.keyword) === '라지') throw new Error('Test 38 옵션 이름(라지)이 키워드로 들어감');
+  const gOpt = { pname: '라지', keyword: '', kwAuto: true, optBase: [{ label: '라지', qty: '' }], platform: '쿠팡' };
+  P.autoKeyword(gOpt);
+  if (String(gOpt.keyword || '').trim()) throw new Error('Test 38 상품명이 옵션 이름 그대로면 키워드를 만들면 안 됨: ' + gOpt.keyword);
+
+  // 4) 상품 정보(판매처 김상사, 상품명)를 첫 가이드에만 붙여도 같은 상품번호인 둘째 가이드에 채워짐
+  getElem('req').value = req81;
+  getElem('t-ip').checked = true;
+  getElem('t-up').checked = false;
+  getElem('takdae').checked = true;
+  getElem('realship').checked = false;
+  getElem('fruit').checked = false;
+  getElem('cart').checked = false;
+  getElem('day').value = '1';
+  getElem('date').value = '2026-11-19';
+  getElem('slot').value = 'midnight';
+  const PNAME81 = '제르넬 남성용 방한장갑 스마트폰 터치 기모 라이더 장갑';
+  const gs81 = h81.guides.map(g => Object.assign({}, g, { keyword: '', guide: '', kwAuto: true }));
+  gs81[0].seller = '김상사'; gs81[0].pname = PNAME81; gs81[0].kwSug = null;
+  P.autoKeyword(gs81[0]);
+  if (gs81[0].keyword !== '방한장갑') throw new Error('Test 38 상품명에서 대표 키워드를 못 고름: ' + gs81[0].keyword);
+  P.setGuides(gs81);
+  ['keyword', 'guide', 'daily', 'total', 'price', 'ship', 'platform', 'seller', 'option', 'pname', 'url', 'pno', 'short', 'page', 'pageM', 'similar', 'photo', 'thumb'].forEach(k => { getElem(k).value = String(gs81[0][k] === undefined || gs81[0][k] === null ? '' : gs81[0][k]); });
+  P.render();
+  if (gs81[1].pname !== PNAME81) throw new Error('Test 38 같은 상품번호인 둘째 가이드에 상품명이 안 채워짐: ' + gs81[1].pname);
+  if (gs81[1].seller !== '김상사') throw new Error('Test 38 같은 상품번호인 둘째 가이드에 판매처가 안 채워짐: ' + gs81[1].seller);
+  if (gs81[1].keyword !== '방한장갑') throw new Error('Test 38 둘째 가이드 키워드가 상품명에서 안 채워짐: ' + gs81[1].keyword);
+
+  // 5) 방제: #택11.19실/빈 김상사 장갑15 (실/빈·택 유지, 옵션 '라지'가 아니라 상품 품목명)
+  const day81 = P.dayTotalOf(1);
+  if (day81 !== '15') throw new Error('Test 38 1일차 인원은 15여야 함: ' + day81);
+  const room81 = P.makeRoom('11.19', day81);
+  if (room81 !== '#택11.19실/빈 김상사 장갑15') throw new Error('Test 38 #81 방제 실패: ' + room81 + ' (' + room81.length + '자)');
+  if (!P.roomHasTak(room81)) throw new Error('Test 38 실·빈 혼합 방제에서 택이 사라짐: ' + room81);
+  if (room81.length > 20) throw new Error('Test 38 방제가 20자를 넘음: ' + room81.length);
+
+  // 6) 공지: 쿠팡 (5명) / 쿠팡 (10명) — 8명/7명으로 쪼개지지 않고, 키워드에 라지가 없음
+  P.render();
+  const notice81 = String(getElem('o-notice').value || '');
+  if (notice81.indexOf('쿠팡 (5명)') < 0 || notice81.indexOf('쿠팡 (10명)') < 0) throw new Error('Test 38 공지 인원이 5명/10명이 아님: ' + (notice81.match(/쿠팡 \(\d+명\)/g) || []).join(','));
+  if (/쿠팡 \((8|7)명\)/.test(notice81)) throw new Error('Test 38 공지 인원이 8명/7명으로 반반 쪼개짐');
+  if (/🐥★키워드 : 라지/.test(notice81)) throw new Error('Test 38 공지 키워드에 라지가 들어감');
+  if (notice81.indexOf('🐥★키워드 : 방한장갑') < 0) throw new Error('Test 38 공지 키워드가 상품명 추천(방한장갑)이 아님');
+  if (notice81.indexOf('🐥상품명 : ' + PNAME81) < 0) throw new Error('Test 38 공지 상품명이 비었거나 라지임');
+  if (notice81.indexOf('🐥옵션 : 라지') < 0) throw new Error('Test 38 공지 옵션이 라지가 아님');
+  if (!/🐥가격 : 9,900/.test(notice81) || !/🐥가격 : 10,900/.test(notice81)) throw new Error('Test 38 공지 가격이 9,900/10,900이 아님');
+
+  console.log('✓ #81 실·빈("5건실 나머지 빈") 방제·인원 5/10·가격 1:1·옵션 라지 미유입 시험 통과 (' + room81 + ')');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (38개 샘플 전원 일치)');
 process.exit(0);
 
 
