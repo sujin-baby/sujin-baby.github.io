@@ -3470,6 +3470,8 @@ function checkFullInner_() {
   const runs = readRuns_(), times = {};
   // 정리(지난 명단 탭·보낸 메시지·사용법 탭 등)가 2시간 넘게 밀렸으면 이번엔 맨 앞에서 (11/17: 확인이 매번 4분 50초쯤 걸려 맨 뒤 정리가 3시간 넘게 못 돌았음)
   { const sa0 = Date.now() - Number(props.getProperty('SLOW_AT') || 0); if (sa0 > 120 * 60000 && !late_(60)) { step_('정리(밀려서 먼저)'); try { slowTasks_(runs, {}); } catch (e) { if (e && e.yieldLock) throw e; note_('정리 실패: ' + e); } } }
+  // 한눈에 명단 칸 덜 불러온 것 다시 불러오기를 앞에서 (11/18: 맨 뒤라 확인이 길면 건너뛰어져 목쿠션 5번째 사람이 1시간 넘게 안 보였음). 한 번 읽기라 빠름
+  try { subTime_('한눈에 명단 칸 확인', function () { dashListStale_(runs); }); globalThis.__DASHSTALE_RUN = 1; } catch (e) { note_('한눈에 명단 칸 확인 실패: ' + e); }
   step_('알림');
   try { subTime_('알림: 안 산 사람', function () { fruitCheck_(runs); }); } catch (e) { note_('안 산 사람 확인 실패: ' + e); }
   try { subTime_('알림: 택배시트', function () { takbaeCheck_(runs); }); } catch (e) { note_('택배시트 알림 실패: ' + e); }
@@ -3694,7 +3696,7 @@ function checkFullInner_() {
   // 리뷰 사진 AI 분류가 남은 의뢰가 있으면 이어서 (10/31)
   if (props.getProperty('RVAI_Q') && !late_(200)) { step_('리뷰 사진 AI'); rvAiQueue_(); }
   if (geminiKey_()) { try { ensureInboxTrigger_(); } catch (e) {} }
-  if (!late_(200)) { try { subTime_('한눈에 명단 칸 확인', function () { dashListStale_(); }); } catch (e) { note_('한눈에 명단 칸 확인 실패: ' + e); } }
+  if (!late_(200) && !globalThis.__DASHSTALE_RUN) { try { subTime_('한눈에 명단 칸 확인', function () { dashListStale_(); }); } catch (e) { note_('한눈에 명단 칸 확인 실패: ' + e); } }
   if (geminiKey_() && !late_(200)) { try { subTime_('리뷰 사진 받는 곳', function () { rvInboxSort_(null); }); } catch (e) { note_('리뷰 사진 받는 곳 실패: ' + e); } }
   // 사용법 탭 글이 바뀌었으면 바로 (정리는 30분마다라 새 칸이 늦게 생김. 같으면 속성 하나만 보고 끝)
   try { ensureUsageTab_(); } catch (e) {}
@@ -7500,6 +7502,8 @@ function onRunSubmit_(e) {
     // 명단 탭(값)에 새 응답 줄을 바로 (15분 기다리지 않게, 사용자 요청 10/20). 몇 초면 됨
     // 명단 탭에 바로 (기다리지 않음: 10/22 30초 기다리기가 자동 확인을 막아서 뺌)
     Object.keys(sids).forEach(function (sid) { try { syncList_(SpreadsheetApp.openById(sid)); } catch (err) {} });
+    // 한눈에 명단 칸도 새 응답을 빨리 끌어오게 (IMPORTRANGE가 늦게 새로 가져와서 1시간 넘게 안 보이던 것, 11/18 목쿠션)
+    try { SpreadsheetApp.flush(); dashListStale_(readRuns_()); } catch (err) {}
     // 월급시트·한눈에 탭은 오래 걸려서(합쳐 몇 분) 응답마다 하면 6분 제한에 걸려 한눈에 탭이 비워진 채 멈출 수 있음 (10/20)
     //  → 1분 뒤 자동 확인 한 번이 둘 다 갱신 (응답이 몰려도 한 번만)
     // 인원이 다 찼으면(마감·명단 전달) 1분 뒤 확인이 함. 여기서 전체 확인을 돌리면 몇 분 동안 잠금을 잡아 다른 사람 응답이 명단에 늦게 떴음 (10/23)
@@ -11295,7 +11299,7 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '39';
+const DASH_VER = '40';   // 40: 택배 옮김 머리글에 오늘 옮길 진행 수·인원 (11/18)
 // 한눈에 '리뷰 취합할 것' 칸에 보일 것: 의뢰 전체 리뷰가 끝난(RVRPT_) 의뢰 중 업체 전송 체크 안 했거나 체크한 지 3일 안 된 것. 최근 40일 진행만, 기대평 빼고
 //  날마다 취합하던 줄은 없앰 (사용자 요청 10/26: 날짜별로 말고 한 캠페인이 다 끝나면 그때 한 번에)
 function rvItems_(allRuns, props) {
@@ -11511,6 +11515,13 @@ function buildDashboard_(force) {
   let errs = {};
   try { errs = JSON.parse(props.getProperty('RUN_ERRORS') || '{}'); } catch (e) {}
   sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold').setBackground('#efe6f7');
+  // 택배 옮김 머리글에 오늘 택배시트로 옮길 진행 수·인원 합 (11/18 사용자: 복붙하다 하나 빼먹을까 봐). 체크칸·신청 수를 보는 수식이라 바로 바뀜
+  try {
+    const nR = Math.max(runs.length + 1, 2), A = 'A2:A' + nR, M = 'M2:M' + nR, F = 'F2:F' + nR;
+    sh.getRange(1, 13).setFormula('="택배 옮김"&CHAR(10)&"오늘 "&(COUNTIFS(' + A + ',TODAY(),' + M + ',TRUE)+COUNTIFS(' + A + ',TODAY(),' + M + ',FALSE))&"개·"&(SUMIFS(' + F + ',' + A + ',TODAY(),' + M + ',TRUE)+SUMIFS(' + F + ',' + A + ',TODAY(),' + M + ',FALSE))&"명"' +
+      '&CHAR(10)&"남은 "&COUNTIFS(' + A + ',TODAY(),' + M + ',FALSE)&"개·"&SUMIFS(' + F + ',' + A + ',TODAY(),' + M + ',FALSE)&"명"&IF(COUNTIFS(' + A + ',"<"&TODAY(),' + M + ',FALSE)>0,CHAR(10)&"⚠ 지난 날 안 옮김 "&COUNTIFS(' + A + ',"<"&TODAY(),' + M + ',FALSE)&"개","")')
+      .setWrap(true).setHorizontalAlignment('center').setNote('오늘 진행 중 택대(택배시트에 옮길 것) 진행 수와 신청 인원 합. 옮기고 아래 칸을 체크하면 \'남은\'이 줄어요.\n(택배시트 마감 뒤 산 사람 = 파란 줄은 다음 택배시트라 이 합에 같이 들어가 있어요)');
+  } catch (e) {}
   const payUrl = CONFIG.PAY_SHEET_ID ? 'https://docs.google.com/spreadsheets/d/' + CONFIG.PAY_SHEET_ID + '/edit#gid=' + CONFIG.PAY_TAB_GID : '';
   const allAsgValues = [];
   try { const as = assignSheet_(), al = as.getLastRow(); if (al >= 2) allAsgValues.push.apply(allAsgValues, as.getRange(2, 1, al - 1, 9).getValues()); } catch (e) {}
