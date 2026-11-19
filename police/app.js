@@ -1161,7 +1161,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
 
   /* ---------- mascot ---------- */
-  var MV = '2026111922';
+  var MV = '2026111935';
   /* 순경 공채(2027-08-21)·지텔프(2026-11-29) 목표에 맞춘 현실 자극 문구 */
   var MOT = {
     done: [
