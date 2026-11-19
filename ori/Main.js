@@ -12055,7 +12055,7 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '40';   // 40: 택배 옮김 머리글에 오늘 옮길 진행 수·인원 (11/18)
+const DASH_VER = '41';   // 41: 의뢰 총건수 = 리뷰 구성 화면 링크 (11/19) · 40: 택배 옮김 머리글에 오늘 옮길 진행 수·인원 (11/18)
 // 한눈에 '리뷰 취합할 것' 칸에 보일 것: 의뢰 전체 리뷰가 끝난(RVRPT_) 의뢰 중 업체 전송 체크 안 했거나 체크한 지 3일 안 된 것. 최근 40일 진행만, 기대평 빼고
 //  날마다 취합하던 줄은 없앰 (사용자 요청 10/26: 날짜별로 말고 한 캠페인이 다 끝나면 그때 한 번에)
 function rvItems_(allRuns, props) {
@@ -12331,6 +12331,11 @@ function buildDashboard_(force) {
     // 기대평은 건수로 (의뢰 총건수 405, 그날 목표·신청 = 사람 × 그 주 건수, 사용자 요청 10/24)
     const per = isExpect_(r) ? expPer_(r) : cartN_(r), mixDay = isExpect_(r) && !!EXP_MIX[dateTok_(r['명단 제목'])];   // A·B묶음 섞인 기대평 날은 건수를 직접 셈 (10/26)
     sh.getRange(rr, 1, 1, 5).setValues([[r['진행일'], String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''), dashStatus_(r), isExpect_(r) ? expTotal_(r) : ((Number(r['총건수']) || 0) * per || ''), (mixDay ? expCount_(r, Number(r['목표인원']) || 0, allRuns) : (Number(r['목표인원']) || 0) * per) || r['목표인원']]]);
+    // 의뢰 총건수 숫자 = 그 의뢰 리뷰 구성 화면 (포토대기·텍스트 몇 건을 진행 중에 바꿀 때 한 곳에서, 11/19 수진 님 '헷갈리니까')
+    if (CONFIG.WEBAPP_URL && r['시트ID'] && !isExpect_(r)) try {
+      const tot0 = (Number(r['총건수']) || 0) * per;
+      sh.getRange(rr, 4).setFormula('=HYPERLINK(' + q(CONFIG.WEBAPP_URL + '?p=review&k=' + encodeURIComponent(CONFIG.KEY) + '&s=' + encodeURIComponent(String(r['시트ID']))) + ',' + (tot0 ? tot0 : q('리뷰 구성')) + ')');
+    } catch (e) {}
     const w = windowOf_(allRuns, r);
     const ts = 'IMPORTRANGE(' + q(x.url) + ',' + q(x.ref + 'A' + x.start + ':A') + ')';
     // 명단 시트 하나를 여러 날이 같이 쓰면 그날 몫(진행일 0시 ~ 다음 진행 0시)만 셈
