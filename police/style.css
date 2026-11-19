@@ -248,8 +248,12 @@ button{font-family:inherit;font-size:inherit;color:inherit;border:0;background:n
 .dday-chip b{color:#b91c1c;font-weight:900}
 
 /* 마스코트 + 말풍선 */
-.mascot-row{display:flex;align-items:center;gap:10px;margin:-2px 0 12px}
-.mascot{width:64px;height:64px;flex:0 0 auto;filter:drop-shadow(0 6px 8px rgba(16,24,40,.10));animation:bob 3.2s ease-in-out infinite}
+.mascot-row{display:flex;align-items:center;gap:10px;margin:-2px 0 12px;min-width:0}
+/* 뱃지형 광 — 이미지가 늦게 떠도 자리가 비어 보이지 않게 (filter·클리핑 없이) */
+.mascot-box{flex:0 0 auto;width:64px;height:64px;position:relative;display:block;animation:bob 3.2s ease-in-out infinite;will-change:transform}
+.mascot-box::before{content:"";position:absolute;left:-14%;top:-14%;width:128%;height:128%;border-radius:50%;z-index:0;
+  background:radial-gradient(circle at 50% 42%,rgba(110,139,255,.34),rgba(110,139,255,.12) 52%,rgba(110,139,255,0) 72%)}
+.mascot{position:relative;z-index:1;width:100%;height:100%;display:block;object-fit:contain;-webkit-user-drag:none;user-select:none}
 @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
 .bubble{position:relative;background:var(--c-soft);color:var(--ink);font-size:12.5px;font-weight:700;line-height:1.4;padding:9px 12px;border-radius:14px;border:1px solid rgba(16,24,40,.05)}
 .bubble::before{content:"";position:absolute;left:-6px;top:50%;transform:translateY(-50%) rotate(45deg);width:10px;height:10px;background:var(--c-soft)}
@@ -362,7 +366,7 @@ body.speed #qPrev{display:none}
 
 @media(max-width:360px){
   .ql-val{min-width:64px;font-size:10px}
-  .mascot{width:54px;height:54px}
+  .mascot-box{width:54px;height:54px}
   .dday-info i{font-size:10.5px}
 }
 
@@ -648,7 +652,9 @@ body{background:var(--bg);color:var(--ink)}
 .sheet-close{background:var(--card3);color:var(--ink2)}
 .sheet-bg{background:rgba(0,0,0,.62)}
 .toast{background:#e9edf5;color:#0B0D10}
-.mascot{filter:drop-shadow(0 8px 12px rgba(0,0,0,.5))}
+/* 다크 카드에서 마스코트가 묻히지 않게 (filter는 iOS에서 이미지가 안 그려질 수 있어 안 씀) */
+.mascot-box::before{background:radial-gradient(circle at 50% 42%,rgba(110,139,255,.42),rgba(110,139,255,.14) 52%,rgba(110,139,255,0) 72%)}
+.sum-mascot,.fb-mascot{filter:none}
 .stat b,.page-title,.sec-title{color:var(--ink)}
 .page-sub{color:var(--ink2)}
 
@@ -661,7 +667,7 @@ body{background:var(--bg);color:var(--ink)}
 .bubble::before{background:var(--c-soft);border-left:1px solid var(--line2);border-bottom:1px solid var(--line2)}
 @media(max-width:400px){
   .mascot-row{gap:8px}
-  .mascot{width:56px;height:56px}
+  .mascot-box{width:56px;height:56px}
   .bubble{font-size:12px;padding:10px 12px;line-height:1.55}
 }
 
@@ -1079,6 +1085,7 @@ body.boss .quiz::before{content:"";position:absolute;inset:0;pointer-events:none
 @keyframes exReachPulse{0%,30%{opacity:0;transform:scale(.5);transform-origin:center}45%{opacity:.9;transform:scale(1.4)}70%{opacity:0;transform:scale(1.9)}}
 @media(prefers-reduced-motion:reduce){
   .ex-svg *{animation:none !important}
+  .mascot-box{animation:none !important}
 }
 
 /* G-POINT 행 내부를 span으로 바꾼 뒤 정렬 보정 */

@@ -1161,18 +1161,48 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
 
   /* ---------- mascot ---------- */
+  var MV = '2026111922';
+  /* 순경 공채(2027-08-21)·지텔프(2026-11-29) 목표에 맞춘 현실 자극 문구 */
   var MOT = {
-    done: ['오늘 몫 다 했어요. 이 정도면 충분해요.', '목표 완료. 남은 건 내일 해도 돼요.', '꾸준함이 제일이에요. 오늘도 해냈어요.'],
-    none: ['시작이 제일 어려워요. 한 문제만 풀어 봐요.', '오늘은 짧게, 대신 꼭 한 문제.', '5분만 해도 오늘은 이긴 거예요.', '지금 이 한 문제가 쌓여서 시험이 돼요.'],
-    mid: ['좋아요, 흐름 탔어요. 한 문제 더 가요.', '콤보 이어 가면 보너스가 붙어요.', '틀린 문제가 제일 좋은 선생님이에요.', '여기까지 온 것만으로도 잘하고 있어요.']
+    done: [
+      '오늘 몫 끝. 이게 매일 쌓이면 합격권이에요.',
+      '오늘 목표 채웠어요. 안 한 사람과 하루만큼 벌렸어요.',
+      '여기서 멈춰도 돼요. 대신 내일은 안 미루기.',
+      '{po}까지 이 페이스면 충분해요. 오늘은 끝.',
+      '끝냈으면 쉬세요. 내일 또 {q}문제, 그거면 돼요.'
+    ],
+    none: [
+      '오늘 안 풀면 어제 외운 것도 날아가요. 10문제만.',
+      '지텔프 {gt} · 문법에서 점수 뽑아야 해요. 5문제부터.',
+      '0문제로 하루 넘기면 {po}는 그냥 줄어요.',
+      '책 펴는 데 3분, 안 펴면 내일 30분. 지금 3분.',
+      '시작 안 하면 오답도 안 쌓여요. 한 문제만, 진짜로.'
+    ],
+    mid: [
+      '지금 잡은 오답 하나가 시험장 1점이에요. 계속.',
+      '지텔프 문법 빨리 끝내야 형사법에 시간 더 써요.',
+      '여기서 끊으면 내일 처음부터예요. 10문제만 더.',
+      '틀린 걸 다시 맞히는 게 진짜 실력이에요. 오답부터.',
+      '{po}. 오늘 몫은 오늘 끝내는 게 제일 싸요.'
+    ]
   };
+  function motLine(key, n) {
+    var arr = MOT[key] || MOT.none;
+    var gd = daysTo(GTELP);
+    var pool = arr.filter(function (s) { return gd >= 0 || s.indexOf('{gt}') < 0; });
+    if (!pool.length) pool = arr;
+    /* 날짜 + 푼 문제 수(5문제 단위)에 따라 문구가 바뀜 */
+    var s = pool[seedOf(todayStr() + key + '-' + Math.floor((n || 0) / 5)) % pool.length];
+    return s.replace('{gt}', ddayLabel(GTELP))
+      .replace('{po}', ddayLabel(S.dday || DTARGET))
+      .replace('{q}', String(S.goal.q || 10));
+  }
   function renderMascot() {
     var d = dayRec();
     var lead = $('#homeBubble');
     if (lead) {
       var key = ((d.ans || 0) >= S.goal.q && (d.xp || 0) >= S.goal.xp) ? 'done' : (!(d.ans || 0) ? 'none' : 'mid');
-      var arr = MOT[key];
-      lead.textContent = arr[seedOf(todayStr() + key) % arr.length];
+      lead.textContent = motLine(key, d.ans || 0);
     }
     var memo = $('#bubMemo');
     if (memo) memo.textContent = memoLine();
@@ -2351,7 +2381,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var el = $('#qFb');
     el.classList.remove('hidden', 'ok', 'no');
     el.classList.add(ok ? 'ok' : 'no');
-    el.querySelector('.fb-head').innerHTML = '<img class="fb-mascot" src="assets/' + (ok ? 'mascot-happy.png' : 'mascot-happy.png') + '" alt="">' +
+    el.querySelector('.fb-head').innerHTML = '<img class="fb-mascot" src="assets/' + (ok ? 'mascot-win.png' : 'mascot-happy.png') + '?v=' + MV + '" alt="">' +
       '<span>' + (ok ? '정답이에요!' + (bonus ? ' 콤보 보너스 🎉' : ' 🎉') : '아쉬워요 😢') + '</span>' +
       '<span class="fb-xp">+' + gain + ' P</span>';
     el.querySelector('.fb-text').innerHTML = expHtml(q, QS && QS.items[QS.i]);
@@ -2546,7 +2576,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     $('#qCount').textContent = tot + '/' + tot;
     $('#qBody').innerHTML =
       '<div class="summary">' +
-      '<img class="sum-mascot" src="assets/mascot-win.png" alt="">' +
+      '<img class="sum-mascot" src="assets/mascot-win.png?v=' + MV + '" alt="">' +
       '<h2>' + ok + ' / ' + tot + ' 정답</h2><p>' + msg + '</p>' +
       '<div class="streak-pop"><span>🔥</span><b>' + (S.streak.n || 0) + '일 연속</b><i>최고 ' + (S.streak.best || 0) + '일</i></div>' +
       '<div class="rows"><div class="row"><span>정답률</span><i>' + acc + '%</i></div>' +
@@ -2577,7 +2607,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     $('#qBar').style.width = '100%';
     $('#qBody').innerHTML =
       '<div class="summary">' +
-      '<img class="sum-mascot" src="assets/mascot-win.png" alt="">' +
+      '<img class="sum-mascot" src="assets/mascot-win.png?v=' + MV + '" alt="">' +
       '<h2>⚡ ' + ok + '문제!</h2><p>60초 동안 ' + ok + '문제를 맞혔어요' + (isBest ? ' — 최고 기록!' : '') + '</p>' +
       '<div class="speed-score">⏱ 60초 · 최고 ' + best + '문제</div>' +
       '<div class="rows"><div class="row"><span>최고 콤보</span><i>🔥 ' + QS.maxCombo + '연속</i></div>' +
