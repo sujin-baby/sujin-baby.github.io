@@ -1980,7 +1980,49 @@ kc인증 받은 안심되는 소재
   console.log('✓ #85 네이버 단독·유령 쿠팡 없음·위치 빈칸·1일차 라벤더 3명/2일차 브라운 3명 시험 통과');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (40개 샘플 전원 일치)');
+// ==========================================
+// Test 41: 팀룸 #88(#89·#91) — 쿠팡 '다른 판매자 보기(2)' 버튼 글자가 판매처로 들어가 방제·명단 제목이 '보기(2)'가 되던 것 (11/19)
+// ==========================================
+{
+  console.log('-- Test 41: #88 판매처에 보기(2) 오인식');
+  // ① okSeller: 화면 버튼 글자는 판매처가 아님
+  ['보기(2)', '보기', '더보기', '전체 보기', '상품평 보기(12)', '리뷰 보기(3)', '판매자 보기(2)'].forEach(x => {
+    if (P.okSeller(x)) throw new Error('Test 41 okSeller가 화면 글자를 판매처로 받음: ' + x);
+  });
+  // ② 진짜 상호는 그대로 (보기로 시작해도, 괄호 없는 이름도)
+  ['디에이치컴퍼니', '보기좋은상회', '에큐어', '김상사'].forEach(x => {
+    if (!P.okSeller(x)) throw new Error('Test 41 진짜 판매처를 막음: ' + x);
+  });
+  // ③ 상품 정보 붙여넣기 칸에 판매처 '보기(2)'가 와도 판매처는 빈칸 (기억·공지·방제로 안 감)
+  const cp88 = P.parseCoupang('상품명 : 에르온 웜마스터 프리미엄 남성용 발열 기모내의 상하의 세트\n판매처 : 보기(2)\n상품번호 : 9810539344 - 29380190716');
+  if (cp88.seller) throw new Error('Test 41 parseCoupang이 보기(2)를 판매처로 받음: ' + cp88.seller);
+  const cp88ok = P.parseCoupang('상품명 : 에르온 웜마스터 프리미엄 남성용 발열 기모내의 상하의 세트\n판매처 : 디에이치컴퍼니\n상품번호 : 9810539344 - 29380190716');
+  if (cp88ok.seller !== '디에이치컴퍼니') throw new Error('Test 41 정상 판매처를 막음: ' + cp88ok.seller);
+
+  // ④ #88 의뢰서 그대로: 가이드 2개(남성/여성), 판매처가 제대로 읽힌 경우 방제
+  const req88 = `#입금대행 실배 19800 19800\n\n1. 검색 키워드(미노출시 저희가 키워드땁니다): 남성용 기모내의\n2. 키워드 검색 시 현재 순위 : \n3. 총 구매 건수 :  5건 (실배송5건)\n4. 일 진행 건수 : 5건(실구매)\n5. 상품주소(URL) : https://link.coupang.com/a/iNrkgNl5tQ\n6. 구매옵션 : 리뷰어들사이즈에따라\n7. 포토제공 유 무  :  무\n8. 리뷰내용 가이드 : 무조건 포장지사진은x 포장지벗긴 실물사진과 착용사진 등 만적용\n9. 입금하실 입금자명 : 강유정\n10.택배대행 Y/N: N\n================\n\n1. 검색 키워드(미노출시 저희가 키워드땁니다): 여성용 기모내의\n2. 키워드 검색 시 현재 순위 : \n3. 총 구매 건수 :  5건 (실배송5건)\n4. 일 진행 건수 : 5건(실구매)\n5. 상품주소(URL) : https://link.coupang.com/a/iNrsBUCCPc\n6. 구매옵션 : 리뷰어들사이즈에따라\n7. 포토제공 유 무  :  무\n8. 리뷰내용 가이드 : 무조건 포장지사진은x 포장지벗긴 실물사진과 착용사진 등 만적용\n9. 입금하실 입금자명 : 강유정\n10.택배대행 Y/N: N`;
+  const h88 = P.parseAll(req88);
+  if (h88.guides.length !== 2) throw new Error('Test 41 #88은 가이드 2개여야 함: ' + h88.guides.length);
+  getElem('req').value = req88;
+  getElem('takdae').checked = false;
+  getElem('realship').checked = true;
+  getElem('fruit').checked = false;
+  getElem('t-up').checked = false;
+  h88.guides.forEach(g => { g.seller = '디에이치컴퍼니'; });
+  P.setGuides(h88.guides);
+  const roomGood = P.makeRoom('11.19', '10');
+  if (/보기/.test(roomGood)) throw new Error('Test 41 방제에 화면 글자가 들어감: ' + roomGood);
+  if (!/기모내의/.test(roomGood) || roomGood.length > 20) throw new Error('Test 41 방제가 20자에 기모내의를 남겨야 함: ' + roomGood + ' (' + roomGood.length + '자)');
+
+  // ⑤ 판매처가 '보기(2)'로 잘못 들어온 상태라도 방제·명단 제목에는 절대 안 씀 (이중 방어)
+  P.setGuides([{ keyword: '남성용 기모내의', guide: '기모내의', seller: '보기(2)', platform: '쿠팡', total: '5', daily: '5' }]);
+  const roomBad = P.makeRoom('11.19', '5');
+  if (/보기/.test(roomBad)) throw new Error('Test 41 판매처가 보기(2)일 때 방제에 그 글자가 들어감: ' + roomBad);
+
+  console.log('✓ #88 판매처 보기(2) 차단·방제 시험 통과 (정상 판매처 방제: ' + roomGood + ' / 보기(2)일 때: ' + roomBad + ')');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (41개 샘플 전원 일치)');
 process.exit(0);
 
 
