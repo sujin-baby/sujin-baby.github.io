@@ -27,7 +27,7 @@ const want = [
 const a = run(false), b = run(true);
 let ok = JSON.stringify(a.w) === JSON.stringify(want);
 if (!ok) console.log('XX updatePay_ 값이 다름\n' + a.w.join('\n'));
-const fastOk = b.w.length === 1 && b.w[0] === want[0] && /"2\|#10\.30 실 밴드 10"/.test(b.sig || '');
+const fastOk = b.w.length === 1 && b.w[0] === want[0] && /"#10\.30 실 밴드 10\|S1"/.test(b.sig || '');
 if (!fastOk) console.log('XX 즉시 마감 payRowNow_ 값이 다름\n' + b.w.join('\n') + '\n' + b.sig);
 console.log(ok && fastOk ? '✓ 월급시트 줄 값 시험 통과 (' + want.length + '줄 + 즉시 마감)' : 'XX 실패');
 process.exit(ok && fastOk ? 0 : 1);

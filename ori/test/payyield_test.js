@@ -18,5 +18,13 @@ ok(pg && pg.done.length === 1, '한 데까지 기억 ' + env.__props.get('PAY_PR
 env.__props.delete('WANT_LOCK');
 let e2 = null; try { G('updatePay_(true)'); } catch (e) { e2 = e; }
 ok(!e2 && JSON.stringify(G('__W.slice()')) === JSON.stringify(['#10.30 실 밴드 10', '#11.2 실 밴드 10']), '다음엔 남은 줄부터 ' + JSON.stringify(G('__W.slice()')) + ' ' + JSON.stringify(e2));
+// (11/19) 진행목록 줄 번호가 밀려도(새 진행이 맨 위에 들어감) 이미 쓴 줄을 다시 쓰지 않음
+{
+  const sh = env.__ss.sheets['진행목록'];
+  sh.rows.splice(1, 0, LH.map(h => ({ '진행일': d(11, 3), '명단 제목': '#11.3 실 새진행 5 (뽀짝오리)', '시트ID': 'S9', '폼ID': 'F9', '진행 상태': '진행중', '인원': 1, '목표인원': 5, '총건수': 5, '일차': 1, '가격': '9000' })[h] ?? ''));
+  G('globalThis.__W = []; writePayRow_ = function (r, n) { __W.push(n); };');
+  G('updatePay_(true)');
+  ok(JSON.stringify(G('__W.slice()')) === JSON.stringify(['#11.3 실 새진행 5']), '새 진행 줄만 씀(밀린 줄은 다시 안 씀) ' + JSON.stringify(G('__W.slice()')));
+}
 console.log(fails.length ? 'XX 월급시트 넘기기 시험 실패:\n- ' + fails.join('\n- ') : '✓ 월급시트 줄 쓰기 중 새 진행 만들기에 넘기기 시험 통과');
 process.exit(fails.length ? 1 : 0);

@@ -1836,6 +1836,21 @@ function diag_(p) {
   } catch (e) { out.colgrpErr = String(e); }
   // &rvj=글자: 진행 제목에 그 글자가 든 의뢰의 리뷰 정보(RV_: 종류·개수·가이드) (읽기만)
   if (p.rvj) try { const pr = PropertiesService.getScriptProperties(), seen = {}; out.rvj = []; readRuns_().forEach(function (r) { const sid = String(r['시트ID'] || ''); if (!sid || seen[sid] || String(r['명단 제목']).indexOf(String(p.rvj)) < 0) return; seen[sid] = 1; out.rvj.push(bareTitle_(r['명단 제목']) + ' | ' + String(pr.getProperty('RV_' + sid) || '').slice(0, 600)); }); } catch (e) { out.rvjErr = String(e); }
+  // &rvai=글자: 그 의뢰 리뷰이미지 폴더의 종류 폴더별 장수와 사진마다 AI가 적어 둔 판단(설명 칸) 앞 몇 개 (읽기만, 11/19 봉상회 60장이 다 텍스트로 감)
+  if (p.rvai) try {
+    const pr = PropertiesService.getScriptProperties(), r0 = readRuns_().filter(function (x) { return String(x['명단 제목']).indexOf(String(p.rvai)) >= 0 && x['시트ID']; })[0];
+    out.rvai = { run: r0 ? bareTitle_(r0['명단 제목']) : '', rv: r0 ? String(pr.getProperty('RV_' + r0['시트ID']) || '').slice(0, 300) : '', dirs: [] };
+    const imgId = r0 && pr.getProperty('RVIMG_' + r0['시트ID']);
+    if (imgId) {
+      const walk = function (fo, path, depth) {
+        const fi = fo.getFiles(), files = [];
+        while (fi.hasNext()) { const x = fi.next(); if (/^image\//.test(x.getMimeType())) files.push(x); }
+        out.rvai.dirs.push({ path: path, n: files.length, sample: files.slice(0, Number(p.n) || 6).map(function (x) { return x.getName().slice(-14) + ' ' + String(x.getDescription() || '').slice(0, 220); }) });
+        if (depth < 3) { const di = fo.getFolders(); while (di.hasNext()) { const y = di.next(); walk(y, path + '/' + y.getName(), depth + 1); } }
+      };
+      walk(DriveApp.getFolderById(imgId), '리뷰이미지', 0);
+    }
+  } catch (e) { out.rvaiErr = String(e); }
   // &rvst=글자: 그 의뢰 리뷰 확인 상태 (진행·체크 칸·체크 안 된 사람·진행 시간 밖 사람·관련 속성) (읽기만, 11/9 나주배 보고 글이 안 뜸)
   if (p.rvst) try {
     const pr = PropertiesService.getScriptProperties(), runs = readRuns_(), seen = {}; out.rvst = [];
@@ -11321,7 +11336,7 @@ function updatePay_(resumable) {
   //  (10/31) 6시간 → 하루: 76줄을 다시 쓰는 데 209초 걸려 6시간마다 확인이 5분을 넘김. 값이 바뀐 줄은 지금처럼 바로 씀.
   //  손으로 지운 줄·바꾼 수량은 하루 안에 되살리고, 새벽 자가 점검이 '월급시트 줄 없음·수량 다름'을 따로 알려 줌
   const fresh = function (rid, sig) { const o = rowSig[rid]; return o && o.s === sig && Date.now() - o.t < 24 * 3600000; };
-  const saveSig = function () { try { const keep = {}; runs.forEach(function (r) { const k = r.row + '|' + nameOf(r); if (rowSig[k]) keep[k] = rowSig[k]; }); props.setProperty('PAY_ROWSIG', JSON.stringify(keep)); } catch (e) {} };
+  const saveSig = function () { try { const keep = {}; runs.forEach(function (r) { const k = payRid_(r); if (rowSig[k]) keep[k] = rowSig[k]; }); props.setProperty('PAY_ROWSIG', JSON.stringify(keep)); } catch (e) {} };
   const stop = function (what) { props.setProperty('PAY_PROG', JSON.stringify(prog)); saveSig(); throw { payLate: what }; };
   const tooLate = function () { return resumable && late_(280); };   // 한 줄 쓰기가 30초 넘기도 해서 (11/18), 15분 확인 6분 제한 안에
   // 새 진행 만들기 같은 직접 하는 일이 기다리면 한 줄 쓸 때마다 바로 넘김 (11/19: 월급시트 줄 쓰기 256초 동안 새 진행 만들기 화면이 응답을 못 받아 '만들기' 버튼이 다시 뜸). 한 데까지 적어 두고 다음에 이어서
@@ -11344,9 +11359,9 @@ function updatePay_(resumable) {
     } catch (e) { note_('월급시트 줄 모양 고치기 실패: ' + e); }
   }
   runs.forEach(function (r) {
-    const rid = r.row + '|' + nameOf(r);
+    const rid = payRid_(r);
     if (prog && prog.done.indexOf(rid) >= 0) return;
-    if (tooLate()) stop('줄 ' + prog.done.length + '/' + runs.length);
+    if (tooLate()) stop('줄 ' + runs.filter(function (x) { return prog.done.indexOf(payRid_(x)) >= 0; }).length + '/' + runs.length);
     yieldPay();
     const sp = subTime_('월급시트: 줄 계산', function () { return payRowSpec_(r, all); });
     if (!fresh(rid, sp.sig)) { subTime_('월급시트: 줄 쓰기', function () { writePayRow_(r, sp.name, sp.total, sp.prev, sp.shared, sp.ex, all); }); rowSig[rid] = { s: sp.sig, t: Date.now() }; }
@@ -11608,9 +11623,12 @@ function payRowNow_(r, runs) {
   try { if (wr && wr.sh) { payColors_(wr.sh); paySpareRows_(wr.sh); } } catch (e) {}   // 새 줄도 바로 캠페인 색·여분 줄 (11/16)
   const props = PropertiesService.getScriptProperties();
   let rowSig = {}; try { rowSig = JSON.parse(props.getProperty('PAY_ROWSIG') || '{}'); } catch (e) {}
-  rowSig[r.row + '|' + payNameOf_(r)] = { s: sp.sig, t: Date.now() };
+  rowSig[payRid_(r)] = { s: sp.sig, t: Date.now() };
   props.setProperty('PAY_ROWSIG', JSON.stringify(rowSig));
 }
+// 월급시트 '이미 쓴 줄'·'어디까지 했나' 기억 열쇠: 진행 이름 + 명단 시트 (11/19: 줄 번호로 기억해서, 진행목록이 진행일 순으로 정렬돼 새 진행이 하나 생기면
+//  모든 줄 번호가 밀려 133줄을 처음부터 다시 씀 → '월급시트 이어서'가 4시간 넘게 밀리고 15분 확인 시간을 다 씀)
+function payRid_(r) { return payNameOf_(r) + '|' + String(r['시트ID'] || ''); }
 function payNameOf_(r) { return String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, '').trim(); }
 // 월급시트 한 줄에 넣을 값 (updatePay_와 즉시 마감이 같이 씀). sig가 같으면 다시 안 씀
 function payRowSpec_(r, all) {
