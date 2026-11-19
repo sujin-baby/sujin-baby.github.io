@@ -11258,6 +11258,8 @@ function updatePay_(resumable) {
   const saveSig = function () { try { const keep = {}; runs.forEach(function (r) { const k = r.row + '|' + nameOf(r); if (rowSig[k]) keep[k] = rowSig[k]; }); props.setProperty('PAY_ROWSIG', JSON.stringify(keep)); } catch (e) {} };
   const stop = function (what) { props.setProperty('PAY_PROG', JSON.stringify(prog)); saveSig(); throw { payLate: what }; };
   const tooLate = function () { return resumable && late_(280); };   // 한 줄 쓰기가 30초 넘기도 해서 (11/18), 15분 확인 6분 제한 안에
+  // 새 진행 만들기 같은 직접 하는 일이 기다리면 한 줄 쓸 때마다 바로 넘김 (11/19: 월급시트 줄 쓰기 256초 동안 새 진행 만들기 화면이 응답을 못 받아 '만들기' 버튼이 다시 뜸). 한 데까지 적어 두고 다음에 이어서
+  const yieldPay = function () { try { yieldIfWanted_(); } catch (e) { if (prog) props.setProperty('PAY_PROG', JSON.stringify(prog)); saveSig(); throw e; } };
   const all = readRuns_().filter(function (r) { return r['시트ID'] && r['진행일'] instanceof Date; });
   const runs = all.filter(function (r) { return r['진행 상태'] !== '종료'; });
   // 스토어 왼쪽에 '진행일' 칸 (사용자 요청 10/19). 탭마다 한 번 (있으면 그대로)
@@ -11279,6 +11281,7 @@ function updatePay_(resumable) {
     const rid = r.row + '|' + nameOf(r);
     if (prog && prog.done.indexOf(rid) >= 0) return;
     if (tooLate()) stop('줄 ' + prog.done.length + '/' + runs.length);
+    yieldPay();
     const sp = subTime_('월급시트: 줄 계산', function () { return payRowSpec_(r, all); });
     if (!fresh(rid, sp.sig)) { subTime_('월급시트: 줄 쓰기', function () { writePayRow_(r, sp.name, sp.total, sp.prev, sp.shared, sp.ex, all); }); rowSig[rid] = { s: sp.sig, t: Date.now() }; }
     if (prog) prog.done.push(rid);
@@ -11297,6 +11300,7 @@ function updatePay_(resumable) {
   const postName = ['캠페인 색', '중복 줄', '상태', '날짜순 정렬', '캠페인 색', '진행비', '이월', '여분 줄'];
   for (let i = prog ? prog.post : 0; i < post.length; i++) {
     if (tooLate()) stop(postName[i] + ' 단계');
+    yieldPay();
     try { subTime_('월급시트: ' + postName[i], post[i]); } catch (e) { note_('월급시트 ' + postName[i] + ' 실패: ' + e); }
     if (prog) prog.post = i + 1;
   }
