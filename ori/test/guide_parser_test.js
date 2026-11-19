@@ -1908,7 +1908,79 @@ https://www.coupang.com/vp/products/9812998435?vendorItemId=96299881395
   console.log('✓ 실·빈+택대+10번N 주의 문구·확인창·fname 시험 통과 (' + room39 + ' → fname "' + fname39 + '")');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (39개 샘플 전원 일치)');
+// ==========================================
+// Test 40: 팀룸 #85 — 네이버 단독 의뢰서(구분선 뒤 옵션 칸) · 1p 가격검색 오탐 · 하루 3건 옵션 2종(라벤더3/브라운3) (11/19)
+// ==========================================
+console.log('-- Test 40: #85 디어누베 아기풋워머 (네이버 6건·하루 3건·라벤더 3/브라운 3)');
+{
+  const req85 = `#입금대행 실배 13900
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 디어누베 아기풋워머
+
+2. 키워드 검색 시 현재 순위 :모르시면 비워두세요
+
+3. 총 결제하신 건수 : 6
+
+4. 하루 구매하는건수 (어뷰징 피하기위해
+조금씩 변동될수 있습니다 : 3건
+
+5. 상품주소(URL) : https://m.smartstore.naver.com/delphiniummarket/products/13882138252
+-> 네이버 6건
+—————————
+
+6. 구매옵션 :
+네이버 - 라벤더 3 , 브라운 3
+
+7. 포토제공 (몇명)  /포토없음  선택: 포토제공x
+
+8. 리뷰 가이드 :
+(참고용)
+kc인증 받은 안심되는 소재
+신겨보았을때 착용모습
+
+9. 입금하실 입금자명 : 강태연(우주파워샵)`;
+
+  const h85 = P.parseAll(req85);
+  // ① 주소(URL)가 없는 조각은 독립 상품이 아니다 — 구분선 뒤 옵션·포토·리뷰·입금자명 칸이 별도 '쿠팡' 가이드로 갈라지면 안 됨
+  if (h85.guides.length !== 1) throw new Error('Test 40 네이버 단독 의뢰서는 가이드 1개여야 함(유령 쿠팡 블록), got: ' + h85.guides.length + ' / ' + JSON.stringify(h85.guides.map(x => x.platform)));
+  const g85 = h85.guides[0];
+  if (g85.platform !== '네이버') throw new Error('Test 40 플랫폼은 네이버여야 함: ' + g85.platform);
+  if (String(g85.pno) !== '13882138252') throw new Error('Test 40 상품번호: ' + g85.pno);
+  if (!/kc인증/.test(g85.review)) throw new Error('Test 40 리뷰 가이드가 유령 블록으로 새서 사라짐: ' + g85.review);
+
+  // ② 위치: 키워드 라벨 안내문 '(미노출시 저희가 키워드땁니다)'만 보고 '(안나오면 가격검색 해주세요)'를 붙이지 않음
+  if (g85.page) throw new Error('Test 40 순위를 모를 때 위치는 빈칸이어야 함(양식 안내문 오탐), got: ' + g85.page);
+  if (/가격\s*검색/.test(g85.keyword)) throw new Error('Test 40 키워드에 가격검색 안내가 붙음: ' + g85.keyword);
+  if (String(g85.keyword) !== '디어누베 아기풋워머') throw new Error('Test 40 키워드: ' + g85.keyword);
+
+  // ③ 옵션: '네이버 - 라벤더 3 , 브라운 3' → 이름표를 떼고 라벤더 3명 / 브라운 3명 (하루 3건)
+  if (g85.optBase.length !== 2 || g85.optBase[0].label !== '라벤더' || g85.optBase[0].qty !== '3' || g85.optBase[1].label !== '브라운' || g85.optBase[1].qty !== '3') {
+    throw new Error('Test 40 옵션은 라벤더 3 / 브라운 3이어야 함: ' + JSON.stringify(g85.optBase));
+  }
+  if (g85.option !== '라벤더 (3명)') throw new Error('Test 40 1일차 옵션은 라벤더 (3명): ' + g85.option);
+  if (P.optionText(g85, 2) !== '브라운 (3명)') throw new Error('Test 40 2일차 옵션은 브라운 (3명): ' + P.optionText(g85, 2));
+
+  // ④ 2일차 계획: 3명·옵션 이름 목록과 그날 인원([0,3])을 서버에 넘겨 다음 일차 공지 옵션 줄이 '브라운 (3명)'이 되게
+  P.setGuides([g85]);
+  getElem('day').value = '1';
+  getElem('date').value = '2026-11-19';
+  getElem('o-room').value = '#11.19 실 아기풋워머 3';
+  const plan85 = P.buildPlan();
+  if (plan85.length !== 1) throw new Error('Test 40 2일차 계획이 1개여야 함: ' + JSON.stringify(plan85));
+  if (Number(plan85[0].n) !== 3) throw new Error('Test 40 2일차 인원은 3명: ' + plan85[0].n);
+  const c85 = plan85[0].c[0];
+  if (Number(c85[0]) !== 3) throw new Error('Test 40 2일차 건수 3: ' + c85[0]);
+  if (JSON.stringify(c85[1]) !== '[0,3]') throw new Error('Test 40 2일차 옵션 인원은 [라벤더 0, 브라운 3]: ' + JSON.stringify(c85[1]));
+  if (JSON.stringify(c85[3]) !== '["라벤더","브라운"]') throw new Error('Test 40 2일차 옵션 이름 목록: ' + JSON.stringify(c85[3]));
+
+  // ⑤ 같은 양식 안내문이라도 키워드를 못 받은 의뢰(#81 김상사)는 가격검색 안내 유지
+  const hKwMiss = P.parseAll('#입금대행 택대 9900\n\n1. 검색 키워드(미노출시 저희가 키워드땁니다):\n2. 키워드 검색 시 현재 순위 :모르시면 비워두세요\n3. 총 결제하신 건수 : 5\n4. 하루 진행 건수 : 5\n5. 상품주소(URL) : https://www.coupang.com/vp/products/9812998435?itemId=29388465518\n6. 구매옵션 : 라지\n10.택배대행 Y/N: N');
+  if (!/가격검색/.test(String(hKwMiss.guides[0].page))) throw new Error('Test 40 키워드 없는 의뢰의 가격검색 안내가 사라짐: ' + hKwMiss.guides[0].page);
+
+  console.log('✓ #85 네이버 단독·유령 쿠팡 없음·위치 빈칸·1일차 라벤더 3명/2일차 브라운 3명 시험 통과');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (40개 샘플 전원 일치)');
 process.exit(0);
 
 
