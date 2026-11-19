@@ -7901,15 +7901,19 @@ function ensureSubmitTriggers_(runs) {
     ScriptApp.newTrigger('checkFull').timeBased().everyMinutes(15).create(); cleaned--;
   }
   // 같은 일을 하는 트리거가 둘 이상이면 하나만 (편집, 9시 알림 등)
-  const seen = {};
+  const seen = {}, aiId = props.getProperty('RVAI_TRIG_ID');
   all.forEach(function (t) {
     if (t.getHandlerFunction() === 'checkFull' || isFormT(t)) return;
+    if (aiId && t.getUniqueId() === aiId) return;   // 리뷰 사진 AI 1분 연쇄(onAdminEdit 1회 예약)는 5분 실행(onAdminEdit 반복)과 같아 보여도 지우지 않음 (11/19)
     const k = t.getHandlerFunction() + '|' + t.getEventType() + '|' + (t.getTriggerSourceId() || '');
     if (seen[k]) { ScriptApp.deleteTrigger(t); cleaned++; } else seen[k] = 1;
   });
   if (cleaned > 0) { note_('✓ 다 돈 예약·겹친 트리거 ' + cleaned + '개 지움'); all = ScriptApp.getProjectTriggers(); }
-  // 2) 폼 트리거: 남는 자리만큼 (1분 뒤·0시 예약을 새로 걸 자리 2개는 비워 둠)
-  const room = Math.max(0, 20 - all.filter(function (t) { return !isFormT(t); }).length - 2);
+  // 2) 폼 트리거: 남는 자리만큼. 1분 뒤 확인·0시 예약·리뷰 사진 AI 이어 하기(1분 뒤) 자리는 비워 둠 — 지금 걸려 있지 않은 것만큼 + 여유 1
+  //  (11/19: 폼 트리거가 19개 한도를 채워 리뷰 사진 AI 1분 연쇄가 못 걸림 → 15분 확인 때 한두 장씩만 나뉘어 봉상회 감홍사과외 사진이 며칠째 그대로)
+  const ids = all.map(function (t) { return t.getUniqueId(); });
+  const missing = ['SOON_TRIG_ID', 'MID_TRIG_ID', 'RVAI_TRIG_ID'].filter(function (k) { const id = props.getProperty(k); return !(id && ids.indexOf(id) >= 0); }).length;
+  const room = Math.max(0, 19 - all.filter(function (t) { return !isFormT(t); }).length - missing);
   const t0 = today_().getTime();
   const pri = function (r) { const d = r['진행일'] instanceof Date ? dayStart_(r['진행일']) : t0; return d === t0 ? [0, 0] : d > t0 ? [1, d - t0] : [2, t0 - d]; };
   const want = [];
