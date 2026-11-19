@@ -3816,8 +3816,9 @@ function checkFullInner_() {
       // 진행 중 의뢰 리뷰이미지에 바로 올린 사진도 대기열로 (11/15)
       if (geminiKey_()) { try { subTime_('리뷰 사진 진행 중', function () { rvLooseCheck_(readRuns_()); }); } catch (e) { if (e && e.yieldLock) throw e; note_('진행 중 리뷰 사진 확인 실패: ' + e); } }
       // 리뷰 사진 AI 분류가 남은 의뢰가 있으면 이어서 (10/31)
-      if (props.getProperty('RVAI_Q') && !late_(200)) { try { step_('리뷰 사진 AI'); rvAiQueue_(); } catch (e) { if (e && e.yieldLock) throw e; note_('리뷰 사진 AI 실패: ' + e); } }
-      if (geminiKey_() && !late_(200)) { try { subTime_('리뷰 사진 받는 곳', function () { rvInboxSort_(null); }); } catch (e) { if (e && e.yieldLock) throw e; note_('리뷰 사진 받는 곳 실패: ' + e); } }
+      // 15분 확인 안에서는 150초 전에만 (11/19: 사진 한 장 AI가 1분 넘게 걸려 200초에 시작하면 6분 제한에 끊김 — 21:35·22:35 확인). AI 분류는 1분 연쇄가 따로 함
+      if (props.getProperty('RVAI_Q') && !late_(150)) { try { step_('리뷰 사진 AI'); rvAiQueue_(); } catch (e) { if (e && e.yieldLock) throw e; note_('리뷰 사진 AI 실패: ' + e); } }
+      if (geminiKey_() && !late_(150)) { try { subTime_('리뷰 사진 받는 곳', function () { rvInboxSort_(null); }); } catch (e) { if (e && e.yieldLock) throw e; note_('리뷰 사진 받는 곳 실패: ' + e); } }
     } },
     { n: '마무리', need: 15, run: function () {
       try { ensureInboxTrigger_(); } catch (e) {}
@@ -8883,6 +8884,7 @@ function geminiAsk_(parts, json) {
   for (let i = 0; i < models.length; i++) {
     // 앞 모델이 실패했는데 이미 25초 넘게 걸렸거나 확인 시간이 거의 다 됐으면 다음 모델로 넘어가지 않고 잠시 뒤 이어서 (11/19: 사진 한 장에 74초 → 15:40 확인이 6분 제한에 끊김)
     if (i > 0 && (Date.now() - tStart > 25000 || (globalThis.__ORI_T0 && late_(260)))) throw { quota: 1, message: 'Gemini가 느려서 잠시 뒤 이어서 (' + last + ')' };
+    if (globalThis.__IN_CF && late_(210)) throw { quota: 1, message: '15분 확인 시간이 거의 다 돼서 다음에 (' + last + ')' };   // 한 번 묻는 데 1분 넘게 걸리기도 해서
     const ask = function () { return UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + models[i] + ':generateContent', {
       method: 'post', contentType: 'application/json', headers: bearer ? { Authorization: 'Bearer ' + key } : { 'x-goog-api-key': key }, payload: JSON.stringify(body), muteHttpExceptions: true }); };
     let res = ask();
@@ -9607,7 +9609,7 @@ function rvAiSort_(f, sid, props) {
   const t0 = Date.now();
   let done = 0, moved = {};
   for (let i = 0; i < left.length; i++) {
-    if (Date.now() - t0 > 60000 || late_(230) || (globalThis.__ORI_T0 && Date.now() - Number(props.getProperty('WANT_LOCK') || 0) < 300000) || cfWanted_()) break;   // 직접 하는 일·15분 확인이 기다리면 멈춤
+    if (Date.now() - t0 > 60000 || late_(globalThis.__IN_CF ? 180 : 230) || (globalThis.__ORI_T0 && Date.now() - Number(props.getProperty('WANT_LOCK') || 0) < 300000) || cfWanted_()) break;   // 직접 하는 일·15분 확인이 기다리면 멈춤. 15분 확인 안에서는 180초까지만
     const x = left[i];
     let o;
     try { o = subTime_('리뷰 사진 AI', function () { return geminiReadCapture_(x.getBlob()); }); }
@@ -9745,7 +9747,7 @@ function rvInboxSort_(runs) {
   const t0 = Date.now(), got = {};
   let unknown = 0;
   for (let i = 0; i < files.length; i++) {
-    if (Date.now() - t0 > 60000 || late_(230) || (globalThis.__ORI_T0 && Date.now() - Number(props.getProperty('WANT_LOCK') || 0) < 300000) || cfWanted_()) break;   // 직접 하는 일·15분 확인이 기다리면 멈춤
+    if (Date.now() - t0 > 60000 || late_(globalThis.__IN_CF ? 180 : 230) || (globalThis.__ORI_T0 && Date.now() - Number(props.getProperty('WANT_LOCK') || 0) < 300000) || cfWanted_()) break;   // 직접 하는 일·15분 확인이 기다리면 멈춤. 15분 확인 안에서는 180초까지만
     const x = files[i];
     let o = null;
     // 전에 AI가 읽은 사진이면(사진 설명 'AI {…}') 다시 안 물어봄
