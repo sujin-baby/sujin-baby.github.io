@@ -8837,7 +8837,10 @@ function geminiAsk_(parts, json) {
   const models = (okM ? [okM] : []).concat(GEMINI_MODELS.filter(function (m) { return m !== okM; }));
   const body = { contents: [{ parts: parts }], generationConfig: json ? { responseMimeType: 'application/json', temperature: 0 } : { temperature: 0 } };
   let last = '', bearer = props.getProperty('GEMINI_AUTH') === 'bearer';
+  const tStart = Date.now();
   for (let i = 0; i < models.length; i++) {
+    // 앞 모델이 실패했는데 이미 25초 넘게 걸렸거나 확인 시간이 거의 다 됐으면 다음 모델로 넘어가지 않고 잠시 뒤 이어서 (11/19: 사진 한 장에 74초 → 15:40 확인이 6분 제한에 끊김)
+    if (i > 0 && (Date.now() - tStart > 25000 || (globalThis.__ORI_T0 && late_(260)))) throw { quota: 1, message: 'Gemini가 느려서 잠시 뒤 이어서 (' + last + ')' };
     const ask = function () { return UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + models[i] + ':generateContent', {
       method: 'post', contentType: 'application/json', headers: bearer ? { Authorization: 'Bearer ' + key } : { 'x-goog-api-key': key }, payload: JSON.stringify(body), muteHttpExceptions: true }); };
     let res = ask();
