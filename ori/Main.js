@@ -4473,9 +4473,19 @@ function bgYield_() {
   const cw = Number(PropertiesService.getScriptProperties().getProperty('CF_WANT') || 0);
   if (cw && Date.now() - cw < 300000) throw { yieldLock: 1, cf: 1 };
 }
-function bgLast_(t, p) { return t.last ? t.last(p) : Number(p.getProperty('BG_' + t.k) || 0); }
+// 할 일이 생겼을 때만 도는 일(due: 월급시트 이어서 등)은 마지막으로 한 때와 할 일이 생긴 때(BG_DUE0_) 중 늦은 때부터 셈
+//  (11/19: 18:04에 마지막으로 한 '월급시트 이어서'가 23시에 다시 생기자 '305분째 밀림'으로 나옴)
+function bgLast_(t, p) {
+  const base = t.last ? t.last(p) : Number(p.getProperty('BG_' + t.k) || 0);
+  return t.due ? Math.max(base, Number(p.getProperty('BG_DUE0_' + t.k) || 0)) : base;
+}
 function bgOrder_(p, now) {
-  return BG_TASKS.filter(function (t) { return !t.due || t.due(p); })
+  return BG_TASKS.filter(function (t) {
+    if (!t.due) return true;
+    const on = t.due(p), k = 'BG_DUE0_' + t.k, d0 = p.getProperty(k);
+    if (on && !d0) p.setProperty(k, String(now)); else if (!on && d0) p.deleteProperty(k);
+    return on;
+  })
     .map(function (t) { return { t: t, r: (now - bgLast_(t, p)) / (t.every * 60000) }; })
     .filter(function (x) { return x.r >= 1; })
     .sort(function (a, b) { return b.r - a.r; });
