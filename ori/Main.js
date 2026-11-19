@@ -3789,7 +3789,8 @@ function checkFullInner_() {
       if (rvCut) { note_('✓ 리뷰 확인 나눠서 하는 중 (시간이 모자라 다음 확인에서 이어서. 오류 아님)'); throw { cfCut: 1 }; }
     } },
     { n: '한눈에', need: 75, run: function () {
-      try { buildDashboard_(false); } catch (e) { if (e && e.yieldLock) throw e; note_('한눈에 탭 실패: ' + e); }
+      globalThis.__DASH_CUT_OK = true;   // 늦었으면 다시 그리기는 다음 확인에서 (cfCut)
+      try { buildDashboard_(false); } catch (e) { if (e && (e.yieldLock || e.cfCut)) throw e; note_('한눈에 탭 실패: ' + e); } finally { globalThis.__DASH_CUT_OK = false; }
       // 한눈에에 #REF! 같은 오류 칸이 있으면 통째로 다시 그림 (메뉴 '한눈에 탭 새로 만들기'와 같음, 10/30). 한 시간에 한 번까지, 시간이 넉넉할 때만
       try {
         const bad = dashErrorCells_();
@@ -12249,6 +12250,8 @@ function buildDashboard_(force) {
   if (sh && runs.length) { try { sh.getRange(2, 4, runs.length, 4).setNumberFormat('0'); } catch (e) {} }
   // 서명이 같아도 위 표가 비어 있으면(지난번에 지우고 쓰다가 멈춤) 다시 만듦
   if (!force && sh && props.getProperty('DASH_SIG') === sig && (!runs.length || String(sh.getRange(2, 2).getValue()).trim() !== '')) return;
+  // 다시 그리기는 130~230초 걸려서, 15분 확인이 이미 170초를 넘겼으면 이번엔 안 그리고 다음 확인에서 (11/19 22:35: 262초에 시작해 6분 제한에 끊김)
+  if (globalThis.__DASH_CUT_OK && late_(170)) throw { cfCut: 1 };
   // 지우기 전에 서명을 지워 둠: 쓰다가 멈추면 다음 확인이 꼭 다시 만들게
   props.deleteProperty('DASH_SIG');
   order.forEach(function (k) { Object.assign(sheets[k], sheetInfo(sheets[k].sid)); });
