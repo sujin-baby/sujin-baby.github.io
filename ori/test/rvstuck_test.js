@@ -25,7 +25,10 @@ ok(st && JSON.parse(st).n === 1 && JSON.parse(st).un[0] === '홍길동(' + md(da
 ok(!env.__props.get('RVRPT_S1'), '아직 의뢰 끝 아님');
 ok(todos().length === 1 && /리뷰 확인 안 된 1명: 홍길동/.test(todos()[0]) && /리뷰 취합 안 한 날: /.test(todos()[0]), '할 일 한 번 ' + JSON.stringify(todos()));
 let items = G('rvItems_(readRuns_(), PropertiesService.getScriptProperties())');
-ok(items.length === 1 && items[0].type === 'stuck' && /^⚠ 업체 전달 못 함: 과일쏙 사과외 .*홍길동/.test(items[0].label), '한눈에 빨간 줄 ' + JSON.stringify(items));
+ok(items.length === 1 && items[0].type === 'stuck' && /^⚠ 과일쏙 사과외 \(.+\) 전달 못 함 · 확인 안 됨 1명$/.test(items[0].label) && !/홍길동/.test(items[0].label), '한눈에 한 줄(이름 없이) ' + JSON.stringify(items));
+ok(/홍길동/.test(items[0].note || ''), '이름은 칸 메모에 ' + items[0].note);
+ok(G("rvStuckShort_(readRuns_(), { n: 20, ppl: 40, ph: { 포토: 8, 텍스트: 22, 별점: 0, 기타: 0 } })").endsWith('전달 못 함 · 확인 안 됨 20명 · 사진 10장 모자람'), '짧은 글 ' + G("rvStuckShort_(readRuns_(), { n: 20, ppl: 40, ph: { 포토: 8, 텍스트: 22, 별점: 0, 기타: 0 } })"));
+ok(/사진 0장 \/ 60명/.test(G("rvStuckText_(readRuns_(), { un: [], n: 0, ppl: 60, ph: { 포토: 0, 텍스트: 0, 별점: 0, 기타: 0 } })")), '사진 0장에 빈 괄호 없음');
 // 다시 봐도 할 일은 한 번만
 env.__props.forEach((v, k) => { if (/^RVSEEN_/.test(k)) env.__props.delete(k); });
 G('reviewDone_(readRuns_())');

@@ -693,7 +693,7 @@ function tsMs_(v) {
   if (typeof v === 'number' && v > 40000 && v < 80000) return Math.round((v - 25569) * 864e5) - 9 * 3600000;
   return NaN;
 }
-const REAL_YELLOW = '#fff2a8';
+const REAL_YELLOW = '#ffff00';   // 실배송 줄 (11/19 사용자: 연한 노랑 #fff2a8 → 진한 노랑, 앞으로 들어오는 줄부터)
 function buildMergeTab_(ss) {
   const tabs = ss.getSheets().filter(function (t) { return !!t.getFormUrl(); });
   if (!tabs.length) return null;
@@ -941,6 +941,15 @@ function syncListBody_(ss, sh, props, id, tabs, sigK, sigNow) {
       const day = Math.floor((x.t + 9 * 3600000) / 86400000) + 25569;
       return Array(paint).fill(realRow_(real, realOpt, x) ? REAL_YELLOW : real ? '#ffffff' : DAY_COLORS[day % 7]);
     }));
+    // 실배송 줄은 체크칸 바로 옆 칸에 '실배송' (11/19 사용자). 그 칸이 머리글 있는 칸이면 안 씀
+    if (real && rvc > 0 && !hdr[rvc]) {
+      if (sh.getMaxColumns() < rvc + 1) sh.insertColumnsAfter(sh.getMaxColumns(), rvc + 1 - sh.getMaxColumns());
+      const isReal = add.map(function (x) { return realRow_(real, realOpt, x); });
+      if (isReal.some(Boolean)) {
+        sh.getRange(start, rvc + 1, n, 1).setValues(isReal.map(function (b) { return [b ? '실배송' : '']; }))
+          .setBackgrounds(isReal.map(function (b) { return [b ? REAL_YELLOW : null]; }));
+      }
+    }
     done = done.concat(add.map(function (x) { return String(x.t); }));
     try { payCheck_(ss, add); } catch (e) { note_('결제금액 확인 실패: ' + e); }
     try { storeDupCheck_(ss, add); } catch (e) { note_('스중불가 중복 확인 실패: ' + e); }
@@ -8390,9 +8399,22 @@ function rvStuckText_(mine, o) {
   if (o.n) parts.push('리뷰 확인 안 된 ' + o.n + '명: ' + o.un.join(' ') + (o.n > o.un.length ? ' …' : ''));
   const noColl = ppl.filter(function (r) { const x = r['리뷰 취합']; return !(x instanceof Date || String(x == null ? '' : x).trim() !== ''); }).map(f);
   if (noColl.length && noColl.length < ppl.length) parts.push('리뷰 취합 안 한 날: ' + noColl.join(', '));
-  if (o.ph) { const tot = o.ph['포토'] + o.ph['텍스트'] + o.ph['별점'] + o.ph['기타']; parts.push('리뷰이미지 사진 ' + tot + '장(' + ['포토', '텍스트', '별점', '기타'].filter(function (k) { return o.ph[k]; }).map(function (k) { return k + ' ' + o.ph[k]; }).join('·') + ') / ' + o.ppl + '명' + (tot < o.ppl ? ' → ' + (o.ppl - tot) + '장 모자람' : '')); }
+  if (o.ph) { const tot = o.ph['포토'] + o.ph['텍스트'] + o.ph['별점'] + o.ph['기타'], kinds = ['포토', '텍스트', '별점', '기타'].filter(function (k) { return o.ph[k]; }).map(function (k) { return k + ' ' + o.ph[k]; }).join('·'); parts.push('리뷰이미지 사진 ' + tot + '장' + (kinds ? '(' + kinds + ')' : '') + ' / ' + o.ppl + '명' + (tot < o.ppl ? ' → ' + (o.ppl - tot) + '장 모자람' : '')); }
   if (o.pend) parts.push('일정 탭에 아직 대기 중인 다음 진행이 있음');
   return campOf_((mine[0] || {})['명단 제목']) + (span ? ' (' + span + ')' : '') + ' — ' + (parts.join(' · ') || '리뷰 확인이 다 안 됨');
+}
+// 한눈에 '리뷰 취합할 것' 한 줄 (11/19 사용자: 이름이 다 나와 가독성이 심각) — 이름·자세한 건 칸 메모와 📝할일에
+//  '⚠ 오늘과일 황금향외 (11.3~11.9) 전달 못 함 · 확인 안 됨 20명 · 사진 20장 모자람'
+function rvStuckShort_(mine, o) {
+  const f = function (r) { return (r['진행일'].getMonth() + 1) + '.' + r['진행일'].getDate(); };
+  const ds = (mine || []).filter(function (r) { return r['진행일'] instanceof Date; });
+  const ppl = ds.filter(function (r) { return (Number(r['인원']) || 0) > 0; }), sp = ppl.length ? ppl : ds;
+  const span = !sp.length ? '' : f(sp[0]) === f(sp[sp.length - 1]) ? f(sp[0]) : f(sp[0]) + '~' + f(sp[sp.length - 1]);
+  const bits = [];
+  if (o.n) bits.push('확인 안 됨 ' + o.n + '명');
+  if (o.ph) { const tot = o.ph['포토'] + o.ph['텍스트'] + o.ph['별점'] + o.ph['기타']; if (tot < o.ppl) bits.push('사진 ' + (o.ppl - tot) + '장 모자람'); }
+  if (o.pend) bits.push('다음 진행 대기');
+  return '⚠ ' + campOf_((mine[0] || {})['명단 제목']) + (span ? ' (' + span + ')' : '') + ' 전달 못 함' + (bits.length ? ' · ' + bits.join(' · ') : '');
 }
 function rvTypeOf_(folderName) { const m = String(folderName || '').trim().match(/^(포토|텍스트|별점)/); return m ? m[1] : ''; }
 // 장바구니건 상품 수 (1 = 아님). 생성기가 넘긴 CART_<시트ID>
@@ -11939,7 +11961,7 @@ function rvItems_(allRuns, props) {
     const stk = all['RVSTUCK_' + sid];
     if (!all['RVRPT_' + sid] && !sentVals.length && stk && stk.charAt(0) === '{' && rvStuckLate_(mine)) {
       let so = {}; try { so = JSON.parse(stk); } catch (e) {}
-      items.push({ type: 'stuck', sid: sid, label: '⚠ 업체 전달 못 함: ' + rvStuckText_(mine, so), at: '', sheet: String(mine[0]['시트 링크'] || ''), folder: all['RVIMG_' + sid] ? 'https://drive.google.com/drive/folders/' + all['RVIMG_' + sid] : String(mine[0]['폴더 링크'] || '') });
+      items.push({ type: 'stuck', sid: sid, label: rvStuckShort_(mine, so), note: '업체 전달 못 함 (이걸 다 하면 📦 의뢰 끝 줄로 바뀜)\n' + rvStuckText_(mine, so) + '\n→ 명단 시트에서 그분 리뷰 확인 체크 / 리뷰 사진은 리뷰이미지 폴더에', at: '', sheet: String(mine[0]['시트 링크'] || ''), folder: all['RVIMG_' + sid] ? 'https://drive.google.com/drive/folders/' + all['RVIMG_' + sid] : String(mine[0]['폴더 링크'] || '') });
       return;
     }
     if (!all['RVRPT_' + sid] || (sentAt && dayStart_(sentAt) < t0)) return;
@@ -11952,7 +11974,8 @@ function rvItems_(allRuns, props) {
     const img = all['RVIMG_' + sid] ? 'https://drive.google.com/drive/folders/' + all['RVIMG_' + sid] : String(mine[0]['폴더 링크'] || '');
     items.push({ type: 'req', sid: sid, label: '📦 의뢰 끝: ' + campOf_(mine[0]['명단 제목']) + ' (' + span + ') ' + todo, at: md(sentAt && sentAt.getTime() ? sentAt : ''), sheet: String(mine[0]['시트 링크'] || ''), folder: img });
   });
-  return items;
+  // 보낼 것(📦 의뢰 끝)을 위에, 전달 못 한 것(⚠)은 그 아래 (11/19)
+  return items.filter(function (x) { return x.type !== 'stuck'; }).concat(items.filter(function (x) { return x.type === 'stuck'; }));
 }
 // 한눈에 '리뷰 취합할 것' 체크칸 상태 → 진행목록 '리뷰 취합'/'업체 전송' (편집 트리거가 못 받은 체크도 다시 그릴 때 저장. 10/25 # 10.15 고구마말랭이 체크가 안 남았음)
 //  11/5 패치: 진행목록에 수동/자동 입력된 날짜가 있으면, 대시보드 체크박스가 false라고 해서 빈칸으로 덮어써 삭제하지 않음 (수동 입력 날짜 영구 보존)
@@ -12260,10 +12283,10 @@ function buildDashboard_(force) {
   const rvMap = {};
   if (rvItems.length) {
     const rt = bar + 2;
-    sh.getRange(rt, 1, 1, 5).setValues([['보냄', '리뷰 취합할 것 (의뢰 리뷰가 다 끝난 것 · 업체에 보내면 체크 → 다음 날 사라짐)', '체크한 날', '명단', '사진 올릴 곳']]).setFontWeight('bold').setBackground('#e6f4ea');
+    sh.getRange(rt, 1, 1, 5).setValues([['보냄', '리뷰 취합할 것 (📦 다 끝난 것 · 업체에 보내면 체크 → 다음 날 사라짐 / ⚠ 아직 못 보내는 것 · 칸을 누르면 이름)', '체크한 날', '명단', '사진 올릴 곳']]).setFontWeight('bold').setBackground('#e6f4ea');
     rvItems.forEach(function (it, i) {
       const rr = rt + 1 + i;
-      if (it.type === 'stuck') { sh.getRange(rr, 2).setValue(it.label).setHorizontalAlignment('left').setFontWeight('bold').setFontColor('#cc0000').setWrap(true); }
+      if (it.type === 'stuck') { sh.getRange(rr, 2).setValue(it.label).setHorizontalAlignment('left').setFontWeight('normal').setFontColor('#b3261e').setWrap(true); if (it.note) sh.getRange(rr, 2).setNote(it.note); }
       else {
       rvMap[rr] = it.type === 'req' ? { type: 'req', sid: it.sid, label: String(it.label).slice(0, 40) } : { type: 'day', title: it.title };
       sh.getRange(rr, 1).insertCheckboxes().setValue(!!it.at);
