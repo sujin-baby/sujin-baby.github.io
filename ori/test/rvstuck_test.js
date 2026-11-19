@@ -72,5 +72,16 @@ ok(G('reviewDone_(readRuns_())') === false && !env.__props.get('RV_CUR'), '다�
   again();
   ok(G('__CNT') === 2, '6시간 지나면 다시 셈 ' + G('__CNT'));
 }
+// (11/19 15:40 끊김) 150초가 지났으면 리뷰 압축(사진 AI)을 시작하지 않고 다음에 그 의뢰부터
+{
+  list.rows[4][3] = true; env.__props.forEach((v, k) => { if (/^RVSEEN_/.test(k)) env.__props.delete(k); });
+  G('globalThis.__ORI_T0 = Date.now(); rvFolder_ = function () { return { img: {} }; }; globalThis.__ZIP = 0; rvZip_ = function () { __ZIP++; };');
+  G('reviewDone_(readRuns_())');
+  ok(env.__props.get('RVRPT_S1') && G('__ZIP') === 1, '시간 넉넉하면 압축함 ' + G('__ZIP'));
+  G('globalThis.__ORI_T0 = Date.now() - 200000');
+  ok(G('reviewDone_(readRuns_())') === true && G('__ZIP') === 1 && env.__props.get('RV_CUR') === 'S1', '150초 지나면 압축 안 하고 멈춤 ' + G('__ZIP') + ' ' + env.__props.get('RV_CUR'));
+  G('globalThis.__ORI_T0 = Date.now()');
+  ok(G('reviewDone_(readRuns_())') === false && G('__ZIP') === 2 && !env.__props.get('RV_CUR'), '다음엔 그 의뢰부터 압축 ' + G('__ZIP'));
+}
 console.log(fails.length ? 'XX 업체 전달 막힘 시험 실패:\n- ' + fails.join('\n- ') : '✓ 업체 전달 막힘 알림 시험 통과');
 process.exit(fails.length ? 1 : 0);

@@ -8122,6 +8122,8 @@ function reviewDone_(runs, only) {
   let stuckN = 0, rvStop = false;
   // 시간 넘으면 멈추고 다음 확인에서 멈춘 의뢰부터 (11/19 피클: 자정 뒤 리뷰 확인 259초 → 6분 제한에 걸릴 수 있음). RV_CUR = 멈춘 의뢰
   const rvCur = props.getProperty('RV_CUR') || '';
+  // 리뷰 압축(사진 AI 포함)은 한 의뢰에 80초 넘게 걸리기도 해서(11/19 15:40 확인이 이 단계에서 6분 제한에 끊김), 150초가 지났으면 시작하지 않고 다음 확인에서 그 의뢰부터
+  const heavyOk = function (sid) { if (globalThis.__ORI_T0 && late_(RV_HEAVY_SEC)) { rvStop = true; props.setProperty('RV_CUR', sid); return false; } return true; };
   cfRotate_(Object.keys(bySheet), function (k) { return k; }, rvCur).forEach(function (sid) {
     if (rvStop) return;
     if (only && only.indexOf(sid) < 0) return;   // 5분 확인: 명단 시트가 바뀐 의뢰만
@@ -8146,7 +8148,7 @@ function reviewDone_(runs, only) {
       try {
         let rk0 = ''; try { rk0 = (JSON.parse(props.getProperty('RV_' + sid) || '{}') || {}).kind || ''; } catch (e) {}
         const f0 = rk0 === 'confirm' ? null : subTime_('정리: 리뷰 폴더', function () { return rvFolder_(mine, props, sid); });
-        if (f0) subTime_('정리: 리뷰 압축', function () { rvZip_(f0, fname, props, sid, mine); });
+        if (f0) { if (!heavyOk(sid)) return; subTime_('정리: 리뷰 압축', function () { rvZip_(f0, fname, props, sid, mine); }); }
       } catch (e) { note_('리뷰 완료 확인 실패 ' + sid + ': ' + e.message); }
       return;
     }
@@ -8307,7 +8309,7 @@ function reviewDone_(runs, only) {
         // '리뷰 다 끝남 → 서랍에서 저장' 할 일은 안 넣음 (사용자 11/3: 리뷰 사진은 전원 완료 때가 아니라 날짜별로 받음)
       }
       // B1. 리뷰이미지 폴더 사진 → 압축 (다 끝난 뒤에 한 번에 업체로)
-      if (capF && props.getProperty(rk) && !rvSentAny_(mine)) subTime_('정리: 리뷰 압축', function () { rvZip_(capF, name, props, sid, mine); });
+      if (capF && props.getProperty(rk) && !rvSentAny_(mine) && heavyOk(sid)) subTime_('정리: 리뷰 압축', function () { rvZip_(capF, name, props, sid, mine); });
       // 끝까지 봤으면 기억 (위에서 return 한 건 다음에 다시 봄). 이 단계에서 명단 시트에 쓴 게 있으면 수정 시각이 바뀌어 다음에 한 번 더 봄
       if (mod) props.setProperty(seenK, sig);
     } catch (e) { note_('리뷰 완료 확인 실패 ' + sid + ': ' + e.message); }
@@ -8317,7 +8319,7 @@ function reviewDone_(runs, only) {
   if (init) props.setProperty('RVDONE_INIT', '1');
   return false;
 }
-const RV_STOP_SEC = 250;
+const RV_STOP_SEC = 250, RV_HEAVY_SEC = 150;
 // 의뢰 폴더 안 '리뷰이미지' 폴더 (없으면 만듦)
 function rvFolder_(mine, props, sid) {
   const first = mine.filter(function (x) { return x['폴더 링크']; })[0];
