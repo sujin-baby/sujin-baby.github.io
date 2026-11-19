@@ -1,4 +1,4 @@
-// 스중불가 (11/10): 더호컴퍼니 = 앨비나프레시. 같은 업체 다른 진행·앞 날 명단에 같은 계정주(전화·주소·아이디)가 있으면 할 일. 다른 업체는 안 봄  node storedup_test.js <Main.js>
+// 스중불가 (11/10, 11/19 고침: 앨비나프레시는 비전이공이공 업체로 더호컴퍼니와 다른 묶음). 같은 업체 다른 진행·앞 날 명단에 같은 계정주(전화·주소·아이디)가 있으면 할 일. 다른 업체는 안 봄  node storedup_test.js <Main.js>
 const H = require('./harness'); const vm = require('vm');
 const env = H.makeEnv({ main: process.argv[2], props: { OUTBOX_SORTED: '1', OUTBOX_FMT2: '1' } }); const G = k => vm.runInContext(k, env);
 const fails = [], ok = (c, m) => { if (!c) fails.push(m); };
@@ -6,7 +6,7 @@ const LH = G('LIST_HEADER'), mk = o => LH.map(h => o[h] !== undefined ? o[h] : '
 const t0 = new Date(); t0.setHours(0, 0, 0, 0); const at = (d, h) => new Date(t0.getTime() + d * 86400000 + h * 3600000);
 env.__ss.sheets['진행목록'] = new H.Sheet('진행목록', [LH.slice(),
   mk({ '진행일': at(0, 0), '명단 제목': '#택11.10 앨비나프레시 설향딸기20 (뽀짝오리)', '시트ID': 'S2', '업체': '앨비나프레시', '인원': 2 }),
-  mk({ '진행일': at(-4, 0), '명단 제목': '#택11.6 차량용 거치대 3 (뽀짝오리)', '시트ID': 'S1', '업체': '더호컴퍼니', '인원': 3 }),
+  mk({ '진행일': at(-4, 0), '명단 제목': '#택11.6 차량용 거치대 3 (뽀짝오리)', '시트ID': 'S1', '업체': '비전이공이공', '인원': 3 }),
   mk({ '진행일': at(-3, 0), '명단 제목': '#택11.7 오늘과일 귤 5 (뽀짝오리)', '시트ID': 'S3', '업체': '오늘과일', '인원': 1 })]);
 const HD = ['타임스탬프', '계정명(수령인)', '아이디', '전화번호', '주소'];
 const sheet = rows => { const s = new H.Sheet('명단', [['x'], HD].concat(rows)); Object.getPrototypeOf(s.getRange(1, 1)).getNotes = function () { return this.getValues().map(r => r.map(() => '')); }; return s; };
@@ -22,11 +22,13 @@ const add = S2.rows.slice(2).map(r => ({ t: r[0].getTime(), o: { '타임스탬�
 env.__ADD = add; env.__SS2 = { getId: () => 'S2' };
 let err = ''; try { G('storeDupCheck_(__SS2, __ADD)'); } catch (e) { err = String(e.stack || e); }
 ok(!err, '오류 ' + err);
-ok(msgs().length === 1 && /\[스중불가 중복\] 더호컴퍼니·앨비나프레시/.test(msgs()[0]) && /김가나B .*↔ 차량용 거치대 .* 김가나 · 전화 같음/.test(msgs()[0]) && !/최마바/.test(msgs()[0]), '할 일 ' + JSON.stringify(msgs()));
+ok(msgs().length === 1 && /\[스중불가 중복\] 앨비나프레시·비전이공이공/.test(msgs()[0]) && /김가나B .*↔ 차량용 거치대 .* 김가나 · 전화 같음/.test(msgs()[0]) && !/최마바/.test(msgs()[0]), '할 일 ' + JSON.stringify(msgs()));
 // 2) 다른 업체 진행 응답은 안 봄
 env.__SS3 = { getId: () => 'S3' };
 G('storeDupCheck_(__SS3, [{ t: 1, o: { "전화번호": "010-1111-2222" } }])');
 ok(msgs().length === 1, '다른 업체는 안 봄');
+// 2-1) (11/19) 더호컴퍼니와 앨비나프레시는 다른 업체
+ok(G("storeGroupOf_('더호컴퍼니')") >= 0 && G("storeGroupOf_('앨비나프레시')") >= 0 && G("storeGroupOf_('더호컴퍼니')") !== G("storeGroupOf_('앨비나프레시')"), '더호컴퍼니 ≠ 앨비나프레시');
 // 3) 한 번 훑기: 최근 14일 묶음 명단에서 중복
 env.__ss.sheets['보낼메시지'] = new H.Sheet('보낼메시지', [['ID', '보낼 날짜', '종류', '카톡방', '메시지', '보냄 체크']]);
 G('storeDupScan1_()');

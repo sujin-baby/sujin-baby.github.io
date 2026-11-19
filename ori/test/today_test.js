@@ -76,5 +76,10 @@ const dup = G('paySimilarDups_()');
 ok(dup.length === 1 && /2행 #택11\.5 차량용 거치대 3 \/ 3행 #택11\.5 더호 차량용 거치대 3/.test(dup[0]) && !/샤워기|다른가게|11\.6/.test(dup[0]), '비슷한 줄 ' + JSON.stringify(dup));
 pay.rows.splice(1, 1);
 ok(G('paySimilarDups_()').length === 0, '중복 없으면 알림 없음');
+// (11/19) 서로 다른 의뢰서 진행(명단 시트가 다름)이면 이름이 비슷해도 안 알림 (레깅스 30·50 오알림)
+pay.rows.push(['#11.18 실 탄탄 레깅스 30', '탄탄'], ['#11.18 실 탄탄 레깅스 50', '탄탄']);
+const LHx = G('LIST_HEADER'), mkx = o => LHx.map(h => o[h] !== undefined ? o[h] : '');
+env.__ss.sheets['진행목록'].rows.push(mkx({ '진행일': day(0), '명단 제목': '#11.18 실 탄탄 레깅스 30 (뽀짝오리)', '시트ID': 'LA', '진행 상태': '진행중' }), mkx({ '진행일': day(0), '명단 제목': '#11.18 실 탄탄 레깅스 50 (뽀짝오리)', '시트ID': 'LB', '진행 상태': '진행중' }));
+ok(!G('paySimilarDups_()').some(x => /레깅스/.test(x)), '다른 의뢰서 진행은 안 알림 ' + JSON.stringify(G('paySimilarDups_()')));
 console.log(fails.length ? 'XX 오늘 할 것·폼수정 B1·월급시트 비슷한 줄 시험 실패:\n- ' + fails.join('\n- ') : '✓ 오늘 할 것·폼수정 B1·월급시트 비슷한 줄 시험 통과');
 process.exit(fails.length ? 1 : 0);
