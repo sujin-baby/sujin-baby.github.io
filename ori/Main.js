@@ -2043,6 +2043,13 @@ function createRunLocked_(d) {
       if (prev.assign || empty) { try { prev.notice = refreshNotice_(run, d) || prev.notice; if (empty) note_('✓ 빈 공지 채움: ' + bareTitle_(run['명단 제목'])); } catch (e) { note_('공지 다시 넣기 실패: ' + e); } }
       return prev;
     }
+    // 다른 의뢰서 진행과 방제가 글자까지 똑같으면 만들지 않음 (11/19 피클: 카톡방·명단방 메시지와 월급시트 줄이 섞임 — 어제 레깅스 30·50)
+    {
+      const want = [bareTitle_(d.title)];
+      if (d.takdae && !takTitle_(d.title) && !takKeep_(d.title)) want.push(bareTitle_(addTak_(d.title)));
+      const same = readRuns_().filter(function (x) { return x['진행 상태'] !== '종료' && want.indexOf(bareTitle_(x['명단 제목'])) >= 0; })[0];
+      if (same) throw new Error('같은 방제의 진행이 이미 있어요: ' + bareTitle_(same['명단 제목']) + ' (진행목록 ' + same.row + '행, 다른 의뢰서)\n방제가 같으면 카톡방·명단방 메시지와 월급시트 줄이 섞여요. 방제 끝에 구분(예: -2)을 붙여 다시 만들어 주세요.');
+    }
     let res;
     try { res = createRunInner_(d); }
     catch (e) {
@@ -11691,6 +11698,14 @@ function payRowSpec_(r, all) {
 }
 function writePayRow_(r, name, remain, prevMonth, shared, ex, allRuns) {
   ex = ex || { store: r['업체'], time: payTime_(r['구매시간']), photo: r['포토'] };
+  // 다른 의뢰서(다른 명단 시트) 진행과 방제가 글자까지 똑같으면 월급시트 한 줄에 둘이 섞여 써짐 (11/19 피클: 계약 수량 칸 칩 링크를 못 읽어서 이름으로만 가림)
+  //  → 둘 다 쓰지 않고 멈춤 + 할 일. 사용자가 진행목록에서 한쪽 방제에 구분을 붙이면 다음 확인에서 각자 줄로
+  const twin = (allRuns || []).filter(function (x) { return x.row !== r.row && x['진행 상태'] !== '종료' && String(x['시트ID'] || '') !== String(r['시트ID'] || '') && payNameOf_(x).replace(/\s+/g, '') === String(name).replace(/\s+/g, ''); })[0];
+  if (twin) {
+    note_('⛔ 월급시트 안 씀: ' + name + ' — 같은 방제 진행이 둘(진행목록 ' + Math.min(r.row, twin.row) + '·' + Math.max(r.row, twin.row) + '행, 다른 의뢰서)');
+    try { queueMsg_('내 할 일', '[월급시트 멈춤] 같은 방제 진행이 둘이에요: ' + name + '\n진행목록 ' + Math.min(r.row, twin.row) + '행·' + Math.max(r.row, twin.row) + '행 (서로 다른 의뢰서·명단 시트)\n월급시트 한 줄에 섞이지 않게 둘 다 안 썼어요. 진행목록에서 한쪽 방제 끝에 구분(예: -2)을 붙이면 다음 확인에서 각자 줄로 써요.', '할 일'); } catch (e) {}
+    return;
+  }
   const day = r['진행일'];
   const sh = payTab_(day.getMonth() + 1);
   const L = payLayout_(sh);
