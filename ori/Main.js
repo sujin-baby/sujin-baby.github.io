@@ -11343,6 +11343,13 @@ function updatePay_(resumable) {
   const yieldPay = function () { try { yieldIfWanted_(); } catch (e) { if (prog) props.setProperty('PAY_PROG', JSON.stringify(prog)); saveSig(); throw e; } };
   const all = readRuns_().filter(function (r) { return r['시트ID'] && r['진행일'] instanceof Date; });
   const runs = all.filter(function (r) { return r['진행 상태'] !== '종료'; });
+  // 옛 열쇠(줄 번호|이름) → 새 열쇠(이름|명단 시트)로 한 번 옮김 (11/19 바꾼 날 133줄을 또 다시 쓰지 않게). 이름이 한 진행에만 맞을 때만
+  Object.keys(rowSig).forEach(function (k) {
+    const m = k.match(/^\d+\|(.+)$/); if (!m) return;
+    const hit = runs.filter(function (x) { return payNameOf_(x) === m[1]; });
+    if (hit.length === 1 && !rowSig[payRid_(hit[0])]) rowSig[payRid_(hit[0])] = rowSig[k];
+    delete rowSig[k];
+  });
   // 스토어 왼쪽에 '진행일' 칸 (사용자 요청 10/19). 탭마다 한 번 (있으면 그대로)
   try { fixPaySunnyOnce_(); } catch (e) { note_('월급시트 써니마켓 정리 실패: ' + e); }
   try { payTabsNow_().forEach(payDateCol_); } catch (e) { note_('월급시트 진행일 칸 만들기 실패: ' + e); }

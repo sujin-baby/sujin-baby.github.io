@@ -26,5 +26,14 @@ ok(!e2 && JSON.stringify(G('__W.slice()')) === JSON.stringify(['#10.30 실 밴�
   G('updatePay_(true)');
   ok(JSON.stringify(G('__W.slice()')) === JSON.stringify(['#11.3 실 새진행 5']), '새 진행 줄만 씀(밀린 줄은 다시 안 씀) ' + JSON.stringify(G('__W.slice()')));
 }
+// (11/19) 옛 열쇠(줄 번호|이름)는 새 열쇠로 옮겨서 다시 안 씀
+{
+  const rs = JSON.parse(env.__props.get('PAY_ROWSIG')); const old = {};
+  Object.keys(rs).forEach((k, i) => { old[(i + 2) + '|' + k.split('|')[0]] = rs[k]; });
+  env.__props.set('PAY_ROWSIG', JSON.stringify(old));
+  G('globalThis.__W = []');
+  G('updatePay_(true)');
+  ok(G('__W.length') === 0 && !Object.keys(JSON.parse(env.__props.get('PAY_ROWSIG'))).some(k => /^\d+\|/.test(k)), '옛 열쇠 옮김·다시 안 씀 ' + JSON.stringify(G('__W.slice()')));
+}
 console.log(fails.length ? 'XX 월급시트 넘기기 시험 실패:\n- ' + fails.join('\n- ') : '✓ 월급시트 줄 쓰기 중 새 진행 만들기에 넘기기 시험 통과');
 process.exit(fails.length ? 1 : 0);
