@@ -232,7 +232,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v201 (판매처 '보기(2)' 오인식)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v202 (폼 만들기 전 리뷰 구성 확인)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -431,7 +431,7 @@ details.help-box summary {
             <span style="font-weight: 900; font-size: 14px; color: var(--pink-deep, #ff5fa8); display:flex; align-items:center; gap:5px;">
               <span>💬 AI 다이렉트 대화 · 공지 수정 요청</span>
             </span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v201</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v202</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 10px;">
             공지가 이상하게 나왔거나 수정이 필요한가요? 여기서 메시지를 보내면 <b>피클(생성기)</b>과 <b>클로드(시트)</b>에게 실시간으로 전달돼요!
@@ -504,6 +504,13 @@ details.help-box summary {
             • <b>띄어쓰기 닉네임</b>: 대괄호로 묶기 <span class="mono" style="background:#f1e4eb; padding:1px 5px; border-radius:4px;">그린 (2명) [시묘 심효진] 조혜정</span><br>
             • <b>배정 수정</b>: 나중에 이름을 채우고 아래 버튼을 다시 누르면 배정 탭만 자동 업데이트돼요!
           </div>
+        </div>
+
+        <div class="card-out" id="rvc-box" style="margin: 12px 0; background: #fffdf2; border: 2px solid var(--ink); border-radius: 12px; padding: 12px 14px;">
+          <div style="font-weight: 900; font-size: 13px; color: #8a5a00; margin-bottom: 4px;">🧾 리뷰 구성 확인 <span style="font-weight:600; color:#666; font-size:12px;">(폼 만들기 전에 꼭 · 의뢰서에서 읽은 값이에요, 틀리면 고쳐 주세요)</span></div>
+          <div id="rvc-rows" style="font-size:12.5px; line-height:1.5;"></div>
+          <div id="rvc-warn" style="font-size:12.5px; font-weight:700; color:#c62828; margin-top:6px;"></div>
+          <label style="display:flex; gap:8px; align-items:center; justify-content:flex-start; margin-top:8px; font-size:13px; font-weight:800; color:var(--ink);"><input type="checkbox" id="rvc-ok" style="width:20px; height:20px; flex:none; margin:0;"><span>포토대기·포토·텍스트·별점 개수를 확인했어요</span></label>
         </div>
 
         <div class="card-out" style="margin: 12px 0; background: #f3f9ff; border: 2px solid var(--ink); border-radius: 12px; padding: 12px 14px;">
@@ -3316,6 +3323,10 @@ details.help-box summary {
   // 의뢰서의 리뷰 종류와 개수: '포토리뷰 5개 (1줄리뷰) / 별점만 30개', '텍스트리뷰, 별점리뷰 각 10개씩', '별점2개,글씨리뷰3개'
   // 유 10개, 무 10개 / 포토 10 / 텍스트 10 지원 (10/31 사용자 요청)
   function reviewMix(g) {
+    if (g && g.rvEdited && g.rvSet) { const l = rvList(g.rvSet); return l.length >= 2 ? l : []; }   // 리뷰 구성 확인 칸에서 고친 값 (11/19 수진 님)
+    return reviewMix0(g);
+  }
+  function reviewMix0(g) {
     const t = [g.review, g.photo].filter(Boolean).join(" / ");
     const re = /(포토\s*대기|포토\s*리뷰|텍스트\s*리뷰|글씨\s*리뷰|별점\s*리뷰|별점\s*만|별점|한\s*줄\s*리뷰|1줄\s*리뷰|포토|텍스트|글씨|별점|유|무)\s*(\d+)?\s*(?:개|건|명)?\s*(\([^)]*\))?|리뷰\s*(\d+)\s*(?:개|건|명)|각\s*(\d+)\s*(?:개|건|명)/g;
     const out = []; let pend = [], m;
@@ -3361,8 +3372,48 @@ details.help-box summary {
   // 리뷰 공지 종류: 리뷰 종류가 나뉘면 '나눠 배정', 포토 유면 포토대기, 구매확정이면 구확, 직접 찍는 포토, 아니면 전체 텍스트
   // 포토제공: '유', 'Y'. 로켓배송·그로스·실배송은 포토대기가 아니라 직접 쓰는 포토리뷰 (10/30)
   let rocketRun = false;
-  function photoWait(g) { return /^\s*(유|y(es)?\b|있|일부|추후|미정|제공)/i.test(g.photo || "") && !rocketRun && !$("realship").checked; }
+  function photoWait(g) { if (g && g.rvEdited && g.rvSet) return g.rvSet.w > 0; return photoWait0(g); }
+  function photoWait0(g) { return /^\s*(유|y(es)?\b|있|일부|추후|미정|제공)/i.test(g.photo || "") && !rocketRun && !$("realship").checked; }
+  // ---------------- 리뷰 구성 확인 (11/19 수진 님: 의뢰서마다 쓰는 사람·형식이 달라 포토대기를 잘못 읽음 → 폼 만들기 전에 개수를 보고 확인) ----------------
+  //  상품마다 { w: 포토대기(업체 사진), p: 포토리뷰(직접 찍음), t: 텍스트, s: 별점 } 의뢰서 전체 개수. 고치면 공지 리뷰 배분·관리 시트 리뷰 정보(포토전달 탭 등)가 이 값으로
+  const RVC_K = [["w", "포토대기", "업체 사진"], ["p", "포토리뷰", "직접 찍음"], ["t", "텍스트리뷰", ""], ["s", "별점", ""]];
+  const rvEsc = x => String(x == null ? "" : x).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  function rvList(st) { return RVC_K.filter(x => Number(st[x[0]]) > 0).map(x => ({ label: x[1], n: Number(st[x[0]]) })); }
+  function rvKindOne(g) {
+    if ((rocketRun || $("realship").checked) && /^\s*(유|y(es)?\b|있)/i.test(g.photo || "")) return "p";
+    if (photoWait0(g)) return "w";
+    if (/구매\s*확정|구확/.test([g.photo, g.review].join(" ")) || /구매\s*확정|구확/.test(String($("req").value || "").split("\n")[0])) return "c";
+    if (/포토\s*리뷰|사진/.test([g.photo, g.review].join(" "))) return "p";
+    return "t";
+  }
+  function rvDefaults(g) {
+    const o = { w: 0, p: 0, t: 0, s: 0 }, mix = reviewMix0(g);
+    if (mix.length) { mix.forEach(x => { const k = /대기/.test(x.label) ? "w" : /포토|사진/.test(x.label) ? "p" : /별점/.test(x.label) ? "s" : "t"; o[k] += Number(x.n) || 0; }); return o; }
+    const k = rvKindOne(g); if (k !== "c") o[k] = Number(g.total) || 0;
+    return o;
+  }
+  function rvSetOf(g) { return g.rvEdited && g.rvSet ? g.rvSet : rvDefaults(g); }
+  function rvAnyEdited() { return guides.some(g => g.rvEdited && g.rvSet); }
+  // 확인 칸 경고: 합계 ≠ 총건수, 의뢰서에 포토(유·포토리뷰·사진)가 있는데 포토 0
+  function rvIssues() {
+    const out = [], confirmRun = reviewKind0() === "confirm";
+    guides.forEach((g, i) => {
+      const st = rvSetOf(g), sum = RVC_K.reduce((a, x) => a + (Number(st[x[0]]) || 0), 0), tot = Number(g.total) || 0;
+      const nm = guides.length > 1 ? (g.guide || g.keyword || ("상품 " + (i + 1))) + ": " : "";
+      if (!confirmRun && tot && sum !== tot) out.push(nm + "개수 합 " + sum + "개 ≠ 총건수 " + tot + "건");
+      if (!confirmRun && st.w + st.p === 0 && (/^\s*(유|y(es)?\b|있|일부|추후|미정|제공)/i.test(g.photo || "") || /포토|사진/.test(String(g.review || "")))) out.push(nm + "의뢰서에 포토가 있는데 포토대기·포토리뷰가 0이에요");
+    });
+    return out;
+  }
   function reviewKind() {
+    if (!rvAnyEdited()) return reviewKind0();
+    const sets = guides.map(rvSetOf), used = {};
+    sets.forEach(st => RVC_K.forEach(x => { if (Number(st[x[0]]) > 0) used[x[0]] = 1; }));
+    const ks = Object.keys(used);
+    if (ks.length !== 1) return ks.length ? "mix" : reviewKind0();
+    return ks[0] === "w" ? "photo" : ks[0] === "p" ? "self" : ks[0] === "t" ? "text" : "mix";
+  }
+  function reviewKind0() {
     if (guides.some(g => reviewMix(g).length)) return "mix";
     const t = guides.map(g => [g.photo, g.review].join(" ")).join(" ");
     if ((rocketRun || $("realship").checked) && guides.some(g => /^\s*(유|y(es)?\b|있)/i.test(g.photo || ""))) return "self";
@@ -3374,6 +3425,7 @@ details.help-box summary {
   }
   // 의뢰서 전체 리뷰 개수: 상품마다 일차를 다 더함 ('옥광밤 : 별점 4, 텍스트리뷰 6 / 황금향 : 별점 5, 텍스트리뷰 9')
   function reviewTotals() {
+    if (rvAnyEdited()) return guides.map(g => { const l = rvList(rvSetOf(g)); return l.length ? (guides.length > 1 ? (g.guide || g.keyword || "상품") + " : " : "") + l.map(o => o.label + " " + o.n).join(", ") : ""; }).filter(Boolean).join(" / ");
     return guides.map(g => {
       const mix = reviewMix(g); if (!mix.length) return "";
       const days = (g.days && g.days.length) ? g.days.length : numDays(Number(g.total) || 0, Number(g.daily) || 0);
@@ -4970,7 +5022,30 @@ details.help-box summary {
   let takConfirmed = false;   // 택대 '택' 붙이기를 수진 님께 한 번 확인받았는지 (11/17)
   let runNonce = Math.random().toString(36).slice(2, 10);
   var roomTpl = "";
+  let rvcSig = "";
+  function renderRvConfirm() {
+    const rows = $("rvc-rows"); if (!rows) return;
+    // 의뢰서를 다 읽은 뒤 값이 바뀌어도 다시 그림 (고치는 중인 칸이 있으면 그대로 둠)
+    const reqSig = String(($("req") || {}).value || "");
+    const sig = reqSig.length + "|" + guides.map(g => [g.guide || g.keyword || "", g.total || "", g.photo || "", g.review || "", JSON.stringify(rvSetOf(g))].join(":")).join("|");
+    let typing = false; try { const a = document.activeElement; typing = !!(a && a.dataset && a.dataset.rvk); } catch (e) {}
+    if (sig !== rvcSig && !typing) {
+      // 의뢰서가 바뀌면 확인 체크를 다시 받음
+      if (rvcSig && rvcSig.split("|")[0] !== String(reqSig.length) && $("rvc-ok")) $("rvc-ok").checked = false;
+      rvcSig = sig;
+      rows.innerHTML = guides.map((g, i) => {
+        const st = rvSetOf(g), nm = guides.length > 1 ? (g.guide || g.keyword || ("상품 " + (i + 1))) : (g.keyword || g.guide || "");
+        const src = [g.photo ? "포토 " + g.photo : "", g.review ? String(g.review).slice(0, 60) : ""].filter(Boolean).join(" · ");
+        return '<div style="margin:6px 0;"><b>' + rvEsc(nm || "이 의뢰") + '</b> <span style="color:#666;">(총 ' + rvEsc(g.total || "?") + '건' + (src ? ' · 의뢰서: ' + rvEsc(src) : '') + ')</span><div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;">' +
+          RVC_K.map(x => '<label style="display:flex; align-items:center; gap:3px; background:#fff; border:1.5px solid #e2d6b5; border-radius:8px; padding:3px 6px;">' + x[1].replace("리뷰", "") + (x[2] ? '<span style="color:#888; font-size:11px;">(' + x[2] + ')</span>' : '') +
+            '<input data-rvg="' + i + '" data-rvk="' + x[0] + '" inputmode="numeric" value="' + (Number(st[x[0]]) || 0) + '" style="width:42px; padding:3px; border:1px solid #ccc; border-radius:6px; text-align:right;"></label>').join("") + '</div></div>';
+      }).join("");
+    }
+    const iss = rvIssues();
+    if ($("rvc-warn")) $("rvc-warn").textContent = iss.length ? "⚠ " + iss.join(" / ") : "";
+  }
   function updateMakeRun() {
+    try { renderRvConfirm(); } catch (e) {}
     const t = type(), tk = $("takdae").checked, real = $("realship").checked;
     const kw = guides.map(g => (g.keyword || "").trim()).filter((k, i, arr) => k && arr.indexOf(k) === i).join(" / ") || "(키워드)";
     const plat = (guides[0] || {}).platform || "쿠팡";
@@ -5151,8 +5226,23 @@ details.help-box summary {
     for (let i = 0; i < t.length; i += 600) parts.push(t.slice(i, i + 600));
     parts.forEach((c, i) => { try { fetch(WEBAPP + "?k=" + encodeURIComponent(key) + "&p=reqraw&n=" + encodeURIComponent(runNonce) + "&i=" + i + "&of=" + parts.length + "&t=" + encodeURIComponent(c), { mode: "no-cors" }).catch(() => {}); } catch (e) {} });
   }
+  // 리뷰 구성 확인 칸 숫자를 고치면 그 상품 값으로 (공지 리뷰 배분·관리 시트 리뷰 정보가 따라감)
+  if ($("rvc-rows")) $("rvc-rows").addEventListener("input", e => {
+    const el = e.target, gi = Number(el && el.dataset && el.dataset.rvg), k = el && el.dataset && el.dataset.rvk, g = guides[gi];
+    if (!g || !k) return;
+    g.rvSet = Object.assign({}, rvSetOf(g)); g.rvSet[k] = Number(String(el.value || "").replace(/\D/g, "")) || 0; g.rvEdited = true;
+    render();
+  });
   $("make-run").addEventListener("click", ev => {
     const b = $("make-run").dataset.block; if (b) { ev.preventDefault(); toast(b); return; }
+    // 리뷰 구성(포토대기·포토·텍스트·별점 개수)을 확인해야 만듦 (11/19 수진 님). 경고가 있으면 한 번 더 물음
+    if ($("rvc-ok") && !$("rvc-ok").checked) {
+      ev.preventDefault();
+      toast("리뷰 구성(포토대기·포토·텍스트·별점 개수)을 확인하고 체크해 주세요");
+      try { $("rvc-box").scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
+      return;
+    }
+    { const iss = rvIssues(); if (iss.length && !confirm("리뷰 구성에 확인할 게 있어요:\n\n" + iss.join("\n") + "\n\n그래도 이대로 만들까요?")) { ev.preventDefault(); toast("멈췄어요. 리뷰 구성 칸을 확인해 주세요."); return; } }
     // 실·빈 혼합 + 헤더 택대 + 10번 N: 택대로 두되 만들기 직전에 한 번 확인 (#81, 11/18 수진 님 "폼생성전 나한테 주의 혹은 확인해주세요")
     { const q = silbinTakNAsk();
       if (q && !confirm(q)) {
@@ -5793,7 +5883,7 @@ details.help-box summary {
 
   if (typeof globalThis !== "undefined") {
     globalThis.__PARSER__ = {
-      parseAll, parseHead, setGuides: gs => { guides = gs; }, fieldsOf, parseOptions, parse, parseCoupang, optionText, optForGuide, colorHintOf, baseName, makeRoom, shortName, suggestKeywords, sugKw, kwList, reviewMix, isBlockedText, posText, okSeller, maskItem,
+      parseAll, parseHead, setGuides: gs => { guides = gs; }, fieldsOf, parseOptions, parse, parseCoupang, optionText, optForGuide, colorHintOf, baseName, makeRoom, shortName, suggestKeywords, sugKw, kwList, reviewMix, rvDefaults, rvIssues, reviewKind, reviewTotals, photoWait, isBlockedText, posText, okSeller, maskItem,
       buildPlan, planRoomFrom, dayTotalOf, roomHasTak, takFixRoom, sheetBaseName, takAskNeeded, silbinTakNNote, silbinTakNAsk, SILBIN_TAKN_TEXT, render, isSilbin, totalCount, platCountOf, routePaste, fillCoupang, autoKeyword, shareSameProd, setHead: h => { lastHead = h; }, setCur: i => { cur = i; }
     };
   }

@@ -10561,7 +10561,7 @@ function photoTabRows_(runs) {
     // 전달 끝난 지 이틀 지나면 안 보임 (날짜를 모르는 예전 표시는 진행일 7일 뒤부터)
     if (sent) { const m = sent.match(/^(\d{2})\/(\d{2})/); const sd = m ? new Date(today_().getFullYear(), Number(m[1]) - 1, Number(m[2])).getTime() : dayStart_(r['진행일']) + 5 * D; if (t0 - sd > 2 * D) return; }
     const room = String(r['카톡방'] || bareTitle_(r['명단 제목']));
-    out.push({ k: k, day: r['진행일'], room: bareTitle_(r['명단 제목']), camp: campOf_(r['명단 제목']), shop: String(r['업체'] || ''), need: photoNeed_(room, ob) || '', got: got, sent: sentAt, age: age,
+    out.push({ k: k, sid: String(r['시트ID'] || ''), day: r['진행일'], room: bareTitle_(r['명단 제목']), camp: campOf_(r['명단 제목']), shop: String(r['업체'] || ''), need: photoNeed_(room, ob) || '', got: got, sent: sentAt, age: age,
       st: sent ? 2 : got ? 1 : 0 });
   });
   out.sort(function (a, b) { return (a.st - b.st) || (a.day - b.day); });
@@ -10570,7 +10570,7 @@ function photoTabRows_(runs) {
 function photoTabBuild_(runs, force) {
   const rows = photoTabRows_(runs), props = PropertiesService.getScriptProperties();
   const pend = rows.filter(function (x) { return x.st < 2; }).length;
-  const sig = msgvSigHash_(JSON.stringify(rows.map(function (x) { return [x.k, x.need, x.got, x.sent, x.st, x.age > 1]; })) + '|v1');
+  const sig = msgvSigHash_(JSON.stringify(rows.map(function (x) { return [x.k, x.need, x.got, x.sent, x.st, x.age > 1]; })) + '|v2');
   let sh = photoTab_(rows.length > 0 || force);
   if (!sh) return 0;
   const want = PHOTO_TAB + (pend ? ' ' + pend : '');
@@ -10580,7 +10580,7 @@ function photoTabBuild_(runs, force) {
   sh.clear(); try { sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).clearDataValidations(); } catch (e) {}
   if (sh.getMaxColumns() < PHOTO_COLS) sh.insertColumnsAfter(sh.getMaxColumns(), PHOTO_COLS - sh.getMaxColumns());
   if (sh.getMaxRows() < n + H + 3) sh.insertRowsAfter(sh.getMaxRows(), n + H + 3 - sh.getMaxRows());
-  sh.getRange(1, 1, 1, 9).merge().setValue('📷 업체 포토 받았는지 · 리뷰어에게 전달했는지 (뽀짝피드백 방에 업체 포토가 오면 ✅받음 → 리뷰어에게 보내면 ✅전달)  ·  실배송 제외')
+  sh.getRange(1, 1, 1, 9).merge().setValue('📷 업체 포토 받았는지 · 리뷰어에게 전달했는지 (뽀짝피드백 방에 업체 포토가 오면 ✅받음 → 리뷰어에게 보내면 ✅전달)  ·  실배송 제외  ·  포토 칸을 누르면 리뷰 구성(포토대기·텍스트 몇 건)을 고칠 수 있어요')
     .setFontWeight('bold').setBackground('#fde7f3').setFontColor('#7a2e57').setWrap(true);
   sh.setRowHeight(1, 34);
   sh.getRange(H, 1, 1, PHOTO_COLS).setValues([['진행일', '방제', '상품', '포토', '업체 포토 받음', '받은 때', '리뷰어 전달', '전달한 때', '상태', '키']])
@@ -10592,6 +10592,11 @@ function photoTabBuild_(runs, force) {
       return [md(x.day), x.room, x.camp + (x.shop && x.camp.indexOf(x.shop) < 0 ? ' (' + x.shop + ')' : ''), x.need === '' ? '' : x.need + '건', x.st >= 1, x.got, x.st === 2, x.sent, stt, x.k];
     }));
     sh.getRange(H + 1, 5, n, 1).insertCheckboxes(); sh.getRange(H + 1, 7, n, 1).insertCheckboxes();
+    // 포토 칸 = 그 의뢰 리뷰 구성 화면 (중간에 리뷰가 바뀌면 여기서 고침 → 리뷰 가이드·포토전달·업체 보고 장수가 따라감, 11/19 수진 님)
+    if (CONFIG.WEBAPP_URL) try {
+      const q = function (t) { return '"' + String(t).replace(/"/g, '""') + '"'; };
+      rows.forEach(function (x, i) { if (x.sid) sh.getRange(H + 1 + i, 4).setFormula('=HYPERLINK(' + q(CONFIG.WEBAPP_URL + '?p=review&k=' + encodeURIComponent(CONFIG.KEY) + '&s=' + encodeURIComponent(x.sid)) + ',' + q(x.need === '' ? '구성 보기' : x.need + '건') + ')'); });
+    } catch (e) {}
     sh.getRange(H + 1, 1, n, PHOTO_COLS).setBackgrounds(rows.map(function (x) { return Array(PHOTO_COLS).fill(x.st === 2 ? '#eeeeee' : x.st === 1 ? '#fff3cd' : x.age >= 2 ? '#fde2e2' : '#ffffff'); }))
       .setFontColors(rows.map(function (x) { return Array(PHOTO_COLS).fill(x.st === 2 ? '#9e9e9e' : '#222222'); }));
     sh.getRange(H + 1, 4, n, 6).setHorizontalAlignment('center');
