@@ -1954,7 +1954,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3369,6 +3369,7 @@ function checkFull() {
   if (ui) return quickCheck_(ui);
   let ran = false;
   globalThis.__ORI_T0 = Date.now();
+  globalThis.__IN_CF = true;
   // 0시대에는 폼 열기를 잠금 없이 먼저 (15분 확인이 마침 돌고 있어 잠금을 못 잡아도 0시에 바로 열리게)
   try { if (Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'H') === '0') openStartingForms_(readRuns_(), outboxRows_()); } catch (e) { note_('0시 폼 열기 실패: ' + e); }
   // 5분 실행(미뤄도 되는 일)이 잠금을 잡고 있으면 다음 일 사이에서 비켜 주게 (11/18: 15분 확인이 잠금을 못 잡아 건너뛰면 안 됨)
@@ -3381,6 +3382,8 @@ function checkFull() {
       else note_('멈춤: ' + (e && e.message || e));
     }
   }, 120000);
+  // 잠금을 못 잡아 건너뛰면 점검에서 보이게 (11/19: 30분씩 확인이 없었는데 흔적이 없었음)
+  if (!ran) { try { const pp = PropertiesService.getScriptProperties(), old = String(pp.getProperty('CF_SKIP') || ''); pp.setProperty('CF_SKIP', (Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 잠금 못 잡아 건너뜀 / ' + old).slice(0, 300)); } catch (e) {} }
   report_('자동 확인', ran);
 }
 
@@ -3425,6 +3428,14 @@ function yieldIfWanted_() {
   if (!globalThis.__ORI_T0) return;
   const want = Number(PropertiesService.getScriptProperties().getProperty('WANT_LOCK') || 0);
   if (want && Date.now() - want < 300000) throw { yieldLock: 1 };
+  if (cfWanted_()) throw { yieldLock: 1, cf: 1 };
+}
+// 15분 확인이 잠금을 기다리는 중인지 (CF_WANT, 5분 안). 15분 확인 자신은 안 비켜 줌
+//  (11/19: 리뷰 사진 AI 1분 연쇄가 잠금을 몇 분씩 쥐고 이걸 안 봐서, 15분 확인이 2분 기다리다 아무 기록 없이 건너뜀 → 30분씩 확인이 없었음)
+function cfWanted_() {
+  if (globalThis.__IN_CF) return false;
+  const cw = Number(PropertiesService.getScriptProperties().getProperty('CF_WANT') || 0);
+  return !!cw && Date.now() - cw < 300000;
 }
 function late_(sec) { return Date.now() - (globalThis.__ORI_T0 || Date.now()) > sec * 1000; }
 
@@ -4504,18 +4515,25 @@ function rvInboxTick_() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;   // 15분 확인이 도는 중이면 그쪽에서 함
   globalThis.__ORI_LOCK = true;   // 안에서 locked_를 부르는 일(정리 등)이 같은 잠금을 다시 기다리지 않게
+  try {
+  // 15분 확인이 잠금을 기다리면 단계 사이에서 바로 비켜 줌 (11/19)
+  if (cfWanted_()) return;
   try { rvMoveFix1_(); } catch (e) { try { note_('시온스 사진 옮기기 실패: ' + e.message); } catch (e2) {} }
   try { globalThis.__ORI_T0 = Date.now(); rvInboxSort_(null); } catch (e) { try { note_('리뷰 사진 받는 곳(5분) 실패: ' + e); } catch (e2) {} }
   // 명단 시트 리뷰 확인 체크 → 5분 안에 취완·리뷰비·페이백 요청 (11/8 사용자: 시온스 발마사지기 다 체크했는데 리뷰비 요청이 너무 늦게 뜸)
+  if (cfWanted_()) return;
   try { if (!late_(150)) rvQuickCheck_(); } catch (e) { try { if (!(e && e.yieldLock)) note_('리뷰 확인(5분) 실패: ' + e); } catch (e2) {} }
+  if (cfWanted_()) return;
   try { if (!late_(170)) rvZipSoon_(); } catch (e) { try { if (!(e && e.yieldLock)) note_('리뷰 보고 글(5분) 실패: ' + e); } catch (e2) {} }
   // 리뷰이미지에 바로 올린 사진 확인도 5분마다 (15분 확인이 길면 끝까지 못 가서 안 돌았음, 11/16)
+  if (cfWanted_()) return;
   try { if (!late_(160)) rvLooseCheck_(readRuns_()); } catch (e) {}
   // AI 분류 대기열도 이어서 (1분 연쇄 트리거도 이 길로 들어옴, 11/7)
+  if (cfWanted_()) return;
   try { if (PropertiesService.getScriptProperties().getProperty('RVAI_Q') && !late_(200)) rvAiQueue_(); } catch (e) { try { note_('리뷰 사진 AI(연쇄) 실패: ' + e); } catch (e2) {} }
   // 미뤄도 되는 일: 가장 오래 밀린 것부터, 남은 시간만큼 (11/18 사용자: 15분 확인 뒤쪽 일이 계속 밀리던 것)
   try { bgLane_(); } catch (e) { try { note_('5분 실행(미뤄도 되는 일) 실패: ' + e); } catch (e2) {} }
-  finally { globalThis.__ORI_LOCK = false; lock.releaseLock(); }
+  } finally { globalThis.__ORI_LOCK = false; lock.releaseLock(); }
 }
 // 받는 곳에서 사진이 들어간 의뢰(RVZIPSOON_) → 5분마다 보고 글 확인 (11/9 나주배: 리뷰가 다 끝난 의뢰인데 사진을 올리고 보고 글이 30분 넘게 늦게 뜸, 30분 정리에서만 봐서)
 //  rvZip_가 사진이 10분 동안 안 바뀌면 보고 글을 넣음 → 마지막 사진 뒤 10~15분. 보고 글이 생기거나, 업체에 보냈거나, 3시간 지나면 표시 지움
@@ -9589,7 +9607,7 @@ function rvAiSort_(f, sid, props) {
   const t0 = Date.now();
   let done = 0, moved = {};
   for (let i = 0; i < left.length; i++) {
-    if (Date.now() - t0 > 60000 || late_(230) || (globalThis.__ORI_T0 && Date.now() - Number(props.getProperty('WANT_LOCK') || 0) < 300000)) break;   // 직접 하는 일이 기다리면 멈춤
+    if (Date.now() - t0 > 60000 || late_(230) || (globalThis.__ORI_T0 && Date.now() - Number(props.getProperty('WANT_LOCK') || 0) < 300000) || cfWanted_()) break;   // 직접 하는 일·15분 확인이 기다리면 멈춤
     const x = left[i];
     let o;
     try { o = subTime_('리뷰 사진 AI', function () { return geminiReadCapture_(x.getBlob()); }); }
@@ -9727,7 +9745,7 @@ function rvInboxSort_(runs) {
   const t0 = Date.now(), got = {};
   let unknown = 0;
   for (let i = 0; i < files.length; i++) {
-    if (Date.now() - t0 > 60000 || late_(230) || (globalThis.__ORI_T0 && Date.now() - Number(props.getProperty('WANT_LOCK') || 0) < 300000)) break;   // 직접 하는 일이 기다리면 멈춤
+    if (Date.now() - t0 > 60000 || late_(230) || (globalThis.__ORI_T0 && Date.now() - Number(props.getProperty('WANT_LOCK') || 0) < 300000) || cfWanted_()) break;   // 직접 하는 일·15분 확인이 기다리면 멈춤
     const x = files[i];
     let o = null;
     // 전에 AI가 읽은 사진이면(사진 설명 'AI {…}') 다시 안 물어봄
