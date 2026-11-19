@@ -532,7 +532,9 @@
   }
   /* 판매처: 첫 후보가 '가입' 같은 엉터리면 버리고 다음 후보로 (seller_test가 이 줄부터 잘라 시험함, 지우지 마세요) */
   const BAD_SELLER = /가입|보러가기|평가|정보|^특가|로켓|할인|쿠폰|무료|배송|와우|입점|다를\s*수|있습니다|없습니다|합니다|바랍니다|드립니다|확인|주의|안내|참고|동일|상이|기준|경우|제외|배지|인증/;
-  const okSeller = s => !!s && s.length <= 30 && !/^(?:[는은이가의를와과]\s|[,\s])/.test(s) && !BAD_SELLER.test(s);
+  /* '보기(2)'·'상품평 보기(12)'·'더보기' 같은 쿠팡 버튼 글자는 판매처가 아님 (11/19 #88: 판매처에 '보기(2)') */
+  function isUiSeller(s) { return /^(?:[가-힣]{1,8}\s+)?보기\s*\(\s*\d+\s*\)$|^(?:보기|더\s*보기|전체\s*보기|접기|펼치기)$|^(?:상품평|리뷰|후기|판매자|판매처|옵션|색상|사이즈|수량|배송|문의|상세\s*정보)\s*\(\s*\d+\s*\)$/.test(String(s || "").replace(/\s+/g, " ").trim()); }
+  const okSeller = s => !!s && s.length <= 30 && !/^(?:[는은이가의를와과]\s|[,\s])/.test(s) && !BAD_SELLER.test(s) && !isUiSeller(s);
   const readCoupangSeller = () => {
     for (const e of document.querySelectorAll('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]')) {
       const t = (e.textContent || "").replace(/\s+/g, " ").trim();
