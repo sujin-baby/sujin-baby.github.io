@@ -2898,12 +2898,14 @@ details.help-box summary {
   //  키워드 라벨 안내문만 보고 순위가 비었다며 '(안나오면 가격검색 해주세요)'가 붙어, 실제로 1p에 뜨는 상품의 위치가 틀렸다)
   //  단, 키워드를 아예 못 받은 의뢰(#81 김상사)는 검색할 키워드가 없으니 양식 안내문의 가격검색 안내를 그대로 살린다
   const KW_HINT_PAREN = /[\(（][^\)）]*(?:키워드\s*(?:땁|줄|드립)|저희가\s*키워드)[^\)）]*[\)）]/g;
+  // 괄호 없이 줄로 적인 안내문('미노출시 저희가 키워드 드립니다')도 같은 안내
+  const KW_HINT_BARE = /미노출\s*시?[^\n]{0,25}?키워드\s*(?:를|은|는|이|가)?\s*(?:땁|줄|드립)[^\n]*/g;
   function noExposeHint(t0, hasKeyword) {
     const src = String(t0 || "");
-    const t = src.replace(KW_HINT_PAREN, " ");
+    const hintHere = (() => { KW_HINT_PAREN.lastIndex = 0; if (KW_HINT_PAREN.test(src)) return true; KW_HINT_BARE.lastIndex = 0; return KW_HINT_BARE.test(src); })();
+    const t = src.replace(KW_HINT_PAREN, " ").replace(KW_HINT_BARE, " ");
     if (/미노출/.test(t) || /가격\s*검색/.test(t)) return true;
-    KW_HINT_PAREN.lastIndex = 0;
-    return !hasKeyword && KW_HINT_PAREN.test(src);
+    return !hasKeyword && hintHere;
   }
   // 검색 결과에 안 잡혀 URL에 rank=0/searchRank=0으로 남은 것도 미노출 표시다 (11/12 v175 엔부사과)
   const URL_NO_RANK = /[?&](?:searchRank|rank)=0(?:[&#]|$)/;
