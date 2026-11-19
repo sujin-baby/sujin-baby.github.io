@@ -61,5 +61,16 @@ G('globalThis.__ORI_T0 = Date.now() - 300000');
 ok(G('reviewDone_(readRuns_())') === true && env.__props.get('RV_CUR') === 'S1', '시간 넘으면 멈춤 ' + env.__props.get('RV_CUR'));
 G('globalThis.__ORI_T0 = Date.now()');
 ok(G('reviewDone_(readRuns_())') === false && !env.__props.get('RV_CUR'), '다음엔 이어서 끝냄');
+// (11/19) 사진 수는 6시간에 한 번만 셈
+{
+  env.__props.delete('RVRPT_S1'); env.__props.delete('RVDONE_S1'); list.rows[4][3] = false;
+  G("globalThis.__CNT = 0; rvFolder_ = function () { return { img: {} }; }; rvImgCount_ = function () { __CNT++; return { 포토: 1, 텍스트: 0, 별점: 0, 기타: 0 }; };");
+  const again = () => { env.__props.forEach((v, k) => { if (/^RVSEEN_/.test(k)) env.__props.delete(k); }); G('reviewDone_(readRuns_())'); };
+  again(); again();
+  ok(G('__CNT') === 1 && JSON.parse(env.__props.get('RVSTUCK_S1')).ph['포토'] === 1, '사진 수 한 번만 셈 ' + G('__CNT'));
+  const o = JSON.parse(env.__props.get('RVSTUCK_S1')); o.phAt = Date.now() - 7 * 3600000; env.__props.set('RVSTUCK_S1', JSON.stringify(o));
+  again();
+  ok(G('__CNT') === 2, '6시간 지나면 다시 셈 ' + G('__CNT'));
+}
 console.log(fails.length ? 'XX 업체 전달 막힘 시험 실패:\n- ' + fails.join('\n- ') : '✓ 업체 전달 막힘 알림 시험 통과');
 process.exit(fails.length ? 1 : 0);

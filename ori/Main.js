@@ -8279,8 +8279,11 @@ function reviewDone_(runs, only) {
             const t = v[i][cT].getTime(), r = mine.filter(function (m) { const w = windowOf_(runs, m); return t >= w.from && t < w.to; })[0];
             return (cNm >= 0 ? String(v[i][cNm]).trim() : '?') + (r && r['진행일'] instanceof Date ? '(' + (r['진행일'].getMonth() + 1) + '.' + r['진행일'].getDate() + ')' : '');
           });
-          let ph = null; if (capF && capF.img) try { ph = rvImgCount_(capF.img); } catch (e) {}
-          const o = { un: un.slice(0, 20), n: un.length, ppl: live.length, ph: ph, pend: !!pend[campKey_(mine[0]['캠페인'] || mine[0]['명단 제목'])] };
+          // 사진 수는 6시간에 한 번만 셈 (11/19: 명단 시트가 바뀔 때마다 사진 100장 폴더를 다시 세서 리뷰 확인이 30초 → 230초)
+          let old0 = null; try { old0 = JSON.parse(props.getProperty(sk) || 'null'); } catch (e) {}
+          let ph = old0 && old0.ph && Date.now() - (Number(old0.phAt) || 0) < 6 * 3600000 ? old0.ph : null, phAt = ph ? old0.phAt : 0;
+          if (!ph && capF && capF.img) try { ph = subTime_('리뷰 확인: 사진 세기', function () { return rvImgCount_(capF.img); }); phAt = Date.now(); } catch (e) {}
+          const o = { un: un.slice(0, 20), n: un.length, ppl: live.length, ph: ph, phAt: phAt, pend: !!pend[campKey_(mine[0]['캠페인'] || mine[0]['명단 제목'])] };
           props.setProperty(sk, JSON.stringify(o));
           if (!init && rvStuckLate_(mine) && !props.getProperty('RVSTUCKMSG_' + sid)) {
             props.setProperty('RVSTUCKMSG_' + sid, '1');
