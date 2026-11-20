@@ -48,7 +48,7 @@ async function autoRun(url, gt) {
     autoTab = t.id;
     /* 단축 링크(link.coupang.com 등)가 상품 페이지로 넘어갈 때까지 (최대 40초) */
     let tab = t;
-    for (let i = 0; i < 80; i++) { await sleep(500); tab = await chrome.tabs.get(t.id); if (tab.status === "complete" && (/\/products\/\d+|goodsNo=|toss\.shopping\/i\//i.test(tab.url || "") || (i >= 12 && /shopping-discovery/i.test(tab.url || "")))) break; }
+    for (let i = 0; i < 80; i++) { await sleep(500); tab = await chrome.tabs.get(t.id); if (i > 0 && i % 10 === 0) pushGen({ status: "상품 페이지 기다리는 중… (" + Math.round(i / 2) + "초)" }); if (tab.status === "complete" && (/\/products\/\d+|goodsNo=|toss\.shopping\/i\//i.test(tab.url || "") || (i >= 12 && /shopping-discovery/i.test(tab.url || "")))) break; }
     await sleep(1500);
     tab = await chrome.tabs.get(t.id);
     if (/oliveyoung\.co\.kr/.test(tab.url || "")) return await autoOy(tab);

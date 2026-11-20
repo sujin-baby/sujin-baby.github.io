@@ -240,6 +240,7 @@ function runRun(opt) {
     const r = await runAutoX({ url: 'https://shopping.naver.com/catalog/123456', out: true });   // 상품 페이지가 아님
     ok(r.removed.indexOf(99) < 0 && r.updated.some(u => u[1] && u[1].active === true), '상품 페이지가 아니면 탭을 닫지 않고 앞으로 보여 줌');
     ok(r.pushed.some(s => s.indexOf('상품 페이지가 안 열렸어요') === 0 && s.indexOf('shopping.naver.com/catalog/123456') > 0), '왜 안 됐는지 주소까지 넣어 알려 줌: ' + JSON.stringify(r.pushed.filter(s => s.indexOf('안 열렸') >= 0)));
+    ok(r.pushed.some(s => s.indexOf('상품 페이지 기다리는 중… (5초)') === 0), '오래 걸려도 멈춘 것처럼 보이지 않게 5초마다 진행 상태를 보냄: ' + JSON.stringify(r.pushed.filter(s => s.indexOf('기다리는') >= 0).slice(0, 3)));
   }
   {
     const r = await runAutoX({ url: NVURL, startThrows: 'parts is not defined' });   // 도중에 터짐
