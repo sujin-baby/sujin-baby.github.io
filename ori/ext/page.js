@@ -212,6 +212,9 @@
     }
     const pm = L.pathname.match(/products\/(\d+)/);
     if (!pm) return { err: "네이버는 스마트스토어(또는 브랜드스토어) 상품 페이지에서 눌러 주세요." };
+    /* 상품명·판매처를 뽑을 때 title을 '상품명 : 스토어이름'으로 나눔 — 쿠팡 칸에만 있고 여기 빠져 있어
+       네이버 상품 페이지에서 누르면 'parts is not defined'로 바로 멈추던 것 (11/20 1.8.6, 사용자 제보 '네이버 하니까 바로 꺼지잖아') */
+    const parts = (document.title || "").split(/\s+:\s+/);
     /* 상품명·판매처: 모바일 스마트스토어는 og:title·title이 짧은 이름만 담기도 해서 화면 제목·구조화 데이터(JSON-LD)까지 봄 (11/18 #77)
        - 상품명: og:title·title의 이름 → JSON-LD name → 화면 상품 제목 중 '첫 낱말이 같은' 가장 긴 것
        - 판매처: title 마지막 칸(스토어 이름) → 없으면 JSON-LD brand → 화면 브랜드 ('네이버 스마트스토어'만 읽어 빈칸이 되던 것) */
