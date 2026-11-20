@@ -1161,7 +1161,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
 
   /* ---------- mascot ---------- */
-  var MV = '2026112026';
+  var MV = '2026112027';
   /* 순경 공채(2027-08-21)·지텔프(2026-11-29) 목표에 맞춘 현실 자극 문구 */
   var MOT = {
     done: [
@@ -2472,6 +2472,17 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       if (last && last.k && /^[-·•]\s*\S/.test(s)) { last.li.push(s.replace(/^[-·•]\s*/, '')); return; }
       blocks.push({ t: s });
     });
+    /* 수진 님: 해설 카드는 '풀이 → 오답 → 해석' 순서로 읽히게. 라벨 블록만 있던 자리끼리 순서를 바꾸고
+       일반 문단 자리는 그대로 둔다(경찰 기출 해설 등 라벨 없는 해설은 영향 없음) */
+    var LAB_ORDER = { '풀이': 1, '오답': 2, '해석': 3 };
+    var labSlots = [];
+    blocks.forEach(function (bk, i) { if (bk.k) labSlots.push(i); });
+    if (labSlots.length > 1) {
+      var labSorted = labSlots.map(function (i) { return blocks[i]; }).sort(function (a, b) {
+        return (LAB_ORDER[a.k] || 9) - (LAB_ORDER[b.k] || 9);
+      });
+      labSlots.forEach(function (i, n) { blocks[i] = labSorted[n]; });
+    }
     blocks.forEach(function (bk, i) {
       if (bk.k) {
         var cls = bk.k === '해석' ? 'tr' : (bk.k === '풀이' ? 'sol' : 'wrong');
