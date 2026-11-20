@@ -82,8 +82,10 @@ function setup() {
 // 한눈에 색: 내일(토)부터 다음 진행일(월)까지 하늘색 — 주말 진행 11/21 줄이 흰색이던 것 (11/20)
 {
   const src = require('fs').readFileSync(process.argv[2], 'utf8');
-  ok(src.indexOf("'=AND(INT($A2)>TODAY(),INT($A2)<=WORKDAY(TODAY(),1,{'") >= 0, '한눈에 줄 하늘색 = 내일~다음 진행일');
-  ok(src.indexOf("G2<>0,INT($A2)>TODAY(),INT($A2)<=WORKDAY(TODAY(),1,'") >= 0, '남은 칸 하늘색도 같게');
+  ok(src.indexOf("'=AND(INT($A2)=TODAY()+' + (i + 1) + ',INT($A2)<=WORKDAY(TODAY(),1,' + hs + '))').setBackground(c)") >= 0, '한눈에 줄 = 내일~다음 진행일, 날짜마다 다른 색');
+  ok(src.indexOf("G2<>0,INT($A2)=TODAY()+' + (i + 1) + ',INT($A2)<=WORKDAY(TODAY(),1,' + hs + '))').setFontColor('#d00000').setBold(true).setBackground(c)") >= 0, '남은 칸도 같은 날짜 색');
+  const vm2 = require('vm'), H2 = require('./harness'), e2 = H2.makeEnv({ main: process.argv[2] }), cols = vm2.runInContext('DASH_DAY_COLORS', e2);
+  ok(cols.length >= 5 && new Set(cols).size === cols.length && cols.indexOf('#d9ead3') < 0 && cols.indexOf('#ea9999') < 0 && cols.indexOf('#d9d9d9') < 0, '날짜 색은 서로 다르고 오늘·알림·완료 색과 안 겹침 ' + cols);
   ok(src.indexOf("INT($A2)=WORKDAY(TODAY(),1,") < 0, '옛 규칙(다음 진행일 하루만) 없음');
 }
 console.log(fails.length ? 'XX 주말 진행 시험 실패:\n- ' + fails.join('\n- ') : '✓ 주말 진행·남성용 기모 타이즈 한 번 시험 통과');

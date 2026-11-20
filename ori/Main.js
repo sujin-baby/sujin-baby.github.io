@@ -12168,7 +12168,9 @@ function dashStatus_(r) {
   if (d === t && !(r['마감 시각'] instanceof Date)) return '진행중';
   return '진행완료';
 }
-const DASH_VER = '42';   // 42: 주말 진행도 다음 진행일까지 하늘색 (11/20) · 41: 의뢰 총건수 = 리뷰 구성 화면 링크 (11/19) · 40: 택배 옮김 머리글에 오늘 옮길 진행 수·인원 (11/18)
+// 한눈에 진행 줄 색: 내일(+1)·모레(+2)·… 다음 진행일까지 날짜마다 다른 색 (오늘은 연두 #d9ead3, 진행완료 회색·빨강·주황·노랑 알림 색과 안 겹치게)
+const DASH_DAY_COLORS = ['#cfe2f3', '#d9d2e9', '#ead1dc', '#d0e0e3', '#fce5cd', '#e6e6e6', '#f3f3f3'];
+const DASH_VER = '43';   // 43: 내일부터 다음 진행일까지 날짜마다 다른 색 (11/20) · 42: 주말 진행도 다음 진행일까지 하늘색 (11/20) · 41: 의뢰 총건수 = 리뷰 구성 화면 링크 (11/19) · 40: 택배 옮김 머리글에 오늘 옮길 진행 수·인원 (11/18)
 // 한눈에 '리뷰 취합할 것' 칸에 보일 것: 의뢰 전체 리뷰가 끝난(RVRPT_) 의뢰 중 업체 전송 체크 안 했거나 체크한 지 3일 안 된 것. 최근 40일 진행만, 기대평 빼고
 //  날마다 취합하던 줄은 없앰 (사용자 요청 10/26: 날짜별로 말고 한 캠페인이 다 끝나면 그때 한 번에)
 function rvItems_(allRuns, props) {
@@ -12658,17 +12660,22 @@ function buildDashboard_(force) {
     rules.unshift(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER(G2),G2<>0)').setFontColor('#d00000').setBold(true).setRanges([sh.getRange(2, 7, runs.length, 1)]).build());
     // 빨간 글씨인 '남은' 칸도 오늘·다음 진행일 색은 칠함 (규칙은 먼저 맞는 하나만 적용돼서 합친 규칙을 앞에, 10/21)
     const gR = sh.getRange(2, 7, runs.length, 1), hs = '{' + holidaySerials_().join(',') + '}';
-    rules.unshift(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER(G2),G2<>0,INT($A2)>TODAY(),INT($A2)<=WORKDAY(TODAY(),1,' + hs + '))').setFontColor('#d00000').setBold(true).setBackground('#cfe2f3').setRanges([gR]).build());
+    DASH_DAY_COLORS.forEach(function (c, i) {
+      rules.unshift(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER(G2),G2<>0,INT($A2)=TODAY()+' + (i + 1) + ',INT($A2)<=WORKDAY(TODAY(),1,' + hs + '))').setFontColor('#d00000').setBold(true).setBackground(c).setRanges([gR]).build());
+    });
     rules.unshift(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER(G2),G2<>0,INT($A2)=TODAY())').setFontColor('#d00000').setBold(true).setBackground('#d9ead3').setRanges([gR]).build());
     // 상태가 진행완료면 회색
     rules.unshift(SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('진행완료').setBackground('#d9d9d9').setFontColor('#666666').setRanges([sh.getRange(2, 3, runs.length, 1)]).build());
     rules.push(SpreadsheetApp.newConditionalFormatRule().whenNumberGreaterThan(0).setBackground('#ea9999').setFontColor('#7f0000').setBold(true).setRanges([sh.getRange(2, 12, runs.length, 1)]).build());
     rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISLOGICAL(M2),M2=FALSE)').setBackground('#ea9999').setRanges([sh.getRange(2, 13, runs.length, 1)]).build());
-    // 오늘 진행 = 연두, 다음 진행일(금요일이면 월요일, 공휴일도 건너뜀)까지 = 하늘색 (11/20: 주말 진행 11/21(토)이 색 없이 흰 줄이던 것 → 내일부터 다음 진행일까지 다 하늘색). 수식이라 날이 바뀌면 저절로 바뀜 (사용자 요청 10/20). 위 빨간 표시가 먼저
+    // 오늘 진행 = 연두, 내일부터 다음 진행일(금요일이면 월요일, 공휴일도 건너뜀)까지는 날짜마다 다른 색 DASH_DAY_COLORS (내일 하늘색 → 모레 연보라 → 글피 연분홍 …)
+    //  (11/20 사용자: 주말 진행 11/21(토)이 흰 줄 → 하늘색으로 묶었더니 "헷갈리니까 날짜마다 색 다르게"). 수식이라 날이 바뀌면 저절로 바뀜 (사용자 요청 10/20). 위 빨간 표시가 먼저
     //  공휴일은 스크립트의 공휴일 목록(KR_HOLIDAYS + CONFIG.EXTRA_HOLIDAYS)을 날짜 숫자로 WORKDAY에 넣음
     const top = sh.getRange(2, 1, runs.length, head.length);
     rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=INT($A2)=TODAY()').setBackground('#d9ead3').setRanges([top]).build());
-    rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(INT($A2)>TODAY(),INT($A2)<=WORKDAY(TODAY(),1,{' + holidaySerials_().join(',') + '}))').setBackground('#cfe2f3').setRanges([top]).build());
+    DASH_DAY_COLORS.forEach(function (c, i) {
+      rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(INT($A2)=TODAY()+' + (i + 1) + ',INT($A2)<=WORKDAY(TODAY(),1,' + hs + '))').setBackground(c).setRanges([top]).build());
+    });
   }
   // 명단 줄 번갈아 연한 색 (읽기 쉽게, 다른 표시보다 약하게 맨 뒤에)
   show.forEach(function (id) {
@@ -12682,7 +12689,10 @@ function buildDashboard_(force) {
     note_('한눈에 색 규칙 공휴일 빼고 다시: ' + e.message);
     sh.setConditionalFormatRules(rules.map(function (r) {
       const c = r.getBooleanCondition(), f = c ? String((c.getCriteriaValues() || [])[0] || '') : '';
-      return /WORKDAY\(TODAY\(\),1,\{/.test(f) ? SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(f.replace(/,\{[^}]*\}/, '')).setBackground('#cfe2f3').setRanges(r.getRanges()).build() : r;
+      if (!/WORKDAY\(TODAY\(\),1,\{/.test(f)) return r;
+      const f2 = f.replace(/,\{[^}]*\}/, '');
+      try { return r.copy().whenFormulaSatisfied(f2).build(); } catch (e2) {}   // 날짜별 색·빨간 글씨 그대로
+      return SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(f2).setBackground('#cfe2f3').setRanges(r.getRanges()).build();
     }));
   }
   // 맨 끝 정리: 이번에 쓴 범위보다 아래에 남아있는 이전 잔여 행만 정리 (시작 시 전체 clear를 하지 않아 5분 백지화 원천 차단)
