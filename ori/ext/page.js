@@ -20,6 +20,42 @@
     const om = document.body.innerText.match(/(?:색상|옵션|구성|사이즈|수량|선택)[^\n]{0,12}[:：]\s*([^\n]{1,40})/);
     return om ? om[1].trim() : "";
   }
+  /* 전체 색상/옵션 목록 (11/17 v194): 고른 값 하나만 읽으면 다른 색이 있는지 몰라 '단일옵션'으로 나감.
+     상품 옵션 칸 안의 색상 칩·목록·드롭다운에서 2~12개가 잡히면 '블랙 / 아이보리 / 핑크'로. 가격·배송·광고 글자는 뺌 */
+  const ALL_BAD_EL = /추천|함께|비슷|관련|리뷰|광고|배너|랭킹|위젯|recommend|together|similar|related|review|banner|ranking|widget/i;
+  const ALL_BAD_TXT = /^(선택\s*하세요|선택해\s*주세요|옵션\s*선택|색상\s*선택|사이즈|수량|전체|모든\s*옵션|필터|정렬|구매하기|장바구니|바로\s*구매|더\s*보기|접기|펼치기)$/;
+  const ALL_BAD_WORD = /원|할인|쿠폰|적립|무료\s*배송|로켓|배송|특가|사은품|증정|이벤트|리뷰|평점|재고|품절\s*제외/;
+  function readAllColors() {
+    const out = [];
+    const add = t => {
+      const v = String(t || "").replace(/\s+/g, " ").replace(/^[\s:：·•\-–—]+|[\s:：·•\-–—]+$/g, "").trim();
+      if (!v || v.length > 20 || !/[가-힣a-z]/i.test(v) || /^\d+$/.test(v)) return;
+      if (ALL_BAD_TXT.test(v) || ALL_BAD_WORD.test(v) || /[×*]/.test(v)) return;
+      const n = v.replace(/\s+/g, "");
+      if (out.some(x => x.replace(/\s+/g, "") === n)) return;
+      out.push(v);
+    };
+    const okRoot = el => { try { return !ALL_BAD_EL.test(String((el && el.className) || "")) && !(el && el.closest && el.closest('[class*="recommend"],[class*="together"],[class*="similar"],[class*="related"],[class*="review"],[class*="banner"],[class*="ranking"],[class*="widget"]')); } catch (e) { return false; } };
+    let roots = [];
+    try { roots = [...document.querySelectorAll('.prod-option, [class*="prod-option"], [class*="ProductOption"], [class*="option-picker"], [class*="optionPicker"], [class*="color-option"], [class*="colorOption"], [class*="color-chip"], [class*="colorChip"], [class*="swatch"], [class*="variant"]')].filter(okRoot); } catch (e) { roots = []; }
+    if (!roots.length) { try { const s = document.querySelector('select[name*="옵션"], select[id*="option"], select[id*="Option"]'); if (s && okRoot(s)) roots = [s]; } catch (e) {} }
+    const SEL = '[role="option"], li, button, label, [class*="chip"], [class*="swatch"], [class*="color"], [class*="option-item"], [class*="OptionItem"]';
+    roots.forEach(rt => {
+      try { rt.querySelectorAll("select option").forEach(o => add(o.textContent)); } catch (e) {}
+      let els = []; try { els = [...rt.querySelectorAll(SEL)]; } catch (e) {}
+      els.forEach(el => {
+        try { if (el.querySelector(SEL)) return; } catch (e) {}
+        const lbl = el.getAttribute ? el.getAttribute("aria-label") || el.getAttribute("title") || "" : "";
+        add(lbl || el.textContent);
+      });
+      /* 색상 칩이 이미지로만 된 경우 alt 글자 */
+      try { rt.querySelectorAll("img[alt]").forEach(im => add(im.getAttribute("alt"))); } catch (e) {}
+    });
+    /* 부모 칸 글자('블랙 아이보리 핑크'처럼 여러 색이 한 칸에 붙은 것)는 뺌 */
+    const fin = out.filter(v => !/\s/.test(v) || !out.some(w => w !== v && v.indexOf(w) >= 0));
+    if (fin.length < 2 || fin.length > 12) return "";
+    return fin.join(" / ");
+  }
   /* 옵션마다 가격 (쿠팡 '수량' 목록: 2개 29,200원 / 3개 41,200원 …, 10/24 옥광밤·황금향). 이름표(수량) 줄 다음 옵션 이름 줄 → 가격 줄.
      지금 고른 옵션 가격(cur)과 같은 줄이 목록에 없으면 잘못 읽은 걸로 보고 안 씀 */
   const readOptPrices = (txt, name, cur) => {
@@ -133,13 +169,15 @@
       /* 판매처: 첫 후보가 '가입', '다를 수 있습니다' 같은 엉터리면 버리고 다음 후보로 (11/01 판매처 오류 해결).
          조사로 시작하거나 안내/배송 문장은 판매자가 아님. 상품명 첫 단어로 채우지 않음: 판매자 이름은 쿠팡·토스·네이버 페이지에 꼭 있음 (사용자 10/31) */
       const BAD_SELLER = /가입|보러가기|평가|정보|^특가|로켓|할인|쿠폰|무료|배송|와우|입점|다를\s*수|있습니다|없습니다|합니다|바랍니다|드립니다|확인|주의|안내|참고|동일|상이|기준|경우|제외|배지|인증/;
-      const okSeller = s => !!s && s.length <= 30 && !/^[는은]\s/.test(s) && !BAD_SELLER.test(s);
+      /* '보기(2)'·'상품평 보기(12)'·'더보기' 같은 쿠팡 버튼 글자는 판매처가 아님 (11/19 #88) */
+      function isUiSeller(s) { return /^(?:[가-힣]{1,8}\s+)?보기\s*\(\s*\d+\s*\)$|^(?:보기|더\s*보기|전체\s*보기|접기|펼치기)$|^(?:상품평|리뷰|후기|판매자|판매처|옵션|색상|사이즈|수량|배송|문의|상세\s*정보)\s*\(\s*\d+\s*\)$/.test(String(s || "").replace(/\s+/g, " ").trim()); }
+      const okSeller = s => !!s && s.length <= 30 && !/^[는은]\s/.test(s) && !BAD_SELLER.test(s) && !isUiSeller(s);
       for (const e of document.querySelectorAll('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]')) {
         const t = (e.textContent || "").replace(/\s+/g, " ").trim();
         if (okSeller(t)) { seller = t; break; }
       }
       if (!seller) {
-        const re = /판매자\s*[:：]?\s*([^\n]{1,60})/g;
+        const re = /판매자\s*[:：]?\s*\n?\s*([^\n]{1,60})/g;
         let sm;
         while ((sm = re.exec(txt))) {
           const t = sm[1].replace(/\s*(판매자\s*)?(상품\s*)?보러\s*가기.*$/, "").replace(/\s*판매자\s*평가.*$/, "").trim();
@@ -148,7 +186,7 @@
       }
       /* '판매자 특가', '판매자로켓' 같은 배지 글자는 판매처가 아님 → 페이지 데이터의 판매자 이름 (따옴표가 \" 로 들어간 데이터도) */
       if (!seller) { const vn = (String(html).match(/\\?"(?:vendorName|sellerName)\\?"\s*:\s*\\?"([^"\\]{2,60})/) || [])[1] || ""; if (okSeller(vn)) seller = vn; }
-      if (!seller) { const s2 = txt.match(/상호\s*\/\s*대표자\s*([^\n\/]{1,40})/); if (s2 && okSeller(s2[1].trim())) seller = s2[1].trim(); }
+      if (!seller) { const s2 = txt.match(/상호\s*\/\s*대표자\s*[:：]?\s*\n?\s*([^\n\/]{1,40})/); if (s2 && okSeller(s2[1].trim())) seller = s2[1].trim(); }
       /* 못 읽었으면 왜 그런지 보려고 화면의 '판매자·상호' 줄을 같이 보냄 */
       const sellerHint = seller ? "" : txt.split("\n").map(x => x.replace(/\s+/g, " ").trim()).filter(x => /판매자|판매처|상호|스토어/.test(x) && x.length <= 60).slice(0, 4).join(" | ") + (/vendorName|sellerName/.test(html) ? " [페이지 데이터에 판매자 칸 있음]" : "");
       let opt = readOption();
@@ -162,6 +200,9 @@
       if (!optPrices.length) optPrices = readOptItems(price);
       /* 고른 옵션을 못 읽었으면 목록에서 지금 가격과 같은 옵션 (하나일 때만) */
       if (optPrices.length && !optPrices.some(x => x.o === opt)) { const hit = optPrices.filter(x => x.p === price); opt = hit.length === 1 ? hit[0].o : ""; }
+      /* 고른 값 하나만으론 어떤 색이 있는지 몰라 '단일옵션'으로 나가던 것 → 페이지의 전체 색상 목록을 옵션으로 (11/17 v194, 
+         생성기 fillCoupang이 의뢰서 6번이 비고 7번에 색상 이야기가 있을 때 이 목록을 씀) */
+      { const allC = readAllColors(); if (allC && (!opt || !opt.trim() || /^단일\s*옵션$/.test(opt) || (!/[×*]/.test(opt) && opt.length <= 20))) opt = allC; }
       /* 로켓 배송: 배지 이미지, 클래스, 본문 키워드로 정확히 감지 (10/30: 텍스트에 안 나오는 SVG/이미지 배지 감지 보강) */
       const rkTxt = (function (t, nm) { const c = t.search(/쿠팡\s*상품\s*번호|이런\s*건\s*어때요|함께\s*비교하면|다른\s*고객이\s*함께/); if (c > 0) t = t.slice(0, c); const ni = nm ? t.indexOf(String(nm).slice(0, 12)) : -1; if (ni > 0) t = t.slice(ni); return t.slice(0, 8000); })(txt, name);
       const isRocket = !!document.querySelector('.prod-badge__rocket, [class*="badge-rocket"], [class*="rocket-badge"], img[alt*="로켓"], [class*="delivery-badge-rocket"]') ||
@@ -171,9 +212,34 @@
     }
     const pm = L.pathname.match(/products\/(\d+)/);
     if (!pm) return { err: "네이버는 스마트스토어(또는 브랜드스토어) 상품 페이지에서 눌러 주세요." };
-    const parts = document.title.split(/\s+:\s+/);
-    const name = (og("title") || parts[0] || "").split(/\s+:\s+/)[0].trim();
-    const seller = (parts.length > 1 ? parts[parts.length - 1] : og("site_name")).replace(/\s*[-|]?\s*네이버.*$/, "").trim();
+    /* 상품명·판매처를 뽑을 때 title을 '상품명 : 스토어이름'으로 나눔 — 쿠팡 칸에만 있고 여기 빠져 있어
+       네이버 상품 페이지에서 누르면 'parts is not defined'로 바로 멈추던 것 (11/20 1.8.6, 사용자 제보 '네이버 하니까 바로 꺼지잖아') */
+    const parts = (document.title || "").split(/\s+:\s+/);
+    /* 상품명·판매처: 모바일 스마트스토어는 og:title·title이 짧은 이름만 담기도 해서 화면 제목·구조화 데이터(JSON-LD)까지 봄 (11/18 #77)
+       - 상품명: og:title·title의 이름 → JSON-LD name → 화면 상품 제목 중 '첫 낱말이 같은' 가장 긴 것
+       - 판매처: title 마지막 칸(스토어 이름) → 없으면 JSON-LD brand → 화면 브랜드 ('네이버 스마트스토어'만 읽어 빈칸이 되던 것) */
+    const ld = (() => { try { const out = []; document.querySelectorAll('script[type="application/ld+json"]').forEach(s => { try { const j = JSON.parse(s.textContent || "null"); (Array.isArray(j) ? j : [j]).forEach(o => { if (o && o["@graph"]) o["@graph"].forEach(x => out.push(x)); else out.push(o); }); } catch (e) {} }); return out.filter(o => o && /product/i.test(String(o["@type"] || "")))[0] || null; } catch (e) { return null; } })();
+    const ldName = String((ld && ld.name) || "").replace(/\s+/g, " ").trim();
+    const ldBrand = String((ld && ld.brand && (ld.brand.name || ld.brand)) || "").replace(/\s+/g, " ").trim();
+    /* 판매처(스토어 이름)를 먼저 읽음 — 상품명 끝에 붙는 '| 스토어이름 · 복사'를 떼는 데 씀 (#96, 11/20) */
+    let seller = (parts.length > 1 ? parts[parts.length - 1] : og("site_name")).replace(/\s*[-|]?\s*네이버.*$/, "").trim();
+    if (!seller) seller = ldBrand;
+    if (!seller) { try { seller = [...document.querySelectorAll('[class*="brand"], [class*="brandName"]')].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).filter(t => t.length >= 2 && t.length <= 30).sort((a, b) => a.length - b.length)[0] || ""; } catch (e) {} }
+    /* 스마트스토어 상품명 칸은 '상품명 | 스토어이름 복사'처럼 스토어 이름과 복사 단추 글자까지 담아 옴 → 떼어 냄 (#96, 11/20).
+       쿠팡 상품명에도 '|'가 들어갈 수 있어 판매처 이름과 같은 꼬리만 떼고, 규격 숫자·수량은 건드리지 않음 */
+    const tidyNm = t => {
+      let s = String(t || "").replace(/\s+/g, " ").trim();
+      for (let k = 0; k < 3; k++) {
+        const before = s;
+        s = s.replace(/\s*(?:\||·|ㆍ|-|–)\s*(?:복사|copy)\s*$/i, "").replace(/\s*(?:복사|copy)$/i, "").trim();
+        if (seller && seller.length >= 2) s = s.replace(new RegExp("\\s*(?:\\||｜|·|ㆍ|-|–)\\s*" + seller.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*(?:복사|copy)?\\s*$", "i"), "").trim();
+        if (s === before) break;
+      }
+      return s;
+    };
+    const tName = tidyNm((og("title") || parts[0] || "").split(/\s+:\s+/)[0].trim());
+    const domName = (() => { try { return [...document.querySelectorAll('h1, h2, h3, [class*="product-title"], [class*="prd_name"], [class*="productName"], [class*="prod_name"]')].map(e => tidyNm(e.innerText || "")).filter(t => t.length >= 6 && t.length <= 200 && !/^(?:상품|카테고리|리뷰|구매|배송|판매|네이버|NAVER|전체)/.test(t)).sort((a, b) => b.length - a.length)[0] || ""; } catch (e) { return ""; } })();
+    const name = [tName, tidyNm(ldName), domName].filter(Boolean).reduce((a, b) => (b.length > a.length && (!tName || b.slice(0, 2) === tName.slice(0, 2)) ? b : a), tName || "");
     /* 가격: 페이지 안 상품 데이터(할인가 → 판매가) → 화면에서 상품명 바로 뒤 가격 중 낮은 것(정가 줄 그은 것 말고 할인가) */
     let price = 0;
     const dm = html.match(/"discountedSalePrice"\s*:\s*(\d{3,})/) || html.match(/"mobileDiscountedSalePrice"\s*:\s*(\d{3,})/);
