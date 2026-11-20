@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         오리 상품정보 도우미
 // @namespace    https://sujin-baby.github.io/guide/
-// @version      196.0
+// @version      203.0
 // @description  쿠팡·네이버·토스·올리브영 화면 오른쪽 아래 단추로 상품 정보를 한 번에 가져와요 (오리방 체험단)
 // @author       오리방
 // @match        *://*.coupang.com/*
@@ -13,7 +13,7 @@
 // @noframes
 // ==/UserScript==
 /*
-  오리 상품정보 도우미 (생성기 v196)
+  오리 상품정보 도우미 (생성기 v203)
   - 생성기(guide/index.html)의 '상품 위치 찾기' 북마크 코드(bm-src)를 그대로 담고 있어요.
   - 상품 정보를 읽는 규칙을 고치면  node ori/tools/build_userscript.js  를 다시 돌려
     이 파일과 생성기 안의 스크립트(us-src)를 함께 맞춰 주세요. (안 맞으면 CI가 멈춥니다)
@@ -24,7 +24,7 @@
 (function () {
   "use strict";
   if (window.__ORI_HELPER__) return;
-  window.__ORI_HELPER__ = "196.0";
+  window.__ORI_HELPER__ = "201.0";
 
   /* 상품 정보 읽기 = 생성기 북마크 코드 그대로. oriMode: "info" 전체 / "pos" 위치 줄만 */
   async function ORI_RUN(oriMode) {
@@ -228,12 +228,25 @@
       const ld = (() => { try { const out = []; document.querySelectorAll('script[type="application/ld+json"]').forEach(s => { try { const j = JSON.parse(s.textContent || "null"); (Array.isArray(j) ? j : [j]).forEach(o => { if (o && o["@graph"]) o["@graph"].forEach(x => out.push(x)); else out.push(o); }); } catch (e) {} }); return out.filter(o => o && /product/i.test(String(o["@type"] || "")))[0] || null; } catch (e) { return null; } })();
       const ldName = String((ld && ld.name) || "").replace(/\s+/g, " ").trim();
       const ldBrand = String((ld && ld.brand && (ld.brand.name || ld.brand)) || "").replace(/\s+/g, " ").trim();
-      const tName = (og("title") || parts[0] || "").split(/\s+:\s+/)[0].trim();
-      const domName = (() => { try { return [...document.querySelectorAll('h1, h2, h3, [class*="product-title"], [class*="prd_name"], [class*="productName"], [class*="prod_name"]')].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).filter(t => t.length >= 6 && t.length <= 200 && !/^(?:상품|카테고리|리뷰|구매|배송|판매|네이버|NAVER|전체)/.test(t)).sort((a, b) => b.length - a.length)[0] || ""; } catch (e) { return ""; } })();
-      const name = [tName, ldName, domName].filter(Boolean).reduce((a, b) => (b.length > a.length && (!tName || b.slice(0, 2) === tName.slice(0, 2)) ? b : a), tName || "");
+      /* 판매처(스토어 이름)를 먼저 읽음 — 상품명 끝에 붙는 '| 스토어이름 · 복사'를 떼는 데 씀 (#96, 11/20) */
       let seller = (parts.length > 1 ? parts[parts.length - 1] : og("site_name")).replace(/\s*[-|]?\s*네이버.*$/, "").trim();
       if (!seller) seller = ldBrand;
       if (!seller) { try { seller = [...document.querySelectorAll('[class*="brand"], [class*="brandName"]')].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).filter(t => t.length >= 2 && t.length <= 30).sort((a, b) => a.length - b.length)[0] || ""; } catch (e) {} }
+      /* 스마트스토어 상품명 칸은 '상품명 | 스토어이름 복사'처럼 스토어 이름과 복사 단추 글자까지 담아 옴 → 떼어 냄 (#96, 11/20).
+         쿠팡 상품명에도 '|'가 들어갈 수 있어 판매처 이름과 같은 꼬리만 떼고, 규격 숫자·수량은 건드리지 않음 */
+      const tidyNm = t => {
+        let s = String(t || "").replace(/\s+/g, " ").trim();
+        for (let k = 0; k < 3; k++) {
+          const before = s;
+          s = s.replace(/\s*(?:\||·|ㆍ|-|–)\s*(?:복사|copy)\s*$/i, "").replace(/\s*(?:복사|copy)$/i, "").trim();
+          if (seller && seller.length >= 2) s = s.replace(new RegExp("\\s*(?:\\||｜|·|ㆍ|-|–)\\s*" + seller.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*(?:복사|copy)?\\s*$", "i"), "").trim();
+          if (s === before) break;
+        }
+        return s;
+      };
+      const tName = tidyNm((og("title") || parts[0] || "").split(/\s+:\s+/)[0].trim());
+      const domName = (() => { try { return [...document.querySelectorAll('h1, h2, h3, [class*="product-title"], [class*="prd_name"], [class*="productName"], [class*="prod_name"]')].map(e => tidyNm(e.innerText || "")).filter(t => t.length >= 6 && t.length <= 200 && !/^(?:상품|카테고리|리뷰|구매|배송|판매|네이버|NAVER|전체)/.test(t)).sort((a, b) => b.length - a.length)[0] || ""; } catch (e) { return ""; } })();
+      const name = [tName, tidyNm(ldName), domName].filter(Boolean).reduce((a, b) => (b.length > a.length && (!tName || b.slice(0, 2) === tName.slice(0, 2)) ? b : a), tName || "");
       let img = og("image"); if (img.indexOf("//") === 0) img = "https:" + img;
       const kwh = hv("kw") || sugKw(name).join("|");
       const html0 = document.documentElement.innerHTML;
@@ -598,7 +611,9 @@
   }
   /* 판매처: 첫 후보가 '가입' 같은 엉터리면 버리고 다음 후보로 (seller_test가 이 줄부터 잘라 시험함, 지우지 마세요) */
   const BAD_SELLER = /가입|보러가기|평가|정보|^특가|로켓|할인|쿠폰|무료|배송|와우|입점|다를\s*수|있습니다|없습니다|합니다|바랍니다|드립니다|확인|주의|안내|참고|동일|상이|기준|경우|제외|배지|인증/;
-  const okSeller = s => !!s && s.length <= 30 && !/^(?:[는은이가의를와과]\s|[,\s])/.test(s) && !BAD_SELLER.test(s);
+  /* '보기(2)'·'상품평 보기(12)'·'더보기' 같은 쿠팡 버튼 글자는 판매처가 아님 (11/19 #88: 판매처에 '보기(2)') */
+  function isUiSeller(s) { return /^(?:[가-힣]{1,8}\s+)?보기\s*\(\s*\d+\s*\)$|^(?:보기|더\s*보기|전체\s*보기|접기|펼치기)$|^(?:상품평|리뷰|후기|판매자|판매처|옵션|색상|사이즈|수량|배송|문의|상세\s*정보)\s*\(\s*\d+\s*\)$/.test(String(s || "").replace(/\s+/g, " ").trim()); }
+  const okSeller = s => !!s && s.length <= 30 && !/^(?:[는은이가의를와과]\s|[,\s])/.test(s) && !BAD_SELLER.test(s) && !isUiSeller(s);
   const readCoupangSeller = () => {
     for (const e of document.querySelectorAll('.prod-brand-name, [class*="brand-name"], [class*="brandName"], a[class*="brand"]')) {
       const t = (e.textContent || "").replace(/\s+/g, " ").trim();
