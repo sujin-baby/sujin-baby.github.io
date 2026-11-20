@@ -5,6 +5,10 @@
   const norm = t => String(t || "").replace(/[\s\[\]\(\)\/,.·\-_+~!*'"]/g, "").toLowerCase();
   const isNaver = /naver\.com$/.test(location.hostname);
   const numOf = s => Number(String(s || "").replace(/[^0-9]/g, "")) || 0;
+  /* 화면 글자·HTML을 임는 곳이 한 군데라도 터지면 상품 정보를 통째로 못 읽음(11/20 1.8.7:
+     '탭만 열리고 아무 작업도 안 함'). body가 없거나(아직 안 그려짐) innerText가 없어도 빈 글로 돌려줌 */
+  const bodyText = () => { try { return (document.body && document.body.innerText) || ""; } catch (e) { return ""; } };
+  const htmlText = () => { try { return (document.documentElement && document.documentElement.innerHTML) || ""; } catch (e) { return ""; } };
 
   /* 고른 옵션: '색상 × 수량' 같은 이름표를 찾아 바로 옆 값 (콜론은 화면 꾸밈이라 글에 없을 때가 있음) */
   const OPT_LAB = /^(개당\s*)?(색상|옵션|사이즈|수량|구성|선택|용량|맛|종류|컬러|타입|중량|무게|개수)(\s*[×x\/·,]\s*(색상|옵션|사이즈|수량|구성|선택|용량|맛|종류|컬러|타입|중량|무게|개수))*\s*[:：]?$/;
@@ -17,7 +21,7 @@
       v = v.replace(/^\s*[:：]\s*/, "").replace(/\s+/g, " ").trim();
       if (v && v.length <= 60 && !/선택하세요|선택해\s*주세요|^\d+$/.test(v)) return v;
     }
-    const om = document.body.innerText.match(/(?:색상|옵션|구성|사이즈|수량|선택)[^\n]{0,12}[:：]\s*([^\n]{1,40})/);
+    const om = bodyText().match(/(?:색상|옵션|구성|사이즈|수량|선택)[^\n]{0,12}[:：]\s*([^\n]{1,40})/);
     return om ? om[1].trim() : "";
   }
   /* 전체 색상/옵션 목록 (11/17 v194): 고른 값 하나만 읽으면 다른 색이 있는지 몰라 '단일옵션'으로 나감.
@@ -117,6 +121,7 @@
   /* 배송비: 상품명 뒤 글에서 '배송비 3,000원' / '무료배송' / '30,000원 이상 (구매 시) 무료'. 가격이 무료 조건에 맞으면 무료 (사용자 요청 10/20)
      '일반배송 | 2,500원'(올리브영)도. '추가 배송비'(제주·도서산간), 반품·교환 배송비는 건너뜀 */
   const shipOf = (txt, name, price) => {
+    txt = String(txt || "");
     const i0 = name ? txt.indexOf(name.slice(0, 10)) : -1, t = (i0 >= 0 ? txt.slice(i0, i0 + 5000) : txt.slice(0, 8000)).replace(/\s+/g, " ");
     const w = n => n.toLocaleString("ko-KR");
     const thM = t.match(/(\d{1,3}(?:,\d{3})+|\d{4,})\s*원\s*이상\s*(?:구매|주문|결제)?\s*(?:시|하면)?\s*(?:배송비\s*)?무료/);
@@ -129,10 +134,16 @@
     if (/무료\s*배송|배송비\s*[:：]?\s*무료/.test(t)) return "무료";
     return "확인 필요 (상품 페이지에서 배송비를 못 읽었어요)";
   };
+  /* 어떤 이유로든 터지면 백지 대신 이유를 돌려준다 (부르는 쪽이 결과 상자에 그대로 보여 줌) */
   function readProduct() {
+    try { return readProduct_(); }
+    catch (e) { return { site: isNaver ? "naver" : "coupang", mob: /^m\./.test(location.hostname), pid: "", item: "", name: "", seller: "", opt: "", price: 0, ship: "", img: "",
+      err: "상품 정보를 읽다가 멈춰요 (" + String((e && e.message) || e) + "). 페이지가 다 띄워진 뒤 아이콘을 한 번 더 눌러 주세요." }; }
+  }
+  function readProduct_() {
     const L = location;
-    const og = n => { const m = document.querySelector('meta[property="og:' + n + '"]'); return m ? (m.content || "") : ""; };
-    const html = document.documentElement.innerHTML, txt = document.body.innerText;
+    const og = n => { try { const m = document.querySelector('meta[property="og:' + n + '"]'); return m ? String(m.content || "") : ""; } catch (e) { return ""; } };
+    const html = htmlText(), txt = bodyText();
     let img = og("image"); if (img.indexOf("//") === 0) img = "https:" + img;
     const num = s => Number(String(s || "").replace(/[^0-9]/g, "")) || 0;
     const firstPrices = (t, n) => (t.match(/\d{1,3}(?:,\d{3})+\s*원/g) || []).slice(0, n).map(num).filter(x => x >= 100);
@@ -338,14 +349,14 @@
   }
   /* 쇼핑몰이 띄운 보안 확인(캡차) 화면인지: 상품 칸이 하나도 없고 보안 확인 문구가 있을 때만 */
   const BLOCK_RE = /자동\s*입력\s*방지|보안\s*확인|영수증|비정상적인|일시적으로\s*제한|접속이\s*(제한|불가)|로봇이\s*아닙|Access Denied|captcha|unusual traffic|사용권한이\s*없/i;
-  const blockedText = () => !!document.body && BLOCK_RE.test(document.body.innerText.slice(0, 4000)) && cardList().length === 0;
-  const snippet = () => ((document.title || "") + " | " + (document.body ? document.body.innerText : "")).replace(/\s+/g, " ").trim().slice(0, 90);
+  const blockedText = () => !!document.body && BLOCK_RE.test(bodyText().slice(0, 4000)) && cardList().length === 0;
+  const snippet = () => ((document.title || "") + " | " + bodyText()).replace(/\s+/g, " ").trim().slice(0, 90);
   async function waitReady() {
     let last = -1, same = 0;
     for (let i = 0; i < 50; i++) {
       await sleep(300);
       if (!document.body) continue;
-      const n = document.body.innerText.length + cardList().length * 1000;
+      const n = bodyText().length + cardList().length * 1000;
       if (n > 300 && n === last) { if (++same >= 2) return; } else same = 0;
       last = n;
     }
@@ -408,7 +419,7 @@
     const list = P.list;
     let hit = P.hit, how = P.how, adHit = P.adHit, org = P.org;
     FOUND_EL = P.el;
-    const body = document.body.innerText;
+    const body = bodyText();
     if (!isNaver) window.scrollTo(0, 0);
     /* 비슷한 상품이 많은지: 가격비교·카탈로그로 묶인 칸이거나, 같은 상품명이 광고 아닌 칸에 2개 이상 */
     const nk15 = norm(o.nm).slice(0, 15);
@@ -454,7 +465,7 @@
     if (!bx) {
       bx = document.createElement("div"); bx.id = "__pl_box";
       bx.style.cssText = "position:fixed;right:8px;bottom:8px;z-index:2147483647;width:360px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow-y:auto;overflow-x:hidden;box-sizing:border-box;background:#fff;color:#1d1a24;border:2px solid #5b2a86;border-radius:10px;padding:14px;font:13px/1.5 sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.2);text-align:left";
-      document.body.appendChild(bx);
+      (document.body || document.documentElement).appendChild(bx);
     }
     bx.textContent = "";
     const add = (tag, css, text) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (text != null) e.textContent = text; bx.appendChild(e); return e; };
@@ -484,7 +495,7 @@
   function copy(text) {
     const t = document.createElement("textarea");
     t.value = text; t.style.cssText = "position:fixed;left:-9999px;top:0";
-    document.body.appendChild(t); t.select();
+    (document.body || document.documentElement).appendChild(t); t.select();
     let ok = false; try { ok = document.execCommand("copy"); } catch (e) {}
     t.remove();
     return ok;
@@ -514,7 +525,7 @@
     let query = qp.get("query") || qp.get("q") || "";   /* 네이버 query, 쿠팡 q */
     if (!query) { const inp = document.querySelector('input[type="search"], input[name="query"], header input[type="text"]'); if (inp) query = inp.value || ""; }
     let lo = numOf(qp.get("minPrice")), hi = numOf(qp.get("maxPrice"));
-    const m = document.body.innerText.slice(0, 8000).match(/(\d{1,3}(?:,\d{3})+)\s*원?\s*~\s*(\d{1,3}(?:,\d{3})+)\s*원/);
+    const m = bodyText().slice(0, 8000).match(/(\d{1,3}(?:,\d{3})+)\s*원?\s*~\s*(\d{1,3}(?:,\d{3})+)\s*원/);
     if (m && isNaver) { lo = numOf(m[1]); hi = numOf(m[2]); }   /* 쿠팡은 상품 칸 가격('9,800원~12,800원')을 필터로 잘못 읽어서 주소(minPrice·maxPrice)만 */
     let page = numOf(qp.get("pagingIndex")) || numOf(qp.get("page"));   /* 네이버 pagingIndex, 쿠팡 page */
     if (!page) {

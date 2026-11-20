@@ -42,9 +42,10 @@ async function autoRun(url, gt) {
   if (busy && Date.now() - busySince < 12 * 60000) { pushGen({ status: "이미 찾는 중이에요. 끝나고 다시 눌러 주세요." }); return; }
   pushGen({ status: "상품 페이지 여는 중…" });
   await keepFn(fnOf(String(url).split("#")[1] || ""));   /* 단축 링크는 넘어가며 #을 버려서 미리 기억 */
-  const t = await chrome.tabs.create({ url: url, active: false, windowId: gt.windowId, index: gt.index + 1 });
-  autoTab = t.id;
+  let t = null;
   try {
+    t = await chrome.tabs.create({ url: url, active: false, windowId: gt.windowId, index: gt.index + 1 });
+    autoTab = t.id;
     /* 단축 링크(link.coupang.com 등)가 상품 페이지로 넘어갈 때까지 (최대 40초) */
     let tab = t;
     for (let i = 0; i < 80; i++) { await sleep(500); tab = await chrome.tabs.get(t.id); if (tab.status === "complete" && (/\/products\/\d+|goodsNo=|toss\.shopping\/i\//i.test(tab.url || "") || (i >= 12 && /shopping-discovery/i.test(tab.url || "")))) break; }
@@ -52,13 +53,34 @@ async function autoRun(url, gt) {
     tab = await chrome.tabs.get(t.id);
     if (/oliveyoung\.co\.kr/.test(tab.url || "")) return await autoOy(tab);
     if (/toss\.(shopping|im)/.test(tab.url || "")) { await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["oy.js"] }); return; }   // 토스: 상품 정보만 (검색 순위는 토스 앱 안이라 못 찾음)
-    if (!/\/products\/\d+/.test(tab.url || "")) { pushGen({ status: "상품 페이지가 안 열렸어요. 열린 탭을 확인해 주세요." }); await chrome.tabs.update(t.id, { active: true }); return; }
+    if (!/\/products\/\d+/.test(tab.url || "")) {
+      /* 왜 상품 페이지가 아닌지 알 수 있게 주소를 같이 보여 줌 (shopping.naver.com·naver.me 등, 11/20 1.8.7).
+         백그라운드 탭이라 안내를 못 보고 그냥 멈춘 것처럼 보이던 것 → 탭을 앞으로 보여 줌 */
+      const u = String(tab.url || tab.pendingUrl || "");
+      pushGen({ status: "상품 페이지가 안 열렸어요 (" + u.slice(0, 90) + "). 열린 탭을 확인해 주세요." });
+      try { await chrome.tabs.update(t.id, { active: true }); } catch (e) {}
+      return;
+    }
+    const siteName = /naver\.com/.test(tab.url || "") ? "네이버" : "쿠팡";
+    pushGen({ status: "상품 정보 읽는 중… (" + siteName + ")" });
     const out = await start(tab);
     /* 쿠팡: 끝나면 상품 탭 닫음 (결과는 생성기에). 네이버: 검색 탭이 따로 열려서 상품 탭만 닫음.
        실패했으면(out 없음) 네이버라도 상품 탭을 닫지 않고 활성 탭으로 보여 줌 — 탭이 그냥 사라져서
        '확장 프로그램이 바로 꺼진다'로 보이던 것 (11/20 1.8.6) */
     if (out) chrome.tabs.remove(t.id).catch(() => {});
     else chrome.tabs.update(t.id, { active: true }).catch(() => {});
+  } catch (e) {
+    /* 어디서 멈췄는지 알 수 있게: 실제 오류와 그때 주소를 생성기·탭에 남기고 그 탭을 앞으로 보여 줌
+       (11/20 1.8.7 — 백그라운드 탭이라 아무 말 없이 끝난 것처럼 보이던 것) */
+    const em = String((e && e.message) || e);
+    let u = "";
+    try { u = String((await chrome.tabs.get(t.id)).url || ""); } catch (e2) {}
+    pushGen({ status: "멈췄어요: " + em + (u ? " (" + u.slice(0, 90) + ")" : "") });
+    if (t) {
+      try { await chrome.tabs.update(t.id, { active: true }); } catch (e2) {}
+      await ui(t.id, { title: "상품 정보를 가져오다 멈췄어요", msg: em + (u ? "\n화면: " + u : ""),
+        notes: [{ t: "이 탭에서 아이콘을 한 번 더 눌러 보시고, 같은 곳에서 멈추면 이 화면을 캡처해서 알려 주세요.", warn: true }] }).catch(() => null);
+    }
   } finally { autoTab = 0; }
 }
 /* 올리브영: 상품 페이지에서 oy.js(상품 정보) → 같은 탭을 검색 화면으로 → oy.js(몇 번째). 결과는 oy.js가 생성기로 보냄. 탭은 분홍 테두리 확인용으로 둠 */
@@ -70,7 +92,7 @@ async function autoOy(tab) {
   const su = r && r.result;
   if (!su) { pushGen({ status: "올리브영 상품 정보를 못 읽었어요. 열린 탭을 확인해 주세요." }); await chrome.tabs.update(tid, { active: true }); return; }
   pushGen({ status: "올리브영 검색 화면에서 찾는 중…" });
-  const p = waitComplete(tid, 30000); await chrome.tabs.update(tid, { url: su }); await p;
+  const p = waitCompleteEvent(tid, 30000); await chrome.tabs.update(tid, { url: su }); await p;
   await sleep(1500);
   await chrome.scripting.executeScript({ target: { tabId: tid }, files: ["oy.js"] });
 }
@@ -180,7 +202,16 @@ function pageOf(base, site, dev, p) {
 const sameKeys = (a, b) => !!a && !!b && a.length > 0 && a.join("|") === b.join("|");
 
 /* ---------- 찾는 창 ---------- */
-function waitComplete(tabId, ms) {
+/* 탭이 이미 다 그려진 상태면 기다리지 않고 바로 넘어감.
+   새로 만든 탭이 캐시로 1초 만에 다 뜨면 'complete' 신호가 듣기 전에 지나가 25초를 그냥 세던 것 (11/20 1.8.7 — 자동 가져오기가 멈춘 것처럼 보임) */
+async function waitComplete(tabId, ms) {
+  let now = null;
+  try { now = await chrome.tabs.get(tabId); } catch (e) { now = null; }
+  if (now && now.status === "complete") return;
+  return waitCompleteEvent(tabId, ms);
+}
+/* 주소를 바꾸기 직전에 미리 걸어 두는 쪽 (바꾼 뒤에 걸면 complete를 놓칠 수 있음) */
+function waitCompleteEvent(tabId, ms) {
   return new Promise(res => {
     let t = null;
     const done = () => { clearTimeout(t); chrome.tabs.onUpdated.removeListener(l); res(); };
@@ -199,7 +230,7 @@ async function nav(url) {
   /* 네이버는 너무 빨리 넘기면 보안 확인을 띄워서 사람처럼 1~2.5초 쉬고 */
   if (/naver\.com/.test(url)) await sleep(1000 + Math.random() * 1500);
   work.lastUrl = url;
-  const p = waitComplete(work.tabId, 25000);
+  const p = waitCompleteEvent(work.tabId, 25000);   /* 넘기기 전에 걸어 둬야 complete를 놓치지 않음 */
   await chrome.tabs.update(work.tabId, { url: url });
   await p;
 }
@@ -449,10 +480,25 @@ async function run(tab) {
   if (/^https:\/\/(www|m)\.coupang\.com\/(np|nm)\/search/.test(tab.url || "")) return coupangHere(tab);
   /* 올리브영: 상품 페이지·검색 화면 모두 북마크와 같은 코드(oy.js)로 */
   if (/^https?:\/\/([a-z]+\.)?(oliveyoung\.co\.kr|toss\.shopping|toss\.im)\//.test(tab.url || "")) { await chrome.scripting.executeScript({ target: { tabId: tid }, files: ["oy.js"] }); return; }
-  let info = await call(tid, "readProduct").catch(() => null);
-  /* 상품 화면이 아직 다 안 그려졌으면(상품명 빈칸) 최대 15초 기다렸다 다시 읽음 (11/1: 열고 2초 만에 읽어서 다 빈칸이었음) */
-  for (let i = 0; i < 15 && info && !info.err && !info.name && /coupang\.com/.test(tab.url || ""); i++) { await sleep(1000); info = await call(tid, "readProduct").catch(() => info); }
-  if (!info) { await ui(tid, { title: "상품 위치 찾기", msg: "이 화면은 읽을 수 없어요. 쿠팡·네이버·올리브영 상품 페이지에서 눌러 주세요." }); return; }
+  /* 상품 정보 읽기: 오류를 뭉개지 않고 실제 오류 글자를 생성기·결과 상자에 그대로 보여 줌
+     (11/20 1.8.7 — .catch(() => null)로 삼켜서 '탭만 열리고 아무것도 안 함'의 이유를 알 수 없었음) */
+  let info = null, rdErr = "";
+  const late = /(coupang\.com|naver\.com)/.test(tab.url || "");
+  for (let i = 0; i < 16; i++) {
+    try { info = await call(tid, "readProduct"); rdErr = ""; } catch (e) { info = null; rdErr = String((e && e.message) || e); }
+    if (info && (info.err || info.name)) break;   /* 다 읽었으면 끝 */
+    if (!late) break;                              /* 화면을 늦게 그리는 곳(쿠팡·네이버)만 기다림 */
+    /* 상품 화면이 아직 다 안 그려졌으면(상품명 빈칸·오류) 1초 뒤 다시 — 11/1 쿠팡에 이어
+       네이버 스마트스토어도 백그라운드 탭에서 늦게 그려져 상품명이 빈칸으로 왔다 (11/20 1.8.7, 예전엔 쿠팡만) */
+    await sleep(1000);
+  }
+  if (!info) {
+    const why = rdErr ? " (" + rdErr + ")" : "";
+    pushGen({ status: "상품 정보를 못 읽었어요" + why + " — " + String(tab.url || "").slice(0, 90) });
+    await ui(tid, { title: "상품 위치 찾기", msg: "이 화면은 읽을 수 없어요. 쿠팡·네이버·올리브영 상품 페이지에서 눌러 주세요." + why,
+      notes: [{ t: "화면: " + String(tab.url || "").slice(0, 120), warn: true }] });
+    return;
+  }
   if (info.err) { await ui(tid, { title: "상품 위치 찾기", msg: info.err }); return; }
   if (/사용권한이\s*없|접속이\s*제한|Access\s*Denied/i.test(info.name || "")) {
     await ui(tid, { title: "상품 페이지 오류", msg: "쿠팡에서 사용권한 없음/차단 오류가 떴어요. 상품 페이지를 직접 확인해 주세요." });
@@ -580,9 +626,11 @@ async function naverProduct(tab, info) {
   await ui(tab.id, { title: "상품 정보 " + (copied ? "복사됨" : "") + " · 네이버 검색 탭을 열었어요", out: out, copied: copied, img: info.img,
     msg: "네이버는 자동으로 여러 페이지를 넘기면 접속을 막아서, 검색 화면은 한 화면씩 확인해요.\n새 탭의 검색 화면에서 상품을 찾아 표시해 드려요.\n순서: " + kws.map(k => "'" + k + "'" + (price ? " → '" + k + "' + 가격 " + won(price) + "원" : "")).join(" → "),
     notes: [thumb] });
+  pushGen({ status: "네이버 검색 탭 여는 중… ('" + kws[0] + "')" });
   const nt = await chrome.tabs.create({ url: nvSearchUrl(kws[0], false), index: tab.index + 1, active: true });
   await waitComplete(nt.id, 25000);
   await sleep(2000);
+  pushGen({ status: "네이버 검색 화면에서 상품 찾는 중…" });
   await naverHere(nt);
   /* 검색 탭을 열고 찾기까지 갔으면 성공 — 상품 탭은 닫아도 됨 (검색 탭이 앞에 뜸).
      중간에 실패하면 예외가 올라가 autoRun이 상품 탭을 살려 둠 (11/20 1.8.6) */
@@ -635,12 +683,12 @@ async function naverAct(tab, act) {
   await ui(tid, { title: "넘기는 중…", msg: "" });
   if (act === "next") {
     const ok = await call(tid, "clickPage", [h.page + 1]);
-    if (!ok) { const u = new URL(tab.url); u.searchParams.set("pagingIndex", h.page + 1); const p = waitComplete(tid, 25000); await chrome.tabs.update(tid, { url: u.href }); await p; }
+    if (!ok) { const u = new URL(tab.url); u.searchParams.set("pagingIndex", h.page + 1); const p = waitCompleteEvent(tid, 25000); await chrome.tabs.update(tid, { url: u.href }); await p; }
   } else if (act === "price") {
     const ok = await call(tid, "priceUI", [t.price, t.price]);
-    if (!ok) { const u = new URL(tab.url); u.searchParams.set("minPrice", t.price); u.searchParams.set("maxPrice", t.price); u.searchParams.delete("pagingIndex"); const p = waitComplete(tid, 25000); await chrome.tabs.update(tid, { url: u.href }); await p; }
+    if (!ok) { const u = new URL(tab.url); u.searchParams.set("minPrice", t.price); u.searchParams.set("maxPrice", t.price); u.searchParams.delete("pagingIndex"); const p = waitCompleteEvent(tid, 25000); await chrome.tabs.update(tid, { url: u.href }); await p; }
   } else if (act.indexOf("kw:") === 0) {
-    const p = waitComplete(tid, 25000); await chrome.tabs.update(tid, { url: nvSearchUrl(act.slice(3), mob) }); await p;
+    const p = waitCompleteEvent(tid, 25000); await chrome.tabs.update(tid, { url: nvSearchUrl(act.slice(3), mob) }); await p;
   }
   await sleep(3500);
   const [cur] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
