@@ -3383,7 +3383,11 @@ function checkFull() {
     }
   }, 120000);
   // 잠금을 못 잡아 건너뛰면 점검에서 보이게 (11/19: 30분씩 확인이 없었는데 흔적이 없었음)
-  if (!ran) { try { const pp = PropertiesService.getScriptProperties(), old = String(pp.getProperty('CF_SKIP') || ''); pp.setProperty('CF_SKIP', (Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 잠금 못 잡아 건너뜀 / ' + old).slice(0, 300)); } catch (e) {} }
+  if (!ran) {
+    try { const pp = PropertiesService.getScriptProperties(), old = String(pp.getProperty('CF_SKIP') || ''); pp.setProperty('CF_SKIP', (Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 잠금 못 잡아 건너뜀 / ' + old).slice(0, 300)); } catch (e) {}
+    // 건너뛰면 1분 뒤 다시 (11/20: 16:30 확인이 건너뛴 뒤 다음 15분 예약까지 20분 넘게 확인이 없었음). 이미 걸려 있으면 그대로
+    try { soonCheck_(); } catch (e) {}
+  }
   report_('자동 확인', ran);
 }
 

@@ -22,5 +22,11 @@ ok(e1 && e1.yieldLock && e1.cf, '5분 실행 안에서는 비킴');
 G('globalThis.__IN_CF = true');
 let e2 = null; try { G('yieldIfWanted_()'); } catch (e) { e2 = e; }
 ok(!e2, '15분 확인 자신은 안 비킴');
+// 5) (11/20) 15분 확인이 잠금을 못 잡아 건너뛰면 1분 뒤 다시 예약
+G("globalThis.__IN_CF = false; globalThis.__TRIGS = []; LockService = { getScriptLock: function () { return { tryLock: function () { return false; }, releaseLock: function () {} }; } }; SpreadsheetApp.getUi = function () { throw new Error('no ui'); }; ScriptApp.newTrigger = function (h) { const b = { timeBased: function () { return b; }, after: function () { return b; }, create: function () { __TRIGS.push(h); return { getUniqueId: function () { return 'T' + __TRIGS.length; } }; } }; return b; }; ScriptApp.getProjectTriggers = function () { return []; }; PropertiesService.getScriptProperties().deleteProperty('SOON_TRIG_AT');");
+try { G('checkFull()'); } catch (e) {}
+ok(/잠금 못 잡아 건너뜀/.test(env.__props.get('CF_SKIP') || '') && JSON.stringify(G('__TRIGS')) === '["checkFull"]', '건너뛰면 1분 뒤 다시 ' + JSON.stringify(G('__TRIGS')) + ' ' + env.__props.get('CF_SKIP'));
+try { G('checkFull()'); } catch (e) {}
+ok(G('__TRIGS.length') === 1, '이미 걸려 있으면 또 안 검 ' + G('__TRIGS.length'));
 console.log(fails.length ? 'XX 15분 확인에 비켜 주기 시험 실패:\n- ' + fails.join('\n- ') : '✓ 5분 실행·AI 연쇄가 15분 확인에 비켜 주기 시험 통과');
 process.exit(fails.length ? 1 : 0);
