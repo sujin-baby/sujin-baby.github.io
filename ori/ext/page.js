@@ -285,7 +285,7 @@
     }
     const keyed = anchors.map(a => ({ a: a, k: keyOf(a) })).filter(x => x.k);
     const keysIn = el => { const s = new Set(); keyed.forEach(x => { if (el.contains(x.a)) s.add(x.k); }); return s; };
-    /* 한 목록(같은 부모)에 상품이 하나뿐이면 위로 끝까지 올라가 화면 전체가 ‘ 칸’이 되어 버림 →
+    /* 한 목록(같은 부모)에 상품이 하나뿐이면 위로 끝까지 올라가 화면 전체가 '칸'이 되어 버림 →
        그때는 가격(원)이 적힌 가까운 위 칸을 그 상품 칸으로 (11/20 '전체 1' 화면) */
     const PRICE_CARD = /\d{1,3}(?:,\d{3})+\s*원/;
     const seen = new Set(), cards = [];
