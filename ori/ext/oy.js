@@ -154,6 +154,55 @@
     try { if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id) chrome.runtime.sendMessage(/상품번호\s*[:：]|위치\s*[:：]/.test(out) ? { type: "plResult", text: out, shot: true } : { type: "plStatus", text: [out, note].filter(Boolean).join(" · ") }); } catch (e) {}
     return bx;
   };
+  /* 키워드가 마음에 안 들면 직접 정해서 다시 찾기 (사용자 요청 11/20, 확장 1.8.8의 결과 상자와 같은 자리).
+     모바일 북마크·Userscripts에는 background가 없어서, 그 키워드로 화면(주소)을 넘겨 다시 찾음.
+     찾는 상품은 주소 뒤(#pid=…)·localStorage에 남아 있어서 새 화면에서도 같은 상품을 찾음 */
+  const kwRow = (bx, val, ph, onGo, note, col) => {
+    col = col || "#03c75a";
+    const lb = document.createElement("div");
+    lb.style.cssText = "margin-top:10px;font-size:12px;color:#555";
+    lb.textContent = "키워드가 마음에 안 들면 직접 정해서 다시 찾기";
+    bx.appendChild(lb);
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;gap:6px;margin-top:6px";
+    const inp = document.createElement("input");
+    inp.type = "text"; inp.value = val || ""; inp.placeholder = ph || "검색어 직접 입력";
+    inp.style.cssText = "flex:1;min-width:0;padding:8px;border:1px solid #bbb;border-radius:6px;font:13px sans-serif;box-sizing:border-box";
+    const go = document.createElement("button");
+    go.textContent = "이 키워드로 찾기";
+    go.style.cssText = "padding:8px 10px;border:0;border-radius:6px;background:" + col + ";color:#fff;font:bold 13px sans-serif;white-space:nowrap";
+    const back = () => { go.disabled = false; go.textContent = "이 키워드로 찾기"; };
+    const run = () => {
+      const v = String(inp.value || "").replace(/\s+/g, " ").trim();
+      if (!v) { inp.placeholder = "검색어를 넣어 주세요"; inp.style.borderColor = "#e03131"; try { inp.focus(); } catch (e) {} return; }
+      go.disabled = true; go.textContent = "찾는 중…";
+      let r = null;
+      try { r = onGo(v); } catch (e) { back(); return; }
+      /* 화면을 넘기는 경우(주소 이동)에는 새 화면이 뜰 때까지 그대로, 이 화면에서 다시 찾는 경우에는 끝나면 되돌림 */
+      if (r && typeof r.then === "function") r.then(back, back);
+    };
+    go.onclick = run;
+    inp.addEventListener("keydown", e => { if (e && e.key === "Enter") { e.preventDefault(); run(); } });
+    row.appendChild(inp); row.appendChild(go); bx.appendChild(row);
+    if (note) { const nt = document.createElement("div"); nt.style.cssText = "color:#555;font-size:12px;margin-top:6px"; nt.textContent = note; bx.appendChild(nt); }
+    return bx;
+  };
+  /* 그 키워드로 다시 찾을 주소 — 네이버·쿠팡 검색 화면은 지금 주소의 검색어만 바꾸고 1페이지로, 상품 페이지는 그 키워드의 검색 화면 */
+  const kwUrl = kw => {
+    const u = new URL(L.href);
+    if (/shopping\.naver\.com$/.test(L.hostname) && /\/search\//.test(L.pathname)) {
+      u.searchParams.set("query", kw); u.searchParams.delete("pagingIndex");
+      if (/[#&]kw=/.test(u.hash)) u.hash = u.hash.replace(/([#&])kw=[^&]*/, "$1kw=" + encodeURIComponent(kw));
+      return u.href;
+    }
+    if (/coupang\.com$/.test(L.hostname) && /\/n[pm]\/search/.test(L.pathname)) {
+      u.searchParams.set("q", kw); u.searchParams.delete("page");
+      return u.href;
+    }
+    const mo = /^m\./.test(L.hostname) || /iPhone|iPad|Android/i.test(navigator.userAgent);
+    if (/naver\.com$/.test(L.hostname)) return (mo ? "https://msearch.shopping.naver.com" : "https://search.shopping.naver.com") + "/search/all?query=" + encodeURIComponent(kw);
+    return (mo ? "https://m.coupang.com/nm/search?q=" : "https://www.coupang.com/np/search?q=") + encodeURIComponent(kw);
+  };
   /* ---------- 네이버: 스마트스토어 상품 페이지 = 상품 정보, 네이버 쇼핑 검색 화면 = 찾은 페이지 ---------- */
   if (/naver\.com$/.test(L.hostname)) {
     const pm = L.pathname.match(/products\/(\d+)/);
@@ -194,13 +243,18 @@
       if (!prh) { const t0 = document.body.innerText, i0 = t0.indexOf(name.slice(0, 10)); const ps = ((i0 >= 0 ? t0.slice(i0, i0 + 1500) : t0).match(/\d{1,3}(?:,\d{3})+\s*원/g) || []).slice(0, 2).map(x => Number(x.replace(/[^0-9]/g, ""))); if (ps.length) prh = Math.min.apply(null, ps); }
       const mob0 = /^m\./.test(L.hostname) || /iPhone|iPad|Android/i.test(navigator.userAgent);
       const kw0 = (kwh.split("|")[0] || "").trim() || name;
-      const sUrl = (mob0 ? "https://msearch.shopping.naver.com" : "https://search.shopping.naver.com") + "/search/all?query=" + encodeURIComponent(kw0) +
-        "#pid=" + pm[1] + "&nm=" + encodeURIComponent(name) + "&st=" + encodeURIComponent(seller) + (kwh ? "&kw=" + encodeURIComponent(kwh) : "") + (prh ? "&pr=" + prh : "");
+      /* 직접 정한 키워드로 열 때도 같은 모양 — 상품번호·상품명·판매처·가격을 주소 뒤(#)에 남겨 그 화면에서 이 상품을 찾게 (11/20) */
+      const sUrlOf = (k, kl) => (mob0 ? "https://msearch.shopping.naver.com" : "https://search.shopping.naver.com") + "/search/all?query=" + encodeURIComponent(k) +
+        "#pid=" + pm[1] + "&nm=" + encodeURIComponent(name) + "&st=" + encodeURIComponent(seller) + "&kw=" + encodeURIComponent(kl || k) + (prh ? "&pr=" + prh : "");
+      const sUrl = sUrlOf(kw0, kwh);
       const bx = show(["상품명 : " + name, "판매처 : " + seller, "상품번호 : " + pm[1], "옵션 : " + (readOpt() || "단일옵션"), prh ? "가격 : " + prh.toLocaleString("ko-KR") + "원" : "", "배송비 : " + shipOf(document.body.innerText, name, prh), img ? "썸네일 : " + img : ""].filter(Boolean).join("\n"),
         "위치는 아래 [위치 찾기] → 열린 네이버 쇼핑 화면에서 이 북마크를 한 번 더. 키워드: " + kwh.split("|").join(" → ") + (prh ? " (각각 가격 " + prh.toLocaleString("ko-KR") + "원 필터도)" : ""));
       const go = document.createElement("a"); go.href = sUrl; go.target = "_blank"; go.rel = "noopener"; go.textContent = "위치 찾기 (네이버 쇼핑 열기)";
       go.style.cssText = "display:block;margin-top:8px;padding:9px;border-radius:6px;background:#03c75a;color:#fff;text-align:center;font-weight:700;text-decoration:none";
       bx.appendChild(go);
+      /* 키워드가 마음에 안 들면 직접 정해서 다시 찾기 (11/20, 확장 1.8.8과 같은 자리) — 그 키워드로 검색 화면을 열고 거기서 한 번 더 */
+      kwRow(bx, kw0, "다른 검색어로 찾기", v => { L.href = sUrlOf(v, v); },
+        "그 키워드로 네이버 쇼핑 검색 화면을 열어요. 열리면 이 북마크(🔍 위치 찾기)를 한 번 더 눌러 주세요.");
       return;
     }
     if (/shopping\.naver\.com$/.test(L.hostname)) {
@@ -319,7 +373,8 @@
         /* 비슷한 상품이 많은지: 가격비교·카탈로그로 묶인 칸이거나, 같은 상품명이 광고 아닌 칸에 2개 이상 */
         const nk15 = norm(T.nm).slice(0, 15), cs2 = cards();
         const sim = /판매처\s*\d+|쇼핑몰별\s*최저가|최저\s*[\d,]+\s*원|가격\s*비교/.test(f.el.innerText || "") || (nk15.length >= 8 && cs2.filter(el => !isAd(el) && norm(el.innerText).indexOf(nk15) !== -1).length >= 2);
-        show([q ? "찾은 키워드 : " + q.trim() : "", gg ? "필터 : " + gg : "", sim ? "주의 : 비슷한 상품 많음" : "", (mobN ? "모바일 위치 : " : "PC 위치 : ") + pos].filter(Boolean).join("\n"), "찾았어요 (분홍 테두리). 복사해서 생성기 '상품 정보 붙여넣기' 칸에." + (f.how === "상품명" ? " 상품명으로 찾음(스토어 이름은 화면에 없었음)." : ""));
+        const fb = show([q ? "찾은 키워드 : " + q.trim() : "", gg ? "필터 : " + gg : "", sim ? "주의 : 비슷한 상품 많음" : "", (mobN ? "모바일 위치 : " : "PC 위치 : ") + pos].filter(Boolean).join("\n"), "찾았어요 (분홍 테두리). 복사해서 생성기 '상품 정보 붙여넣기' 칸에." + (f.how === "상품명" ? " 상품명으로 찾음(스토어 이름은 화면에 없었음)." : ""));
+        kwRow(fb, q.trim(), "다른 검색어로 찾기", v => { L.href = kwUrl(v); }, "그 키워드로 다시 검색한 화면을 열어요. 화면이 열리면 이 북마크(🔍 위치 찾기)를 한 번 더 눌러 주세요.");
       } else {
         const ks = String(T.kw || "").split("|").filter(Boolean);
         const nb = show("이 화면에는 없어요", "검색어 '" + q + "'" + (filt ? ", " + filt : "") + (mobN ? "" : ", " + pg + "페이지") + ", 상품 " + f.n + "개 확인" + (f.ad ? " (광고 자리에만 있어요)" : "") + ".\n" + (mobN ? "" : "다음 페이지를 누르고 북마크를 다시 눌러 주세요. ") + (ks.length > 1 ? "그다음 키워드: " + ks.slice(1).join(" → ") : ""));
@@ -332,6 +387,7 @@
           /* 휴대폰은 바로 가격 넣은 화면으로 넘어감 (단추 누를 필요 없이). 열리면 북마크만 한 번 더 */
           if (mobN) { go.textContent = "가격 " + won(T.pr) + "원 넣은 화면으로 넘어가는 중… 열리면 북마크 한 번 더"; setTimeout(() => { L.href = u.href; }, 1500); }
         }
+        kwRow(nb, q.trim(), "다른 검색어로 찾기", v => { L.href = kwUrl(v); }, "그 키워드로 다시 검색한 화면을 열어요. 화면이 열리면 이 북마크(🔍 위치 찾기)를 한 번 더 눌러 주세요.");
       }
       return;
     }
@@ -539,9 +595,11 @@
       el.style.outline = "4px solid #e5397a"; el.style.outlineOffset = "2px"; el.scrollIntoView({ block: "center" });
       const org = base.slice(0, hit).filter(c => !isAdCp(c.el)).length + 1;
       const pos = pg + "p";
-      show([q ? "찾은 키워드 : " + q.trim() : "", (mob ? "모바일 위치 : " : "PC 위치 : ") + pos].filter(Boolean).join("\n"), "찾았어요 (분홍 테두리, 광고 빼고 " + org + "번째). 복사해서 생성기 '상품 정보 붙여넣기' 칸에.");
+      const fb = show([q ? "찾은 키워드 : " + q.trim() : "", (mob ? "모바일 위치 : " : "PC 위치 : ") + pos].filter(Boolean).join("\n"), "찾았어요 (분홍 테두리, 광고 빼고 " + org + "번째). 복사해서 생성기 '상품 정보 붙여넣기' 칸에.");
+      kwRow(fb, q.trim(), "다른 검색어로 찾기", v => { L.href = kwUrl(v); }, "그 키워드로 쿠팡에서 다시 검색한 화면을 열어요. 화면이 열리면 이 북마크(🔍 위치 찾기)를 한 번 더 눌러 주세요.");
     } else {
-      show("이 화면에는 없어요", "검색어 '" + q + "', " + pg + "페이지, 상품 " + (list.length + extra.length) + "개 확인" + (adHit >= 0 ? " (광고 자리에만 있어요)" : "") + ".\n다음 페이지로 이동 후 북마크를 다시 눌러 주세요.");
+      const nb = show("이 화면에는 없어요", "검색어 '" + q + "', " + pg + "페이지, 상품 " + (list.length + extra.length) + "개 확인" + (adHit >= 0 ? " (광고 자리에만 있어요)" : "") + ".\n다음 페이지로 이동 후 북마크를 다시 눌러 주세요.");
+      kwRow(nb, q, "다른 검색어로 찾기", v => { L.href = kwUrl(v); }, "그 키워드로 쿠팡에서 다시 검색한 화면을 열어요. 화면이 열리면 이 북마크(🔍 위치 찾기)를 한 번 더 눌러 주세요.");
     }
     return;
   }
@@ -651,8 +709,8 @@
     kwIn = sug.join("|");
     kwFrom = "상품명 자동 추천";
   }
-  const kws = kwIn.split("|").map(x => x.trim()).filter(Boolean);
-  const kw = kws[0] || "";
+  let kws = kwIn.split("|").map(x => x.trim()).filter(Boolean);
+  let kw = kws[0] || "";
   let price = hp;
   /* 가격: 제목 바로 뒤 첫 가격 (할인·쿠폰·적립·배송 금액은 건너뜀) */
   if (!price) {
@@ -725,10 +783,12 @@
   };
   /* 순서: 대표 키워드 → 대표 키워드 + 가격 필터 → 서브 키워드 */
   let pageLine = "", foundKw = "", filtLine = "", blocked = false;
-  if (kw) {
+  /* 한 벌의 키워드로 1~5페이지 훑기 — 직접 정한 키워드로 다시 찾을 때도 이 함수를 다시 부름 (11/20) */
+  const searchKw = async list => {
+    pageLine = ""; foundKw = ""; filtLine = ""; blocked = false;
     /* 순서: 대표 → 대표 + 가격 → 서브 → 서브 + 가격 … */
     const steps = [];
-    kws.forEach((k, i) => { const lb = i ? "서브" : "대표"; steps.push([k, false, lb]); if (price) steps.push([k, true, lb + "+가격"]); });
+    list.forEach((k, i) => { const lb = i ? "서브" : "대표"; steps.push([k, false, lb]); if (price) steps.push([k, true, lb + "+가격"]); });
     for (const [k, f, lab] of steps) {
       const pg = await look(k, f, lab);
       if (pg === -1) { blocked = true; if (!f) break; else continue; }
@@ -738,8 +798,9 @@
     if (!pageLine) {
       pageLine = rk ? rk : (blocked ? "못 찾음 (쇼핑몰이 막음)" : MAX + "페이지 안에 없음 (쿠팡 화면에서 다른 필터로 직접 찾아 주세요)");
     }
-  }
-  const out = [
+  };
+  if (kw) await searchKw(kws);
+  const buildOut = () => [
     "상품명 : " + name,
     "판매처 : " + seller,
     "상품번호 : " + pid + (item ? " - " + mask(item) : ""),
@@ -753,6 +814,7 @@
     kw ? (mob ? "모바일 위치 : " : "PC 위치 : ") + pageLine : "",
     img ? "썸네일 : " + img : ""
   ].filter(Boolean).join("\n");
+  let out = buildOut();
   say("");
   const ta = document.createElement("textarea");
   ta.value = out;
@@ -780,6 +842,13 @@
   box.appendChild(ta);
   row.appendChild(copy); row.appendChild(close);
   box.appendChild(row);
+  /* 키워드가 마음에 안 들면 직접 정해서 다시 찾기 (11/20) — 이 화면에서 그 키워드로 1~5페이지를 다시 훑음 */
+  kwRow(box, kw, "다른 검색어로 찾기", async v => {
+    kws = [v]; kw = v; kwFrom = "직접 입력"; say("검색어 '" + v + "'로 이 화면에서 다시 찾는 중…");
+    await searchKw(kws);
+    out = buildOut(); ta.value = out;
+    say("");
+  }, "이 화면에서 그 키워드로 1~5페이지를 다시 확인해요 (화면은 넘어가지 않아요).", "#5b2a86");
   /* 썸네일 저장: PC는 바로 다운로드 폴더에(크롬 설정에서 다운로드 위치를 바탕화면으로 바꾸면 바탕화면), 휴대폰은 [앨범에 저장] → '이미지 저장' */
   if (img) {
     const phone = /iPhone|iPad|Android/i.test(navigator.userAgent);

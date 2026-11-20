@@ -8,6 +8,9 @@
 //  확장 1.8.8 (사용자 요청 "키워드가 마음에 안 들면 검색 키워드 내가 정할 수 있게"):
 //              ⑧ 결과 상자에 키워드 입력칸 + [이 키워드로 찾기] → customkw: 액션
 //              ⑨ 네이버는 그 키워드로 다시 검색(naverAct), 쿠팡 검색 화면은 그 키워드로 검색해 읽기, 상품 페이지는 그 키워드로 처음부터(start)
+//  생성기 v204 (사용자 요청 "모바일 Userscripts·북마크에도"):
+//              ⑩ 북마크 코드(bm-src)·oy.js 결과 상자에도 같은 입력칸 + [이 키워드로 찾기] — 모바일은 background가 없어
+//                 네이버·쿠팡 검색 화면은 주소의 검색어만 바꾼 1페이지로 넘기고, 쿠팡 상품 페이지는 그 화면에서 1~5페이지 다시 훑음
 //  node naverprod_test.js <Main.js>
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const root = path.join(__dirname, '..', '..');
@@ -516,6 +519,8 @@ function runRun(opt) {
       querySelectorAll(s) { return queryAll(this, s); },
       querySelector(s) { return queryAll(this, s)[0] || null; },
       scrollIntoView() {},
+      addEventListener(t, f) { this._ev = this._ev || {}; (this._ev[t] = this._ev[t] || []).push(f); },
+      fire(t, ev) { ((this._ev || {})[t] || []).forEach(f => f(ev || {})); },
       getBoundingClientRect() { return { left: 0, top: 0, width: 320, height: 120 }; },
       compareDocumentPosition(o) { return o._i > this._i ? 4 : 2; }
     };
@@ -598,6 +603,84 @@ function runRun(opt) {
   ok(/const cardGroups = \(\) => \{/.test(oy) && /walkN\(3, false\)/.test(oy) && /const PRC = /.test(oy), "oy.js(북마크)도 같은 고침");
   ok(/const cardGroups = \(\) => \{/.test(gen) && /walkN\(3, false\)/.test(gen) && /const PRC = /.test(gen), "guide/index.html 북마크 코드(bm-src)도 같은 고침");
 
+  /* ---------- 8-4) 모바일(북마크 bm-src·oy.js) 결과 상자의 직접 키워드 칸 (생성기 v204, 사용자 요청) ----------
+     확장 1.8.8과 같은 자리. 모바일에는 background가 없어서 주소를 넘겨 다시 찾는다 —
+     네이버·쿠팡 검색 화면은 검색어만 바꾼 1페이지로, 쿠팡 상품 페이지는 그 화면에서 1~5페이지를 다시 훑는다. */
+  const bmSrc = ((gen.match(/<script type="text\/plain" id="bm-src">([\s\S]*?)<\/script>/) || [])[1] || '');
+  const kwRowN = s => (s.match(/kwRow\(/g) || []).length;
+  ok(kwRowN(oy) === 6 && kwRowN(bmSrc) === 6, 'oy.js·bm-src: 직접 키워드 칸이 6곳(네이버 상품 1 · 검색 찾음/못 찾음 2 · 쿠팡 검색 찾음/못 찾음 2 · 쿠팡 상품 1) (' + kwRowN(oy) + '/' + kwRowN(bmSrc) + ')');
+  ok(/키워드가 마음에 안 들면 직접 정해서 다시 찾기/.test(oy) && /이 키워드로 찾기/.test(oy) && /이 키워드로 찾기/.test(bmSrc) && /키워드가 마음에 안 들면 직접 정해서 다시 찾기/.test(bmSrc), '입력칸 이름·단추 글자가 확장 1.8.8과 같음');
+  ok(/kwUrl\(v\)/.test(oy) && /kwUrl\(v\)/.test(bmSrc) && /searchKw\(kws\)/.test(oy) && /searchKw\(kws\)/.test(bmSrc), '그 키워드로 다시 찾기: 검색 화면은 kwUrl(주소), 쿠팡 상품 페이지는 그 화면에서 다시 훑기(searchKw)');
+  /* 주소 만들기: 브라우저 없이 함수만 떼어 실행 */
+  const kwUrlOf = (loc, ua, src) => {
+    const ctx = { location: loc, navigator: { userAgent: ua || 'iPhone' }, URL, console };
+    vm.createContext(ctx);
+    vm.runInContext('const L = location;\n' + fnSrc(src || oy, 'const kwUrl =') + '\nglobalThis.__kw = kwUrl;', ctx);
+    return vm.runInContext('globalThis.__kw', ctx);
+  };
+  {
+    const loc = { href: 'https://search.shopping.naver.com/search/all?query=%ED%8F%AC%EB%91%90%EB%B6%80&minPrice=9600&maxPrice=9600&pagingIndex=3', hostname: 'search.shopping.naver.com', pathname: '/search/all', search: '?query=%ED%8F%AC%EB%91%90%EB%B6%80&minPrice=9600&maxPrice=9600&pagingIndex=3', hash: '' };
+    const u = decodeURIComponent(kwUrlOf(loc, 'Mozilla/5.0 (Macintosh)')('겨울 모자')).replace(/\+/g, ' ');
+    ok(/query=겨울 모자/.test(u) && !/pagingIndex/.test(u) && /minPrice=9600/.test(u), '네이버 검색 화면: 검색어만 바꾸고 1페이지로 (가격 필터는 그대로) — ' + u);
+  }
+  {
+    const loc = { href: 'https://msearch.shopping.naver.com/search/all?query=a#pid=123&nm=%EC%83%81%ED%92%88&st=%EC%8A%A4%ED%86%A0%EC%96%B4&kw=a%7Cb&pr=9900', hostname: 'msearch.shopping.naver.com', pathname: '/search/all', search: '?query=a', hash: '#pid=123&nm=%EC%83%81%ED%92%88&st=%EC%8A%A4%ED%86%A0%EC%96%B4&kw=a%7Cb&pr=9900' };
+    const u = decodeURIComponent(kwUrlOf(loc)('두부면'));
+    ok(/query=두부면/.test(u) && u.indexOf('pid=123') > 0 && /kw=두부면/.test(u) && /pr=9900/.test(u), '모바일 네이버 검색 화면: 찾는 상품(#pid=…)은 그대로 두고 검색어 목록만 바꿈 — ' + u);
+  }
+  {
+    const loc = { href: 'https://m.coupang.com/nm/search?q=%EB%91%90%EB%B6%80&page=3&isPriceRange=true', hostname: 'm.coupang.com', pathname: '/nm/search', search: '?q=%EB%91%90%EB%B6%80&page=3&isPriceRange=true', hash: '' };
+    const u = decodeURIComponent(kwUrlOf(loc)('포두부'));
+    ok(/[?&]q=포두부/.test(u) && !/[?&]page=/.test(u) && /isPriceRange=true/.test(u), '쿠팡 검색 화면: q만 바꾸고 page를 뺌 (다른 필터는 그대로) — ' + u);
+  }
+  {
+    const pc = kwUrlOf({ href: 'https://www.coupang.com/vp/products/123', hostname: 'www.coupang.com', pathname: '/vp/products/123', search: '', hash: '' }, 'Mozilla/5.0 (Macintosh)');
+    const mo = kwUrlOf({ href: 'https://m.coupang.com/vm/products/123', hostname: 'm.coupang.com', pathname: '/vm/products/123', search: '', hash: '' });
+    ok(/www\.coupang\.com\/np\/search\?q=/.test(pc('텀블러')) && /m\.coupang\.com\/nm\/search\?q=/.test(mo('텀블러')), '쿠팡 상품 페이지: 그 키워드로 검색 화면 (PC /np, 모바일 /nm)');
+    const nv = kwUrlOf({ href: 'https://smartstore.naver.com/ecureshop/products/123', hostname: 'smartstore.naver.com', pathname: '/ecureshop/products/123', search: '', hash: '' });
+    ok(/msearch\.shopping\.naver\.com\/search\/all\?query=/.test(nv('텀블러')), '네이버 상품 페이지: 그 키워드로 쇼핑 검색 화면');
+  }
+  /* 실제 화면(가짜 DOM)에서: 찾았을 때 상자에 칸이 생기고, 눌러서 그 주소로 넘어가는지 — oy.js와 bm-src 둘 다 */
+  const kwBoxText = bx => boxText(bx);
+  const kwKids = (bx, tag) => {
+    const out = [];
+    (function walk(x) { if (x.t === tag) out.push(x); (x.k || []).forEach(k => { if (typeof k !== 'string') walk(k); }); })(bx);
+    return out;
+  };
+  const kwBox = async (src, label) => {
+    const t = scanPage('one', src);
+    for (let i = 0; i < 60 && t.boxes.length < 2; i++) await sleep(100);
+    const bx = t.boxes[t.boxes.length - 1];
+    if (!bx) { ok(false, label + ': 결과 상자가 안 뜸'); return; }
+    const inp = kwKids(bx, 'input')[0];
+    const btn = kwKids(bx, 'button').filter(b => b.textContent === '이 키워드로 찾기')[0];
+    ok(!!inp && !!btn, label + ': 찾았을 때 상자에 키워드 입력칸·[이 키워드로 찾기] (' + kwKids(bx, 'input').length + '칸/' + kwKids(bx, 'button').length + '단추)');
+    ok(/키워드가 마음에 안 들면 직접 정해서 다시 찾기/.test(kwBoxText(bx)), label + ': 안내 글도 그 상자 안에 있음');
+    ok(!!inp && inp.value === 'k포두부', label + ': 지금 검색어를 미리 넣어 둠 (' + (inp && inp.value) + ')');
+    const before = t.location.href;
+    inp.value = '두부면';
+    btn.onclick();
+    const after = decodeURIComponent(t.location.href).replace(/\+/g, ' ');
+    ok(t.location.href !== before && /query=두부면/.test(after) && !/pagingIndex/.test(after) && /minPrice=9600/.test(after), label + ': 누르면 그 키워드로 검색한 1페이지 주소로 넘어감 — ' + after.slice(0, 80));
+    /* 빈 값이면 옮겨 가지 않고 안내만 */
+    const t2 = scanPage('one', src);
+    for (let i = 0; i < 60 && t2.boxes.length < 2; i++) await sleep(100);
+    const bx2 = t2.boxes[t2.boxes.length - 1];
+    if (!bx2) { ok(false, label + ': 두 번째 시험에서 상자가 안 뜸'); return; }
+    const inp2 = kwKids(bx2, 'input')[0];
+    const btn2 = kwKids(bx2, 'button').filter(b => b.textContent === '이 키워드로 찾기')[0];
+    const before2 = t2.location.href;
+    inp2.value = '   ';
+    btn2.onclick();
+    ok(t2.location.href === before2 && inp2.placeholder === '검색어를 넣어 주세요', label + ': 빈 값이면 안내만 하고 안 넘어감');
+    inp2.value = '엔터 키워드';
+    inp2.fire('keydown', { key: 'Enter', preventDefault() {} });
+    const ent = decodeURIComponent(t2.location.href).replace(/\+/g, ' ');
+    ok(/query=/.test(ent) && /엔터 키워드/.test(ent), label + ': Enter로도 찾기 — ' + ent.slice(0, 70));
+  };
+  await kwBox(oy, 'oy.js');
+  await kwBox(bmSrc, 'bm-src(북마크)');
+
   /* ---------- 9) 버전·배포물 한 세트 (확장 1.8.9) ---------- */
   ok(man.version === '1.8.9', 'manifest 버전 1.8.9 (' + man.version + ')');
   const ev = (gen.match(/const EXT_VER = "([\d.]+)"/) || [])[1];
@@ -615,6 +698,7 @@ function runRun(opt) {
     ok(/const cardGroups = \(\) => \{/.test(String(entries['ext/oy.js'])) && /const extra = cards\.filter/.test(String(entries['ext/page.js'])), 'zip 안 ext/page.js·oy.js에 1~2개 결과 고침 들어감 (1.8.9)');
     ok(/customkw:/.test(String(entries['ext/bg.js'])) && /이 키워드로 찾기/.test(String(entries['ext/page.js'])), 'zip 안 ext/bg.js·page.js에 사용자 키워드 재검색 들어감 (1.8.8)');
     ok(/await naverHere\(nt\);/.test(String(entries['ext/bg.js'])), 'zip 안 ext/bg.js에 naverProduct 수정 들어감');
+    ok(/kwRow\(/.test(String(entries['ext/oy.js'])) && /이 키워드로 찾기/.test(String(entries['ext/oy.js'])), 'zip 안 ext/oy.js에 직접 키워드 칸 들어감 (생성기 v204)');
   }
 
   console.log(fails.length ? 'XX 네이버 상품 페이지 멈춤 시험 실패:\n- ' + fails.join('\n- ') : '✓ 네이버 상품 페이지 멈춤(parts·탭·오류·재시도·waitComplete) 시험 통과');
