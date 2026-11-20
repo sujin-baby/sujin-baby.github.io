@@ -1954,7 +1954,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3715,6 +3715,7 @@ function checkFullInner_() {
       try { stuckTodoDel1_(); } catch (e) {}
       try { bulkSent1_(); } catch (e) {}
       try { koziRen1_(); } catch (e) {}
+      try { koziWeekend1_(); } catch (e) {}
       try { if (!props.getProperty('EDITC1')) { ensureEditTab_(); props.setProperty('EDITC1', Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm')); } } catch (e) { note_('폼수정 날짜 칸 실패: ' + e); }   // (11/18 한 번) C1 날짜 고르기 바로 (정리가 밀려 늦게 생기던 것)
       try { upAcctOpen1_(); } catch (e) {}
       try { exp135_(); } catch (e) {}
@@ -9244,6 +9245,44 @@ function koziRen1_() {
     if (out.length) { note_('✓ 코지클로 → 남성용 기모 타이즈: ' + out.length + '개'); try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); } }
   } catch (e) { props.setProperty('KOZIREN1', (st + ' 실패(' + (e && e.message || e) + ') ' + out.join(', ')).slice(-400)); }
 }
+// (11/20 한 번, 사용자) 남성용 기모 타이즈(ax7568r3): ① 명단 시트·폼·폴더 이름도 '#택 남성용 기모 타이즈'로 ("#택 남성용 기모 타이즈 이걸로 바껴야")
+//  ② "주말에도 진행해 달래, 월요일부터 하는 거 토·일도 하게 땡겨 줘" → 11.23(월) 진행을 11.21(토)로, 일정 대기 계획(3~10일차)을 11.22~11.29 매일로, 계획에 weekend 표시
+function koziWeekend1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('KOZIWK1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
+  const out = [];
+  try {
+    const base = readRuns_().filter(function (r) { return String(r['요청ID']) === 'ax7568r3'; })[0];
+    if (!base || !base['시트ID']) { props.setProperty('KOZIWK1', (st + ' 실패(1일차 진행 없음)').slice(-400)); return; }
+    const d1 = new Date(base['진행일']); d1.setHours(0, 0, 0, 0);
+    const dayK = function (k) { const z = new Date(d1); z.setHours(12, 0, 0, 0); z.setDate(z.getDate() + k - 1); z.setHours(0, 0, 0, 0); return z; };
+    const nm = function (d, n) { return '#택' + (d.getMonth() + 1) + '.' + d.getDate() + ' 남성용 기모 타이즈' + n; };
+    // ① 파일 이름 (사용자가 직접 바꾸라고 함)
+    try { const f = renameRunFiles_(base, '#택 코지클로 남자타이즈', '#택 남성용 기모 타이즈'); out.push('파일 ' + (f && f.length ? f.join('·') : '이미 됨')); } catch (e) { out.push('파일 실패 ' + e.message); }
+    // ② 이미 만든 2일차(11.23) → 11.21
+    const r2 = readRuns_().filter(function (r) { return String(r['요청ID']) === 'ax7568r3-2' && r['진행 상태'] !== '종료'; })[0];
+    if (r2 && dayStart_(r2['진행일']) !== dayK(2).getTime()) {
+      globalThis.__NO_FILE_RENAME = true; globalThis.__PAY_RENAME_ANY = true;
+      try { out.push('2일차 ' + moveRunDate_(r2, dayK(2))); } finally { globalThis.__NO_FILE_RENAME = false; globalThis.__PAY_RENAME_ANY = false; }
+    }
+    // ③ 일정 대기 계획: k일차 = 1일차 + (k-1)일, 주말 표시
+    const ps = planSheet_(), pl = ps.getLastRow();
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x, i) {
+      if (String(x[0]).indexOf('ax7568r3-') !== 0 || x[8] !== '대기') return;
+      const k = Number(x[2]) || 0; if (k < 2) return;
+      let cfg = {}; try { cfg = JSON.parse(x[9] || '{}') || {}; } catch (e) {}
+      cfg.weekend = true;
+      const d = dayK(k), n = (String(x[4]).match(/(\d+)\s*$/) || [, '10'])[1], t = nm(d, n);
+      ps.getRange(i + 2, 4, 1, 3).setValues([[d, t, t + ' (뽀짝오리)']]);
+      ps.getRange(i + 2, 10).setValue(JSON.stringify(cfg));
+      out.push(k + '일차 ' + (d.getMonth() + 1) + '.' + d.getDate());
+    });
+    props.deleteProperty('DASH_SIG');   // 한눈에 바로 다시 그리게
+    props.setProperty('KOZIWK1', ('✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + out.join(', ')).slice(0, 1500));
+    note_('✓ 남성용 기모 타이즈: 파일 이름·주말 진행 ' + out.length + '개');
+    try { updatePay_(); } catch (e) {}
+  } catch (e) { props.setProperty('KOZIWK1', (st + ' 실패(' + (e && e.message || e) + ') ' + out.join(', ')).slice(-400)); }
+}
 function cableFmt1_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('CABLEFMT1') || '');
   if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
@@ -11049,17 +11088,19 @@ function makeDueDays_() {
     const clash = sameDay(x[3]);
     if (clash && Number(clash['일차']) === k) { sh.getRange(i + 2, 9).setValue('건너뜀 (그날 진행 있음)'); return; }
     // 다른 일차가 그날에 있으면(날짜를 옮겨서 겹침) 빈 진행일로 미룸 (10/20)
-    if (clash) { let nd = nextWorkday_(new Date(x[3])); while (sameDay(nd)) nd = nextWorkday_(nd); x[3] = nd; sh.getRange(i + 2, 4).setValue(nd); }
+    // 주말에도 진행하는 의뢰(cfg.weekend, 11/20 사용자: 남성용 기모 타이즈 '토·일도 하게')는 주말·공휴일을 건너뛰지 않음
+    const wk = !!cfg.weekend, nextDay = function (d) { if (!wk) return nextWorkday_(d); const z = new Date(d); z.setHours(12, 0, 0, 0); z.setDate(z.getDate() + 1); z.setHours(0, 0, 0, 0); return z; };
+    if (clash) { let nd = nextDay(new Date(x[3])); while (sameDay(nd)) nd = nextDay(nd); x[3] = nd; sh.getRange(i + 2, 4).setValue(nd); }
     const prev = chain ? chain.runs[chain.runs.length - 1] : null;
     // 계획 날짜가 주말·공휴일이면 다음 진행일로 미룸 (방제·명단 제목 날짜도)
-    const day0 = new Date(x[3]), dayW = cfg.platform === '기대평' ? new Date(dayStart_(day0)) : workdayOnOrAfter_(day0);   // 기대평은 주말에도 (구매·배송 없음)
+    const day0 = new Date(x[3]), dayW = cfg.platform === '기대평' || wk ? new Date(dayStart_(day0)) : workdayOnOrAfter_(day0);   // 기대평은 주말에도 (구매·배송 없음)
     if (dayW.getTime() !== dayStart_(day0) || (dateTok_(x[5]) && dateTok_(x[5]) !== (dayW.getMonth() + 1) + '.' + dayW.getDate())) {   // 주말이라 미뤘거나 일정 탭에서 날짜를 직접 고침
       x[3] = dayW; x[4] = retitleDate_(x[4], dayW); x[5] = retitleDate_(x[5], dayW);
       sh.getRange(i + 2, 4, 1, 3).setValues([[dayW, x[4], x[5]]]);
     }
     // 전 진행일 0시에 만듦 (사용자 요청 10/24: 월요일 진행이면 금요일 0시. 0시 예약 확인이 바로 만듦)
     const due = new Date(dayW); due.setHours(12, 0, 0, 0);
-    do { due.setDate(due.getDate() - 1); } while (!isWorkday_(due));
+    do { due.setDate(due.getDate() - 1); } while (!wk && !isWorkday_(due));   // 주말 진행이면 바로 전날 0시
     due.setHours(0, 0, 0, 0);
     if (now < due) return;
     locked_(function () {
