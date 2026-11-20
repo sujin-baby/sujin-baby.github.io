@@ -1954,7 +1954,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3710,6 +3710,7 @@ function checkFullInner_() {
       try { cableFmt1_(); } catch (e) {}
       try { stuckTodoDel1_(); } catch (e) {}
       try { bulkSent1_(); } catch (e) {}
+      try { koziRen1_(); } catch (e) {}
       try { if (!props.getProperty('EDITC1')) { ensureEditTab_(); props.setProperty('EDITC1', Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm')); } } catch (e) { note_('폼수정 날짜 칸 실패: ' + e); }   // (11/18 한 번) C1 날짜 고르기 바로 (정리가 밀려 늦게 생기던 것)
       try { upAcctOpen1_(); } catch (e) {}
       try { exp135_(); } catch (e) {}
@@ -9211,6 +9212,34 @@ function bulkSent1_() {
     note_('✓ 할 일·방 공지 일괄 보냄: 할 일 ' + n.todo + ' · 방 공지 ' + n.notice + (keep.length ? ' (내일 이후 폼 공지 ' + keep.length + '개 남김)' : ''));
   } catch (e) { props.setProperty('BULKSENT1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
+// (11/20 한 번, 사용자 "#택11.20 남성용 기모 타이즈10 이런 식으로 바꿔줘 다") 코지클로 남자타이즈 의뢰(ax7568r3) 진행·일정 계획 방제를 '#택M.D 남성용 기모 타이즈N'으로.
+//  방제만 (명단 시트·폼 파일 이름은 그대로), 월급시트 줄 이름도 같이. 일정 탭 '캠페인' 칸은 그대로(같은 의뢰 묶음 키)
+function koziRen1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('KOZIREN1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
+  const out = [];
+  try {
+    const base = readRuns_().filter(function (r) { return String(r['요청ID']) === 'ax7568r3'; })[0];
+    if (!base || !base['시트ID']) { props.setProperty('KOZIREN1', (st + ' 실패(1일차 진행 없음)').slice(-400)); return; }
+    const want = function (d, t) { return '#택' + (d.getMonth() + 1) + '.' + d.getDate() + ' 남성용 기모 타이즈' + ((String(t).match(/(\d+)\s*$/) || [, '10'])[1]); };
+    readRuns_().filter(function (r) { return String(r['시트ID']) === String(base['시트ID']) && r['진행일'] instanceof Date && r['진행 상태'] !== '종료'; }).forEach(function (r0) {
+      const r = readRuns_().filter(function (x) { return x.row === r0.row; })[0] || r0, nt = want(r['진행일'], bareTitle_(r['명단 제목']));
+      if (bareTitle_(r['명단 제목']) === nt) return;
+      globalThis.__NO_FILE_RENAME = true; globalThis.__PAY_RENAME_ANY = true;
+      try { out.push(renameRun_(r, nt, '사용자 11/20: 남성용 기모 타이즈') ? nt : nt + ' 안 바뀜'); } finally { globalThis.__NO_FILE_RENAME = false; globalThis.__PAY_RENAME_ANY = false; }
+    });
+    // 일정 탭 대기 계획 (다음 일차를 만들 때 이 방제로 만듦)
+    const ps = planSheet_(), pl = ps.getLastRow();
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x, i) {
+      if (String(x[0]).indexOf('ax7568r3-') !== 0 || x[8] !== '대기' || !(x[3] instanceof Date)) return;
+      const nt = want(x[3], x[4]);
+      if (String(x[4]) !== nt) { ps.getRange(i + 2, 5, 1, 2).setValues([[nt, nt + ' (뽀짝오리)']]); out.push('일정 ' + nt); }
+    });
+    const bad = out.filter(function (x) { return / 안 바뀜$/.test(x); });
+    props.setProperty('KOZIREN1', ((bad.length ? st + ' 실패(' : '✓ ') + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '이미 됨') + (bad.length ? ')' : '')).slice(0, 1500));
+    if (out.length) { note_('✓ 코지클로 → 남성용 기모 타이즈: ' + out.length + '개'); try { updatePay_(); } catch (e) { note_('월급시트 맞추기 실패: ' + e); } }
+  } catch (e) { props.setProperty('KOZIREN1', (st + ' 실패(' + (e && e.message || e) + ') ' + out.join(', ')).slice(-400)); }
+}
 function cableFmt1_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('CABLEFMT1') || '');
   if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 5) return;
@@ -12256,8 +12285,12 @@ function buildDashboard_(force) {
       const t = String(v[0]).trim();
       if (!t || t.charAt(0) === '■' || t === written[i] || written.indexOf(t) >= 0) return;   // 지난번에 스크립트가 쓴 값이 자리만 밀린 것은 고친 게 아님
       if (runs.some(function (x) { return x['진행 상태'] !== '종료' && bareTitle_(x['명단 제목']) === t; })) return;   // 다른 진행의 방제 그대로면 고친 게 아님 (11/18: 새 '레깅스 50' 방제로 같은 날 '레깅스 30'이 바뀜) (예전 이름으로 되돌리던 것)
-      const r = runs.filter(function (x) { return sameRunTitle_(x['명단 제목'], t) && bareTitle_(x['명단 제목']) !== t; })[0];
-      if (r && renameRun_(r, t, '한눈에 탭 값')) changed = true;
+      // 그 줄에 지난번 쓴 방제(written[i])의 진행 먼저 — 상품 이름을 바꿔도 찾게 (11/20 사용자: '코지클로 남자타이즈' → '남성용 기모 타이즈'로 고치면 못 찾고 되돌아감)
+      const byRow = written[i] ? runs.filter(function (x) { return x['진행 상태'] !== '종료' && bareTitle_(x['명단 제목']) === written[i]; }) : [];
+      const r = (byRow.length === 1 ? byRow[0] : null) || runs.filter(function (x) { return sameRunTitle_(x['명단 제목'], t) && bareTitle_(x['명단 제목']) !== t; })[0];
+      // 사용자가 그 진행 방제를 직접 고친 것: 명단 시트·폼 파일 이름은 그대로(11/16 규칙), 월급시트 줄 이름은 같이 (안 하면 새 줄이 생겨 두 번 잡힘)
+      globalThis.__NO_FILE_RENAME = true; globalThis.__PAY_RENAME_ANY = true;
+      try { if (r && renameRun_(r, t, '한눈에 탭 값')) changed = true; } finally { globalThis.__NO_FILE_RENAME = false; globalThis.__PAY_RENAME_ANY = false; }
     });
     if (changed) { force = true; try { updatePay_(); } catch (e) {} }
   }
