@@ -1161,7 +1161,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
 
   /* ---------- mascot ---------- */
-  var MV = '2026112027';
+  var MV = '2026112028';
   /* 순경 공채(2027-08-21)·지텔프(2026-11-29) 목표에 맞춘 현실 자극 문구 */
   var MOT = {
     done: [
@@ -2430,12 +2430,15 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     }
     var src = '', sm = raw.match(/\(([^()]*(?:켈리 카페|난이도|합격의법학원|적중모의고사|해설|기출문제|순경|경행경채)[^()]*)\)\s*$/);
     if (sm) { src = sm[1].trim(); raw = raw.slice(0, sm.index).trim(); }
+    /* 수진 님: 카페 답지 원문은 맨 아래 카드로 따로 (본문 해석·풀이·오답과 섞이지 않게 먼저 떼어 낸다) */
+    var orig = '', om = raw.match(/(?:^|\n)\s*원문\s*[:：]\s*([\s\S]*)$/);
+    if (om) { orig = String(om[1] || '').replace(/\s*\n\s*/g, ' ').trim(); raw = raw.slice(0, om.index).trim(); }
     var tr = '', tm = raw.match(/\(([^()]{12,})\)\s*$/);
     if (tm && /[가-힣]/.test(tm[1]) && /다[.)]?\s*$/.test(tm[1].trim())) { tr = tm[1].trim(); raw = raw.slice(0, tm.index).trim(); }
     /* 선지별 해설(①~④ · ㉠~㉣ · ㄱ.) 줄은 한 덩어리로 두고, 나머지는 문장 단위로 끊어 읽기 좋게 */
     var OPT_LINE = /^(?:[①-④]|[㉠-㉣]|[ㄱㄴㄷㄹ]\s*\.|[가나다라]\s*\.)/;
-    /* 지텔프 보강 해설: '해석:'·'풀이:'·'오답:' 라벨 줄과 그 아래 '· ' 목록은 통째로 한 덩어리 */
-    var SEC_LINE = /^(해석|풀이|오답)\s*[:：]\s*([\s\S]*)$/;
+    /* 지텔프 보강 해설: '해석:'·'풀이:'·'오답:'·'원문:' 라벨 줄과 그 아래 '· ' 목록은 통째로 한 덩어리 */
+    var SEC_LINE = /^(해석|풀이|오답|원문)\s*[:：]\s*([\s\S]*)$/;
     var sents = [];
     raw.split(/\n+/).forEach(function (line) {
       line = line.trim();
@@ -2474,7 +2477,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     });
     /* 수진 님: 해설 카드는 '풀이 → 오답 → 해석' 순서로 읽히게. 라벨 블록만 있던 자리끼리 순서를 바꾸고
        일반 문단 자리는 그대로 둔다(경찰 기출 해설 등 라벨 없는 해설은 영향 없음) */
-    var LAB_ORDER = { '풀이': 1, '오답': 2, '해석': 3 };
+    var LAB_ORDER = { '풀이': 1, '오답': 2, '해석': 3, '원문': 4 };
     var labSlots = [];
     blocks.forEach(function (bk, i) { if (bk.k) labSlots.push(i); });
     if (labSlots.length > 1) {
@@ -2485,8 +2488,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     }
     blocks.forEach(function (bk, i) {
       if (bk.k) {
-        var cls = bk.k === '해석' ? 'tr' : (bk.k === '풀이' ? 'sol' : 'wrong');
-        h += '<div class="fb-sec ' + cls + '"><div class="fb-sec-k">' + esc(bk.k) + '</div>' +
+        var cls = bk.k === '해석' ? 'tr' : (bk.k === '풀이' ? 'sol' : (bk.k === '원문' ? 'orig' : 'wrong'));
+        h += '<div class="fb-sec ' + cls + '"><div class="fb-sec-k">' + esc(bk.k === '원문' ? '켈리 답지 원문' : bk.k) + '</div>' +
           (bk.b ? '<p class="fb-sec-b">' + T(bk.b) + '</p>' : '') +
           (bk.li.length ? '<ul class="fb-sec-ul">' + bk.li.map(function (x) { return '<li>' + T(x) + '</li>'; }).join('') + '</ul>' : '') +
           '</div>';
@@ -2508,6 +2511,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       else h += '<p class="fb-p">' + T(s) + '</p>';
     });
     if (tr) h += '<div class="fb-tr"><b>해석</b>' + esc(tr) + '</div>';
+    if (orig) h += '<div class="fb-sec orig"><div class="fb-sec-k">켈리 답지 원문</div>' +
+      '<p class="fb-sec-b">' + esc(orig) + '</p></div>';
     if (src) h += '<div class="fb-src">' + esc(src) + '</div>';
     return h;
   }
@@ -3307,7 +3312,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     return raw.split('|').map(function (x) { return x.trim(); }).filter(function (x) {
       if (x.length < 12 || x.length > 220) return false;
       if (/(적중모의고사|모의고사|난이도|켈리 카페|해설\s*:|출처|저작권)/.test(x)) return false;
-      if (/^(해석|풀이|오답)\s*[:：]/.test(x)) return false;   /* 보강 해설의 라벨 줄은 빈칸·카드 재료로 쓰지 않는다 */
+      if (/^(해석|풀이|오답|원문)\s*[:：]/.test(x)) return false;   /* 보강 해설의 라벨 줄은 빈칸·카드 재료로 쓰지 않는다 */
       var digits = (x.match(/[0-9]/g) || []).length;
       if (digits / x.length > 0.22) return false;
       return true;

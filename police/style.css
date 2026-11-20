@@ -1193,6 +1193,10 @@ body.boss .quiz::before{content:"";position:absolute;inset:0;pointer-events:none
 .fb-sec.sol .fb-sec-k{background:#a6edc6}
 .fb-sec.wrong{background:rgba(255,150,130,.09);border-color:rgba(255,150,130,.24)}
 .fb-sec.wrong .fb-sec-k{background:#ffc6b8}
+/* 카페 답지 원문(수진 님 "맨 밑에 켈리카페답지원문 추가") — 맨 아래 인용 카드처럼 보이게 */
+.fb-sec.orig{background:rgba(150,140,215,.07);border-color:rgba(150,140,215,.22);border-style:dashed}
+.fb-sec.orig .fb-sec-k{background:#c9c1ee}
+.fb-sec.orig .fb-sec-b{font-size:13px;line-height:1.6;color:var(--ink3)}
 @media(max-width:390px){ .fb-sec{padding:9px 11px 10px} .fb-sec-b{font-size:13.5px;line-height:1.64} .fb-sec-ul li{font-size:13px} }
 .fb-head{font-size:15.5px;margin-bottom:9px}
 @media(max-width:390px){ .feedback{max-height:70vh;padding:14px 15px calc(12px + var(--safe-b))}
