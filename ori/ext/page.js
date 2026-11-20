@@ -487,6 +487,26 @@
       s.actions.forEach(a => { const b = document.createElement("button"); b.textContent = a.label; b.style.cssText = "padding:9px;border:0;border-radius:6px;cursor:pointer;font:bold 13px sans-serif;background:" + (a.color || "#03c75a") + ";color:#fff"; b.onclick = () => { b.disabled = true; b.textContent = "잠깐만요…"; try { chrome.runtime.sendMessage({ type: "act", act: a.act }); } catch (e) {} }; row2.appendChild(b); });
     }
     (s.notes || []).forEach(n => add("div", "color:" + (n.warn ? "#a35a00" : "#555") + ";font-size:12px;margin-top:6px;white-space:pre-wrap", n.t));
+    /* 키워드가 마음에 안 들 때 직접 정해서 다시 찾기 (사용자 요청 11/20 1.8.8) — 확장이 고른 키워드를 먼저 넣어 둠 */
+    if (s.kw) {
+      add("div", "margin-top:10px;font-size:12px;color:#555", "키워드가 마음에 안 들면 직접 정해서 다시 찾기");
+      const row = add("div", "display:flex;gap:6px;margin-top:6px");
+      const inp = document.createElement("input");
+      inp.style.cssText = "flex:1;min-width:0;padding:8px;border:1px solid #bbb;border-radius:6px;font:13px sans-serif;box-sizing:border-box";
+      inp.type = "text"; inp.value = s.kw.val || ""; inp.placeholder = s.kw.ph || "검색어 직접 입력";
+      const go = document.createElement("button");
+      go.style.cssText = "padding:8px 10px;border:0;border-radius:6px;cursor:pointer;font:bold 13px sans-serif;background:#5b2a86;color:#fff;white-space:nowrap";
+      go.textContent = "이 키워드로 찾기";
+      const goKw = () => {
+        const v = String(inp.value || "").replace(/\s+/g, " ").trim();
+        if (!v) { inp.placeholder = "검색어를 넣어 주세요"; try { inp.focus(); } catch (e) {} return; }
+        go.disabled = true; go.textContent = "찾는 중…";
+        try { chrome.runtime.sendMessage({ type: "act", act: "customkw:" + v }); } catch (e) {}
+      };
+      go.onclick = goKw;
+      inp.addEventListener("keydown", e => { if (e && e.key === "Enter") { e.preventDefault(); goKw(); } });
+      row.appendChild(inp); row.appendChild(go);
+    }
     if (s.img) { const im = add("img", "display:block;max-width:100%;max-height:150px;width:auto;height:auto;margin-top:8px;border-radius:6px;border:1px solid #ddd"); im.src = s.img; im.alt = "대표 썸네일"; }
     return true;
   }

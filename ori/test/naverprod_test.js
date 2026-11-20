@@ -5,6 +5,9 @@
 //              ⑤ waitComplete가 이미 다 뜬 탭에서 25초를 그냥 세던 것 → 바로 통과
 //              ⑥ autoRun이 상품 페이지가 아닌 주소(shopping.naver.com·naver.me)를 주소와 함께 알려 주고, 도중에 터지면 탭을 앞으로
 //              ⑦ page.js readProduct가 body 없음·빈 화면에서도 예외를 안 던짐
+//  확장 1.8.8 (사용자 요청 "키워드가 마음에 안 들면 검색 키워드 내가 정할 수 있게"):
+//              ⑧ 결과 상자에 키워드 입력칸 + [이 키워드로 찾기] → customkw: 액션
+//              ⑨ 네이버는 그 키워드로 다시 검색(naverAct), 쿠팡 검색 화면은 그 키워드로 검색해 읽기, 상품 페이지는 그 키워드로 처음부터(start)
 //  node naverprod_test.js <Main.js>
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const root = path.join(__dirname, '..', '..');
@@ -125,7 +128,7 @@ function runRun(opt) {
     call: async (tid, name) => { calls++; if (name !== 'readProduct') return null; const r = opt.read(calls - 1); if (r instanceof Error) throw r; return r; },
     pushGen: m => { if (m && m.status) statuses.push(m.status); },
     ui: async (id, s) => { uis.push(s); if (s && s.title) statuses.push(s.title + (s.msg ? ' · ' + String(s.msg).split('\n')[0] : '')); return null; },
-    naverProduct: async (tab, info) => { seen.push(info); return true; },
+    naverProduct: async (tab, info, ov) => { seen.push({ info: info, ov: ov }); return true; },
     naverHere: async () => {}, coupangHere: async () => {},
     tabHash: async () => '', fnOf: () => '', keepFn: async () => {}, suggest: n => [n].filter(Boolean),
     sleep: async () => {}, chrome: { scripting: { executeScript: async () => {} } }
@@ -133,7 +136,7 @@ function runRun(opt) {
   vm.createContext(ctx);
   vm.runInContext(fnSrc(bg, 'async function run('), ctx);
   ctx.__tab = { id: 5, index: 1, windowId: 1, url: opt.url || NVURL };
-  vm.runInContext('globalThis.__r = run(globalThis.__tab)', ctx);
+  vm.runInContext('globalThis.__r = run(globalThis.__tab' + (opt.kw ? ', ' + JSON.stringify(opt.kw) : '') + ')', ctx);
   return vm.runInContext('globalThis.__r', ctx).then(r => ({ r, statuses, uis, seen, calls: () => calls }));
 }
 (async () => {
@@ -148,7 +151,7 @@ function runRun(opt) {
     let n = 0;
     const x = await runRun({ read: i => (i < 3 ? { site: 'naver', name: '', seller: '', pid: PID, price: 0 } : { site: 'naver', name: NM, seller: ST, pid: PID, price: 29900 }) });
     ok(x.calls() === 4, '네이버에서 상품명이 빈칸이면 화면이 그려질 때까지 다시 읽음 (4번째에 읽음: ' + x.calls() + '번)');
-    ok(x.r === true && x.seen.length === 1 && x.seen[0].name === NM, '다 읽은 뒤에 검색 탭 열기로 넘어감 (' + JSON.stringify(x.seen.map(i => i.name)) + ')');
+    ok(x.r === true && x.seen.length === 1 && x.seen[0].info.name === NM, '다 읽은 뒤에 검색 탭 열기로 넘어감 (' + JSON.stringify(x.seen.map(i => i.info.name)) + ')');
     n = 0;
   }
   {
@@ -249,8 +252,73 @@ function runRun(opt) {
   }
   ok(!/out \|\| isNv/.test(bg) && !/const isNv = \/naver/.test(fnSrc(bg, 'async function autoRun(')), 'autoRun: 네이버라는 이유만으로 닫던 조건(out || isNv) 없음');
 
+  {
+    /* 사용자가 직접 정한 키워드로 다시 찾기 (1.8.8) */
+    const x = await runRun({ read: () => ({ site: 'naver', name: NM, seller: ST, pid: PID, price: 29900 }), kw: ['겨울모자'] });
+    ok(x.r === true && x.seen.length === 1 && JSON.stringify(x.seen[0].ov) === JSON.stringify(['겨울모자']), 'run(): 사용자 키워드가 있으면 그걸 naverProduct에 넘김 (' + JSON.stringify(x.seen[0] && x.seen[0].ov) + ')');
+  }
+  ok(/kwOverride && kwOverride\.length/.test(fnSrc(bg, 'async function run(')), 'run(): 사용자 키워드를 자동 추천보다 먼저 씀 (쿠팡도 같은 길)');
+  ok(/async function start\(tab, kwOverride\)/.test(bg) && /return await run\(tab, kwOverride\)/.test(bg), 'start(tab, kwOverride) → run(tab, kwOverride)');
+
+  /* ---------- 7-2) bg.js customKw: 어디서 누르든 그 키워드로 다시 찾음 ---------- */
+  function runCustomKw(tabUrl, act) {
+    const calls = [], uis = [];
+    const ctx = {
+      console, Date, Promise, setTimeout, clearTimeout, URL, URLSearchParams, busy: false, busySince: 0,
+      pushGen: () => {}, ui: async (id, s) => { uis.push(s); return null; },
+      naverAct: async (tab, a) => { calls.push(['naverAct', tab.id, a]); },
+      coupangHere: async tab => { calls.push(['coupangHere', tab.id]); return 'here'; },
+      start: async (tab, kw) => { calls.push(['start', tab.id, kw]); },
+      waitCompleteEvent: async () => {}, sleep: async () => {},
+      urlFor: (site, dev, k) => 'https://www.coupang.com/np/search?q=' + encodeURIComponent(k) + '&dev=' + dev,
+      chrome: { tabs: { update: async (id, o) => { calls.push(['update', id, o.url]); return { id: id }; }, get: async () => ({ id: 5, url: tabUrl, status: 'complete' }) } }
+    };
+    vm.createContext(ctx);
+    vm.runInContext(fnSrc(bg, 'async function customKw('), ctx);
+    ctx.__tab = { id: 5, url: tabUrl };
+    return Promise.resolve(vm.runInContext('customKw(__tab, ' + JSON.stringify(act) + ')', ctx)).then(() => ({ calls, uis }));
+  }
+  {
+    const r = await runCustomKw('https://search.shopping.naver.com/search/all?query=A', 'customkw:겨울모자');
+    ok(r.calls.length === 1 && r.calls[0][0] === 'naverAct' && r.calls[0][2] === 'customkw:겨울모자', '네이버 검색 화면: 그 키워드로 다시 찾기로 넘김 (' + JSON.stringify(r.calls) + ')');
+  }
+  {
+    const r = await runCustomKw('https://www.coupang.com/np/search?q=A', 'customkw:겨울모자');
+    ok(r.calls.some(c => c[0] === 'update' && String(c[2]).indexOf(encodeURIComponent('겨울모자')) >= 0), '쿠팡 검색 화면: 그 키워드로 검색한 화면을 엶 (' + JSON.stringify(r.calls.filter(c => c[0] === 'update')) + ')');
+    ok(r.calls.some(c => c[0] === 'coupangHere'), '쿠팡 검색 화면: 연 뒤 그 화면에서 상품을 찾음');
+  }
+  {
+    const r = await runCustomKw(NVURL, 'customkw: 겨울 모자 ');
+    ok(r.calls.some(c => c[0] === 'start' && JSON.stringify(c[2]) === JSON.stringify(['겨울 모자'])), '상품 페이지: 그 키워드로 처음부터 다시 찾음 (공백 정리, ' + JSON.stringify(r.calls) + ')');
+  }
+  {
+    const r = await runCustomKw(NVURL, 'customkw:   ');
+    ok(r.uis.length === 1 && String(r.uis[0].title).indexOf('키워드를 넣어 주세요') >= 0 && !r.calls.length, '빈 키워드면 안내만 하고 아무것도 안 함');
+  }
+  {
+    /* naverAct: 그 키워드로 네이버 검색 주소를 열고 naverHere, nvTarget.kws 맨 앞에 넣음 */
+    const calls = [], pushed = [];
+    let saved = null;
+    const ctx = {
+      console, Date, Promise, setTimeout, clearTimeout, URL, URLSearchParams,
+      chrome: { storage: { local: { get: async () => ({ nvTarget: { kws: ['A', 'B'], price: 29900 } }), set: async o => { saved = o.nvTarget; calls.push(['set']); } } },
+        tabs: { update: async (id, o) => { calls.push(['update', o.url]); return { id: id }; }, get: async () => ({ id: 5, url: 'https://search.shopping.naver.com/search/all?query=%EA%B2%A8%EC%9A%B8%EB%AA%A8%EC%9E%90' }) } },
+      ui: async () => null, pushGen: m => { if (m && m.status) pushed.push(m.status); },
+      waitCompleteEvent: async () => {}, sleep: async () => {},
+      nvSearchUrl: (k, mob) => 'https://search.shopping.naver.com/search/all?query=' + encodeURIComponent(k),
+      naverHere: async tab => { calls.push(['here', tab.id]); return 'H'; }
+    };
+    vm.createContext(ctx);
+    vm.runInContext(fnSrc(bg, 'async function naverAct('), ctx);
+    const r = await vm.runInContext('naverAct({ id: 5, url: "https://search.shopping.naver.com/search/all?query=A" }, "customkw:겨울모자")', ctx);
+    ok(r === 'H', 'naverAct customkw: 그 키워드로 다시 찾고 naverHere를 부름 (' + JSON.stringify(r) + ')');
+    ok(calls.some(c => c[0] === 'update' && c[1].indexOf(encodeURIComponent('겨울모자')) >= 0), '그 키워드로 네이버 검색 주소를 엶');
+    ok(saved && saved.kws[0] === '겨울모자' && saved.kws.indexOf('A') >= 0 && saved.kws.length === 3, 'nvTarget.kws 맨 앞에 사용자 키워드 (이어지는 [다음 키워드]·가격 단추도 이 키워드 기준): ' + JSON.stringify(saved && saved.kws));
+    ok(pushed.some(t => t.indexOf('겨울모자') >= 0), '생성기에도 진행 상태를 보냄');
+  }
+
   /* ---------- 8) bg.js naverProduct: 검색 탭을 열고 찾기까지 가면 true ---------- */
-  function runNaver(info, kws) {
+  function runNaver(info, kws, ov) {
     const created = [], order = [], pushed = [];
     const ctx = {
       console, URL, URLSearchParams, Date, Promise,
@@ -265,7 +333,7 @@ function runRun(opt) {
     vm.createContext(ctx);
     vm.runInContext(fnSrc(bg, 'async function naverProduct('), ctx);
     ctx.__tab = { id: 11, index: 2, url: NVURL, windowId: 1 };
-    vm.runInContext('globalThis.__p = naverProduct(globalThis.__tab, ' + JSON.stringify(info) + ')', ctx);
+    vm.runInContext('globalThis.__p = naverProduct(globalThis.__tab, ' + JSON.stringify(info) + (ov ? ', ' + JSON.stringify(ov) : '') + ')', ctx);
     return vm.runInContext('globalThis.__p', ctx).then(r => ({ r, created, order, pushed }));
   }
   {
@@ -280,9 +348,70 @@ function runRun(opt) {
     ok(r === false, 'naverProduct: 키워드를 못 만들면 false (' + JSON.stringify(r) + ') — 상품 탭을 살려 둠');
     ok(created.length === 0, "'undefined'를 검색하는 탭을 열지 않음");
   }
+  {
+    const { r, created } = await runNaver({ site: 'naver', name: NM, seller: ST, pid: PID, price: 29900, img: '' }, ['자동추천'], ['겨울모자']);
+    ok(r === true && created.length === 1 && decodeURIComponent(created[0].url).indexOf('겨울모자') >= 0, 'naverProduct: 사용자 키워드가 있으면 자동 추천 대신 그 키워드로 검색 탭을 엶 (' + decodeURIComponent((created[0] || {}).url || '') + ')');
+  }
 
-  /* ---------- 9) 버전·배포물 한 세트 (확장 1.8.7) ---------- */
-  ok(man.version === '1.8.7', 'manifest 버전 1.8.7 (' + man.version + ')');
+  /* ---------- 8-2) page.js box(): 결과 상자의 키워드 입력칸 + [이 키워드로 찾기] (1.8.8) ---------- */
+  function boxDom(s) {
+    const sent = [];
+    const mk = tag => {
+      const e = { tag: tag, children: [], style: {}, _h: {}, value: '', disabled: false };
+      e.appendChild = c => { e.children.push(c); return c; };
+      e.addEventListener = (t, f) => { (e._h[t] = e._h[t] || []).push(f); };
+      e.fire = (t, ev) => (e._h[t] || []).forEach(f => f(ev || {}));
+      e.focus = () => { e.focused = true; };
+      e.select = () => {};
+      e.remove = () => {};
+      Object.defineProperty(e, 'textContent', { get: () => e._text || '', set: v => { e._text = String(v); } });
+      return e;
+    };
+    let root = null;
+    const document = { getElementById: () => null, createElement: mk, body: { appendChild: c => { root = c; return c; } }, execCommand: () => true };
+    const chrome = { runtime: { getManifest: () => ({ version: '1.8.8' }), sendMessage: m => { sent.push(m); } } };
+    const ctx = { document, chrome, navigator: {}, console, setTimeout, clearTimeout, Promise, Math, Number, String, RegExp, Array, Object };
+    vm.createContext(ctx);
+    vm.runInContext(fnSrc(pg, 'function box('), ctx);
+    ctx.__s = s;
+    vm.runInContext('box(__s)', ctx);
+    const bx = root;
+    const find = tag => { const out = []; const walk = x => { if (x.tag === tag) out.push(x); (x.children || []).forEach(walk); }; walk(bx); return out; };
+    return { bx, find, sent };
+  }
+  /* box()는 만든 상자를 document.body.appendChild로 넘기므로, 그 상자를 잡아 둘 수 있게 body.appendChild가 받아 둔다 */
+  {
+    const t = boxDom({ title: '찾았어요', big: '키워드 : A', out: '상품명 : X', kw: { val: '에큐어 젊음크림', ph: '다른 검색어로 찾기' } });
+    const inp = t.find('input')[0];
+    const btn = t.find('button').filter(b => b.textContent === '이 키워드로 찾기')[0];
+    ok(t.find('input').length === 1 && !!btn, 'box(): 결과 상자에 키워드 입력칸·[이 키워드로 찾기] 단추가 한 벌만 (' + t.find('input').length + '칸/' + t.find('button').length + '단추)');
+    ok(inp && inp.value === '에큐어 젊음크림', 'box(): 확장이 고른 키워드를 입력칸에 미리 넣어 둠 (' + (inp && inp.value) + ')');
+    inp.value = '  겨울 모자  ';
+    btn.onclick();
+    ok(t.sent.length === 1 && t.sent[0].type === 'act' && t.sent[0].act === 'customkw:겨울 모자', '단추 → customkw:<키워드> 액션 (공백 정리, ' + JSON.stringify(t.sent) + ')');
+    ok(btn.disabled === true && btn.textContent === '찾는 중…', '누른 뒤에는 두 번 못 누르게 "찾는 중…"');
+  }
+  {
+    const t = boxDom({ title: '못 찾았어요', kw: { val: '' } });
+    const inp = t.find('input')[0], btn = t.find('button').filter(b => b.textContent === '이 키워드로 찾기')[0];
+    inp.value = '   ';
+    btn.onclick();
+    ok(t.sent.length === 0 && inp.placeholder === '검색어를 넣어 주세요', '빈 값이면 안내만 하고 안 보냄 (placeholder: ' + inp.placeholder + ')');
+  }
+  {
+    const t = boxDom({ title: '못 찾았어요', kw: { val: 'A' } });
+    const inp = t.find('input')[0];
+    inp.value = '엔터 키워드';
+    inp.fire('keydown', { key: 'Enter', preventDefault() {} });
+    ok(t.sent.length === 1 && t.sent[0].act === 'customkw:엔터 키워드', 'Enter로도 찾기 (' + JSON.stringify(t.sent) + ')');
+  }
+  {
+    const t = boxDom({ title: '상품 위치 찾기', msg: '안내' });
+    ok(t.find('input').length === 0, '키워드 칸이 없는 상자(안내만)에는 입력칸을 안 넣음');
+  }
+
+  /* ---------- 9) 버전·배포물 한 세트 (확장 1.8.8) ---------- */
+  ok(man.version === '1.8.8', 'manifest 버전 1.8.8 (' + man.version + ')');
   const ev = (gen.match(/const EXT_VER = "([\d.]+)"/) || [])[1];
   ok(ev === man.version, '생성기 EXT_VER(' + ev + ') = manifest 버전(' + man.version + ')');
   {
@@ -294,7 +423,8 @@ function runRun(opt) {
     ok(String(entries['ext/page.js']).indexOf('const parts = (document.title || "").split(/\\s+:\\s+/);') >= 0, 'zip 안 ext/page.js에 parts 선언 들어감');
     ok(/function readProduct_\(\)/.test(String(entries['ext/page.js'])), 'zip 안 ext/page.js에 readProduct 방어 코드 들어감 (1.8.7)');
     ok(/const late = \/\(coupang\\\.com\|naver\\\.com\)\//.test(String(entries['ext/bg.js'])), 'zip 안 ext/bg.js에 네이버 빈 상품명 재시도 들어감 (1.8.7)');
-    ok(/\"version\":\s*\"1\.8\.7\"/.test(String(entries['ext/manifest.json'])), 'zip 안 ext/manifest.json도 1.8.7');
+    ok(/\"version\":\s*\"1\.8\.8\"/.test(String(entries['ext/manifest.json'])), 'zip 안 ext/manifest.json도 1.8.8');
+    ok(/customkw:/.test(String(entries['ext/bg.js'])) && /이 키워드로 찾기/.test(String(entries['ext/page.js'])), 'zip 안 ext/bg.js·page.js에 사용자 키워드 재검색 들어감 (1.8.8)');
     ok(/await naverHere\(nt\);/.test(String(entries['ext/bg.js'])), 'zip 안 ext/bg.js에 naverProduct 수정 들어감');
   }
 
