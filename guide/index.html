@@ -2699,7 +2699,21 @@ details.help-box summary {
   // 카톡에서 여러 메시지를 같이 복사하면 줄 앞에 붙는 "[오리입니다] [오전 9:48]" 같은 머리를 뗌
   function cleanReq(text) {
     return String(text || "").replace(/\r/g, "").split("\n")
-      .map(l => l.replace(/^\s*\[[^\]]{1,30}\]\s*\[(?:오전|오후)\s*\d{1,2}:\d{2}\]\s*/, "")).join("\n");
+      .map(l => l.replace(/^\s*\[[^\]]{1,30}\]\s*\[(?:오전|오후)\s*\d{1,2}:\d{2}\]\s*/, ""))
+      .join("\n");
+  }
+  /* '1번) …', '5번) …'처럼 칸 이름 없이 '번호+번'만 적은 의뢰서 (11/20 사용자: 두부과자 의뢰서)
+     — 칸 이름이 없어 1번 줄부터 전부 리뷰 안내로 읽혀 키워드·건수·옵션이 비고, 키워드가 상품명에서 자동으로 '냉장'이 됨
+     → 의뢰서 기본 양식 번호대로 칸 이름을 붙임 (NUMBER_LABELS 와 같은 순서). '8번) 리뷰가이드: …'처럼 이미 칸 이름이 있으면 그대로 */
+  const BEON_NAMES = { 1: "검색 키워드", 2: "순위", 3: "총 구매 건수", 4: "일 진행 건수", 5: "상품주소(URL)", 6: "구매옵션", 7: "포토제공", 8: "리뷰 가이드", 9: "입금자명", 10: "택배대행" };
+  function beonReq(text) {
+    const ls = String(text || "").split("\n"), re = /^\s*(10|[1-9])\s*번\s*(?:[.)：:]\s*|\s+)(.*)$/;
+    if (ls.filter(l => re.test(l)).length < 3) return text;
+    return ls.map(l => {
+      const m = l.match(re); if (!m) return l;
+      const rest = m[2].trim();
+      return LABELS.some(x => x[1].test(rest.split(/[:：]/)[0])) && /[:：]/.test(rest) ? m[1] + ". " + rest : m[1] + ". " + BEON_NAMES[m[1]] + " : " + rest;
+    }).join("\n");
   }
   // 의뢰서 머리 줄: "#입금대행 택대 13600", "#입금대행 실배 원고제공 21200 10700 9700 11700" (맨 위나 맨 아래 어디든)
   const HEAD_RE = /^\s*#?\s*(입금\s*대행|업체\s*입금|업입|입대)/;
@@ -2728,6 +2742,7 @@ details.help-box summary {
   }
   function parseAll(text0) {
     { const ir = infoAsReq(text0); if (ir) text0 = ir; }
+    text0 = beonReq(cleanReq(text0));
     const all = cleanReq(text0).split("\n");
     const headLine = (all.find(l => HEAD_RE.test(l)) || "").trim();
     let dateWord = "";
@@ -6228,7 +6243,7 @@ details.help-box summary {
   if (typeof globalThis !== "undefined") {
     globalThis.__PARSER__ = {
       parseAll, parseHead, setGuides: gs => { guides = gs; }, fieldsOf, parseOptions, parse, parseCoupang, optionText, optForGuide, colorHintOf, baseName, makeRoom, shortName, suggestKeywords, sugKw, kwList, reviewMix, rvDefaults, rvIssues, reviewKind, reviewTotals, photoWait, isBlockedText, posText, okSeller, maskItem,
-      buildPlan, planRoomFrom, dayTotalOf, roomHasTak, takFixRoom, sheetBaseName, takAskNeeded, silbinTakNNote, silbinTakNAsk, SILBIN_TAKN_TEXT, render, isSilbin, totalCount, platCountOf, routePaste, fillCoupang, autoKeyword, shareSameProd, isImgUrl, infoAsReq, setHead: h => { lastHead = h; }, setCur: i => { cur = i; }
+      buildPlan, planRoomFrom, dayTotalOf, roomHasTak, takFixRoom, sheetBaseName, takAskNeeded, silbinTakNNote, silbinTakNAsk, SILBIN_TAKN_TEXT, render, isSilbin, totalCount, platCountOf, routePaste, fillCoupang, autoKeyword, shareSameProd, isImgUrl, infoAsReq, beonReq, setHead: h => { lastHead = h; }, setCur: i => { cur = i; }
     };
   }
 })();
