@@ -1745,6 +1745,17 @@ function diag_(p) {
         runs: mine.map(function (x) { return bareTitle_(x['명단 제목']) + ' 목표' + x['목표인원'] + ' 총' + x['총건수'] + ' 인원' + x['인원'] + ' 일차' + x['일차'] + ' ' + x['요청ID']; }) }; }
   } catch (e) { out.rqErr = String(e); }
   // &mfold=1: 이번 달 폴더 안 같은 이름 폴더가 여럿인 것 (이름, 폴더마다 파일·하위 폴더 수, 만든 때) (읽기만, 11/17 전기면도기 폴더 (1)~(10))
+  // &fnm=1: 이번 달·지난달 폴더 중 폴더 이름이 안의 명단 시트 이름과 다른 것 (읽기만, 11/20 오르베카 폴더 이름에 잘린 영어)
+  if (p.fnm) try {
+    const d0 = new Date(), root = rootFolder_(), res = [];
+    [0, 1].forEach(function (b) {
+      const dd = new Date(d0.getFullYear(), d0.getMonth() - b, 1), nm = dd.getFullYear() + '년 ' + (dd.getMonth() + 1) + '월', mi = root.getFoldersByName(nm);
+      if (!mi.hasNext()) return;
+      const it = mi.next().getFolders();
+      while (it.hasNext()) { const f = it.next(), fs = f.getFilesByType(MimeType.GOOGLE_SHEETS), sn = []; while (fs.hasNext()) sn.push(fs.next().getName()); if (sn.length && sn.indexOf(f.getName()) < 0) res.push(nm + ' | ' + f.getName() + ' → ' + sn.join(' / ') + ' (…' + f.getId().slice(-6) + ')'); }
+    });
+    out.fnm = res.slice(0, 80);
+  } catch (e) { out.fnmErr = String(e); }
   if (p.mfold) try {
     const mf = monthFolder_(new Date()), it = mf.getFolders(), by = {};
     while (it.hasNext()) { const f = it.next(); (by[f.getName()] = by[f.getName()] || []).push(f); }
@@ -1959,7 +1970,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3724,6 +3735,7 @@ function checkFullInner_() {
       try { koziRen1_(); } catch (e) {}
       try { koziWeekend1_(); } catch (e) {}
       try { koziFix2_(); } catch (e) {}
+      try { orvecFold1_(); } catch (e) {}
       try { if (!props.getProperty('EDITC1')) { ensureEditTab_(); props.setProperty('EDITC1', Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm')); } } catch (e) { note_('폼수정 날짜 칸 실패: ' + e); }   // (11/18 한 번) C1 날짜 고르기 바로 (정리가 밀려 늦게 생기던 것)
       try { upAcctOpen1_(); } catch (e) {}
       try { exp135_(); } catch (e) {}
@@ -9321,6 +9333,21 @@ function koziFix2_() {
     props.deleteProperty('DASH_SIG');
     props.setProperty('KOZIWK2', ('✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '이미 됨')).slice(0, 600));
   } catch (e) { props.setProperty('KOZIWK2', (st + ' 실패(' + (e && e.message || e) + ') ' + out.join(', ')).slice(-400)); }
+}
+/* 11/20 사용자: '#택 오르베카 엔부사과 30' 명단 시트·폼은 이름이 맞는데 폴더 이름만 '#택 오르베카(OrVec30'(11/12에 만들 때 잘린 영어)
+   → 폴더 이름을 안의 명단 시트 이름으로. 이름이 아직 그 잘린 이름일 때만, 시트가 '#택 오르베카'로 시작할 때만 (한 번만) */
+function orvecFold1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('ORVECFOLD1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
+  try {
+    const fo = DriveApp.getFolderById('1c5TW1XDoQKoStTvC0kweVrIHQFC4tIX7'), old = fo.getName();
+    if (old !== '#택 오르베카(OrVec30') { props.setProperty('ORVECFOLD1', '✓ 이미 됨: ' + old.slice(0, 60)); return; }
+    const it = fo.getFilesByType(MimeType.GOOGLE_SHEETS), names = [];
+    while (it.hasNext()) names.push(it.next().getName());
+    if (names.length !== 1 || names[0].indexOf('#택 오르베카') !== 0) { props.setProperty('ORVECFOLD1', (st + ' 실패(시트 ' + names.length + '개: ' + names.join(' / ').slice(0, 80) + ')').slice(-400)); return; }
+    fo.setName(names[0]);
+    props.setProperty('ORVECFOLD1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 폴더 이름 ' + old + ' → ' + names[0]);
+  } catch (e) { props.setProperty('ORVECFOLD1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 function cableFmt1_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('CABLEFMT1') || '');
