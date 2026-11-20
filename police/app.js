@@ -1161,7 +1161,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
 
   /* ---------- mascot ---------- */
-  var MV = '2026111941';
+  var MV = '2026112022';
   /* 순경 공채(2027-08-21)·지텔프(2026-11-29) 목표에 맞춘 현실 자극 문구 */
   var MOT = {
     done: [
@@ -1953,7 +1953,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       sfx('no');
     }
     OX.xp += gain; S.xp += gain; day.xp = (day.xp || 0) + gain;
-    var why = String(q.e || '').replace(/^\[[^\]]*\]\s*/, '').replace(/([.!?])\s+/g, '$1\n').split('\n')[0] || '';
+    var why = expLine(q, '풀이') || String(q.e || '').replace(/^\[[^\]]*\]\s*/, '').replace(/([.!?])\s+/g, '$1\n').split('\n')[0] || '';
     if (!why || /^정답\s*[OX0-9①-④][.)]?$/.test(why.trim())) {
       why = (right ? '정답이에요. ' : '이 문장은 원문과 다듬어진 부분이 있는 선지예요. ') + '출처: ' + (q.src || qLabel(q));
     }
@@ -2064,8 +2064,20 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     });
     return h;
   }
+  /* 해설에서 '풀이:'·'해석:' 처럼 라벨이 붙은 줄만 꺼내기 (보강된 지텔프 해설용) */
+  function expLine(q, label) {
+    var lines = String((q && q.e) || '').replace(/\r/g, '').split(/\n/);
+    var re = new RegExp('^' + label + '\\s*[:：]\\s*');
+    for (var i = 0; i < lines.length; i++) {
+      var t = lines[i].trim();
+      if (re.test(t)) return t.replace(re, '').trim();
+    }
+    return '';
+  }
   /* 해설 첫 줄(핵심)만 짧게 */
   function expShort(q) {
+    var pick = expLine(q, '풀이') || expLine(q, '해석');
+    if (pick) return pick;
     var raw = String((q && q.e) || '').split(/\n/)[0].replace(/^\[(핵심|정답|해설)\]\s*/, '').trim();
     return raw || ('정답: ' + (q && q.o && q.o[q.a] ? q.o[q.a] : ''));
   }
@@ -2422,11 +2434,13 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (tm && /[가-힣]/.test(tm[1]) && /다[.)]?\s*$/.test(tm[1].trim())) { tr = tm[1].trim(); raw = raw.slice(0, tm.index).trim(); }
     /* 선지별 해설(①~④ · ㉠~㉣ · ㄱ.) 줄은 한 덩어리로 두고, 나머지는 문장 단위로 끊어 읽기 좋게 */
     var OPT_LINE = /^(?:[①-④]|[㉠-㉣]|[ㄱㄴㄷㄹ]\s*\.|[가나다라]\s*\.)/;
+    /* 지텔프 보강 해설: '해석:'·'풀이:'·'오답:' 라벨 줄과 그 아래 '· ' 목록은 통째로 한 덩어리 */
+    var SEC_LINE = /^(해석|풀이|오답)\s*[:：]\s*([\s\S]*)$/;
     var sents = [];
     raw.split(/\n+/).forEach(function (line) {
       line = line.trim();
       if (!line) return;
-      if (OPT_LINE.test(line)) { sents.push(line); return; }
+      if (OPT_LINE.test(line) || SEC_LINE.test(line) || /^[-·•]\s*\S/.test(line)) { sents.push(line); return; }
       line.replace(/([.!?])\s+(?=[^\s])/g, '$1\n').split(/\n+/).forEach(function (x) {
         x = x.trim(); if (x) sents.push(x);
       });
@@ -2449,14 +2463,32 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var body = sents.filter(function (s) {
       return !(hasAns && /^정답\s*[OX0-9①-④][.)]?$/.test(s.trim()));
     });
-    body.forEach(function (s, i) {
+    /* '해석:'·'풀이:'·'오답:' 라벨 묶음 → 작은 제목이 붙은 카드 하나로 (지텔프 보강 해설) */
+    var blocks = [];
+    body.forEach(function (s) {
+      var sm2 = s.match(SEC_LINE);
+      if (sm2) { blocks.push({ k: sm2[1], b: (sm2[2] || '').trim(), li: [] }); return; }
+      var last = blocks[blocks.length - 1];
+      if (last && last.k && /^[-·•]\s*\S/.test(s)) { last.li.push(s.replace(/^[-·•]\s*/, '')); return; }
+      blocks.push({ t: s });
+    });
+    blocks.forEach(function (bk, i) {
+      if (bk.k) {
+        var cls = bk.k === '해석' ? 'tr' : (bk.k === '풀이' ? 'sol' : 'wrong');
+        h += '<div class="fb-sec ' + cls + '"><div class="fb-sec-k">' + esc(bk.k) + '</div>' +
+          (bk.b ? '<p class="fb-sec-b">' + T(bk.b) + '</p>' : '') +
+          (bk.li.length ? '<ul class="fb-sec-ul">' + bk.li.map(function (x) { return '<li>' + T(x) + '</li>'; }).join('') + '</ul>' : '') +
+          '</div>';
+        return;
+      }
+      var s = bk.t;
       var op = optLineHtml(s, T, '①②③④'.charAt(Number(q.a) || 0));
       if (op) { h += op; return; }
       var tg = s.match(/^\[(정답|핵심|해설|포인트|주의|비교)\]\s*([\s\S]*)$/);
       if (tg && tg[2].trim()) { h += '<p class="fb-key"><span class="fb-tag">' + esc(tg[1]) + '</span>' + T(tg[2].trim()) + '</p>'; return; }
       /* 정답 줄과 거의 같은 문장을 핵심 박스로 또 보여주면 두 번 읽게 되니 일반 문단으로만 */
       var sN = norm(s);
-      if (hasAns && body.length > 1 && sN.length > 10 && (sN === ansN || sN.indexOf(ansN) >= 0 || ansN.indexOf(sN) >= 0)) {
+      if (hasAns && blocks.length > 1 && sN.length > 10 && (sN === ansN || sN.indexOf(ansN) >= 0 || ansN.indexOf(sN) >= 0)) {
         h += '<p class="fb-p">' + T(s) + '</p>';
         return;
       }

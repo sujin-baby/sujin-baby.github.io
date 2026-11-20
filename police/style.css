@@ -1178,6 +1178,22 @@ body.boss .quiz::before{content:"";position:absolute;inset:0;pointer-events:none
   font-size:12.5px;line-height:1.6;color:var(--ink2);word-break:keep-all}
 .fb-tr b{display:block;font-size:9.5px;font-weight:900;color:var(--c-dark);letter-spacing:.4px;margin-bottom:3px}
 .fb-src{margin-top:9px;font-size:10.5px;font-weight:700;color:var(--ink3)}
+/* 해석·풀이·오답 카드 (지텔프 보강 해설) */
+.fb-sec{margin:0 0 11px;padding:10px 12px 11px;border-radius:12px;background:var(--card2);border:1px solid var(--line2)}
+.fb-sec:last-of-type{margin-bottom:4px}
+.fb-sec-k{display:inline-block;font-size:10px;font-weight:900;letter-spacing:.4px;color:#0b1220;border-radius:99px;padding:2px 9px;margin-bottom:6px}
+.fb-sec-b{margin:0;font-size:14px;line-height:1.66;color:var(--ink2);word-break:keep-all;overflow-wrap:anywhere}
+.fb-sec-ul{margin:2px 0 0;padding:0;list-style:none}
+.fb-sec-ul li{position:relative;margin:0 0 5px;padding-left:11px;font-size:13.5px;line-height:1.6;color:var(--ink2);word-break:keep-all;overflow-wrap:anywhere}
+.fb-sec-ul li:last-child{margin-bottom:0}
+.fb-sec-ul li:before{content:'·';position:absolute;left:0;top:-1px;font-weight:900;color:var(--ink3)}
+.fb-sec.tr{background:rgba(110,160,255,.10);border-color:rgba(110,160,255,.26)}
+.fb-sec.tr .fb-sec-k{background:#a9cbff}
+.fb-sec.sol{background:rgba(120,220,170,.10);border-color:rgba(120,220,170,.26)}
+.fb-sec.sol .fb-sec-k{background:#a6edc6}
+.fb-sec.wrong{background:rgba(255,150,130,.09);border-color:rgba(255,150,130,.24)}
+.fb-sec.wrong .fb-sec-k{background:#ffc6b8}
+@media(max-width:390px){ .fb-sec{padding:9px 11px 10px} .fb-sec-b{font-size:13.5px;line-height:1.64} .fb-sec-ul li{font-size:13px} }
 .fb-head{font-size:15.5px;margin-bottom:9px}
 @media(max-width:390px){ .feedback{max-height:70vh;padding:14px 15px calc(12px + var(--safe-b))}
   .fb-text{font-size:14px;line-height:1.66} .fb-key{font-size:14.5px} }
