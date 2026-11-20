@@ -53,10 +53,11 @@ async function autoRun(url, gt) {
     if (/oliveyoung\.co\.kr/.test(tab.url || "")) return await autoOy(tab);
     if (/toss\.(shopping|im)/.test(tab.url || "")) { await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["oy.js"] }); return; }   // 토스: 상품 정보만 (검색 순위는 토스 앱 안이라 못 찾음)
     if (!/\/products\/\d+/.test(tab.url || "")) { pushGen({ status: "상품 페이지가 안 열렸어요. 열린 탭을 확인해 주세요." }); await chrome.tabs.update(t.id, { active: true }); return; }
-    const isNv = /naver\.com/.test(tab.url || "");
     const out = await start(tab);
-    /* 쿠팡: 끝나면 상품 탭 닫음 (결과는 생성기에). 네이버: 검색 탭이 따로 열려서 상품 탭만 닫음. 못 찾으면 상품 탭을 보여 줌 */
-    if (out || isNv) chrome.tabs.remove(t.id).catch(() => {});
+    /* 쿠팡: 끝나면 상품 탭 닫음 (결과는 생성기에). 네이버: 검색 탭이 따로 열려서 상품 탭만 닫음.
+       실패했으면(out 없음) 네이버라도 상품 탭을 닫지 않고 활성 탭으로 보여 줌 — 탭이 그냥 사라져서
+       '확장 프로그램이 바로 꺼진다'로 보이던 것 (11/20 1.8.6) */
+    if (out) chrome.tabs.remove(t.id).catch(() => {});
     else chrome.tabs.update(t.id, { active: true }).catch(() => {});
   } finally { autoTab = 0; }
 }
@@ -569,6 +570,8 @@ async function naverProduct(tab, info) {
   const hk = (h.match(/(?:^|&)kw=([^&]+)/) || [])[1], hp = Number((h.match(/(?:^|&)pr=(\d+)/) || [])[1] || 0);
   const kws = (hk ? decodeURIComponent(hk).split("|") : suggest(info.name)).map(x => x.trim()).filter(Boolean).slice(0, 4);
   const price = hp || info.price || 0;
+  /* 키워드를 못 만들었으면 'undefined'를 검색하는 탭을 열지 않고 상품 탭에 이유를 보여 줌 (11/20 1.8.6) */
+  if (!kws.length) { await ui(tab.id, { title: "상품 위치 찾기", msg: "상품명을 못 읽어서 키워드를 못 만들었어요. 상품 페이지가 다 뜨면 아이콘을 한 번 더 눌러 주세요." }); return false; }
   const t = Object.assign({}, info, { kws: kws, price: price, at: Date.now() });
   await chrome.storage.local.set({ nvTarget: t });
   const thumb = { t: "썸네일 대신: 검색 화면에서 찾으면 그 칸을 캡처해서 저장해요." };
@@ -580,7 +583,10 @@ async function naverProduct(tab, info) {
   const nt = await chrome.tabs.create({ url: nvSearchUrl(kws[0], false), index: tab.index + 1, active: true });
   await waitComplete(nt.id, 25000);
   await sleep(2000);
-  return naverHere(nt);
+  await naverHere(nt);
+  /* 검색 탭을 열고 찾기까지 갔으면 성공 — 상품 탭은 닫아도 됨 (검색 탭이 앞에 뜸).
+     중간에 실패하면 예외가 올라가 autoRun이 상품 탭을 살려 둠 (11/20 1.8.6) */
+  return true;
 }
 
 /* 지금 보고 있는 네이버 검색 화면에서 찾기 */

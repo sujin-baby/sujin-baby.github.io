@@ -212,18 +212,34 @@
     }
     const pm = L.pathname.match(/products\/(\d+)/);
     if (!pm) return { err: "네이버는 스마트스토어(또는 브랜드스토어) 상품 페이지에서 눌러 주세요." };
+    /* 상품명·판매처를 뽑을 때 title을 '상품명 : 스토어이름'으로 나눔 — 쿠팡 칸에만 있고 여기 빠져 있어
+       네이버 상품 페이지에서 누르면 'parts is not defined'로 바로 멈추던 것 (11/20 1.8.6, 사용자 제보 '네이버 하니까 바로 꺼지잖아') */
+    const parts = (document.title || "").split(/\s+:\s+/);
     /* 상품명·판매처: 모바일 스마트스토어는 og:title·title이 짧은 이름만 담기도 해서 화면 제목·구조화 데이터(JSON-LD)까지 봄 (11/18 #77)
        - 상품명: og:title·title의 이름 → JSON-LD name → 화면 상품 제목 중 '첫 낱말이 같은' 가장 긴 것
        - 판매처: title 마지막 칸(스토어 이름) → 없으면 JSON-LD brand → 화면 브랜드 ('네이버 스마트스토어'만 읽어 빈칸이 되던 것) */
     const ld = (() => { try { const out = []; document.querySelectorAll('script[type="application/ld+json"]').forEach(s => { try { const j = JSON.parse(s.textContent || "null"); (Array.isArray(j) ? j : [j]).forEach(o => { if (o && o["@graph"]) o["@graph"].forEach(x => out.push(x)); else out.push(o); }); } catch (e) {} }); return out.filter(o => o && /product/i.test(String(o["@type"] || "")))[0] || null; } catch (e) { return null; } })();
     const ldName = String((ld && ld.name) || "").replace(/\s+/g, " ").trim();
     const ldBrand = String((ld && ld.brand && (ld.brand.name || ld.brand)) || "").replace(/\s+/g, " ").trim();
-    const tName = (og("title") || parts[0] || "").split(/\s+:\s+/)[0].trim();
-    const domName = (() => { try { return [...document.querySelectorAll('h1, h2, h3, [class*="product-title"], [class*="prd_name"], [class*="productName"], [class*="prod_name"]')].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).filter(t => t.length >= 6 && t.length <= 200 && !/^(?:상품|카테고리|리뷰|구매|배송|판매|네이버|NAVER|전체)/.test(t)).sort((a, b) => b.length - a.length)[0] || ""; } catch (e) { return ""; } })();
-    const name = [tName, ldName, domName].filter(Boolean).reduce((a, b) => (b.length > a.length && (!tName || b.slice(0, 2) === tName.slice(0, 2)) ? b : a), tName || "");
+    /* 판매처(스토어 이름)를 먼저 읽음 — 상품명 끝에 붙는 '| 스토어이름 · 복사'를 떼는 데 씀 (#96, 11/20) */
     let seller = (parts.length > 1 ? parts[parts.length - 1] : og("site_name")).replace(/\s*[-|]?\s*네이버.*$/, "").trim();
     if (!seller) seller = ldBrand;
     if (!seller) { try { seller = [...document.querySelectorAll('[class*="brand"], [class*="brandName"]')].map(e => (e.innerText || "").replace(/\s+/g, " ").trim()).filter(t => t.length >= 2 && t.length <= 30).sort((a, b) => a.length - b.length)[0] || ""; } catch (e) {} }
+    /* 스마트스토어 상품명 칸은 '상품명 | 스토어이름 복사'처럼 스토어 이름과 복사 단추 글자까지 담아 옴 → 떼어 냄 (#96, 11/20).
+       쿠팡 상품명에도 '|'가 들어갈 수 있어 판매처 이름과 같은 꼬리만 떼고, 규격 숫자·수량은 건드리지 않음 */
+    const tidyNm = t => {
+      let s = String(t || "").replace(/\s+/g, " ").trim();
+      for (let k = 0; k < 3; k++) {
+        const before = s;
+        s = s.replace(/\s*(?:\||·|ㆍ|-|–)\s*(?:복사|copy)\s*$/i, "").replace(/\s*(?:복사|copy)$/i, "").trim();
+        if (seller && seller.length >= 2) s = s.replace(new RegExp("\\s*(?:\\||｜|·|ㆍ|-|–)\\s*" + seller.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*(?:복사|copy)?\\s*$", "i"), "").trim();
+        if (s === before) break;
+      }
+      return s;
+    };
+    const tName = tidyNm((og("title") || parts[0] || "").split(/\s+:\s+/)[0].trim());
+    const domName = (() => { try { return [...document.querySelectorAll('h1, h2, h3, [class*="product-title"], [class*="prd_name"], [class*="productName"], [class*="prod_name"]')].map(e => tidyNm(e.innerText || "")).filter(t => t.length >= 6 && t.length <= 200 && !/^(?:상품|카테고리|리뷰|구매|배송|판매|네이버|NAVER|전체)/.test(t)).sort((a, b) => b.length - a.length)[0] || ""; } catch (e) { return ""; } })();
+    const name = [tName, tidyNm(ldName), domName].filter(Boolean).reduce((a, b) => (b.length > a.length && (!tName || b.slice(0, 2) === tName.slice(0, 2)) ? b : a), tName || "");
     /* 가격: 페이지 안 상품 데이터(할인가 → 판매가) → 화면에서 상품명 바로 뒤 가격 중 낮은 것(정가 줄 그은 것 말고 할인가) */
     let price = 0;
     const dm = html.match(/"discountedSalePrice"\s*:\s*(\d{3,})/) || html.match(/"mobileDiscountedSalePrice"\s*:\s*(\d{3,})/);

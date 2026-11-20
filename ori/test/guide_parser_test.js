@@ -2022,7 +2022,102 @@ kc인증 받은 안심되는 소재
   console.log('✓ #88 판매처 보기(2) 차단·방제 시험 통과 (정상 판매처 방제: ' + roomGood + ' / 보기(2)일 때: ' + roomBad + ')');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (41개 샘플 전원 일치)');
+// ==========================================
+// Test 42: 팀룸 #96 (11/20) — 의뢰서 머리 금액에 배송비를 또 더해 57,000 → 60,000 · 상품명 뒤 '| 판매처 복사'
+// ==========================================
+console.log('-- Test 42: #96 동대문청년 롱패딩·후리스 (머리 금액 57000 34500 + 배송비 3,000, 네이버 스마트스토어)');
+{
+  const req96 = `#입금대행 택대 57000 34500
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 겨울롱패딩, 단체롱패딩
+2. 키워드 검색 시 현재 순위 :모르시면 비워두세요
+3. 총 결제하신 건수 : 5
+4. 하루 진행 건수 : 2 / 2/ 1
+5. 상품주소(URL) : https://smartstore.naver.com/ddmyouth/products/13869405676
+6. 구매옵션 : 
+7. 포토제공 (몇명)  /포토없음  선택: 포토 다섯명
+8. 리뷰 가이드 :  /원고제공 / 
+9. 입금하실 입금자명 : 양흥식
+10.택배대행 Y/N: 
+
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다): 양털후리스, 단체후리스
+2. 키워드 검색 시 현재 순위 :모르시면 비워두세요
+3. 총 결제하신 건수 : 5
+4. 하루 진행 건수 : 2 / 2/ 1
+5. 상품주소(URL) : https://smartstore.naver.com/ddmyouth/products/13882663982
+6. 구매옵션 : `;
+  const h96 = P.parseAll(req96);
+  if (h96.guides.length !== 2) throw new Error('Test 42 #96은 가이드 2개여야 함: ' + h96.guides.length);
+  if (h96.headPrices.join(',') !== '57000,34500') throw new Error('Test 42 머리 줄 금액을 못 읽음: ' + JSON.stringify(h96.headPrices));
+  if (h96.guides[0].price !== '57000' || h96.guides[1].price !== '34500') throw new Error('Test 42 머리 금액이 가이드마다 안 들어감: ' + h96.guides[0].price + ' / ' + h96.guides[1].price);
+
+  const gs96 = h96.guides.map((g, i) => Object.assign({}, g, {
+    platform: '네이버', seller: '동대문청년', ship: '3,000', page: '1p',
+    pno: i ? '13882663982' : '13869405676',
+    pname: i ? '남녀공용 양털 후리스 집업 자켓 단체 주문 | 동대문청년' : '남녀공용 에어볼 롱패딩 겨울 돕바 단체복 | 동대문청년 복사'
+  }));
+  const fillFields = g => {
+    ['keyword', 'guide', 'daily', 'total', 'price', 'ship', 'platform', 'seller', 'option', 'pname', 'url', 'pno', 'short', 'page', 'pageM', 'similar', 'photo', 'thumb']
+      .forEach(k => { getElem(k).value = String(g[k] === undefined || g[k] === null ? '' : g[k]); });
+  };
+  P.setGuides(gs96);
+  P.setHead(h96);
+  getElem('req').value = req96;
+  getElem('t-ip').checked = true;
+  getElem('t-up').checked = false;
+  getElem('takdae').checked = true;
+  getElem('realship').checked = false;
+  getElem('cart').checked = false;
+  getElem('fruit').checked = false;
+  getElem('day').value = '1';
+  getElem('date').value = '2026-11-20';
+  getElem('slot').value = 'midnight';
+  fillFields(gs96[0]);
+  P.render();
+  const n96 = String(getElem('o-notice').value || '');
+
+  // ① 1번 상품: 의뢰서 금액 57,000 그대로 (60,000 아님)
+  if (n96.indexOf('🐥가격 : 57,000') < 0) throw new Error('Test 42 1번 가격이 57,000이 아님:\n' + n96.split('\n').filter(l => /가격/.test(l)).join(' / '));
+  if (/60,000|37,500/.test(n96)) throw new Error('Test 42 배송비가 또 더해짐(60,000/37,500): ' + n96.split('\n').filter(l => /가격/.test(l)).join(' / '));
+  if (n96.indexOf('🐥가격 : 34,500') < 0) throw new Error('Test 42 2번 가격이 34,500이 아님:\n' + n96.split('\n').filter(l => /가격/.test(l)).join(' / '));
+  // ② 상품명 끝 '| 동대문청년 복사'가 남지 않음
+  if (/복사/.test(n96)) throw new Error('Test 42 공지 상품명에 복사 단추 글자가 남음: ' + n96.split('\n').filter(l => /상품명/.test(l)).join(' / '));
+  if (/\|\s*동대문청년/.test(n96)) throw new Error('Test 42 공지 상품명에 판매처 꼬리가 남음: ' + n96.split('\n').filter(l => /상품명/.test(l)).join(' / '));
+  if (n96.indexOf('🐥상품명 : 남녀공용 에어볼 롱패딩 겨울 돕바 단체복\n') < 0) throw new Error('Test 42 상품명이 잘림: ' + JSON.stringify(n96.split('\n').filter(l => /상품명/.test(l)).join(' / ')));
+  if (n96.indexOf('🐥상품명 : 남녀공용 양털 후리스 집업 자켓 단체 주문\n') < 0) throw new Error('Test 42 2번 상품명에 판매처 꼬리가 남음');
+  // ③ 폼·결제금액 확인에 쓰는 가격도 57,000 (60,000이면 실제 결제 57,000과 어긋나 오탐)
+  const href96 = String(getElem('make-run').href || '');
+  const prices96 = decodeURIComponent((href96.match(/[&?]prices=([^&]*)/) || [])[1] || '');
+  if (prices96.indexOf('57000') < 0 || prices96.indexOf('60000') >= 0) throw new Error('Test 42 폼 생성 링크 가격이 틀림: "' + prices96 + '"');
+
+  // ④ 반대 케이스: 의뢰서에 금액이 없고 상품 페이지 가격(31,500)만 + 배송비 3,000 → 예전처럼 더함 (34,500)
+  P.setHead({ headPrices: [] });
+  getElem('req').value = req96.replace('#입금대행 택대 57000 34500', '#입금대행 택대');
+  P.setGuides([Object.assign({}, gs96[1], { price: '31,500', ship: '3,000', shipInHead: undefined })]);
+  fillFields(Object.assign({}, gs96[1], { price: '31,500' }));
+  P.render();
+  const nNoHead = String(getElem('o-notice').value || '');
+  if (nNoHead.indexOf('🐥가격 : 34,500 (배송비 3,000원 포함)') < 0) throw new Error('Test 42 페이지 가격+배송비 케이스가 깨짐(34,500이어야 함): ' + nNoHead.split('\n').filter(l => /가격/.test(l)).join(' / '));
+
+  // ⑤ 의뢰서 금액이 페이지 가격과 똑같으면(배송비 별도로 확인됨, shipInHead=false) 더해야 함
+  P.setHead({ headPrices: ['34500'] });
+  P.setGuides([Object.assign({}, gs96[1], { price: '34,500', ship: '3,000', shipInHead: false })]);
+  fillFields(Object.assign({}, gs96[1], { price: '34,500' }));
+  P.render();
+  const nSep = String(getElem('o-notice').value || '');
+  if (nSep.indexOf('🐥가격 : 37,500 (배송비 3,000원 포함)') < 0) throw new Error('Test 42 배송비 별도(shipInHead=false) 케이스가 깨짐(37,500이어야 함): ' + nSep.split('\n').filter(l => /가격/.test(l)).join(' / '));
+
+  // ⑥ 상품명 정제: 판매처 꼬리·복사만 떼고 규격·수량은 그대로
+  if (P.baseName('남녀공용 에어볼 롱패딩 겨울 돕바 단체복 | 동대문청년 복사', {}, { platform: '네이버', seller: '동대문청년' }) !== '남녀공용 에어볼 롱패딩 겨울 돕바 단체복') throw new Error('Test 42 네이버 상품명 정제 실패: ' + P.baseName('남녀공용 에어볼 롱패딩 겨울 돕바 단체복 | 동대문청년 복사', {}, { platform: '네이버', seller: '동대문청년' }));
+  if (P.baseName('무릎담요 3kg 극세사', {}, { platform: '쿠팡', seller: '동대문청년' }) !== '무릎담요 3kg 극세사') throw new Error('Test 42 규격이 붙은 상품명을 건드림');
+  if (P.baseName('제르넬 남성용 방한장갑 | 동대문청년', {}, { platform: '쿠팡', seller: '동대문청년' }) !== '제르넬 남성용 방한장갑') throw new Error('Test 42 쿠팡 상품명의 판매처 꼬리를 못 뗌');
+  if (P.baseName('무선마우스 | 화이트', {}, { platform: '네이버', seller: '동대문청년' }) !== '무선마우스 | 화이트') throw new Error('Test 42 판매처가 아닌 \'|\' 꼬리를 잘라냄');
+
+  console.log('✓ #96 머리 금액 배송비 중복 가산·상품명 \'| 판매처 복사\' 시험 통과 (57,000·34,500 / 페이지 가격만일 때 34,500 / 배송비 별도 37,500)');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (42개 샘플 전원 일치)');
 process.exit(0);
 
 
