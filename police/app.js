@@ -1161,7 +1161,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
 
   /* ---------- mascot ---------- */
-  var MV = '2026112022';
+  var MV = '2026112023';
   /* 순경 공채(2027-08-21)·지텔프(2026-11-29) 목표에 맞춘 현실 자극 문구 */
   var MOT = {
     done: [
@@ -2565,6 +2565,15 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
           for (var i = 0; i < opts.length; i++) {
             var q = opts[i].getBoundingClientRect();
             if (q.top < br.bottom - 0.5 && q.bottom > br.bottom + 0.5) { delta = q.bottom - br.bottom + 10; break; }
+          }
+        }
+        /* 정답 보기를 보여주려고 문제 지문의 첫 줄까지 화면 밖으로 밀지 않는다
+           (수진 님: 긴 지문인데 마지막 한 문장만 보여 '한 문장짜리 문제'로 보임) */
+        if (delta > 0) {
+          var stEl = bd.querySelector('.q-text') || bd.querySelector('.q-box');
+          if (stEl) {
+            var room = (stEl.getBoundingClientRect().top - br.top);
+            if (room < delta) delta = Math.max(0, room);
           }
         }
         if (Math.abs(delta) < 1) break;
