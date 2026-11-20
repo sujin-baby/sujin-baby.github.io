@@ -2230,6 +2230,84 @@ NonGMO   비닐패키지 로하스인증
   console.log('✓ N번) 양식 시험 통과');
 }
 
+// ==========================================
+// Test 46: #99 의뢰서 머리 금액 = 상품 페이지 가격이면 배송비를 또 더하지 않음 (11/20 사용자: K-포두부 10,600 → 11,600)
+// ==========================================
+console.log('-- Test 46: #99 머리 금액 = 페이지 가격일 때 배송비 중복 가산 금지');
+{
+  if (typeof P.fillCoupang !== 'function') throw new Error('Test 46: fillCoupang 이 없음');
+  const req99 = `#입금대행 실배 10600
+포토2분 
+
+1번)  건강에좋은음식 몸에좋은 영양소 국내생산 HACCP 신선 단백질
+글루텐프리 다이어트에 좋은음식 고단백 두부과자
+2번)  하단 이미지 첨부
+3번) 리뷰10개
+4번) 1건~2건
+5번)  https://naver.me/GHLF5veG
+6번)  옵션없음
+7번)  포토제공5명
+8번) 리뷰가이드:   HACCP  국내생산
+NonGMO   비닐패키지 로하스인증
+다양한종류  (판두부 4mm면  8mm면)  당일배송  
+9번)  이창익`;
+  const h99 = P.parseAll(req99);
+  if (h99.headPrices.join(',') !== '10600') throw new Error('Test 46 머리 금액을 못 읽음: ' + JSON.stringify(h99.headPrices));
+  const g99 = Object.assign({}, h99.guides[0], {
+    platform: '네이버', seller: 'K-포두부', pno: '13805546799', page: '1p',
+    pname: '국내생산 k포두부 500g 냉장 건두부 쌈두부 얇은두부면 신선 저탄수 마라탕 [원산지:상세설명에 표시]',
+    price: '', ship: '', shipInHead: undefined
+  });
+  P.setGuides([g99]);
+  P.setHead(h99);
+  P.setCur(0);
+  getElem('req').value = req99;
+  ['keyword', 'guide', 'daily', 'total', 'price', 'ship', 'platform', 'seller', 'option', 'pname', 'url', 'pno', 'short', 'page', 'pageM', 'similar', 'photo', 'thumb']
+    .forEach(k => { getElem(k).value = String(g99[k] === undefined || g99[k] === null ? '' : g99[k]); });
+  getElem('t-ip').checked = true; getElem('t-up').checked = false;
+  getElem('takdae').checked = false; getElem('realship').checked = true;
+  getElem('cart').checked = false; getElem('fruit').checked = false;
+  getElem('day').value = '1'; getElem('date').value = '2026-11-20'; getElem('slot').value = 'midnight';
+  getElem('toast').textContent = '';
+
+  // 상품 페이지를 읽어 온 상황: 가격 10,600원, 배송비 1,000원
+  P.fillCoupang({ price: '10,600', ship: 1000 });
+  if (getElem('ship').value !== '1,000') throw new Error('Test 46 배송비 칸이 1,000이 아님: ' + getElem('ship').value);
+  const tst = String(getElem('toast').textContent || '');
+  if (tst.indexOf('의뢰서 금액과 페이지 가격이 같아 더하지 않았어요') < 0) throw new Error('Test 46 배송비 안내 문구가 틀림: ' + tst);
+
+  P.render();
+  const n99 = String(getElem('o-notice').value || '');
+  if (n99.indexOf('🐥가격 : 10,600 (배송비 1,000원 포함)') < 0) throw new Error('Test 46 가격이 10,600이 아님:\n' + n99.split('\n').filter(l => /가격/.test(l)).join(' / '));
+  if (/11,600/.test(n99)) throw new Error('Test 46 배송비가 또 더해짐(11,600): ' + n99.split('\n').filter(l => /가격/.test(l)).join(' / '));
+
+  // 예전 기억(shipInHead=false)이 남아 있는 가이드를 다시 채워도 더하지 않음 (#99 재현: 페이지 가격 = 머리 금액)
+  const gOld = Object.assign({}, g99, { price: '', ship: '', shipInHead: false });
+  P.setGuides([gOld]); P.setCur(0);
+  ['price', 'ship'].forEach(k => { getElem(k).value = ''; });
+  P.fillCoupang({ price: '10,600', ship: 1000 });
+  P.render();
+  const nOld = String(getElem('o-notice').value || '');
+  if (nOld.indexOf('🐥가격 : 10,600') < 0 || /11,600/.test(nOld)) throw new Error('Test 46 예전 기억이 남은 가이드에서 배송비가 또 더해짐: ' + nOld.split('\n').filter(l => /가격/.test(l)).join(' / '));
+
+  // 머리 금액이 '페이지 가격 + 배송비'인 경우(#96처럼 11,600 = 10,600 + 1,000)는 예전처럼 더해 11,600 (머리 금액과 같음)
+  P.setHead({ headPrices: ['11600'] });
+  P.setGuides([Object.assign({}, g99, { price: '', ship: '', shipInHead: undefined })]); P.setCur(0);
+  getElem('price').value = ''; getElem('ship').value = '';
+  P.fillCoupang({ price: '10,600', ship: 1000 });
+  P.render();
+  const nSum = String(getElem('o-notice').value || '');
+  if (nSum.indexOf('🐥가격 : 11,600 (배송비 1,000원 포함)') < 0) throw new Error('Test 46 머리 금액 = 페이지 가격 + 배송비 경우가 깨짐(11,600이어야 함): ' + nSum.split('\n').filter(l => /가격/.test(l)).join(' / '));
+
+  // 제보 문구·버전 표시가 v206
+  ['[생성기 v206 제보]', '[가이드 생성기 v206 공지 오류 제보]'].forEach(s => {
+    if (scriptContent.indexOf(s) < 0) throw new Error('Test 46 제보 문구가 v206이 아님: ' + s);
+  });
+  if (/생성기 v182/.test(scriptContent) || /생성기 v182/.test(html)) throw new Error('Test 46 v182 문구가 남아 있음');
+  if (!/생성기 v206/.test(html)) throw new Error('Test 46 생성기 버전 표시가 v206이 아님');
+  console.log('✓ #99 배송비 중복 가산 금지 시험 통과 (10,600 유지 · 안내 문구 · v206)');
+}
+
 console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (42개 샘플 전원 일치)');
 process.exit(0);
 

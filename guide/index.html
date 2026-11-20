@@ -232,7 +232,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v206 (의뢰서 칸에 상품 정보만 붙여넣어도 상품번호로 상품 주소 · 의뢰서 사진 주소는 상품 주소로 안 읽기 · 네이버 한 번에 가져오기 기다림)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v206 (의뢰서 칸에 상품 정보만 붙여넣어도 상품번호로 상품 주소 · 의뢰서 사진 주소는 상품 주소로 안 읽기 · 네이버 한 번에 가져오기 기다림 · 의뢰서 금액과 페이지 가격이 같으면 배송비를 또 더하지 않음)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -2679,7 +2679,8 @@ details.help-box summary {
   /* 배송비 더하기 (#96, 11/20 수진 님): 의뢰서 머리 줄 금액('#입금대행 택대 57000 34500')은 참가자가 결제할 금액이라
      배송비가 이미 들어 있는 경우가 많다 → 머리 금액을 그대로 쓸 때는 배송비를 또 더하지 않는다 (57,000원짜리를 60,000원으로 내보냄).
      상품 페이지 가격(배송비 별도)을 같이 읽었으면 fillCoupang이 g.shipInHead로 가름:
-       머리 금액 = 페이지 가격 + 배송비 → true(포함), 머리 금액 = 페이지 가격 → false(별도, 예전처럼 더함). 모르면 포함으로 봄. */
+       머리 금액 = 페이지 가격 + 배송비 → true(포함), 머리 금액 = 페이지 가격 → true(포함으로 보고 더하지 않음, #99 11/20).
+       false(별도로 더함)는 코드에서 자동으로 만들지 않고, 모르는 경우에도 포함으로 봄. */
   function headPriceList() { return ((lastHead && lastHead.headPrices) || []).map(x => String(x).replace(/[^0-9]/g, "")).filter(Boolean); }
   function fromHeadPrice(p) { const n = String(p || "").replace(/[^0-9]/g, ""); return !!n && headPriceList().indexOf(n) >= 0; }
   function addShipTo(g, p) {
@@ -4396,16 +4397,20 @@ details.help-box summary {
     if (r.rocket) { r.ship = 0; $("ship").value = ""; }
     else if (r.ship >= 0) $("ship").value = r.ship ? r.ship.toLocaleString("ko-KR") : "";
     // 의뢰서 머리 금액이 배송비를 이미 품었는지: 상품 페이지 가격(배송비 별도)과 견줘 봄 (#96, 11/20)
-    //  '머리 금액 = 페이지 가격 + 배송비'면 포함, '머리 금액 = 페이지 가격'이면 별도(예전처럼 더함)
+    //  '머리 금액 = 페이지 가격 + 배송비'면 포함, '머리 금액 = 페이지 가격'도 포함으로 봄 (#99, 11/20 K-포두부: 10,600 → 11,600)
+    //  사장님이 의뢰서 머리에 직접 적은 금액은 참가자가 결제할 금액이라 배송비가 이미 들어 있는 경우가 많다 → 자동으로 더하지 않는다
+    let eqHeadShip = 0;
     if (r.ship > 0 && r.price && guides[cur]) {
       const hp9 = headPriceList(), pp9 = Number(String(r.price).replace(/[^0-9]/g, "")) || 0;
       const pv9 = lines(String($("price").value || "")).map(x => String(x).replace(/[^0-9]/g, "")).filter(Boolean);
       if (hp9.length && pp9 && pv9.length && pv9.every(x => hp9.indexOf(x) >= 0)) {
         if (hp9.some(x => Number(x) === pp9 + r.ship)) guides[cur].shipInHead = true;
-        else if (hp9.some(x => Number(x) === pp9)) guides[cur].shipInHead = false;
+        // 머리 금액과 페이지 가격이 같아도 '별도'로 넘기지 않음 — 예전 기억(shipInHead=false)이 남아 있어도 포함으로 되돌림
+        else if (hp9.some(x => Number(x) === pp9)) { guides[cur].shipInHead = true; eqHeadShip = r.ship; }
       }
     }
-    if (r.ship > 0 && !r.rocket) {
+    if (eqHeadShip) toast("배송비 " + eqHeadShip.toLocaleString("ko-KR") + "원은 의뢰서 금액과 페이지 가격이 같아 더하지 않았어요 (배송비 별도면 확인해 주세요)");
+    else if (r.ship > 0 && !r.rocket) {
       const pvT = lines(String($("price").value || "")).filter(hasNum)[0] || "";
       const noAdd = fromHeadPrice(pvT) && (guides[cur] || {}).shipInHead !== false;
       toast("배송비 " + r.ship.toLocaleString("ko-KR") + "원" + (noAdd ? "은 의뢰서 금액에 이미 들어 있는 것으로 보고 더하지 않았어요" : "이 붙는 상품이라 공지 가격에 더했어요"));
@@ -5750,7 +5755,7 @@ details.help-box summary {
 
       const mention = aiTarget === "claude" ? "@claude" : aiTarget === "all" ? "@모두" : "@피클";
       const lines = [
-        mention + " [생성기 v182 제보]",
+        mention + " [생성기 v206 제보]",
         "• 내용: " + desc,
         "• 가이드 번호: " + curG + " / " + totalG + " (" + (g.platform || "쿠팡") + ")"
       ];
@@ -5812,7 +5817,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v182 공지 오류 제보]",
+        "🚨 [가이드 생성기 v206 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",
