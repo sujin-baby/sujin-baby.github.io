@@ -78,5 +78,13 @@ function setup() {
   ok(/^✓/.test(env.__props.get('KOZIWK2') || ''), '결과 ' + env.__props.get('KOZIWK2'));
   const once = env.__props.get('KOZIWK2'); G('koziFix2_()'); ok(env.__props.get('KOZIWK2') === once, '한 번만');
 }
+
+// 한눈에 색: 내일(토)부터 다음 진행일(월)까지 하늘색 — 주말 진행 11/21 줄이 흰색이던 것 (11/20)
+{
+  const src = require('fs').readFileSync(process.argv[2], 'utf8');
+  ok(src.indexOf("'=AND(INT($A2)>TODAY(),INT($A2)<=WORKDAY(TODAY(),1,{'") >= 0, '한눈에 줄 하늘색 = 내일~다음 진행일');
+  ok(src.indexOf("G2<>0,INT($A2)>TODAY(),INT($A2)<=WORKDAY(TODAY(),1,'") >= 0, '남은 칸 하늘색도 같게');
+  ok(src.indexOf("INT($A2)=WORKDAY(TODAY(),1,") < 0, '옛 규칙(다음 진행일 하루만) 없음');
+}
 console.log(fails.length ? 'XX 주말 진행 시험 실패:\n- ' + fails.join('\n- ') : '✓ 주말 진행·남성용 기모 타이즈 한 번 시험 통과');
 process.exit(fails.length ? 1 : 0);
