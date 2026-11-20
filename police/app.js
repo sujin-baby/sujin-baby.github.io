@@ -1161,7 +1161,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
 
   /* ---------- mascot ---------- */
-  var MV = '2026112023';
+  var MV = '2026112024';
   /* 순경 공채(2027-08-21)·지텔프(2026-11-29) 목표에 맞춘 현실 자극 문구 */
   var MOT = {
     done: [
@@ -2572,7 +2572,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         if (delta > 0) {
           var stEl = bd.querySelector('.q-text') || bd.querySelector('.q-box');
           if (stEl) {
-            var room = (stEl.getBoundingClientRect().top - br.top);
+            var room = (stEl.getBoundingClientRect().top - br.top) - barH;
             if (room < delta) delta = Math.max(0, room);
           }
         }
