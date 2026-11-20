@@ -41,5 +41,42 @@ function setup() {
   ok(sh.rows[1][3].getDate() === 22 && sh.rows[1][4] === '#11.22 주말 상품 5', '주말 진행은 일요일 그대로 ' + sh.rows[1][3] + ' ' + sh.rows[1][4]);
   ok(sh.rows[2][3].getDate() === 23 && sh.rows[2][4] === '#11.23 평일 상품 5', '평일 진행은 월요일로 ' + sh.rows[2][3] + ' ' + sh.rows[2][4]);
 }
+
+// (11/20 두 번째) 옮긴 2일차의 일정 탭 줄(생성됨)도 같이 · [방제 바뀜] 할 일은 오늘 · koziFix2_
+{
+  const { env, G } = setup();
+  const sh = env.__ss.sheets['일정'];
+  sh.rows.splice(1, 0, ['ax7568r3-2', '코지클로 남자타이즈', 2, new Date(2026, 10, 23), '#택11.23 코지클로 남자타이즈10', '#택11.23 코지클로 남자타이즈10 (뽀짝오리)', 10, '[]', '생성됨', '{}']);
+  G('koziWeekend1_()');
+  const p2 = sh.rows.filter(x => x[0] === 'ax7568r3-2')[0];
+  ok(p2[3].getDate() === 21 && p2[4] === '#택11.21 남성용 기모 타이즈10' && p2[5] === '#택11.21 남성용 기모 타이즈10 (뽀짝오리)' && p2[8] === '생성됨', '날짜 옮기면 일정 탭 줄도 ' + p2.slice(3, 9).join(' / '));
+  const sd = G('sendDate_')('내 할 일', '[방제 바뀜] #택11.23 남성용 기모 타이즈10 → #택11.21 남성용 기모 타이즈10\n1. 카톡방 이름을 …', '할 일');
+  const t0 = G('today_()');
+  ok(sd.getTime() === t0.getTime(), '[방제 바뀜] 할 일은 오늘 ' + sd);
+  const sd2 = G('sendDate_')('내 할 일', '[결제금액 확인] #12.30 다른 상품5', '할 일');
+  ok(sd2.getDate() === 30, '다른 할 일은 글 날짜 그대로 ' + sd2);
+}
+{
+  const { env, G } = setup();
+  const sh = env.__ss.sheets['일정'];
+  sh.rows.splice(1, 0, ['ax7568r3-2', '코지클로 남자타이즈', 2, new Date(2026, 10, 23), '#택11.23 코지클로 남자타이즈10', '#택11.23 코지클로 남자타이즈10 (뽀짝오리)', 10, '[]', '생성됨', '{}']);
+  const ob = G('outboxSheet_()');
+  const far = new Date(2026, 10, 23);
+  ob.appendRow(['m1', far, '할 일', '내 할 일', '[방제 바뀜] #택11.23 남성용 기모 타이즈10 → #택11.21 남성용 기모 타이즈10\n1. 카톡방 이름을 #택11.21 남성용 기모 타이즈10 로 바꾸기', '대기']);
+  ob.appendRow(['m2', new Date(2026, 10, 20), '할 일', '내 할 일', '[결제금액 확인] #택11.20 코지클로 남자타이즈10\n가나다: 16,880원', '대기']);
+  ob.appendRow(['m3', new Date(2026, 10, 19), '할 일', '내 할 일', '[결제금액 확인] #택11.19 코지클로 남자타이즈10 보낸 것', '보냄']);
+  ob.appendRow(['m4', far, '할 일', '내 할 일', '[방제 바뀜] #11.23 다른 상품5 → #11.24 다른 상품5', '대기']);
+  let err = ''; try { G('koziFix2_()'); } catch (e) { err = String(e.stack || e); }
+  ok(!err, 'koziFix2_ 오류 ' + err);
+  const p2 = sh.rows.filter(x => x[0] === 'ax7568r3-2')[0];
+  ok(p2[3].getDate() === 23 && p2[4] === '#택11.23 남성용 기모 타이즈10', '일정 2일차 = 진행과 같게 (진행이 아직 11.23인 시험이라 23) ' + p2[4]);
+  const rows = ob.rows.slice(1), by = id => rows.filter(x => x[0] === id)[0];
+  ok(by('m1')[1].getTime() === G('today_()').getTime(), '방제 바뀜 할 일 오늘로 ' + by('m1')[1]);
+  ok(by('m2')[4].indexOf('남성용 기모 타이즈10') >= 0 && by('m2')[4].indexOf('코지클로') < 0, '안 보낸 글 이름 ' + by('m2')[4]);
+  ok(by('m3')[4].indexOf('코지클로') >= 0, '보낸 글은 그대로');
+  ok(by('m4')[1].getTime() === far.getTime(), '다른 상품 할 일은 그대로');
+  ok(/^✓/.test(env.__props.get('KOZIWK2') || ''), '결과 ' + env.__props.get('KOZIWK2'));
+  const once = env.__props.get('KOZIWK2'); G('koziFix2_()'); ok(env.__props.get('KOZIWK2') === once, '한 번만');
+}
 console.log(fails.length ? 'XX 주말 진행 시험 실패:\n- ' + fails.join('\n- ') : '✓ 주말 진행·남성용 기모 타이즈 한 번 시험 통과');
 process.exit(fails.length ? 1 : 0);

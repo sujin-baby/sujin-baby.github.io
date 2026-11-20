@@ -237,6 +237,11 @@ function moveRunDate_(r, d) {
         if (v[2] !== '포토 가이드') obSet_(ob, v[0], 2, sendDate_(v[3], m2, v[2]));   // 포토 가이드는 '포토전달대기' 그대로
       });
     } catch (e) {}
+    // 일정 탭의 이 진행 줄(같은 요청ID, '생성됨')도 날짜·방제를 같이 (11/20: 11.21로 옮긴 2일차가 일정 탭엔 11.23·옛 이름으로 남던 것)
+    try {
+      const ps = planSheet_(), pl = ps.getLastRow(), rid = String(run['요청ID'] || '');
+      if (rid && pl >= 2) ps.getRange(2, 1, pl - 1, 1).getValues().forEach(function (x, i) { if (String(x[0]) === rid) ps.getRange(i + 2, 4, 1, 3).setValues([[day, nb, nb + ((String(run['명단 제목']).match(/\s*\([^)]*\)\s*$/) || [''])[0])]]); });
+    } catch (e) {}
     // 월급시트 줄 이름·진행일
     try {
       payTabsNow_().forEach(function (sh) {
@@ -1954,7 +1959,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -1966,6 +1971,8 @@ function diag_(p) {
   try { out.obTrace = JSON.parse(CacheService.getScriptCache().get('OB_TRACE') || '[]'); } catch (e) {}
   // 한눈에 O열 메모 점검 (11/16 메모 지워짐): 저장된 메모 전부 + 지금 한눈에 B·O
   if (p.memos) try { out.memos = JSON.parse(PropertiesService.getScriptProperties().getProperty('DASH_MEMOS') || '{}'); const d = adminSs_().getSheetByName(DASH_TAB); out.memoRows = d.getRange(2, 2, Math.min(d.getLastRow() - 1, 120), 14).getValues().map(function (v, i) { return (i + 2) + ' ' + v[0] + ' | ' + v[13]; }).filter(function (x) { return !/^\d+ \| $/.test(x); }); } catch (e) { out.memosErr = String(e); }
+  // &dtab=글자: 한눈에 탭에서 그 글자가 든 줄 A~F (읽기만, 11/20 방제 바뀐 것 확인)
+  if (p.dtab) try { const d = adminSs_().getSheetByName(DASH_TAB); if (d) out.dtab = d.getRange(1, 1, Math.max(d.getLastRow(), 1), 6).getDisplayValues().map(function (x, i) { return (i + 1) + ': ' + x.join(' | '); }).filter(function (x) { return x.indexOf(String(p.dtab)) >= 0; }).slice(0, 40); } catch (e) { out.dtabErr = String(e); }
   try { const d = adminSs_().getSheetByName(DASH_TAB); if (d) out.dashQ = d.getRange(1, 17, 13, 1).getValues().map(function (x) { return String(x[0]); }).filter(Boolean); } catch (e) {}
   return out;
 }
@@ -3716,6 +3723,7 @@ function checkFullInner_() {
       try { bulkSent1_(); } catch (e) {}
       try { koziRen1_(); } catch (e) {}
       try { koziWeekend1_(); } catch (e) {}
+      try { koziFix2_(); } catch (e) {}
       try { if (!props.getProperty('EDITC1')) { ensureEditTab_(); props.setProperty('EDITC1', Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm')); } } catch (e) { note_('폼수정 날짜 칸 실패: ' + e); }   // (11/18 한 번) C1 날짜 고르기 바로 (정리가 밀려 늦게 생기던 것)
       try { upAcctOpen1_(); } catch (e) {}
       try { exp135_(); } catch (e) {}
@@ -4848,6 +4856,8 @@ function tidyOutboxInner_() {
 function sendDate_(room, msg, kind) {
   const t = dateTok_(room) || dateTok_(String(msg || '').slice(0, 300));
   const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // '[방제 바뀜] 옛 → 새' 할 일은 바로 (글 첫 날짜가 옛 방제 날짜라 11.23→11.21로 당긴 진행의 카톡방 이름 바꾸기가 11.23에 뜨던 것, 11/20)
+  if (kind === '할 일' && /^\[방제 바뀜\]/.test(String(msg || ''))) return today;
   if (!t) return today;
   const p = t.split('.'), m = Number(p[0]), d = Number(p[1]), cur = now.getMonth() + 1;
   let day = new Date(now.getFullYear() + (m < cur - 6 ? 1 : m > cur + 6 ? -1 : 0), m - 1, d);
@@ -9282,6 +9292,35 @@ function koziWeekend1_() {
     note_('✓ 남성용 기모 타이즈: 파일 이름·주말 진행 ' + out.length + '개');
     try { updatePay_(); } catch (e) {}
   } catch (e) { props.setProperty('KOZIWK1', (st + ' 실패(' + (e && e.message || e) + ') ' + out.join(', ')).slice(-400)); }
+}
+// (11/20 한 번) 남성용 기모 타이즈 남은 것: 일정 탭 2일차 줄(생성됨)이 11.23·옛 이름 → 진행과 같게, 카톡방 이름 바꾸기 할 일은 오늘로, 안 보낸 글 속 옛 이름 '코지클로 남자타이즈' → '남성용 기모 타이즈'
+function koziFix2_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('KOZIWK2') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
+  const out = [];
+  try {
+    const r2 = readRuns_().filter(function (r) { return String(r['요청ID']) === 'ax7568r3-2'; })[0];
+    if (r2 && r2['진행일'] instanceof Date) {
+      const ps = planSheet_(), pl = ps.getLastRow(), nb = bareTitle_(r2['명단 제목']);
+      if (pl >= 2) ps.getRange(2, 1, pl - 1, 6).getValues().forEach(function (x, i) {
+        if (String(x[0]) !== 'ax7568r3-2' || (x[4] === nb && x[3] instanceof Date && dayStart_(x[3]) === dayStart_(r2['진행일']))) return;
+        ps.getRange(i + 2, 4, 1, 3).setValues([[r2['진행일'], nb, nb + ' (뽀짝오리)']]); out.push('일정 2일차 ' + nb);
+      });
+    }
+    withObWrite_(function () {
+      const ob = outboxSheet_(), ol = ob.getLastRow();
+      if (ol < 2) return;
+      const v = ob.getRange(2, 1, ol - 1, 6).getValues(), today = today_();
+      v.forEach(function (x, i) {
+        if (x[5] !== '대기' && x[5] !== '방 못 찾음') return;
+        const m = String(x[4]);
+        if (m.indexOf('코지클로 남자타이즈') >= 0) { ob.getRange(i + 2, 5).setValue(m.split('코지클로 남자타이즈').join('남성용 기모 타이즈')); out.push('글 이름 ' + (i + 2) + '행'); }
+        if (x[2] === '할 일' && /^\[방제 바뀜\][^\n]*남성용 기모 타이즈/.test(m) && !(x[1] instanceof Date && dayStart_(x[1]) === today.getTime())) { ob.getRange(i + 2, 2).setValue(today); out.push('방제 바뀜 할 일 오늘로 ' + (i + 2) + '행'); }
+      });
+    });
+    props.deleteProperty('DASH_SIG');
+    props.setProperty('KOZIWK2', ('✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '이미 됨')).slice(0, 600));
+  } catch (e) { props.setProperty('KOZIWK2', (st + ' 실패(' + (e && e.message || e) + ') ' + out.join(', ')).slice(-400)); }
 }
 function cableFmt1_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('CABLEFMT1') || '');
