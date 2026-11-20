@@ -38,7 +38,7 @@ function here(url, body, naver) {
   const c = { URL, Number, String, location: { href: url, hostname: new URL(url).hostname },
     document: { querySelector: () => null, querySelectorAll: () => [], body: { innerText: body } } };
   vm.createContext(c);
-  vm.runInContext('const isNaver = ' + !!naver + '; const numOf = s => Number(String(s || "").replace(/[^0-9]/g, "")) || 0;\n' + fnSrc(pg, 'function here(') + '\nthis.r = here();', c);
+  vm.runInContext('const isNaver = ' + !!naver + '; const numOf = s => Number(String(s || "").replace(/[^0-9]/g, "")) || 0; const bodyText = () => { try { return (document.body && document.body.innerText) || ""; } catch (e) { return ""; } };\n' + fnSrc(pg, 'function here(') + '\nthis.r = here();', c);
   return c.r;
 }
 const h1 = here('https://www.coupang.com/np/search?q=%EB%8C%80%EB%B4%89%EA%B0%90&channel=user&isPriceRange=true&minPrice=9800&maxPrice=9800&page=2', '9,800원~12,800원');
