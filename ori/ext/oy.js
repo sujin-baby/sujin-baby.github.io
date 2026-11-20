@@ -1,6 +1,9 @@
 /* 올리브영·토스 + 휴대폰 북마크: 생성기 북마크와 같은 코드 (생성기 bm-src에서 복사) */
 (async () => {
   const L = location;
+  /* 옆 광고·추천 영역(오른쪽 배너, '함께 본 상품' 묶음) 판별 — 검색 결과가 1~2개뿐인 화면을 보강할 때 씀 (11/20) */
+  const SIDE_SEL_N = 'aside, [role="complementary"], [class*="recommend"], [class*="together"], [class*="similar"], [class*="related"], [class*="banner"], [class*="ranking"], [class*="widget"], [class*="advert"], [class*="sidebar"], [class*="side-panel"], [class*="side_panel"]';
+  const inSideN = el => { try { return !!(el && el.closest && el.closest(SIDE_SEL_N)); } catch (e) { return false; } };
   /* 고른 옵션: '색상 × 수량' 같은 이름표 바로 옆 값 (콜론은 화면 꾸밈이라 글에 없을 때가 있음). 없으면 단일옵션 */
   const readOpt = () => {
     // 1. 선택된 라디오/옵션 버튼(예: 10개) 먼저 확인 (모바일 쿠팡 수량 라디오 등, 10/31)
@@ -212,14 +215,25 @@
       const nmK = norm(T.nm).slice(0, 25), stK = norm(T.st);
       const PROD_RE = /smartstore\.naver\.com|brand\.naver\.com|shopping\.naver\.com|adcr|nv_?mid|nvmid|catalog|bridge|\/products\//i;
       const NOT_T = /^(\d[\d,]*\s*원?|가격비교.*|리뷰.*|찜.*|구매.*|등록일.*|정보|신고.*|광고|AD|더보기|판매처.*|\d+)$/;
-      const cards = () => {
+      /* 같은 부모에 3개 이상인 칸 = 검색 결과 목록. 다만 검색 결과가 1~2개뿐인 화면('전체 1'·'전체 2')은
+         진짜 상품 칸의 부모에도 1~2개뿐이라 그 목록에서 빠져 '이 화면에는 없어요'로 나갔음(11/20 제보).
+         → 3개 목록에 못 든 칸은 광고·옆 추천/배너 영역을 뺀 것만 extra로 */
+      const cardGroups = () => {
         const ks = [...document.querySelectorAll("a[href]")].map(a => ({ a: a, t: (a.innerText || "").trim() })).filter(x => x.t.length >= 8 && !NOT_T.test(x.t) && /[가-힣a-z]/i.test(x.t) && PROD_RE.test(x.a.href)).map(x => ({ a: x.a, k: norm(x.t).slice(0, 40) }));
         const n = el => { const st = new Set(); ks.forEach(x => { if (el.contains(x.a)) st.add(x.k); }); return st.size; };
         const seen = new Set(), out = [];
-        ks.forEach(x => { let el = x.a; while (el.parentElement && el.parentElement !== document.body && n(el.parentElement) <= 1) el = el.parentElement; if (!seen.has(el) && !el.contains(document.getElementById("__pl_bm"))) { seen.add(el); out.push(el); } });
+        /* 한 목록에 상품이 하나뿐이면 위로 끝까지 올라가 화면 전체가 ‘칸’이 되므로, 가격(원)이 적힌 가까운 위 칸을 그 상품 칸으로 (11/20 '전체 1') */
+        const PRC = /\d{1,3}(?:,\d{3})+\s*원/;
+        ks.forEach(x => {
+          let el = x.a;
+          while (el.parentElement && el.parentElement !== document.body && n(el.parentElement) <= 1) el = el.parentElement;
+          if (el.parentElement === document.body) { let p = x.a; while (p.parentElement && p.parentElement !== document.body && !PRC.test(p.textContent || "")) p = p.parentElement; if (PRC.test(p.textContent || "")) el = p; }
+          if (!seen.has(el) && !el.contains(document.getElementById("__pl_bm"))) { seen.add(el); out.push(el); }
+        });
         const cp = new Map(); out.forEach(el => cp.set(el.parentElement, (cp.get(el.parentElement) || 0) + 1));
-        return out.filter(el => cp.get(el.parentElement) >= 3);
+        return { list: out.filter(el => cp.get(el.parentElement) >= 3), extra: out.filter(el => cp.get(el.parentElement) < 3 && !isAd(el) && !inSideN(el)) };
       };
+      const cards = () => cardGroups().list;
       const AD_SEL_N = '[class*="ad-badge"], [class*="adBadge"], [class*="ad_label"], [class*="AdMark"], [data-is-ad="true"], [data-ad="true"], [data-ad-id], img[alt*="광고"], img[alt*="AD"]';
       const isAd = el => {
         if (!el) return false;
@@ -242,7 +256,14 @@
       /* 상품명 낱말 대부분 + 스토어 이름이 같아도 같은 상품 (앞부분이 조금 달라도) */
       const nToks = String(T.nm || "").split(/[\s\/,·|]+/).map(norm).filter(x => x.length >= 2);
       const nScore = t => nToks.length < 3 ? 0 : nToks.filter(x => t.indexOf(x) !== -1).length / nToks.length;
-      const find = () => { const cs = cards(); let best = -1, how = "", ad = false; cs.forEach((el, i) => { const t = norm(el.innerText), stOk = stK.length >= 2 && t.indexOf(stK) !== -1, sc = nScore(t); const h = pidRe && pidRe.test(el.innerHTML) ? "상품번호" : (nmK.length >= 6 && t.indexOf(nmK) !== -1 ? (stOk ? "상품명+스토어" : "상품명") : (sc >= 0.8 && stOk ? "상품명+스토어" : (sc >= 0.95 ? "상품명" : ""))); if (!h) return; if (isAd(el)) { ad = true; return; } if (best < 0 || (how === "상품명" && h !== "상품명")) { best = i; how = h; } }); return { i: best, how: how, ad: ad, n: cs.length, el: best >= 0 ? cs[best] : null }; };
+      const find = () => {
+        const g = cardGroups(), cs = g.list;
+        const pick = arr => { let best = -1, how = "", ad = false; arr.forEach((el, i) => { const t = norm(el.innerText), stOk = stK.length >= 2 && t.indexOf(stK) !== -1, sc = nScore(t); const h = pidRe && pidRe.test(el.innerHTML) ? "상품번호" : (nmK.length >= 6 && t.indexOf(nmK) !== -1 ? (stOk ? "상품명+스토어" : "상품명") : (sc >= 0.8 && stOk ? "상품명+스토어" : (sc >= 0.95 ? "상품명" : ""))); if (!h) return; if (isAd(el)) { ad = true; return; } if (best < 0 || (how === "상품명" && h !== "상품명")) { best = i; how = h; } }); return { i: best, how: how, ad: ad, el: best >= 0 ? arr[best] : null }; };
+        let r = pick(cs);
+        /* 3개 이상 목록에서 못 찾으면 1~2개뿐인 목록(전체 1·전체 2 화면)도 한 번 더 봄 */
+        if (r.i < 0 && g.extra.length) { const r2 = pick(g.extra); if (r2.i >= 0) r = r2; }
+        return { i: r.i, how: r.how, ad: r.ad, n: cs.length + g.extra.length, el: r.el };
+      };
       const bx = show("", "아래로 내리면서 찾는 중… (이 화면만 봐요)");
       bx.id = "__pl_bm";
       const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -262,7 +283,24 @@
         const ok = el => { if (el.closest("#__pl_bm")) return false; const tc = el.textContent || ""; if (!key || tc.length > 3000 || tc.indexOf(key) === -1) return false; const t = norm(el.innerText), sc = nScore(t); return (nmK.length >= 6 && t.indexOf(nmK) !== -1) || (sc >= 0.8 && stK.length >= 2 && t.indexOf(stK) !== -1) || sc >= 0.95; };
         const all = [...document.querySelectorAll("li,div,article,section,td")].filter(ok), leaves = all.filter(el => !all.some(x => x !== el && el.contains(x)));
         const PR = /\d{1,3}(?:,\d{3})+\s*원/;
-        for (const lf of leaves) { let a = lf, done = false; while (a.parentElement && a.parentElement !== document.body && !done) { const sib = [...a.parentElement.children].filter(c => PR.test(c.textContent || "")); if (sib.length >= 3 && sib.indexOf(a) >= 0) { done = true; if (!isAd(a)) f = { i: 0, how: "화면 글자", ad: false, n: f.n, el: a, org: sib.slice(0, sib.indexOf(a)).filter(c => !isAd(c)).length + 1 }; } a = a.parentElement; } if (f.i >= 0) break; }
+        /* 3개 이상 목록에서 먼저, 없으면 1~2개뿐인 목록도 (광고·옆 추천/배너 영역은 빼고) */
+        const walkN = (minN, loose) => {
+          for (const lf of leaves) {
+            let a = lf, done = false;
+            while (a.parentElement && a.parentElement !== document.body && !done) {
+              const sib = [...a.parentElement.children].filter(c => PR.test(c.textContent || ""));
+              if (sib.length >= minN && sib.indexOf(a) >= 0) {
+                done = true;
+                if (isAd(a) || (loose && (sib.length > 2 || inSideN(a)))) continue;
+                f = { i: 0, how: "화면 글자", ad: false, n: f.n, el: a, org: sib.slice(0, sib.indexOf(a)).filter(c => !isAd(c)).length + 1 };
+              }
+              a = a.parentElement;
+            }
+            if (f.i >= 0) break;
+          }
+        };
+        walkN(3, false);
+        if (f.i < 0) walkN(1, true);
       }
       const qp = new URLSearchParams(L.search);
       let q = qp.get("query") || ""; if (!q) { const inp = document.querySelector('input[type="search"], input[name="query"], header input[type="text"]'); if (inp) q = inp.value || ""; }
@@ -483,22 +521,27 @@
     as.forEach(x => { let el = x.a; while (el.parentElement && el.parentElement !== document.body && nIn(el.parentElement) <= 1) el = el.parentElement; if (!seenEl.has(el)) { seenEl.add(el); cs.push({ el: el, k: x.k }); } });
     const cp = new Map(); cs.forEach(c => cp.set(c.el.parentElement, (cp.get(c.el.parentElement) || 0) + 1));
     const list = cs.filter(c => cp.get(c.el.parentElement) >= 3);
-    let hit = -1, adHit = -1;
-    list.forEach((c, i) => {
+    /* 검색 결과가 1~2개뿐인 화면(가격 필터 등)은 진짜 상품 칸의 부모에도 1~2개뿐이라 위 목록에서 빠짐(11/20) */
+    const extra = cs.filter(c => cp.get(c.el.parentElement) < 3 && !isAdCp(c.el) && !inSideN(c.el));
+    let hit = -1, adHit = -1, base = list;
+    const pickCp = arr => arr.forEach((c, i) => {
       if (c.k !== T.pid) return;
       if (isAdCp(c.el)) { if (adHit < 0) adHit = i; return; }
       if (hit < 0) hit = i;
     });
+    pickCp(list);
+    if (hit < 0 && extra.length) { base = extra; pickCp(extra); }
+    if (hit < 0) base = list;
     const bx = show("", "쿠팡 검색 결과에서 찾는 중…");
     bx.id = "__pl_bm";
     if (hit >= 0) {
-      const el = list[hit].el;
+      const el = base[hit].el;
       el.style.outline = "4px solid #e5397a"; el.style.outlineOffset = "2px"; el.scrollIntoView({ block: "center" });
-      const org = list.slice(0, hit).filter(c => !isAdCp(c.el)).length + 1;
+      const org = base.slice(0, hit).filter(c => !isAdCp(c.el)).length + 1;
       const pos = pg + "p";
       show([q ? "찾은 키워드 : " + q.trim() : "", (mob ? "모바일 위치 : " : "PC 위치 : ") + pos].filter(Boolean).join("\n"), "찾았어요 (분홍 테두리, 광고 빼고 " + org + "번째). 복사해서 생성기 '상품 정보 붙여넣기' 칸에.");
     } else {
-      show("이 화면에는 없어요", "검색어 '" + q + "', " + pg + "페이지, 상품 " + list.length + "개 확인" + (adHit >= 0 ? " (광고 자리에만 있어요)" : "") + ".\n다음 페이지로 이동 후 북마크를 다시 눌러 주세요.");
+      show("이 화면에는 없어요", "검색어 '" + q + "', " + pg + "페이지, 상품 " + (list.length + extra.length) + "개 확인" + (adHit >= 0 ? " (광고 자리에만 있어요)" : "") + ".\n다음 페이지로 이동 후 북마크를 다시 눌러 주세요.");
     }
     return;
   }
@@ -669,9 +712,10 @@
         as.forEach(x => { let el = x.a; while (el.parentElement && el.parentElement !== doc.body && nIn(el.parentElement) <= 1) el = el.parentElement; if (!seenEl.has(el)) { seenEl.add(el); cs.push({ el: el, k: x.k }); } });
         const cp = new Map(); cs.forEach(c => cp.set(c.el.parentElement, (cp.get(c.el.parentElement) || 0) + 1));
         const isAdC = el => isAdCp(el);
-        // 중간중간 섞여 있는 광고 상품을 전수 식별하여 순위 및 목록에서 완전히 제외
-        const organicCards = cs.filter(c => cp.get(c.el.parentElement) >= 3 && !isAdC(c.el));
-        const ids = organicCards.map(c => c.k);
+        const organicPick = min3 => cs.filter(c => !isAdC(c.el) && (min3 ? cp.get(c.el.parentElement) >= 3 : !inSideN(c.el)));
+        let ids = organicPick(true).map(c => c.k);
+        /* 3개 이상 목록이 하나도 없으면(전체 1·전체 2 화면) 1~2개뿐인 목록도 상품으로 (11/20) */
+        if (!ids.length) ids = organicPick(false).map(c => c.k);
         if (!r.ok || (p === 1 && ids.length === 0)) return filt ? 0 : -1;
         if (ids.indexOf(pid) !== -1) return p;
       } catch (e) { return -1; }

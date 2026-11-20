@@ -264,7 +264,13 @@
   /* ---------- 검색 화면: 상품 칸을 위에서부터 순서대로 ---------- */
   const NAVER_PROD = /smartstore\.naver\.com|brand\.naver\.com|shopping\.naver\.com|adcr|nv_?mid|nvmid|catalog|bridge|\/products\//i;
   const NOT_TITLE = /^(\d[\d,]*\s*원?|가격비교.*|리뷰.*|찜.*|구매.*|등록일.*|정보|신고.*|광고|AD|더보기|판매처.*|\d+)$/;
-  function cardList() {
+  /* 같은 목록(같은 부모)에 3개 이상 있는 칸만: 배너, 추천 한두 개는 빼기.
+     다만 검색 결과가 1~2개뿐인 화면('전체 1'·'전체 2')은 진짜 상품 칸의 부모에도 1~2개뿐이라 그 목록에서 빠지고,
+     옆의 광고·추천 묶음(3개 이상)만 남아 '이 화면에는 없어요'로 나갔음(11/20 제보: 검색 'k포두부 쌈두부' 전체 1).
+     → 3개 목록에 못 든 칸은 광고와 옆 추천/배너 영역을 뺀 것만 extra로 따로 돌려줌 */
+  const SIDE_SEL = 'aside, [role="complementary"], [class*="recommend"], [class*="together"], [class*="similar"], [class*="related"], [class*="banner"], [class*="ranking"], [class*="widget"], [class*="advert"], [class*="sidebar"], [class*="side-panel"], [class*="side_panel"]';
+  const inSide = el => { try { return !!(el && el.closest && el.closest(SIDE_SEL)); } catch (e) { return false; } };
+  function cardsOf() {
     let anchors, keyOf;
     if (!isNaver) {
       anchors = [...document.querySelectorAll('a[href*="/products/"]')].filter(a => /\/v[pm]\/products\/\d+/.test(a.getAttribute("href") || ""));
@@ -279,20 +285,29 @@
     }
     const keyed = anchors.map(a => ({ a: a, k: keyOf(a) })).filter(x => x.k);
     const keysIn = el => { const s = new Set(); keyed.forEach(x => { if (el.contains(x.a)) s.add(x.k); }); return s; };
+    /* 한 목록(같은 부모)에 상품이 하나뿐이면 위로 끝까지 올라가 화면 전체가 '칸'이 되어 버림 →
+       그때는 가격(원)이 적힌 가까운 위 칸을 그 상품 칸으로 (11/20 '전체 1' 화면) */
+    const PRICE_CARD = /\d{1,3}(?:,\d{3})+\s*원/;
     const seen = new Set(), cards = [];
     keyed.forEach(x => {
       let el = x.a;
       while (el.parentElement && el.parentElement !== document.body && keysIn(el.parentElement).size <= 1) el = el.parentElement;
+      if (el.parentElement === document.body) {
+        let p = x.a;
+        while (p.parentElement && p.parentElement !== document.body && !PRICE_CARD.test(p.textContent || "")) p = p.parentElement;
+        if (PRICE_CARD.test(p.textContent || "")) el = p;
+      }
       if (seen.has(el)) return;
       seen.add(el); cards.push({ el: el, k: x.k });
     });
-    /* 같은 목록(같은 부모)에 3개 이상 있는 칸만: 배너, 추천 한두 개는 빼기 */
     const byParent = new Map();
     cards.forEach(c => byParent.set(c.el.parentElement, (byParent.get(c.el.parentElement) || 0) + 1));
-    const list = cards.filter(c => byParent.get(c.el.parentElement) >= 3);
-    list.sort((a, b) => a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
-    return list;
+    const ord = (a, b) => a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+    const list = cards.filter(c => byParent.get(c.el.parentElement) >= 3).sort(ord);
+    const extra = cards.filter(c => byParent.get(c.el.parentElement) < 3 && !isAd(c.el) && !inSide(c.el)).sort(ord);
+    return { list: list, extra: extra };
   }
+  const cardList = () => cardsOf().list;
   /* 광고 표시: '광고', '광고ⓘ', 'AD' (상품명 속 '광고용' 같은 건 아님) */
   const AD_TXT = /(^|[\s·|])(광고|AD)(?![가-힣A-Za-z])/;
   /* 네이버는 광고 아닌 상품 링크도 클릭 기록용 adcr 주소를 써서, 네이버에서는 링크 주소로 광고를 판단하지 않음 */
@@ -327,19 +342,27 @@
     const all = [...document.querySelectorAll("li,div,article,section,td")].filter(ok);
     const leaves = all.filter(el => !all.some(x => x !== el && el.contains(x)));
     const PRICE = /\d{1,3}(?:,\d{3})+\s*원/;
-    for (const leaf of leaves) {
-      let a = leaf;
-      while (a.parentElement && a.parentElement !== document.body) {
-        const sib = [...a.parentElement.children].filter(c => PRICE.test(c.textContent || ""));
-        if (sib.length >= 3 && sib.indexOf(a) >= 0) {
-          if (isAd(a)) break;
-          const org = sib.slice(0, sib.indexOf(a)).filter(c => !isAd(c)).length + 1;
-          return { el: a, org: org, st: !!(stN.length >= 2 && norm(a.innerText).indexOf(stN) !== -1) };
+    const stOf = el => !!(stN.length >= 2 && norm(el.innerText).indexOf(stN) !== -1);
+    /* 3개 이상 목록(보통 검색 결과) 안에서 먼저 찾고, 없으면 1~2개뿐인 목록도 봄.
+       검색 결과가 1개뿐인 화면은 상품 칸의 부모에도 1개뿐이라 3개 조건으로는 못 잡음(11/20 제보).
+       그때는 광고 카드·옆 추천/배너 영역(inSide)을 빼고, 가격이 적힌 칸인 것만 인정해 본문 잡텍스트를 상품으로 오인하지 않게 함 */
+    const walk = (minN, loose) => {
+      for (const leaf of leaves) {
+        let a = leaf;
+        while (a.parentElement && a.parentElement !== document.body) {
+          const sib = [...a.parentElement.children].filter(c => PRICE.test(c.textContent || ""));
+          if (sib.length >= minN && sib.indexOf(a) >= 0) {
+            if (loose) { if (sib.length > 2 || isAd(a) || inSide(a)) break; }
+            else if (isAd(a)) break;
+            const org = sib.slice(0, sib.indexOf(a)).filter(c => !isAd(c)).length + 1;
+            return { el: a, org: org, st: stOf(a) };
+          }
+          a = a.parentElement;
         }
-        a = a.parentElement;
       }
-    }
-    return null;
+      return null;
+    };
+    return walk(3, false) || walk(1, true);
   }
   /* 상품명 낱말(2글자 이상) 중 칸 글자에 들어 있는 비율 */
   function nameScore(t, nm) {
@@ -385,11 +408,15 @@
     /* 지금 그려져 있는 화면에서 찾기 (링크 칸 → 안 되면 화면 글자) */
     let maxN = 0, nearBest = null;
     const probe = () => {
-      const list = cardList();
-      maxN = Math.max(maxN, list.length);
+      const got = cardsOf(), list = got.list, extra = got.extra;
+      maxN = Math.max(maxN, list.length + extra.length);
       let hit = -1, how = "", adHit = -1;
-      list.forEach((c, i) => { const h = matchOf(c.el, o); if (!h) return; if (isAd(c.el)) { if (adHit < 0) adHit = i; return; } if (hit < 0 || (how === "상품명" && h !== "상품명")) { hit = i; how = h; } });
-      let org = hit >= 0 ? list.slice(0, hit).filter(c => !isAd(c.el)).length + 1 : 0, el = hit >= 0 ? list[hit].el : null;
+      const pick = arr => { let h = -1, w = ""; arr.forEach((c, i) => { const m = matchOf(c.el, o); if (!m) return; if (isAd(c.el)) { if (adHit < 0) adHit = i; return; } if (h < 0 || (w === "상품명" && m !== "상품명")) { h = i; w = m; } }); return [h, w]; };
+      let base = list;
+      const r0 = pick(list); hit = r0[0]; how = r0[1];
+      /* 3개 이상 목록에서 못 찾으면, 부모에 1~2개뿐인 진짜 검색 결과 칸('전체 1'·'전체 2' 화면)도 한 번 더 봄 */
+      if (hit < 0 && extra.length) { const r1 = pick(extra); if (r1[0] >= 0) { hit = r1[0]; how = r1[1]; base = extra; } }
+      let org = hit >= 0 ? base.slice(0, hit).filter(c => !isAd(c.el)).length + 1 : 0, el = hit >= 0 ? base[hit].el : null;
       if (hit < 0 && isNaver && o.nm) { const tf = textFind(o); if (tf) { el = tf.el; hit = 0; org = tf.org; how = tf.st ? "화면 글자(상품명+스토어)" : "화면 글자(상품명)"; } }
       if (hit < 0 && isNaver) list.forEach((c, i) => { const sc = nameScore(norm(c.el.innerText), o.nm); if (!nearBest || sc > nearBest.sc) nearBest = { i: i + 1, sc: sc, t: (c.el.innerText || "").replace(/\s+/g, " ").trim().slice(0, 60), st: !!(o.st && norm(c.el.innerText).indexOf(norm(o.st)) !== -1), ad: isAd(c.el) }; });
       return { list: list, hit: hit, how: how, adHit: adHit, org: org, el: el };
