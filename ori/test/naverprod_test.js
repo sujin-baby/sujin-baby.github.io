@@ -45,6 +45,55 @@ function fnSrc(s, head) {
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+/* ---------- 최소 DOM (11/20 '전체 1' 화면 시험용) ----------
+   page.js의 scan()을 진짜로 돌리려고 querySelectorAll/closest/contains/compareDocumentPosition만 흔내 낸 가짜 DOM */
+function splitTop(s) {
+  const out = []; let cur = "", d = 0;
+  for (const ch of s) { if (ch === "[") d++; if (ch === "]") d--; if (/\s/.test(ch) && d === 0) { if (cur) out.push(cur); cur = ""; } else cur += ch; }
+  if (cur) out.push(cur);
+  return out;
+}
+function compoundMatch(e, c) {
+  const parts = c.match(/^[a-zA-Z][\w-]*|[#.][\w-]+|\[[^\]]*\]|\*/g) || [];
+  if (!parts.length) return false;
+  for (const p of parts) {
+    if (p === "*") continue;
+    if (p[0] === "#") { if (e.a.id !== p.slice(1)) return false; }
+    else if (p[0] === ".") { if ((e.a.class || "").split(/\s+/).indexOf(p.slice(1)) < 0) return false; }
+    else if (p[0] === "[") {
+      const mm = p.slice(1, -1).match(/^([\w-]+)\s*([*^]?=)?\s*(?:"([^"]*)"|'([^']*)'|([^\]\s]+))?$/);
+      if (!mm) return false;
+      const v = e.a[mm[1]];
+      if (v === undefined) return false;
+      if (!mm[2]) continue;
+      const want = mm[3] !== undefined ? mm[3] : mm[4] !== undefined ? mm[4] : (mm[5] || "");
+      if (mm[2] === "*=") { if (String(v).indexOf(want) < 0) return false; }
+      else if (mm[2] === "^=") { if (String(v).indexOf(want) !== 0) return false; }
+      else if (String(v) !== want) return false;
+    } else if (e.t !== p.toLowerCase()) return false;
+  }
+  return true;
+}
+function selMatch(e, sel) {
+  for (const part of String(sel).split(",")) {
+    const chain = splitTop(part.trim());
+    if (!chain.length || !compoundMatch(e, chain[chain.length - 1])) continue;
+    let ok = true, n = e.parentElement;
+    for (let i = chain.length - 2; i >= 0; i--) {
+      let found = null;
+      for (; n; n = n.parentElement) if (compoundMatch(n, chain[i])) { found = n; n = n.parentElement; break; }
+      if (!found) { ok = false; break; }
+    }
+    if (ok) return true;
+  }
+  return false;
+}
+function queryAll(root, sel) {
+  const out = [];
+  (function walk(n) { (n.k || []).forEach(x => { if (typeof x === "string") return; if (selMatch(x, sel)) out.push(x); walk(x); }); })(root);
+  return out;
+}
+
 /* ---------- 1) page.js 네이버 readProduct(): 최소 DOM mock으로 실제 실행 ---------- */
 const NM = '에큐어 젊음크림 노화억제크림 주름개선 탭력 50ml', ST = '에큐어샵', PID = '1234567890';
 const TITLE = NM + ' : ' + ST;
@@ -410,8 +459,147 @@ function runRun(opt) {
     ok(t.find('input').length === 0, '키워드 칸이 없는 상자(안내만)에는 입력칸을 안 넣음');
   }
 
-  /* ---------- 9) 버전·배포물 한 세트 (확장 1.8.8) ---------- */
-  ok(man.version === '1.8.8', 'manifest 버전 1.8.8 (' + man.version + ')');
+  /* ---------- 8-3) 검색 결과가 1개뿐인 화면('전체 1')에서 '이 화면에는 없어요' (11/20 제보) ----------
+     제보 화면: 왼쪽 목록에 진짜 상품 1개, 옆에 추천 묶음 9개(같은 부모), 광고 배너.
+     고치기 전에는 추천 9개만 '상품'으로 세어(상품 9개 확인) 진짜 결과를 놓쳤다(hit:-1). */
+  const NM2 = "국내생산 k포두부 500g 냉장 건두부 쌈두부 얇은두부면 신선 저탄수 마라탕";
+  const ST2 = "K-포두부", PID2 = "1234567890";
+  function scanPage(mode, src) {
+    const E = (t, a, k) => ({ t: t, a: a || {}, k: k || [] });
+    const card = o => E("div", { class: "product_item" }, [
+      o.ad ? E("span", { class: "ad-badge" }, ["AD"]) : null,
+      o.link === false ? E("span", { class: "tit" }, [o.nm]) : E("a", { href: o.href }, [o.nm]),
+      E("div", { class: "price" }, [o.price]),
+      E("span", { class: "store" }, [o.store])
+    ].filter(Boolean));
+    const rec = i => card({ nm: "추천 상품 " + i + " 국산 콩 두부 300g 냉장 두부면", href: "https://smartstore.naver.com/rec" + i + "/products/9000000" + (100 + i), price: "9,900원", store: "추천스토어" + i });
+    const real = card({ nm: NM2, href: "https://smartstore.naver.com/ktofu/products/" + PID2, price: "20% 9,600원", store: ST2, link: mode !== "text" });
+    const main = [];
+    if (mode === "one" || mode === "text") main.push(real);
+    else {
+      for (let i = 1; i <= 40; i++) {
+        if (i === 2) main.push(card({ nm: "광고 상품 " + i + " 두부 500g", href: "https://smartstore.naver.com/ad" + i + "/products/8000000" + (100 + i), price: "9,900원", store: "광고스토어" + i, ad: true }));
+        else if (i === 6 && mode === "many") main.push(real);
+        else main.push(card({ nm: "두부 상품 " + i + " 300g", href: "https://smartstore.naver.com/s" + i + "/products/7000000" + (100 + i), price: "9,900원", store: "스토어" + i }));
+      }
+    }
+    const spec = E("div", { class: "page" }, [
+      E("div", { class: "header" }, [E("a", { href: "https://shopping.naver.com/home" }, ["쇼핑홈"])]),
+      E("div", { class: "filter_area" }, [E("span", null, ["카테고리"]), E("span", null, ["브랜드"])]),
+      E("div", { class: "result_area" }, [
+        E("div", { class: "product_list" }, main),
+        E("div", { class: "paginate" }, [E("span", null, ["1"])])
+      ]),
+      E("aside", { class: "right_area" }, [
+        E("div", { class: "recommend_widget" }, [1, 2, 3, 4, 5, 6, 7, 8, 9].map(rec)),
+        E("div", { class: "ad_banner" }, [E("span", { class: "ad-badge" }, ["AD"]), E("div", null, ["메일유업 직장인스토어"]), E("div", null, ["22,000원"])])
+      ])
+    ]);
+    const proto = {
+      get children() { return this.k.filter(x => typeof x !== "string"); },
+      get href() { return this.a.href; },
+      get src() { return this.a.src; },
+      get className() { return this.a.class || ""; },
+      getAttribute(n) { return this.a[n] !== undefined ? this.a[n] : null; },
+      get textContent() { return this._t !== undefined ? this._t : this.k.map(x => typeof x === "string" ? x : x.textContent).join(""); },
+      set textContent(v) { this._t = String(v); this.k = []; },
+      get value() { return this._v || ""; },
+      set value(v) { this._v = String(v); },
+      appendChild(c) { this.k.push(c); if (c && typeof c === "object") c.parentElement = this; return c; },
+      remove() {}, select() {}, focus() {}, setAttribute() {},
+      get innerText() { return this.k.map(x => typeof x === "string" ? x : x.innerText).join("\n"); },
+      get innerHTML() { return this.k.map(x => typeof x === "string" ? x : x._h()).join(""); },
+      _h() { return "<" + this.t + Object.keys(this.a).map(k => " " + k + '="' + this.a[k] + '"').join("") + ">" + this.innerHTML + "</" + this.t + ">"; },
+      contains(x) { for (let n = x; n; n = n.parentElement) if (n === this) return true; return false; },
+      matches(s) { return selMatch(this, s); },
+      closest(s) { for (let n = this; n; n = n.parentElement) if (selMatch(n, s)) return n; return null; },
+      querySelectorAll(s) { return queryAll(this, s); },
+      querySelector(s) { return queryAll(this, s)[0] || null; },
+      scrollIntoView() {},
+      getBoundingClientRect() { return { left: 0, top: 0, width: 320, height: 120 }; },
+      compareDocumentPosition(o) { return o._i > this._i ? 4 : 2; }
+    };
+    const all = [];
+    const build = (s, parent) => {
+      if (typeof s === "string") return s;
+      const e = Object.create(proto);
+      e.t = s.t; e.a = s.a || {}; e.k = []; e.parentElement = parent; e.style = {};
+      all.push(e);
+      (s.k || []).forEach(k => e.k.push(build(k, e)));
+      return e;
+    };
+    const body = build(spec, null);
+    all.forEach((e, i) => { e._i = i; });
+    /* 상자(show/box)가 document.body.appendChild로 들어오면 모아 둠 */
+    const boxes = [];
+    body.appendChild = function (c) { this.k.push(c); if (c) c.parentElement = this; boxes.push(c); return c; };
+    const store = { __pl_target: JSON.stringify({ pid: PID2, nm: NM2, st: ST2, kw: "k포두부 쌈두부", pr: 9600 }) };
+    const doc = {
+      title: "k포두부 쌈두부 : 네이버쇼핑",
+      body: body,
+      documentElement: { innerHTML: "", scrollHeight: 4000 },
+      getElementById: () => null,
+      createElement: t => { const e = Object.create(proto); e.t = t; e.a = {}; e.k = []; e.style = {}; e.parentElement = null; all.push(e); e._i = all.length; return e; },
+      querySelector: s => queryAll(body, s)[0] || null,
+      querySelectorAll: s => queryAll(body, s),
+      execCommand: () => true
+    };
+    const win = { scrollTo() {}, scrollBy() {}, innerHeight: 900, scrollY: 0 };
+    const ctx = {
+      window: win, document: doc,
+      location: { href: "https://search.shopping.naver.com/search/all?query=k%ED%8F%AC%EB%91%90%EB%B6%80&minPrice=9600&maxPrice=9600", hostname: "search.shopping.naver.com", pathname: "/search/all", search: "?query=k%ED%8F%AC%EB%91%90%EB%B6%80&minPrice=9600&maxPrice=9600", hash: "" },
+      navigator: { userAgent: "Mozilla/5.0 (Macintosh)", clipboard: { writeText: async () => {} } },
+      localStorage: { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = v; } },
+      alert: () => {}, prompt: () => "", confirm: () => true,
+      setTimeout, clearTimeout, console, URL, URLSearchParams, Node: { DOCUMENT_POSITION_FOLLOWING: 4 }
+    };
+    ctx.innerHeight = 900; ctx.scrollY = 0; ctx.scrollBy = () => {}; ctx.scrollTo = () => {};
+    vm.createContext(ctx);
+    vm.runInContext(src || pg, ctx);
+    ctx.boxes = boxes;
+    return ctx;
+  }
+  /* 상자 글자 모으기 (show()가 넣은 textarea 값·안내 글) */
+  const boxText = bx => {
+    const out = [];
+    (function walk(n) { (n.k || []).forEach(x => { if (typeof x === "string") { out.push(x); return; } if (x._t) out.push(x._t); if (x._v) out.push(x._v); walk(x); }); })(bx);
+    return out.join("\n");
+  };
+  const scanOf = async mode => {
+    const ctx = scanPage(mode);
+    return await ctx.window.__PL.scan({ pid: PID2, nm: NM2, st: ST2, quick: true });
+  };
+  {
+    const s = await scanOf("one");
+    ok(!!s && s.hit >= 0, "'전체 1' 화면(진짜 결과 1개 + 옆 추천 9개)에서 상품을 찾음 (hit=" + (s && s.hit) + ", 상품 " + (s && s.n) + "개)");
+    ok(!!s && s.org === 1, "그 상품은 이 목록의 1번째 (org=" + (s && s.org) + ")");
+    ok(!!s && !!s.how, "어떻게 찾았는지도 남김 (" + (s && s.how) + ")");
+  }
+  {
+    const s = await scanOf("text");
+    ok(!!s && s.hit >= 0 && s.org === 1 && /화면 글자/.test(s.how || ""), "상품명이 링크가 아닌 1개 화면도 화면 글자로 찾음 (hit=" + (s && s.hit) + ", org=" + (s && s.org) + ", " + (s && s.how) + ")");
+  }
+  {
+    /* 북마크(oy.js)·생성기 bm-src와 같은 코드: 같은 화면에서 실제로 찾는지 상자 글자로 확인 */
+    const t = scanPage("one", oy);
+    for (let i = 0; i < 40 && t.boxes.length < 2; i++) await sleep(100);
+    const txt = t.boxes.length ? boxText(t.boxes[t.boxes.length - 1]) : "";
+    ok(t.boxes.length >= 2 && /찾았어요/.test(txt) && /1페이지/.test(txt), "북마크(oy.js)도 '전체 1' 화면에서 찾음: " + txt.replace(/\n/g, " · ").slice(0, 70));
+  }
+  {
+    const s = await scanOf("many");
+    ok(!!s && s.hit === 5 && s.org === 5, "결과 40개 화면에서는 전과 같이 광고 빼고 5번째 (hit=" + (s && s.hit) + ", org=" + (s && s.org) + ")");
+  }
+  {
+    const s = await scanOf("none");
+    ok(!!s && s.hit < 0, "없는 상품은 옆 추천·광고가 있어도 찾았다고 하지 않음 (hit=" + (s && s.hit) + ")");
+  }
+  ok(/const extra = cards\.filter\(c => byParent\.get\(c\.el\.parentElement\) < 3/.test(pg) && /PRICE_CARD/.test(pg), "page.js: 3개 미만 목록(extra)·화면 전체로 커지는 것 방지 코드 있음");
+  ok(/const cardGroups = \(\) => \{/.test(oy) && /walkN\(3, false\)/.test(oy) && /const PRC = /.test(oy), "oy.js(북마크)도 같은 고침");
+  ok(/const cardGroups = \(\) => \{/.test(gen) && /walkN\(3, false\)/.test(gen) && /const PRC = /.test(gen), "guide/index.html 북마크 코드(bm-src)도 같은 고침");
+
+  /* ---------- 9) 버전·배포물 한 세트 (확장 1.8.9) ---------- */
+  ok(man.version === '1.8.9', 'manifest 버전 1.8.9 (' + man.version + ')');
   const ev = (gen.match(/const EXT_VER = "([\d.]+)"/) || [])[1];
   ok(ev === man.version, '생성기 EXT_VER(' + ev + ') = manifest 버전(' + man.version + ')');
   {
@@ -423,7 +611,8 @@ function runRun(opt) {
     ok(String(entries['ext/page.js']).indexOf('const parts = (document.title || "").split(/\\s+:\\s+/);') >= 0, 'zip 안 ext/page.js에 parts 선언 들어감');
     ok(/function readProduct_\(\)/.test(String(entries['ext/page.js'])), 'zip 안 ext/page.js에 readProduct 방어 코드 들어감 (1.8.7)');
     ok(/const late = \/\(coupang\\\.com\|naver\\\.com\)\//.test(String(entries['ext/bg.js'])), 'zip 안 ext/bg.js에 네이버 빈 상품명 재시도 들어감 (1.8.7)');
-    ok(/\"version\":\s*\"1\.8\.8\"/.test(String(entries['ext/manifest.json'])), 'zip 안 ext/manifest.json도 1.8.8');
+    ok(/\"version\":\s*\"1\.8\.9\"/.test(String(entries['ext/manifest.json'])), 'zip 안 ext/manifest.json도 1.8.9');
+    ok(/const cardGroups = \(\) => \{/.test(String(entries['ext/oy.js'])) && /const extra = cards\.filter/.test(String(entries['ext/page.js'])), 'zip 안 ext/page.js·oy.js에 1~2개 결과 고침 들어감 (1.8.9)');
     ok(/customkw:/.test(String(entries['ext/bg.js'])) && /이 키워드로 찾기/.test(String(entries['ext/page.js'])), 'zip 안 ext/bg.js·page.js에 사용자 키워드 재검색 들어감 (1.8.8)');
     ok(/await naverHere\(nt\);/.test(String(entries['ext/bg.js'])), 'zip 안 ext/bg.js에 naverProduct 수정 들어감');
   }
