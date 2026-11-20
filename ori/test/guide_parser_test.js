@@ -2166,6 +2166,35 @@ https://www.coupang.com/vp/products/9778569271
   console.log('✓ 사진 주소 제외·상품 주소 유지·썸네일 대체 시험 통과');
 }
 
+// ==========================================
+// Test 44: 의뢰서 칸에 '상품 정보'(확장 결과 모양)만 붙여넣음 — 상품번호로 상품 주소 (11/20 사용자: k포두부, v205에서 아무 창도 안 열림)
+// ==========================================
+console.log('-- Test 44: 상품 정보 모양 → 상품번호로 상품 주소');
+{
+  if (typeof P.infoAsReq !== 'function') throw new Error('Test 44: infoAsReq 가 없음');
+  const info = `상품명 : 국내생산 가짜두부 500g 냉장 건두부 [원산지:상세설명에 표시]
+판매처 : 가짜두부상회
+상품번호 : 13805546799
+옵션 : 500g
+가격 : 10,600원
+배송비 : 1,000원 (20,000원 이상 무료인데 이 가격은 안 됨)
+썸네일 : https://shop-phinf.pstatic.net/20261018_158/1234_PNG/5678_9999.png?type=o1000`;
+  const g = P.parseAll(info).guides[0];
+  if (!g) throw new Error('Test 44 가이드를 못 읽음');
+  if (String(g.url || '').trim() !== 'https://smartstore.naver.com/main/products/13805546799') throw new Error('Test 44 네이버 상품 주소를 못 만듦: ' + g.url);
+  // 쿠팡 결과 모양(번호 - 아이템)
+  const cg = P.parseAll(info.replace('13805546799', '9463496930 - 2816***8459').replace(/썸네일 : .*/, '썸네일 : https://thumbnail7.coupangcdn.com/thumbnails/remote/a.jpg')).guides[0];
+  if (String(cg.url || '').trim() !== 'https://www.coupang.com/vp/products/9463496930') throw new Error('Test 44 쿠팡 상품 주소를 못 만듦: ' + cg.url);
+  // 진짜 의뢰서는 건드리지 않음
+  ['1. 검색 키워드 : 두부\n' + info, '5. 상품주소(URL) : https://smartstore.naver.com/abc/products/1\n' + info, '#입금대행 실배 10600\n' + info,
+   info + '\nhttps://smartstore.naver.com/abc/products/1'].forEach(t => { if (P.infoAsReq(t)) throw new Error('Test 44 진짜 의뢰서를 상품 정보로 봄: ' + t.split('\n')[0]); });
+  // 칸이 2개뿐이거나 상품번호가 없으면 만들지 않음
+  if (P.infoAsReq('상품명 : 두부\n가격 : 1,000원')) throw new Error('Test 44 칸 2개로 주소를 만듦');
+  if (P.infoAsReq('상품명 : 두부\n판매처 : 가게\n가격 : 1,000원\n썸네일 : https://shop-phinf.pstatic.net/a.png')) throw new Error('Test 44 상품번호 없이 주소를 만듦');
+  if (!/fillReq\(t\)/.test(scriptContent) || !/fillReq\(val\)/.test(scriptContent)) throw new Error('Test 44 붙여넣기·분석 단추가 fillReq 를 안 씀');
+  console.log('✓ 상품 정보 모양 → 상품 주소 시험 통과');
+}
+
 console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (42개 샘플 전원 일치)');
 process.exit(0);
 

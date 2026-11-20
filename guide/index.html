@@ -232,7 +232,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v205 (의뢰서 사진 주소는 상품 주소로 안 읽기 · 네이버 한 번에 가져오기 기다림 · 모바일 직접 키워드)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v206 (의뢰서 칸에 상품 정보만 붙여넣어도 상품번호로 상품 주소 · 의뢰서 사진 주소는 상품 주소로 안 읽기 · 네이버 한 번에 가져오기 기다림)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -431,7 +431,7 @@ details.help-box summary {
             <span style="font-weight: 900; font-size: 14px; color: var(--pink-deep, #ff5fa8); display:flex; align-items:center; gap:5px;">
               <span>💬 AI 다이렉트 대화 · 공지 수정 요청</span>
             </span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v205</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v206</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 10px;">
             공지가 이상하게 나왔거나 수정이 필요한가요? 여기서 메시지를 보내면 <b>피클(생성기)</b>과 <b>클로드(시트)</b>에게 실시간으로 전달돼요!
@@ -2706,7 +2706,28 @@ details.help-box summary {
   const DATE_LINE = /^\s*(오늘|내일|모레|[월화수목금토일]요일)\s*$/;
   // 의뢰서 하나 = 시트 하나. 카톡 메시지 여러 개로 나눠 온 것도 한 번에 붙여넣으면 한 의뢰(가이드 여러 개)로 읽음
   //  ===== 줄이 있으면 그걸로 나누고, 없으면 같은 칸(총 구매 건수, 상품주소 등)이 또 나오면 거기부터 새 가이드
+  /* 의뢰서 칸에 '상품 정보'(확장 프로그램 결과 모양: 상품명/판매처/상품번호/옵션/가격/썸네일 : …)를 붙여넣은 경우 (11/20 사용자: k포두부)
+     상품 주소가 없고 썸네일 사진 주소만 있어 [한 번에 가져오기]가 사진 탭만 열거나(v204) 아무 창도 안 열렸음(v205)
+     → 상품번호로 상품 주소를 만들어 의뢰서처럼 읽음. 네이버(11자리 이상·사진이 pstatic)는 smartstore.naver.com/main/products/번호,
+       쿠팡(번호 - 아이템)은 coupang.com/vp/products/번호. 진짜 의뢰서(검색 키워드·총 구매 건수·상품주소 칸)면 그대로 둠 */
+  function infoAsReq(text) {
+    const t = String(text || "");
+    const get = k => ((t.match(new RegExp("^[ \\t]*" + k + "[ \\t]*[:：][ \\t]*(.*)$", "m")) || [])[1] || "").trim();
+    const keys = ["상품명", "판매처", "상품번호", "옵션", "가격", "썸네일"].filter(k => get(k)).length;
+    if (keys < 3) return "";
+    if (/검색\s*키워드|총\s*구매|일\s*진행|상품\s*주소|구매\s*옵션|입금\s*대행/.test(t)) return "";
+    if ((t.match(/https?:\/\/\S+/g) || []).some(u => !isImgUrl(u))) return "";
+    const pno = get("상품번호").replace(/\s+/g, " "), thumb = get("썸네일");
+    let url = "";
+    const cm = pno.match(/^(\d{6,})\s*-\s*\S+$/);
+    if (cm || /coupangcdn/.test(thumb)) { const n = cm ? cm[1] : (pno.match(/^\d{6,}/) || [""])[0]; if (n) url = "https://www.coupang.com/vp/products/" + n; }
+    else if (/^\d{9,}$/.test(pno) && (/pstatic\.net/.test(thumb) || /^\d{11,}$/.test(pno))) url = "https://smartstore.naver.com/main/products/" + pno;
+    if (!url) return "";
+    const op = get("옵션"), pr = get("가격").replace(/[^0-9,]/g, "");
+    return ["5. 상품주소(URL) : " + url, op || pr ? "6. 구매옵션 : " + [op, pr ? pr + "원" : ""].filter(Boolean).join(" ") : ""].filter(Boolean).join("\n");
+  }
   function parseAll(text0) {
+    { const ir = infoAsReq(text0); if (ir) text0 = ir; }
     const all = cleanReq(text0).split("\n");
     const headLine = (all.find(l => HEAD_RE.test(l)) || "").trim();
     let dateWord = "";
@@ -5865,6 +5886,14 @@ details.help-box summary {
   }
   setTimeout(loadTeamChat, 600);
 
+  /* 의뢰서 칸 읽기 — '상품 정보' 모양이면(infoAsReq) 상품번호로 만든 상품 주소만 넣고, 판매처·상품명·위치 등은
+     상품 주소가 있는 보통 의뢰서처럼 [한 번에 가져오기]가 상품 페이지에서 가져옴 (11/20 k포두부)
+     (여기서 상품 정보를 바로 채우면 상품명에서 자동 키워드('냉장' 등)가 생겨 확장 프로그램이 그 말로 검색하게 됨) */
+  const fillReq = t => {
+    fill(parseAll(t));
+    if (infoAsReq(t)) { toast("상품 정보 모양이라 상품번호로 상품 주소를 만들었어요 → [한 번에 가져오기]를 눌러 주세요"); return true; }
+    return false;
+  };
   const parseBtnAction = () => {
     $("sample-tag").hidden = true;
     const val = $("req").value;
@@ -5872,7 +5901,7 @@ details.help-box summary {
       toast("의뢰서 내용이 비어 있어요. 먼저 의뢰서를 붙여넣어 주세요!");
       return;
     }
-    fill(parseAll(val));
+    fillReq(val);
     toast("📋 의뢰서 분석 완료! 아래 공지가 생성되었어요.");
   };
   $("parse").addEventListener("click", parseBtnAction);
@@ -5887,7 +5916,7 @@ details.help-box summary {
     $(id).value = t;
     after(t);
   });
-  pasteReplace("req", t => { $("sample-tag").hidden = true; fill(parseAll(t)); toast("의뢰서를 읽었어요"); });
+  pasteReplace("req", t => { $("sample-tag").hidden = true; fillReq(t); toast("의뢰서를 읽었어요"); });
 
   // 시작 상태: 빈 의뢰서로 초기화 (기본 예시 제거)
   $("date").value = todayKST();
@@ -5969,7 +5998,7 @@ details.help-box summary {
     if (!t) { toast("클립보드가 비어 있어요. 카톡에서 의뢰서를 먼저 복사해 주세요"); return; }
     $("req").value = t;
     $("sample-tag").hidden = true;
-    fill(parseAll(t));
+    fillReq(t);
     toast("📋 의뢰서를 읽었어요. 아래 복사 칸을 확인하세요");
   });
   ["paste-cp-btn", "paste-cp-big"].forEach(id => { const b = $(id); if (b) b.addEventListener("click", pasteCp); });
@@ -6076,7 +6105,7 @@ details.help-box summary {
     }
     if (!document.documentElement.hasAttribute("data-pl-ext")) {
       batchSay("📱 의뢰서 분석 및 상품 정보 적용 중…");
-      fill(parseAll($("req").value));
+      fillReq($("req").value);
       await bsleep(300);
       saveCur(); render();
       toast("⚡ 상품 정보 적용 완료!");
@@ -6199,7 +6228,7 @@ details.help-box summary {
   if (typeof globalThis !== "undefined") {
     globalThis.__PARSER__ = {
       parseAll, parseHead, setGuides: gs => { guides = gs; }, fieldsOf, parseOptions, parse, parseCoupang, optionText, optForGuide, colorHintOf, baseName, makeRoom, shortName, suggestKeywords, sugKw, kwList, reviewMix, rvDefaults, rvIssues, reviewKind, reviewTotals, photoWait, isBlockedText, posText, okSeller, maskItem,
-      buildPlan, planRoomFrom, dayTotalOf, roomHasTak, takFixRoom, sheetBaseName, takAskNeeded, silbinTakNNote, silbinTakNAsk, SILBIN_TAKN_TEXT, render, isSilbin, totalCount, platCountOf, routePaste, fillCoupang, autoKeyword, shareSameProd, isImgUrl, setHead: h => { lastHead = h; }, setCur: i => { cur = i; }
+      buildPlan, planRoomFrom, dayTotalOf, roomHasTak, takFixRoom, sheetBaseName, takAskNeeded, silbinTakNNote, silbinTakNAsk, SILBIN_TAKN_TEXT, render, isSilbin, totalCount, platCountOf, routePaste, fillCoupang, autoKeyword, shareSameProd, isImgUrl, infoAsReq, setHead: h => { lastHead = h; }, setCur: i => { cur = i; }
     };
   }
 })();
