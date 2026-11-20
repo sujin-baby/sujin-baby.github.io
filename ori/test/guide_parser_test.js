@@ -2117,6 +2117,55 @@ console.log('-- Test 42: #96 동대문청년 롱패딩·후리스 (머리 금액
   console.log('✓ #96 머리 금액 배송비 중복 가산·상품명 \'| 판매처 복사\' 시험 통과 (57,000·34,500 / 페이지 가격만일 때 34,500 / 배송비 별도 37,500)');
 }
 
+
+// ==========================================
+// Test 43: 의뢰서에 섞인 '사진 주소'는 상품 주소로 안 읽기 (11/20 사용자 제보 — [한 번에 가져오기]가 이미지 탭만 열고 끝)
+// ==========================================
+console.log('-- Test 43: 사진(썸네일) 주소 제외 · 상품 주소만 · 썸네일 칸 대체');
+{
+  if (typeof P.isImgUrl !== 'function') throw new Error('Test 43: isImgUrl 이 없음');
+  [
+    'https://shop-phinf.pstatic.net/20241120_1/1234_1700000000000PNG/1234_1700000000000.png?type=w860',
+    'https://thumbnail7.coupangcdn.com/thumbnails/remote/230x230ex/image/vendor_inventory/abc.jpg',
+    'https://postfiles.pstatic.net/MjAyNDExMjBfMS/photo.JPG',
+    'https://blogfiles.naver.net/MjAyNDExMjBfMS/blog.gif',
+    'https://cdn.example.com/a/b.webp#x',
+    'https://cdn.example.com/a/b.bmp',
+    'https://cdn.example.com/a/b.jpeg?w=1'
+  ].forEach(u => { if (!P.isImgUrl(u)) throw new Error('Test 43 사진 주소를 못 알아봄: ' + u); });
+  [
+    'https://www.coupang.com/vp/products/9778569271?itemId=29274107751',
+    'https://m.coupang.com/vm/products/9778569271',
+    'https://smartstore.naver.com/ecureshop/products/1234567890',
+    'https://link.coupang.com/a/abc123',
+    'https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000123456'
+  ].forEach(u => { if (P.isImgUrl(u)) throw new Error('Test 43 상품 주소를 사진으로 잘못 봄: ' + u); });
+
+  const req = `#입금대행 실배 11500
+
+1. 검색 키워드 : k포두부
+3. 총 구매 건수 : 2
+4. 일 진행 건수 : 2
+5. 상품주소(URL) : https://shop-phinf.pstatic.net/20241120_1/1234_1700000000000PNG/1234_1700000000000.png?type=w860
+https://www.coupang.com/vp/products/9778569271
+6. 구매옵션 : 1kg 11,500원
+7. 포토제공 유 무 : 유 2`;
+  const h = P.parseAll(req);
+  const g = h.guides[0];
+  if (!g) throw new Error('Test 43 가이드를 못 읽음');
+  if (/pstatic|\.png/i.test(String(g.url || ''))) throw new Error('Test 43 사진 주소가 상품 주소 칸에 들어감: ' + g.url);
+  if (!/coupang\.com\/vp\/products\/9778569271/.test(String(g.url || ''))) throw new Error('Test 43 상품 주소를 못 읽음: ' + g.url);
+  if (!/pstatic/.test(String(g.thumb || ''))) throw new Error('Test 43 사진 주소를 썸네일 칸에 안 채움: ' + g.thumb);
+  // 사진 주소만 있는 의뢰서 → 상품 주소는 비고 사진은 썸네일로만
+  const h2 = P.parseAll(req.replace('https://www.coupang.com/vp/products/9778569271', ''));
+  const g2 = h2.guides[0];
+  if (/https?:/.test(String(g2.url || ''))) throw new Error('Test 43 사진 주소만 있는데 상품 주소가 생김: ' + g2.url);
+  if (!/pstatic/.test(String(g2.thumb || ''))) throw new Error('Test 43 사진만 있을 때 썸네일을 못 채움: ' + g2.thumb);
+  // 상품 주소 칸의 주소는 [열기] 단추 대상에서도 사진 주소를 뺌
+  if (!/filter\(u => u && !isImgUrl\(u\.url\)\)/.test(scriptContent)) throw new Error('Test 43 updateProductLink 가 사진 주소를 거르지 않음');
+  console.log('✓ 사진 주소 제외·상품 주소 유지·썸네일 대체 시험 통과');
+}
+
 console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (42개 샘플 전원 일치)');
 process.exit(0);
 

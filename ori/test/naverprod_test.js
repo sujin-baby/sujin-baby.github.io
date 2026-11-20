@@ -11,6 +11,9 @@
 //  생성기 v204 (사용자 요청 "모바일 Userscripts·북마크에도"):
 //              ⑩ 북마크 코드(bm-src)·oy.js 결과 상자에도 같은 입력칸 + [이 키워드로 찾기] — 모바일은 background가 없어
 //                 네이버·쿠팡 검색 화면은 주소의 검색어만 바꾼 1페이지로 넘기고, 쿠팡 상품 페이지는 그 화면에서 1~5페이지 다시 훑음
+//  확장 1.8.10 (11/20 사용자 제보 "이미지 탭만 열리고 끝"):
+//              ⑪ 의뢰서·상품 주소의 사진(썸네일) 주소는 상품 주소로 안 읽음 (파서·[열기] 단추·autoRun)
+//              ⑫ 네이버 [한 번에 가져오기]는 검색(naverHere)을 마친 뒤에 결과를 보냄 — 못 찾았을 때·못 읽었을 때도 상태를 보내 4분 대기 없이 끝남
 //  node naverprod_test.js <Main.js>
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const root = path.join(__dirname, '..', '..');
@@ -272,7 +275,8 @@ function runRun(opt) {
       ui: async (id, s) => { uis.push(s); return null; }
     };
     vm.createContext(ctx);
-    vm.runInContext(fnSrc(bg, 'async function autoRun('), ctx);
+    /* autoRun 안에서 사진 주소를 거르므로 isImgUrl 도 같이 넣어 준다 (1.8.10) */
+    vm.runInContext(fnSrc(bg, 'const isImgUrl =') + '\n' + fnSrc(bg, 'async function autoRun('), ctx);
     const p = vm.runInContext('autoRun("' + opt.url + '", { windowId: 1, index: 0 })', ctx);
     return Promise.resolve(p).then(() => ({ removed, updated, pushed, uis, created }));
   }
@@ -681,8 +685,87 @@ function runRun(opt) {
   await kwBox(oy, 'oy.js');
   await kwBox(bmSrc, 'bm-src(북마크)');
 
-  /* ---------- 9) 버전·배포물 한 세트 (확장 1.8.9) ---------- */
-  ok(man.version === '1.8.9', 'manifest 버전 1.8.9 (' + man.version + ')');
+  /* ---------- 8-5) [한 번에 가져오기]가 사진 주소·검색 전에 끝나던 것 (확장 1.8.10, 11/20 사용자 제보) ----------
+     제보: [한 번에 가져오기]를 눌렀더니 shop-phinf.pstatic.net 이미지 탭만 열리고 끝남.
+     원인 ① 의뢰서에 섞인 썸네일 주소를 상품 주소로 읽어 그 탭을 열었음 ② 네이버는 검색(naverHere) 전에
+     상품 정보를 먼저 보내서 생성기 runBatch가 1초 만에 'ok'로 넘어감. */
+  const isImgSrc = fnSrc(bg, 'const isImgUrl =');
+  {
+    const ctx = { console };
+    vm.createContext(ctx);
+    vm.runInContext(isImgSrc + '\nglobalThis.__i = isImgUrl;', ctx);
+    const f = vm.runInContext('globalThis.__i', ctx);
+    ok(f('https://shop-phinf.pstatic.net/20241120_1/1234_1700000000000PNG/1234.png?type=w860') && f('https://thumbnail7.coupangcdn.com/thumbnails/remote/230x230/image/vendor_inventory/a.jpg') && f('https://blogfiles.naver.net/x/y.GIF'), 'bg.js isImgUrl: 사진 주소를 알아봄 (확장자·대표 이미지 호스트)');
+    ok(!f('https://www.coupang.com/vp/products/123') && !f('https://smartstore.naver.com/shop/products/123') && !f('https://link.coupang.com/a/abc'), 'bg.js isImgUrl: 상품 주소는 사진이 아님');
+  }
+  /* autoRun: 사진 주소면 탭을 열지 않고 '건너뜀'을 보냄 */
+  const runAuto = async url => {
+    const created = [], statuses = [];
+    const ctx = {
+      console, pushGen: m => { if (m && m.status) statuses.push(m.status); }, busy: false, busySince: 0,
+      chrome: { tabs: {
+        create: async o => { created.push(o); return { id: 1, status: 'complete', url: o.url }; },
+        get: async () => ({ id: 1, url: 'https://www.coupang.com/vp/products/9', status: 'complete' }),
+        update: async () => ({}), remove: async () => ({})
+      } },
+      keepFn: async () => {}, fnOf: () => '', sleep: async () => {}, start: async () => '', autoOy: async () => {}, ui: async () => null
+    };
+    vm.createContext(ctx);
+    vm.runInContext(isImgSrc + '\n' + fnSrc(bg, 'async function autoRun(') + '\nglobalThis.__a = autoRun;', ctx);
+    await vm.runInContext('globalThis.__a(' + JSON.stringify(url) + ', { windowId: 1, index: 0 })', ctx);
+    return { created, statuses };
+  };
+  {
+    const a = await runAuto('https://shop-phinf.pstatic.net/20241120_1/1234_1700000000000PNG/1234.png?type=w860');
+    ok(a.created.length === 0, 'autoRun: 사진 주소는 탭을 열지 않음 (' + a.created.length + '개 열림)');
+    ok(a.statuses.some(s => /이미지 주소/.test(s) && /건너뜀/.test(s)), 'autoRun: "상품 페이지 주소가 아니라 이미지 주소예요 (건너뜀)" 를 보냄: ' + JSON.stringify(a.statuses));
+    const b = await runAuto('https://www.coupang.com/vp/products/9778569271');
+    ok(b.created.length === 1, 'autoRun: 상품 주소는 예전처럼 상품 페이지 탭을 엶');
+  }
+  /* copyText(noPush) — 네이버는 검색을 마친 뒤(naverHere)에 결과를 보냄 */
+  ok(/async function copyText\(text, tabId, noPush\)/.test(bg) && /if \(!noPush\) pushGen\(\{ text: text \}\);/.test(bg), 'copyText(text, tabId, noPush): noPush면 생성기로 안 보냄');
+  ok(/copyText\(out, tab\.id, true\)/.test(fnSrc(bg, 'async function naverProduct(')), 'naverProduct: 검색(naverHere) 전에는 상품 정보를 생성기로 안 보냄 (runBatch가 1초 만에 ok로 넘어가던 것)');
+  ok(bg.indexOf('copyText(out, tab.id, true)') < bg.indexOf('await naverHere(nt);'), 'naverProduct: noPush 복사가 검색 탭 읽기보다 먼저 (순서 확인)');
+  /* naverHere: 찾았을 때·못 찾았을 때 모두 결과를 보냄 (못 찾았을 때 예전엔 아무것도 안 보내 4분을 기다림) */
+  const runHere = async (scan, here, target) => {
+    const pushes = [], uis = [], copies = [];
+    const ctx = {
+      console, pushGen: m => pushes.push(m), ui: async (id, s) => { uis.push(s); return null; },
+      call: async (tid, name) => name === 'scan' ? scan : name === 'here' ? here : null,
+      chrome: { storage: { local: { get: async () => ({ nvTarget: target }) } } },
+      shotHit: async () => ({}), gageom: (lo, hi) => lo + '~' + hi, won: n => String(n), MAXP: 5,
+      copyText: async (text, tid, noPush) => { copies.push({ text: text, tid: tid, noPush: noPush }); return true; },
+      sleep: async () => {}
+    };
+    vm.createContext(ctx);
+    const line = head => (bg.split('\n').find(l => l.indexOf(head) === 0) || '');
+    vm.runInContext(line('const mask2 =') + '\n' + line('const infoLines =') + '\n' + fnSrc(bg, 'async function naverHere(') + '\nglobalThis.__h = naverHere;', ctx);
+    await vm.runInContext('globalThis.__h({ id: 7, url: "https://search.shopping.naver.com/search/all?query=x" })', ctx);
+    return { pushes, uis, copies };
+  };
+  const NH_T = { name: '국내생산 k포두부 500g 냉장', seller: 'K-포두부', pid: '1234567890', kws: ['k포두부'], price: 9600 };
+  {
+    const h = await runHere({ hit: 2, org: 2, n: 20 }, { query: 'k포두부', lo: 9600, hi: 9600, page: 1 }, NH_T);
+    ok(h.copies.length === 1 && h.copies[0].noPush === undefined && /PC 위치/.test(h.copies[0].text), 'naverHere: 찾았으면 위치까지 넣은 결과를 생성기로 보냄 (noPush 없이)');
+  }
+  {
+    const h = await runHere({ hit: -1, n: 20, adHit: -1 }, { query: 'k포두부', lo: 0, hi: 0, page: 1 }, NH_T);
+    ok(h.pushes.some(p => p.text && /상품명 : /.test(p.text)), 'naverHere: 못 찾아도 상품 정보를 생성기로 보냄 (4분 대기 없이 다음 상품으로)');
+    ok(h.pushes.some(p => p.status && /에는 없어요/.test(p.status)), 'naverHere: "이 화면에는 없어요" 상태도 같이 보냄');
+  }
+  {
+    const err = await runHere({ error: '화면 없음' }, {}, NH_T);
+    ok(err.pushes.some(p => p.status && /못 읽었어요/.test(p.status) && /건너뜀/.test(p.status)), 'naverHere: 화면을 못 읽으면 건너뜀 상태');
+    const blk = await runHere({ blocked: true }, {}, NH_T);
+    ok(blk.pushes.some(p => p.status && /건너뜀/.test(p.status)), 'naverHere: 네이버가 접속을 막았으면 건너뜀 상태');
+    const non = await runHere({ hit: -1, n: 0 }, {}, null);
+    ok(non.pushes.some(p => p.status && /건너뜀/.test(p.status)), 'naverHere: 찾을 상품 정보가 없으면 건너뜀 상태');
+  }
+  ok(/이미지 주소\|건너뜀/.test(gen), '생성기 runBatch: "이미지 주소·건너뜀" 상태를 받으면 4분 기다리지 않고 다음 상품으로');
+  ok(/!isImgUrl\(u\.url\)/.test(gen), '생성기 [열기] 단추(updateProductLink)도 사진 주소는 상품으로 안 만듦');
+
+  /* ---------- 9) 버전·배포물 한 세트 (확장 1.8.10) ---------- */
+  ok(man.version === '1.8.10', 'manifest 버전 1.8.10 (' + man.version + ')');
   const ev = (gen.match(/const EXT_VER = "([\d.]+)"/) || [])[1];
   ok(ev === man.version, '생성기 EXT_VER(' + ev + ') = manifest 버전(' + man.version + ')');
   {
@@ -694,7 +777,7 @@ function runRun(opt) {
     ok(String(entries['ext/page.js']).indexOf('const parts = (document.title || "").split(/\\s+:\\s+/);') >= 0, 'zip 안 ext/page.js에 parts 선언 들어감');
     ok(/function readProduct_\(\)/.test(String(entries['ext/page.js'])), 'zip 안 ext/page.js에 readProduct 방어 코드 들어감 (1.8.7)');
     ok(/const late = \/\(coupang\\\.com\|naver\\\.com\)\//.test(String(entries['ext/bg.js'])), 'zip 안 ext/bg.js에 네이버 빈 상품명 재시도 들어감 (1.8.7)');
-    ok(/\"version\":\s*\"1\.8\.9\"/.test(String(entries['ext/manifest.json'])), 'zip 안 ext/manifest.json도 1.8.9');
+    ok(/\"version\":\s*\"1\.8\.10\"/.test(String(entries['ext/manifest.json'])), 'zip 안 ext/manifest.json도 1.8.10');
     ok(/const cardGroups = \(\) => \{/.test(String(entries['ext/oy.js'])) && /const extra = cards\.filter/.test(String(entries['ext/page.js'])), 'zip 안 ext/page.js·oy.js에 1~2개 결과 고침 들어감 (1.8.9)');
     ok(/customkw:/.test(String(entries['ext/bg.js'])) && /이 키워드로 찾기/.test(String(entries['ext/page.js'])), 'zip 안 ext/bg.js·page.js에 사용자 키워드 재검색 들어감 (1.8.8)');
     ok(/await naverHere\(nt\);/.test(String(entries['ext/bg.js'])), 'zip 안 ext/bg.js에 naverProduct 수정 들어감');
