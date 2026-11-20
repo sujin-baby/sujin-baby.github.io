@@ -2195,6 +2195,41 @@ console.log('-- Test 44: 상품 정보 모양 → 상품번호로 상품 주소'
   console.log('✓ 상품 정보 모양 → 상품 주소 시험 통과');
 }
 
+// ==========================================
+// Test 45: '1번) …' 번호+번 양식 (11/20 사용자: 두부과자 의뢰서 — 칸을 못 읽어 키워드가 상품명에서 '냉장'으로 뜸)
+// ==========================================
+console.log('-- Test 45: N번) 양식');
+{
+  if (typeof P.beonReq !== 'function') throw new Error('Test 45: beonReq 가 없음');
+  const req = `#입금대행 실배 10600
+포토2분 
+
+1번)  건강에좋은음식 몸에좋은 영양소 국내생산 HACCP 신선 단백질
+글루텐프리 다이어트에 좋은음식 고단백 두부과자
+2번)  하단 이미지 첨부
+3번) 리뷰10개
+4번) 1건~2건
+5번)  https://naver.me/GHLF5veG
+6번)  옵션없음
+7번)  포토제공5명
+8번) 리뷰가이드:   HACCP  국내생산
+NonGMO   비닐패키지 로하스인증
+다양한종류  (판두부 4mm면  8mm면)  당일배송  
+9번)  홍길동`;
+  const g = P.parseAll(req).guides[0];
+  if (!g) throw new Error('Test 45 가이드를 못 읽음');
+  if (!/^건강에좋은음식/.test(String(g.keyword || ''))) throw new Error('Test 45 키워드를 못 읽음: ' + g.keyword);
+  if (String(g.total) !== '10') throw new Error('Test 45 총 건수: ' + g.total);
+  if (String(g.daily) !== '2') throw new Error('Test 45 일 건수: ' + g.daily);
+  if (String(g.url || '').trim() !== 'https://naver.me/GHLF5veG') throw new Error('Test 45 상품 주소: ' + g.url);
+  if (/건강에좋은음식|naver\.me/.test(String(g.review || ''))) throw new Error('Test 45 1~5번이 리뷰 안내로 들어감: ' + g.review);
+  if (!/HACCP/.test(String(g.review || ''))) throw new Error('Test 45 8번 리뷰 가이드를 못 읽음: ' + g.review);
+  // '번' 줄이 2개 이하면 건드리지 않음 (본문 중 '1번 옵션' 같은 말)
+  const few = '1번) 가\n2번) 나\n3. 총 구매 건수 : 5';
+  if (P.beonReq(few) !== few) throw new Error('Test 45 번 줄 2개인데 바꿈');
+  console.log('✓ N번) 양식 시험 통과');
+}
+
 console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (42개 샘플 전원 일치)');
 process.exit(0);
 
