@@ -1161,7 +1161,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
 
   /* ---------- mascot ---------- */
-  var MV = '2026112024';
+  var MV = '2026112026';
   /* 순경 공채(2027-08-21)·지텔프(2026-11-29) 목표에 맞춘 현실 자극 문구 */
   var MOT = {
     done: [
@@ -3161,7 +3161,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!q) {
       q = sp.pool[start];
       var un0 = clip(unitName(q.c, q.u) || s.name, 14);
-      return '『' + un0 + '』 ' + clip(String(q.e || q.q).replace(/^\[?[^\]]*\]?\s*/, ''), 44);
+      return '『' + un0 + '』 ' + clip(String(expLine(q, '풀이') || q.e || q.q).replace(/^\[?[^\]]*\]?\s*/, ''), 44);
     }
     var un = clip(unitName(q.c, q.u) || s.name, 14);
     return '『' + un + '』 ' + b.key;
@@ -3296,6 +3296,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     return raw.split('|').map(function (x) { return x.trim(); }).filter(function (x) {
       if (x.length < 12 || x.length > 220) return false;
       if (/(적중모의고사|모의고사|난이도|켈리 카페|해설\s*:|출처|저작권)/.test(x)) return false;
+      if (/^(해석|풀이|오답)\s*[:：]/.test(x)) return false;   /* 보강 해설의 라벨 줄은 빈칸·카드 재료로 쓰지 않는다 */
       var digits = (x.match(/[0-9]/g) || []).length;
       if (digits / x.length > 0.22) return false;
       return true;
