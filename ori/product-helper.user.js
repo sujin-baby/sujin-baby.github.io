@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         오리 상품정보 도우미
 // @namespace    https://sujin-baby.github.io/guide/
-// @version      203.0
+// @version      205.0
 // @description  쿠팡·네이버·토스·올리브영 화면 오른쪽 아래 단추로 상품 정보를 한 번에 가져와요 (오리방 체험단)
 // @author       오리방
 // @match        *://*.coupang.com/*
@@ -13,7 +13,7 @@
 // @noframes
 // ==/UserScript==
 /*
-  오리 상품정보 도우미 (생성기 v203)
+  오리 상품정보 도우미 (생성기 v205)
   - 생성기(guide/index.html)의 '상품 위치 찾기' 북마크 코드(bm-src)를 그대로 담고 있어요.
   - 상품 정보를 읽는 규칙을 고치면  node ori/tools/build_userscript.js  를 다시 돌려
     이 파일과 생성기 안의 스크립트(us-src)를 함께 맞춰 주세요. (안 맞으면 CI가 멈춥니다)
@@ -24,11 +24,14 @@
 (function () {
   "use strict";
   if (window.__ORI_HELPER__) return;
-  window.__ORI_HELPER__ = "201.0";
+  window.__ORI_HELPER__ = "205.0";
 
   /* 상품 정보 읽기 = 생성기 북마크 코드 그대로. oriMode: "info" 전체 / "pos" 위치 줄만 */
   async function ORI_RUN(oriMode) {
   const L = location;
+  /* 옆 광고·추천 영역(오른쪽 배너, '함께 본 상품' 묶음) 판별 — 검색 결과가 1~2개뿐인 화면을 보강할 때 씀 (11/20) */
+  const SIDE_SEL_N = 'aside, [role="complementary"], [class*="recommend"], [class*="together"], [class*="similar"], [class*="related"], [class*="banner"], [class*="ranking"], [class*="widget"], [class*="advert"], [class*="sidebar"], [class*="side-panel"], [class*="side_panel"]';
+  const inSideN = el => { try { return !!(el && el.closest && el.closest(SIDE_SEL_N)); } catch (e) { return false; } };
   /* 고른 옵션: '색상 × 수량' 같은 이름표 바로 옆 값 (콜론은 화면 꾸밈이라 글에 없을 때가 있음). 없으면 단일옵션 */
   const readOpt = () => {
     /* 1. 선택된 라디오/옵션 버튼(예: 10개) 먼저 확인 (모바일 쿠팡 수량 라디오 등, 10/31) */
@@ -215,6 +218,55 @@
     try { if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id) chrome.runtime.sendMessage(/상품번호\s*[:：]|위치\s*[:：]/.test(out) ? { type: "plResult", text: out, shot: true } : { type: "plStatus", text: [out, note].filter(Boolean).join(" · ") }); } catch (e) {}
     return bx;
   };
+  /* 키워드가 마음에 안 들면 직접 정해서 다시 찾기 (사용자 요청 11/20, 확장 1.8.8의 결과 상자와 같은 자리).
+     모바일 북마크·Userscripts에는 background가 없어서, 그 키워드로 화면(주소)을 넘겨 다시 찾음.
+     찾는 상품은 주소 뒤(#pid=…)·localStorage에 남아 있어서 새 화면에서도 같은 상품을 찾음 */
+  const kwRow = (bx, val, ph, onGo, note, col) => {
+    col = col || "#03c75a";
+    const lb = document.createElement("div");
+    lb.style.cssText = "margin-top:10px;font-size:12px;color:#555";
+    lb.textContent = "키워드가 마음에 안 들면 직접 정해서 다시 찾기";
+    bx.appendChild(lb);
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;gap:6px;margin-top:6px";
+    const inp = document.createElement("input");
+    inp.type = "text"; inp.value = val || ""; inp.placeholder = ph || "검색어 직접 입력";
+    inp.style.cssText = "flex:1;min-width:0;padding:8px;border:1px solid #bbb;border-radius:6px;font:13px sans-serif;box-sizing:border-box";
+    const go = document.createElement("button");
+    go.textContent = "이 키워드로 찾기";
+    go.style.cssText = "padding:8px 10px;border:0;border-radius:6px;background:" + col + ";color:#fff;font:bold 13px sans-serif;white-space:nowrap";
+    const back = () => { go.disabled = false; go.textContent = "이 키워드로 찾기"; };
+    const run = () => {
+      const v = String(inp.value || "").replace(/\s+/g, " ").trim();
+      if (!v) { inp.placeholder = "검색어를 넣어 주세요"; inp.style.borderColor = "#e03131"; try { inp.focus(); } catch (e) {} return; }
+      go.disabled = true; go.textContent = "찾는 중…";
+      let r = null;
+      try { r = onGo(v); } catch (e) { back(); return; }
+      /* 화면을 넘기는 경우(주소 이동)에는 새 화면이 뜰 때까지 그대로, 이 화면에서 다시 찾는 경우에는 끝나면 되돌림 */
+      if (r && typeof r.then === "function") r.then(back, back);
+    };
+    go.onclick = run;
+    inp.addEventListener("keydown", e => { if (e && e.key === "Enter") { e.preventDefault(); run(); } });
+    row.appendChild(inp); row.appendChild(go); bx.appendChild(row);
+    if (note) { const nt = document.createElement("div"); nt.style.cssText = "color:#555;font-size:12px;margin-top:6px"; nt.textContent = note; bx.appendChild(nt); }
+    return bx;
+  };
+  /* 그 키워드로 다시 찾을 주소 — 네이버·쿠팡 검색 화면은 지금 주소의 검색어만 바꾸고 1페이지로, 상품 페이지는 그 키워드의 검색 화면 */
+  const kwUrl = kw => {
+    const u = new URL(L.href);
+    if (/shopping\.naver\.com$/.test(L.hostname) && /\/search\//.test(L.pathname)) {
+      u.searchParams.set("query", kw); u.searchParams.delete("pagingIndex");
+      if (/[#&]kw=/.test(u.hash)) u.hash = u.hash.replace(/([#&])kw=[^&]*/, "$1kw=" + encodeURIComponent(kw));
+      return u.href;
+    }
+    if (/coupang\.com$/.test(L.hostname) && /\/n[pm]\/search/.test(L.pathname)) {
+      u.searchParams.set("q", kw); u.searchParams.delete("page");
+      return u.href;
+    }
+    const mo = /^m\./.test(L.hostname) || /iPhone|iPad|Android/i.test(navigator.userAgent);
+    if (/naver\.com$/.test(L.hostname)) return (mo ? "https://msearch.shopping.naver.com" : "https://search.shopping.naver.com") + "/search/all?query=" + encodeURIComponent(kw);
+    return (mo ? "https://m.coupang.com/nm/search?q=" : "https://www.coupang.com/np/search?q=") + encodeURIComponent(kw);
+  };
   /* ---------- 네이버: 스마트스토어 상품 페이지 = 상품 정보, 네이버 쇼핑 검색 화면 = 찾은 페이지 ---------- */
   if (/naver\.com$/.test(L.hostname)) {
     const pm = L.pathname.match(/products\/(\d+)/);
@@ -255,13 +307,18 @@
       if (!prh) { const t0 = document.body.innerText, i0 = t0.indexOf(name.slice(0, 10)); const ps = ((i0 >= 0 ? t0.slice(i0, i0 + 1500) : t0).match(/\d{1,3}(?:,\d{3})+\s*원/g) || []).slice(0, 2).map(x => Number(x.replace(/[^0-9]/g, ""))); if (ps.length) prh = Math.min.apply(null, ps); }
       const mob0 = /^m\./.test(L.hostname) || /iPhone|iPad|Android/i.test(navigator.userAgent);
       const kw0 = (kwh.split("|")[0] || "").trim() || name;
-      const sUrl = (mob0 ? "https://msearch.shopping.naver.com" : "https://search.shopping.naver.com") + "/search/all?query=" + encodeURIComponent(kw0) +
-        "#pid=" + pm[1] + "&nm=" + encodeURIComponent(name) + "&st=" + encodeURIComponent(seller) + (kwh ? "&kw=" + encodeURIComponent(kwh) : "") + (prh ? "&pr=" + prh : "");
+      /* 직접 정한 키워드로 열 때도 같은 모양 — 상품번호·상품명·판매처·가격을 주소 뒤(#)에 남겨 그 화면에서 이 상품을 찾게 (11/20) */
+      const sUrlOf = (k, kl) => (mob0 ? "https://msearch.shopping.naver.com" : "https://search.shopping.naver.com") + "/search/all?query=" + encodeURIComponent(k) +
+        "#pid=" + pm[1] + "&nm=" + encodeURIComponent(name) + "&st=" + encodeURIComponent(seller) + "&kw=" + encodeURIComponent(kl || k) + (prh ? "&pr=" + prh : "");
+      const sUrl = sUrlOf(kw0, kwh);
       const bx = show(["상품명 : " + name, "판매처 : " + seller, "상품번호 : " + pm[1], "옵션 : " + (readOpt() || "단일옵션"), prh ? "가격 : " + prh.toLocaleString("ko-KR") + "원" : "", "배송비 : " + shipOf(document.body.innerText, name, prh), img ? "썸네일 : " + img : ""].filter(Boolean).join("\n"),
         "위치는 아래 [위치 찾기] → 열린 네이버 쇼핑 화면에서 이 북마크를 한 번 더. 키워드: " + kwh.split("|").join(" → ") + (prh ? " (각각 가격 " + prh.toLocaleString("ko-KR") + "원 필터도)" : ""));
       const go = document.createElement("a"); go.href = sUrl; go.target = "_blank"; go.rel = "noopener"; go.textContent = "위치 찾기 (네이버 쇼핑 열기)";
       go.style.cssText = "display:block;margin-top:8px;padding:9px;border-radius:6px;background:#03c75a;color:#fff;text-align:center;font-weight:700;text-decoration:none";
       bx.appendChild(go);
+      /* 키워드가 마음에 안 들면 직접 정해서 다시 찾기 (11/20, 확장 1.8.8과 같은 자리) — 그 키워드로 검색 화면을 열고 거기서 한 번 더 */
+      kwRow(bx, kw0, "다른 검색어로 찾기", v => { L.href = sUrlOf(v, v); },
+        "그 키워드로 네이버 쇼핑 검색 화면을 열어요. 열리면 이 북마크(🔍 위치 찾기)를 한 번 더 눌러 주세요.");
       return;
     }
     if (/shopping\.naver\.com$/.test(L.hostname)) {
@@ -276,14 +333,25 @@
       const nmK = norm(T.nm).slice(0, 25), stK = norm(T.st);
       const PROD_RE = /smartstore\.naver\.com|brand\.naver\.com|shopping\.naver\.com|adcr|nv_?mid|nvmid|catalog|bridge|\/products\//i;
       const NOT_T = /^(\d[\d,]*\s*원?|가격비교.*|리뷰.*|찜.*|구매.*|등록일.*|정보|신고.*|광고|AD|더보기|판매처.*|\d+)$/;
-      const cards = () => {
+      /* 같은 부모에 3개 이상인 칸 = 검색 결과 목록. 다만 검색 결과가 1~2개뿐인 화면('전체 1'·'전체 2')은
+         진짜 상품 칸의 부모에도 1~2개뿐이라 그 목록에서 빠져 '이 화면에는 없어요'로 나갔음(11/20 제보).
+         → 3개 목록에 못 든 칸은 광고·옆 추천/배너 영역을 뺀 것만 extra로 */
+      const cardGroups = () => {
         const ks = [...document.querySelectorAll("a[href]")].map(a => ({ a: a, t: (a.innerText || "").trim() })).filter(x => x.t.length >= 8 && !NOT_T.test(x.t) && /[가-힣a-z]/i.test(x.t) && PROD_RE.test(x.a.href)).map(x => ({ a: x.a, k: norm(x.t).slice(0, 40) }));
         const n = el => { const st = new Set(); ks.forEach(x => { if (el.contains(x.a)) st.add(x.k); }); return st.size; };
         const seen = new Set(), out = [];
-        ks.forEach(x => { let el = x.a; while (el.parentElement && el.parentElement !== document.body && n(el.parentElement) <= 1) el = el.parentElement; if (!seen.has(el) && !el.contains(document.getElementById("__pl_bm"))) { seen.add(el); out.push(el); } });
+        /* 한 목록에 상품이 하나뿐이면 위로 끝까지 올라가 화면 전체가 '칸'이 되므로, 가격(원)이 적힌 가까운 위 칸을 그 상품 칸으로 (11/20 '전체 1') */
+        const PRC = /\d{1,3}(?:,\d{3})+\s*원/;
+        ks.forEach(x => {
+          let el = x.a;
+          while (el.parentElement && el.parentElement !== document.body && n(el.parentElement) <= 1) el = el.parentElement;
+          if (el.parentElement === document.body) { let p = x.a; while (p.parentElement && p.parentElement !== document.body && !PRC.test(p.textContent || "")) p = p.parentElement; if (PRC.test(p.textContent || "")) el = p; }
+          if (!seen.has(el) && !el.contains(document.getElementById("__pl_bm"))) { seen.add(el); out.push(el); }
+        });
         const cp = new Map(); out.forEach(el => cp.set(el.parentElement, (cp.get(el.parentElement) || 0) + 1));
-        return out.filter(el => cp.get(el.parentElement) >= 3);
+        return { list: out.filter(el => cp.get(el.parentElement) >= 3), extra: out.filter(el => cp.get(el.parentElement) < 3 && !isAd(el) && !inSideN(el)) };
       };
+      const cards = () => cardGroups().list;
       const AD_SEL_N = '[class*="ad-badge"], [class*="adBadge"], [class*="ad_label"], [class*="AdMark"], [data-is-ad="true"], [data-ad="true"], [data-ad-id], img[alt*="광고"], img[alt*="AD"]';
       const isAd = el => {
         if (!el) return false;
@@ -306,7 +374,14 @@
       /* 상품명 낱말 대부분 + 스토어 이름이 같아도 같은 상품 (앞부분이 조금 달라도) */
       const nToks = String(T.nm || "").split(/[\s\/,·|]+/).map(norm).filter(x => x.length >= 2);
       const nScore = t => nToks.length < 3 ? 0 : nToks.filter(x => t.indexOf(x) !== -1).length / nToks.length;
-      const find = () => { const cs = cards(); let best = -1, how = "", ad = false; cs.forEach((el, i) => { const t = norm(el.innerText), stOk = stK.length >= 2 && t.indexOf(stK) !== -1, sc = nScore(t); const h = pidRe && pidRe.test(el.innerHTML) ? "상품번호" : (nmK.length >= 6 && t.indexOf(nmK) !== -1 ? (stOk ? "상품명+스토어" : "상품명") : (sc >= 0.8 && stOk ? "상품명+스토어" : (sc >= 0.95 ? "상품명" : ""))); if (!h) return; if (isAd(el)) { ad = true; return; } if (best < 0 || (how === "상품명" && h !== "상품명")) { best = i; how = h; } }); return { i: best, how: how, ad: ad, n: cs.length, el: best >= 0 ? cs[best] : null }; };
+      const find = () => {
+        const g = cardGroups(), cs = g.list;
+        const pick = arr => { let best = -1, how = "", ad = false; arr.forEach((el, i) => { const t = norm(el.innerText), stOk = stK.length >= 2 && t.indexOf(stK) !== -1, sc = nScore(t); const h = pidRe && pidRe.test(el.innerHTML) ? "상품번호" : (nmK.length >= 6 && t.indexOf(nmK) !== -1 ? (stOk ? "상품명+스토어" : "상품명") : (sc >= 0.8 && stOk ? "상품명+스토어" : (sc >= 0.95 ? "상품명" : ""))); if (!h) return; if (isAd(el)) { ad = true; return; } if (best < 0 || (how === "상품명" && h !== "상품명")) { best = i; how = h; } }); return { i: best, how: how, ad: ad, el: best >= 0 ? arr[best] : null }; };
+        let r = pick(cs);
+        /* 3개 이상 목록에서 못 찾으면 1~2개뿐인 목록(전체 1·전체 2 화면)도 한 번 더 봄 */
+        if (r.i < 0 && g.extra.length) { const r2 = pick(g.extra); if (r2.i >= 0) r = r2; }
+        return { i: r.i, how: r.how, ad: r.ad, n: cs.length + g.extra.length, el: r.el };
+      };
       const bx = show("", "아래로 내리면서 찾는 중… (이 화면만 봐요)");
       bx.id = "__pl_bm";
       const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -326,7 +401,24 @@
         const ok = el => { if (el.closest("#__pl_bm")) return false; const tc = el.textContent || ""; if (!key || tc.length > 3000 || tc.indexOf(key) === -1) return false; const t = norm(el.innerText), sc = nScore(t); return (nmK.length >= 6 && t.indexOf(nmK) !== -1) || (sc >= 0.8 && stK.length >= 2 && t.indexOf(stK) !== -1) || sc >= 0.95; };
         const all = [...document.querySelectorAll("li,div,article,section,td")].filter(ok), leaves = all.filter(el => !all.some(x => x !== el && el.contains(x)));
         const PR = /\d{1,3}(?:,\d{3})+\s*원/;
-        for (const lf of leaves) { let a = lf, done = false; while (a.parentElement && a.parentElement !== document.body && !done) { const sib = [...a.parentElement.children].filter(c => PR.test(c.textContent || "")); if (sib.length >= 3 && sib.indexOf(a) >= 0) { done = true; if (!isAd(a)) f = { i: 0, how: "화면 글자", ad: false, n: f.n, el: a, org: sib.slice(0, sib.indexOf(a)).filter(c => !isAd(c)).length + 1 }; } a = a.parentElement; } if (f.i >= 0) break; }
+        /* 3개 이상 목록에서 먼저, 없으면 1~2개뿐인 목록도 (광고·옆 추천/배너 영역은 빼고) */
+        const walkN = (minN, loose) => {
+          for (const lf of leaves) {
+            let a = lf, done = false;
+            while (a.parentElement && a.parentElement !== document.body && !done) {
+              const sib = [...a.parentElement.children].filter(c => PR.test(c.textContent || ""));
+              if (sib.length >= minN && sib.indexOf(a) >= 0) {
+                done = true;
+                if (isAd(a) || (loose && (sib.length > 2 || inSideN(a)))) continue;
+                f = { i: 0, how: "화면 글자", ad: false, n: f.n, el: a, org: sib.slice(0, sib.indexOf(a)).filter(c => !isAd(c)).length + 1 };
+              }
+              a = a.parentElement;
+            }
+            if (f.i >= 0) break;
+          }
+        };
+        walkN(3, false);
+        if (f.i < 0) walkN(1, true);
       }
       const qp = new URLSearchParams(L.search);
       let q = qp.get("query") || ""; if (!q) { const inp = document.querySelector('input[type="search"], input[name="query"], header input[type="text"]'); if (inp) q = inp.value || ""; }
@@ -345,7 +437,8 @@
         /* 비슷한 상품이 많은지: 가격비교·카탈로그로 묶인 칸이거나, 같은 상품명이 광고 아닌 칸에 2개 이상 */
         const nk15 = norm(T.nm).slice(0, 15), cs2 = cards();
         const sim = /판매처\s*\d+|쇼핑몰별\s*최저가|최저\s*[\d,]+\s*원|가격\s*비교/.test(f.el.innerText || "") || (nk15.length >= 8 && cs2.filter(el => !isAd(el) && norm(el.innerText).indexOf(nk15) !== -1).length >= 2);
-        show([q ? "찾은 키워드 : " + q.trim() : "", gg ? "필터 : " + gg : "", sim ? "주의 : 비슷한 상품 많음" : "", (mobN ? "모바일 위치 : " : "PC 위치 : ") + pos].filter(Boolean).join("\n"), "찾았어요 (분홍 테두리). 복사해서 생성기 '상품 정보 붙여넣기' 칸에." + (f.how === "상품명" ? " 상품명으로 찾음(스토어 이름은 화면에 없었음)." : ""));
+        const fb = show([q ? "찾은 키워드 : " + q.trim() : "", gg ? "필터 : " + gg : "", sim ? "주의 : 비슷한 상품 많음" : "", (mobN ? "모바일 위치 : " : "PC 위치 : ") + pos].filter(Boolean).join("\n"), "찾았어요 (분홍 테두리). 복사해서 생성기 '상품 정보 붙여넣기' 칸에." + (f.how === "상품명" ? " 상품명으로 찾음(스토어 이름은 화면에 없었음)." : ""));
+        kwRow(fb, q.trim(), "다른 검색어로 찾기", v => { L.href = kwUrl(v); }, "그 키워드로 다시 검색한 화면을 열어요. 화면이 열리면 이 북마크(🔍 위치 찾기)를 한 번 더 눌러 주세요.");
       } else {
         const ks = String(T.kw || "").split("|").filter(Boolean);
         const nb = show("이 화면에는 없어요", "검색어 '" + q + "'" + (filt ? ", " + filt : "") + (mobN ? "" : ", " + pg + "페이지") + ", 상품 " + f.n + "개 확인" + (f.ad ? " (광고 자리에만 있어요)" : "") + ".\n" + (mobN ? "" : "다음 페이지를 누르고 북마크를 다시 눌러 주세요. ") + (ks.length > 1 ? "그다음 키워드: " + ks.slice(1).join(" → ") : ""));
@@ -358,6 +451,7 @@
           /* 휴대폰은 바로 가격 넣은 화면으로 넘어감 (단추 누를 필요 없이). 열리면 북마크만 한 번 더 */
           if (mobN) { go.textContent = "가격 " + won(T.pr) + "원 넣은 화면으로 넘어가는 중… 열리면 북마크 한 번 더"; setTimeout(() => { L.href = u.href; }, 1500); }
         }
+        kwRow(nb, q.trim(), "다른 검색어로 찾기", v => { L.href = kwUrl(v); }, "그 키워드로 다시 검색한 화면을 열어요. 화면이 열리면 이 북마크(🔍 위치 찾기)를 한 번 더 눌러 주세요.");
       }
       return;
     }
@@ -549,22 +643,29 @@
     as.forEach(x => { let el = x.a; while (el.parentElement && el.parentElement !== document.body && nIn(el.parentElement) <= 1) el = el.parentElement; if (!seenEl.has(el)) { seenEl.add(el); cs.push({ el: el, k: x.k }); } });
     const cp = new Map(); cs.forEach(c => cp.set(c.el.parentElement, (cp.get(c.el.parentElement) || 0) + 1));
     const list = cs.filter(c => cp.get(c.el.parentElement) >= 3);
-    let hit = -1, adHit = -1;
-    list.forEach((c, i) => {
+    /* 검색 결과가 1~2개뿐인 화면(가격 필터 등)은 진짜 상품 칸의 부모에도 1~2개뿐이라 위 목록에서 빠짐(11/20) */
+    const extra = cs.filter(c => cp.get(c.el.parentElement) < 3 && !isAdCp(c.el) && !inSideN(c.el));
+    let hit = -1, adHit = -1, base = list;
+    const pickCp = arr => arr.forEach((c, i) => {
       if (c.k !== T.pid) return;
       if (isAdCp(c.el)) { if (adHit < 0) adHit = i; return; }
       if (hit < 0) hit = i;
     });
+    pickCp(list);
+    if (hit < 0 && extra.length) { base = extra; pickCp(extra); }
+    if (hit < 0) base = list;
     const bx = show("", "쿠팡 검색 결과에서 찾는 중…");
     bx.id = "__pl_bm";
     if (hit >= 0) {
-      const el = list[hit].el;
+      const el = base[hit].el;
       el.style.outline = "4px solid #e5397a"; el.style.outlineOffset = "2px"; el.scrollIntoView({ block: "center" });
-      const org = list.slice(0, hit).filter(c => !isAdCp(c.el)).length + 1;
+      const org = base.slice(0, hit).filter(c => !isAdCp(c.el)).length + 1;
       const pos = pg + "p";
-      show([q ? "찾은 키워드 : " + q.trim() : "", (mob ? "모바일 위치 : " : "PC 위치 : ") + pos].filter(Boolean).join("\n"), "찾았어요 (분홍 테두리, 광고 빼고 " + org + "번째). 복사해서 생성기 '상품 정보 붙여넣기' 칸에.");
+      const fb = show([q ? "찾은 키워드 : " + q.trim() : "", (mob ? "모바일 위치 : " : "PC 위치 : ") + pos].filter(Boolean).join("\n"), "찾았어요 (분홍 테두리, 광고 빼고 " + org + "번째). 복사해서 생성기 '상품 정보 붙여넣기' 칸에.");
+      kwRow(fb, q.trim(), "다른 검색어로 찾기", v => { L.href = kwUrl(v); }, "그 키워드로 쿠팡에서 다시 검색한 화면을 열어요. 화면이 열리면 이 북마크(🔍 위치 찾기)를 한 번 더 눌러 주세요.");
     } else {
-      show("이 화면에는 없어요", "검색어 '" + q + "', " + pg + "페이지, 상품 " + list.length + "개 확인" + (adHit >= 0 ? " (광고 자리에만 있어요)" : "") + ".\n다음 페이지로 이동 후 북마크를 다시 눌러 주세요.");
+      const nb = show("이 화면에는 없어요", "검색어 '" + q + "', " + pg + "페이지, 상품 " + (list.length + extra.length) + "개 확인" + (adHit >= 0 ? " (광고 자리에만 있어요)" : "") + ".\n다음 페이지로 이동 후 북마크를 다시 눌러 주세요.");
+      kwRow(nb, q, "다른 검색어로 찾기", v => { L.href = kwUrl(v); }, "그 키워드로 쿠팡에서 다시 검색한 화면을 열어요. 화면이 열리면 이 북마크(🔍 위치 찾기)를 한 번 더 눌러 주세요.");
     }
     return;
   }
@@ -676,8 +777,8 @@
     kwIn = sug.join("|");
     kwFrom = "상품명 자동 추천";
   }
-  const kws = kwIn.split("|").map(x => x.trim()).filter(Boolean);
-  const kw = kws[0] || "";
+  let kws = kwIn.split("|").map(x => x.trim()).filter(Boolean);
+  let kw = kws[0] || "";
   let price = hp;
   /* 가격: 제목 바로 뒤 첫 가격 (할인·쿠폰·적립·배송 금액은 건너뜀) */
   if (!price) {
@@ -740,9 +841,11 @@
         as.forEach(x => { let el = x.a; while (el.parentElement && el.parentElement !== doc.body && nIn(el.parentElement) <= 1) el = el.parentElement; if (!seenEl.has(el)) { seenEl.add(el); cs.push({ el: el, k: x.k }); } });
         const cp = new Map(); cs.forEach(c => cp.set(c.el.parentElement, (cp.get(c.el.parentElement) || 0) + 1));
         const isAdC = el => isAdCp(el);
-        /* 중간중간 섞여 있는 광고 상품을 전수 식별하여 순위 및 목록에서 완전히 제외 */
-        const organicCards = cs.filter(c => cp.get(c.el.parentElement) >= 3 && !isAdC(c.el));
-        const ids = organicCards.map(c => c.k);
+        /* 중간중간 섞여 있는 광고 상품을 전수 식별하여 순위 및 목록에서 완전히 제외.
+           3개 이상 목록이 하나도 없으면(전체 1·전체 2 화면) 1~2개뿐인 목록도 상품으로 (11/20) */
+        const organicPick = min3 => cs.filter(c => !isAdC(c.el) && (min3 ? cp.get(c.el.parentElement) >= 3 : !inSideN(c.el)));
+        let ids = organicPick(true).map(c => c.k);
+        if (!ids.length) ids = organicPick(false).map(c => c.k);
         if (!r.ok || (p === 1 && ids.length === 0)) return filt ? 0 : -1;
         if (ids.indexOf(pid) !== -1) return p;
       } catch (e) { return -1; }
@@ -752,10 +855,12 @@
   };
   /* 순서: 대표 키워드 → 대표 키워드 + 가격 필터 → 서브 키워드 */
   let pageLine = "", foundKw = "", filtLine = "", blocked = false;
-  if (kw) {
+  /* 한 벌의 키워드로 1~5페이지 훑기 — 직접 정한 키워드로 다시 찾을 때도 이 함수를 다시 부름 (11/20) */
+  const searchKw = async list => {
+    pageLine = ""; foundKw = ""; filtLine = ""; blocked = false;
     /* 순서: 대표 → 대표 + 가격 → 서브 → 서브 + 가격 … */
     const steps = [];
-    kws.forEach((k, i) => { const lb = i ? "서브" : "대표"; steps.push([k, false, lb]); if (price) steps.push([k, true, lb + "+가격"]); });
+    list.forEach((k, i) => { const lb = i ? "서브" : "대표"; steps.push([k, false, lb]); if (price) steps.push([k, true, lb + "+가격"]); });
     for (const [k, f, lab] of steps) {
       const pg = await look(k, f, lab);
       if (pg === -1) { blocked = true; if (!f) break; else continue; }
@@ -765,8 +870,9 @@
     if (!pageLine) {
       pageLine = rk ? rk : (blocked ? "못 찾음 (쇼핑몰이 막음)" : MAX + "페이지 안에 없음 (쿠팡 화면에서 다른 필터로 직접 찾아 주세요)");
     }
-  }
-  let out = [
+  };
+  if (kw) await searchKw(kws);
+  const buildOut = () => [
     "상품명 : " + name,
     "판매처 : " + seller,
     "상품번호 : " + pid + (item ? " - " + mask(item) : ""),
@@ -780,6 +886,7 @@
     kw ? (mob ? "모바일 위치 : " : "PC 위치 : ") + pageLine : "",
     img ? "썸네일 : " + img : ""
   ].filter(Boolean).join("\n");
+  let out = buildOut();
   /* 유저스크립트에서 [🔍 위치 찾기]로 열었을 때는 위치 줄만 (v195). 북마크릿은 oriMode가 없어 그대로 전체 */
   if (oriMode === "pos") out = out.split("\n").filter(l => /^(찾은 키워드|필터|PC 위치|모바일 위치) : /.test(l)).join("\n") || out;
   say("");
@@ -815,6 +922,15 @@
   box.appendChild(ta);
   row.appendChild(copy); row.appendChild(close);
   box.appendChild(row);
+  /* 키워드가 마음에 안 들면 직접 정해서 다시 찾기 (11/20) — 이 화면에서 그 키워드로 1~5페이지를 다시 훑음 */
+  kwRow(box, kw, "다른 검색어로 찾기", async v => {
+    kws = [v]; kw = v; kwFrom = "직접 입력"; say("검색어 '" + v + "'로 이 화면에서 다시 찾는 중…");
+    await searchKw(kws);
+    out = buildOut();
+    if (oriMode === "pos") out = out.split("\n").filter(l => /^(찾은 키워드|필터|PC 위치|모바일 위치) : /.test(l)).join("\n") || out;
+    ta.value = out;
+    say("");
+  }, "이 화면에서 그 키워드로 1~5페이지를 다시 확인해요 (화면은 넘어가지 않아요).", "#5b2a86");
   /* 썸네일 저장: PC는 바로 다운로드 폴더에(크롬 설정에서 다운로드 위치를 바탕화면으로 바꾸면 바탕화면), 휴대폰은 [앨범에 저장] → '이미지 저장' */
   if (img) {
     const phone = /iPhone|iPad|Android/i.test(navigator.userAgent);

@@ -21,6 +21,12 @@ let genT = null, autoTab = 0;
 async function genTarget() { if (genT) return genT; const o = await chrome.storage.session.get("genT").catch(() => ({})); return (genT = o.genT || null); }
 async function pushGen(m) { const g = await genTarget(); if (!g) return; try { await chrome.tabs.sendMessage(g.tabId, Object.assign({ type: "plPush" }, m), { frameId: g.frameId }); } catch (e) {} }
 const setGen = sender => { genT = { tabId: sender.tab.id, frameId: sender.frameId || 0 }; chrome.storage.session.set({ genT: genT }).catch(() => {}); };
+/* 썸네일 이미지 주소인지 — 생성기(guide/index.html)의 isImgUrl 과 같은 규칙 (11/20 사용자 제보) */
+const isImgUrl = u => {
+  const s = String(u || "");
+  if (/\.(?:png|jpe?g|webp|gif|bmp)(?:[?#]|$)/i.test(s)) return true;
+  return /^https?:\/\/(?:[^\/]+\.)?(?:shop-phinf\.pstatic\.net|blogfiles\.naver\.net|postfiles\.pstatic\.net|thumbnail\d*\.coupangcdn\.com)\//i.test(s);
+};
 chrome.runtime.onMessage.addListener((m, sender) => {
   if (!m || !sender.tab) return;
   if (m.type === "plGenHere") setGen(sender);
@@ -40,6 +46,9 @@ function oyThumb(text) {
 }
 async function autoRun(url, gt) {
   if (busy && Date.now() - busySince < 12 * 60000) { pushGen({ status: "이미 찾는 중이에요. 끝나고 다시 눌러 주세요." }); return; }
+  /* 썸네일 이미지 주소를 상품 주소로 받으면 탭을 열지 않고 건너뜀 (11/20 사용자 제보: '이미지 탭만 열리고 끝')
+     생성기는 이 글을 보고 다음 상품으로 넘어감 (guide/index.html 의 '건너뜀' 처리) */
+  if (isImgUrl(url)) { pushGen({ status: "상품 페이지 주소가 아니라 이미지 주소예요 (건너뜀)" }); return; }
   pushGen({ status: "상품 페이지 여는 중…" });
   await keepFn(fnOf(String(url).split("#")[1] || ""));   /* 단축 링크는 넘어가며 #을 버려서 미리 기억 */
   let t = null;
@@ -461,8 +470,10 @@ async function saveThumb(info) {
 }
 
 /* ---------- 복사 (화면 밖 작은 문서에서) ---------- */
-async function copyText(text, tabId) {
-  pushGen({ text: text });
+async function copyText(text, tabId, noPush) {
+  /* noPush: 클립보드에만 넣고 생성기에는 안 보냄. 네이버 상품은 검색 화면(naverHere)을 읽은 뒤에 결과를 보내야
+     [한 번에 가져오기]가 검색 끝나기를 기다리기 때문에, 먼저 보내면 1초 만에 'ok'로 넘어가 버림 (11/20) */
+  if (!noPush) pushGen({ text: text });
   if (tabId) { try { if (await call(tabId, "copy", [text])) return true; } catch (e) {} }
   try {
     try { await chrome.offscreen.createDocument({ url: "offscreen.html", reasons: ["CLIPBOARD"], justification: "결과 복사" }); } catch (e) {}
@@ -629,7 +640,7 @@ async function naverProduct(tab, info, kwOverride) {
   await chrome.storage.local.set({ nvTarget: t });
   const thumb = { t: "썸네일 대신: 검색 화면에서 찾으면 그 칸을 캡처해서 저장해요." };
   const out = infoLines(t).join("\n");
-  const copied = await copyText(out, tab.id);
+  const copied = await copyText(out, tab.id, true);   /* 생성기에는 아직 안 보냄 — naverHere가 검색을 마친 뒤에 (11/20) */
   await ui(tab.id, { title: "상품 정보 " + (copied ? "복사됨" : "") + " · 네이버 검색 탭을 열었어요", out: out, copied: copied, img: info.img,
     msg: "네이버는 자동으로 여러 페이지를 넘기면 접속을 막아서, 검색 화면은 한 화면씩 확인해요.\n새 탭의 검색 화면에서 상품을 찾아 표시해 드려요.\n순서: " + kws.map(k => "'" + k + "'" + (price ? " → '" + k + "' + 가격 " + won(price) + "원" : "")).join(" → "),
     notes: [thumb] });
@@ -648,12 +659,14 @@ async function naverProduct(tab, info, kwOverride) {
 async function naverHere(tab) {
   const tid = tab.id;
   const { nvTarget: t } = await chrome.storage.local.get("nvTarget");
-  if (!t) { await ui(tid, { title: "상품 위치 찾기", msg: "먼저 네이버 상품 페이지(스마트스토어)에서 아이콘을 눌러 주세요. 그 상품을 이 화면에서 찾아요." }); return; }
+  if (!t) { pushGen({ status: "찾을 상품 정보가 없어요 (건너뜀)" }); await ui(tid, { title: "상품 위치 찾기", msg: "먼저 네이버 상품 페이지(스마트스토어)에서 아이콘을 눌러 주세요. 그 상품을 이 화면에서 찾아요." }); return; }
   await ui(tid, { title: "이 화면에서 찾는 중…", msg: "아래로 내리면서 '" + t.name.slice(0, 30) + "'를 찾고 있어요." });
   const mob = /msearch|^https:\/\/m\./.test(tab.url || "");
   const s = await call(tid, "scan", [{ pid: t.pid, nm: t.name, st: t.seller, scroll: mob, max: 200 }]);
-  if (!s || s.error) { await ui(tid, { title: "화면을 못 읽었어요", msg: (s && s.error) || "" , notes: [{ t: "화면: " + ((s && s.snip) || ""), warn: true }] }); return; }
+  /* [한 번에 가져오기]가 4분을 기다리지 않게: 못 읽었으면 이유를 생성기에 보냄 (11/20) */
+  if (!s || s.error) { pushGen({ status: "네이버 검색 화면을 못 읽었어요 (건너뜀)" + ((s && s.error) ? " — " + s.error : "") }); await ui(tid, { title: "화면을 못 읽었어요", msg: (s && s.error) || "" , notes: [{ t: "화면: " + ((s && s.snip) || ""), warn: true }] }); return; }
   if (s.blocked) {
+    pushGen({ status: "네이버가 접속을 막아 둔 상태예요 (건너뜀)" });
     await ui(tid, { title: "네이버가 접속을 막아 둔 상태예요", msg: "자동 검색이 많았다고 보고 잠깐 막은 거예요. 시간이 지나면 풀려요(보통 몇 시간 안).\n그동안은 자동으로 넘기지 말고, 풀린 뒤에 이 화면에서 아이콘을 다시 눌러 주세요.\n계속 안 풀리면 화면의 '원클릭 진단'을 눌러 보세요." });
     return;
   }
@@ -677,6 +690,10 @@ async function naverHere(tab) {
   const actions = [];
   if (!mob && h.page < MAXP) actions.push({ label: "다음 페이지 (" + (h.page + 1) + "페이지) 보고 다시 찾기", act: "next" });
   if (nextStep) actions.push(nextStep[1] ? { label: "가격 " + won(t.price) + "~" + won(t.price) + "원 넣고 다시 찾기", act: "price" } : { label: "'" + nextStep[0] + "' 검색하고 다시 찾기", act: "kw:" + nextStep[0], color: "#5b2a86" });
+  /* 못 찾았어도 상품 정보는 생성기로 보내고(위치 칸만 빈 상태) '이 화면에는 없어요'를 같이 남김 —
+     안 보내면 [한 번에 가져오기]가 4분을 기다리다 실패로 끝남 (11/20) */
+  pushGen({ status: "이 화면" + (mob ? "" : "(" + h.page + "페이지)") + "에는 없어요 (위치 없이 상품 정보만 넣었어요)" });
+  pushGen({ text: infoLines(t).join("\n") });
   await ui(tid, { title: "이 화면" + (mob ? "" : "(" + h.page + "페이지)") + "에는 없어요", msg: "검색어 '" + (h.query || "?") + "'" + (filtered ? ", 가격 " + won(h.lo) + "~" + won(h.hi) + "원" : "") + ", 상품 " + s.n + "개 확인" + (s.adHit >= 0 ? " (광고 자리에만 있어요)" : "") + (s.n === 0 ? "\n화면: " + (s.snip || "") : ""),
     actions: actions, notes: [{ t: "단추를 누르면 한 화면만 넘기고 다시 찾아요. 너무 빨리 여러 번 누르지 마세요(네이버가 막아요)." },
       { t: "찾는 상품: " + String(t.name || "").slice(0, 45) + " / " + (t.seller || "?") + " (다른 상품이면 그 상품 페이지에서 아이콘을 먼저 눌러 주세요)" },
