@@ -11132,6 +11132,15 @@ function deleteRunTimes_(r, dates) {
 
 const PLAN_TAB = '일정';
 const PLAN_HEAD = ['ID', '캠페인', '일차', '진행일', '방제', '명단 제목', '건수', '인원', '상태', '설정'];
+// 일정 줄을 만드는 때: 진행일 전 진행일(평일) 0시, 주말에도 진행하는 의뢰(설정 weekend)면 바로 전날 0시. 만들기(planCreate)와 새벽 점검이 같이 씀
+//  (11/21 피클 점검: 새벽 점검이 weekend를 안 읽어 11/23 남성용 기모 타이즈를 '안 만들어짐'으로 잘못 알림)
+function planDue_(day, wk) {
+  const due = new Date(day); due.setHours(12, 0, 0, 0);
+  do { due.setDate(due.getDate() - 1); } while (!wk && !isWorkday_(due));
+  due.setHours(0, 0, 0, 0);
+  return due;
+}
+function planWk_(cfgText) { try { return !!JSON.parse(String(cfgText || '{}')).weekend; } catch (e) { return false; } }
 const NOTICE_SEP = '\n\n------------------------------------------------\n\n';
 
 function planSheet_() {
@@ -11260,9 +11269,7 @@ function makeDueDays_() {
       sh.getRange(i + 2, 4, 1, 3).setValues([[dayW, x[4], x[5]]]);
     }
     // 전 진행일 0시에 만듦 (사용자 요청 10/24: 월요일 진행이면 금요일 0시. 0시 예약 확인이 바로 만듦)
-    const due = new Date(dayW); due.setHours(12, 0, 0, 0);
-    do { due.setDate(due.getDate() - 1); } while (!wk && !isWorkday_(due));   // 주말 진행이면 바로 전날 0시
-    due.setHours(0, 0, 0, 0);
+    const due = planDue_(dayW, wk);   // 주말 진행이면 바로 전날 0시
     if (now < due) return;
     locked_(function () {
       if (findRunByRequest_(x[0])) { sh.getRange(i + 2, 9).setValue('생성됨'); return; }
@@ -13233,7 +13240,7 @@ function morningCheck_() {
   // 5. 만들어졌어야 할 다음 일차가 일정 탭에 '대기'로 남아 있음
   try {
     const ps = planSheet_(), pl = ps.getLastRow();
-    const stuck = pl >= 2 ? ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().filter(function (x) { return x[8] === '대기' && x[3] instanceof Date && prevWork(x[3]) < t0; }) : [];
+    const stuck = pl >= 2 ? ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().filter(function (x) { return x[8] === '대기' && x[3] instanceof Date && planDue_(x[3], planWk_(x[9])).getTime() < t0; }) : [];
     if (stuck.length) issues.push('만들어졌어야 할 다음 일차가 안 만들어짐: ' + stuck.slice(0, 6).map(function (x) { return bareTitle_(x[4]); }).join(', '));
   } catch (e) {}
   // 6. 트리거
