@@ -3917,8 +3917,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var gp = S.subj === 'gtelp';
     $$('#memoSeg .seg-b').forEach(function (b) {
       var seg = b.getAttribute('data-seg');
-      /* G-POINT·조문은 경찰 과목 전용, 자료실은 지텔프(김준기 자료)에도 있다 */
-      var show = (seg === 'gp' || seg === 'law') ? !gp : true;
+      /* G-POINT는 지텔프 전용, 조문은 경찰 과목 전용, 자료실은 둘 다 있다 */
+      var show = (seg === 'gp') ? gp : (seg === 'law') ? !gp : true;
       b.classList.toggle('hidden', !show);
     });
     if (MEMO.seg === 'gp' && !gp) MEMO.seg = 'card';
