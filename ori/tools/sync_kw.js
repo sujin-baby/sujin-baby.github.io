@@ -5,6 +5,8 @@
 //      `무타공`은 확장에만 있었습니다. 이제 ori/kw_dict.json 만 고치고 이 명령을 돌립니다.
 //
 //  쓰는 법:
+//  v209: 성별·연령·미니가 붙은 합성어(여성겨울모자)에서 그 앞뒤만 떼는 목록(genderPrefix·genderKeep)도 여기서 함께 맞춥니다.
+//
 //    node ori/tools/sync_kw.js            사전을 각 파일의 표시 구간(/* ORI-KW-DICT:BEGIN … */)에 써 넣기
 //    node ori/tools/sync_kw.js --check    각 구간이 사전과 같은지만 확인 (다르면 exit 1 — CI가 씀)
 //
@@ -41,12 +43,16 @@ function sources() {
   const colors = byLen(arr('colors')).map(esc);                       // 색·사이즈 (숫자+단위는 코드의 spec()이 걸러요)
   const places = byLen(arr('places')).map(esc);                       // 가구·자리 말(식탁·책상…) — 키워드에서 뺌
   const types = byLen(arr('types')).map(esc);                         // 같은 종류 상품 이름(선풍기·청소기…) — '대표 + 종류' 후보
+  const genP = byLen(arr('genderPrefix')).map(esc);                   // 성별·연령·미니 접두/꼬리 (여성겨울모자 → 겨울모자)
+  const genK = byLen(arr('genderKeep')).map(esc);                     // 그 말 자체가 품목이라 떼면 안 되는 말(여성청결제·남성화)
   return {
     nouns: '/(?:' + nouns.concat(exact).join('|') + ')$/',
     stop: '/^(?:' + stops.join('|') + ')$/i',
     colors: '/^(?:' + colors.join('|') + ')$/i',
     places: '/^(?:' + places.join('|') + ')$/',
-    types: '/(?:' + types.join('|') + ')$/'
+    types: '/(?:' + types.join('|') + ')$/',
+    gender: ['GEN_PREFIX = /^(?:' + genP.join('|') + ')$/', 'GEN_KEEP = /^(?:' + genK.join('|') + ')$/',
+             'JOIN_NOUN = /^(?:' + byLen(arr('compoundJoins')).map(esc).join('|') + ')$/']
   };
 }
 
@@ -71,6 +77,12 @@ const TARGETS = [
   { file: 'ori/ext/oy.js', id: 'oy_stop', name: 'STOP', kind: 'stop', indent: '    ' },
   { file: 'ori/ext/oy.js', id: 'oy_color', name: 'KW_COLOR', kind: 'colors', indent: '    ' },
   // 확장 프로그램 (키워드 추천은 화면 안 page.js가 아니라 bg.js)
+  // 성별·연령·미니 접두/꼬리 (v209) — 생성기 본문·북마크·확장이 같은 목록
+  { file: 'guide/index.html', id: 'bm_gen', name: 'GEN', kind: 'gender', indent: '    ' },
+  { file: 'guide/index.html', id: 'body_gen', name: 'GEN', kind: 'gender', indent: '  ' },
+  { file: 'guide/index.html', id: 'body_suggen', name: 'GEN', kind: 'gender', indent: '    ' },
+  { file: 'ori/ext/oy.js', id: 'oy_gen', name: 'GEN', kind: 'gender', indent: '    ' },
+  { file: 'ori/ext/bg.js', id: 'bg_gen', name: 'GEN', kind: 'gender', indent: '' },
   { file: 'ori/ext/bg.js', id: 'bg_noun', name: 'NOUN_SUFFIX', kind: 'nouns', indent: '' },
   { file: 'ori/ext/bg.js', id: 'bg_stop', name: 'KW_STOP', kind: 'stop', indent: '' },
   { file: 'ori/ext/bg.js', id: 'bg_color', name: 'KW_COLOR', kind: 'colors', indent: '' }
@@ -78,7 +90,10 @@ const TARGETS = [
 
 const begin = id => '/* ORI-KW-DICT:BEGIN ' + id + ' */';
 const end = id => '/* ORI-KW-DICT:END ' + id + ' */';
-const line = t => t.indent + 'const ' + t.name + ' = ' + t.rx + ';';
+/* gender 처럼 한 구간에 두 줄을 쓰는 경우는 rx 가 배열 */
+const line = t => Array.isArray(t.rx)
+  ? t.rx.map(x => t.indent + 'const ' + x + ';').join('\n')
+  : t.indent + 'const ' + t.name + ' = ' + t.rx + ';';
 
 function regions(text, id) {
   const re = new RegExp('(\\/\\* ORI-KW-DICT:BEGIN ' + id + ' \\*\\/)([\\s\\S]*?)(\\/\\* ORI-KW-DICT:END ' + id + ' \\*\\/)', 'g');

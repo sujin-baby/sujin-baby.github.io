@@ -2390,7 +2390,7 @@ NonGMO   비닐패키지 로하스인증
   } catch (e) {
     throw new Error('사전이 어긋났어요 (node ori/tools/sync_kw.js 로 맞추세요): ' + String((e.stdout || '') + (e.stderr || '')).slice(0, 400));
   }
-  console.log('  ✓ sync_kw.js --check 통과 (사전 21곳 일치)');
+  console.log('  ✓ sync_kw.js --check 통과 (사전이 한 곳과 일치)');
 
   // ② 음식 오탐 방지 — 한 글자 접두(고·무·초·저)를 수식어로 보고 잘라내지 않음
   [['꿀 고구마 3kg 세척고구마', '고구마'], ['무말랭이 1kg 국산 무말랭이', '무말랭이'],
@@ -2496,6 +2496,73 @@ NonGMO   비닐패키지 로하스인증
   console.log('  ✓ 사전(nouns ' + dict.nouns.length + '·수식어 ' + dict.modifiers.length + '·꼬리 ' + dict.tails.length + '·색 ' + dict.colors.length + ')에 생성기·확장 단어가 모두 있음');
 
   console.log('✓ v208 사전 통합·규칙(음식/무선이어폰/꼬리)·고친 키워드 기억 시험 통과');
+}
+
+// ==========================================
+// Test 49: v209 — 성별·연령 접두가 붙은 합성어(여성겨울모자→겨울모자)·수식어/용도어(기모·등산) 제외·붙여 쓴 품목(고구마 말랭이→고구마말랭이) (11/21)
+// ==========================================
+console.log('-- Test 49: 성별 접두 제거·용도어/수식어 제외·붙여 쓴 품목 합치기 (v209)');
+{
+  // ① 성별·연령이 붙어 있어도 그 부분만 떼고 품목을 남김
+  [['[당일출고] 여성겨울모자 니트 방한 비니', '겨울모자'],
+   ['남성 기모 타이즈 3개입', '타이즈'],
+   ['남자 등산 바람막이 자켓', '바람막이'],
+   ['고구마 말랭이 500g', '고구마말랭이']].forEach(([nm, want]) => {
+    const got = P.suggestKeywords(nm, []).main;
+    if (got !== want) throw new Error('Test 49 대표 키워드가 틀림 (' + nm + ' → ' + JSON.stringify(got) + ', 기대 ' + want + ')');
+    const list = P.sugKw(nm);
+    if (!list.length) throw new Error('Test 49 추천 키워드가 비었음: ' + nm);
+    if (!list.some(k => k === want || k.split(' ').indexOf(want) >= 0)) throw new Error('Test 49 추천 키워드에 ' + want + ' 가 없음: ' + JSON.stringify(list));
+    if (list.some(k => /여성겨울모자|^기모$|등산 바람막이 자켓/.test(k))) throw new Error('Test 49 떼야 할 말이 추천에 남음: ' + JSON.stringify(list));
+  });
+  console.log('  ✓ 여성겨울모자→겨울모자 · 남성 기모 타이즈→타이즈 · 남자 등산 바람막이 자켓→바람막이 · 고구마 말랭이→고구마말랭이');
+
+  // ② 품목 자체가 그 말일 때(여성청결제·남성화)는 떼지 않음
+  const clean49 = P.suggestKeywords('여성청결제 3개입', []).main;
+  if (clean49 !== '여성청결제') throw new Error('Test 49 여성청결제를 떼면 안 됨: ' + JSON.stringify(clean49));
+  const shoe49 = P.suggestKeywords('남성화 265mm', []).main;
+  if (!/남성화/.test(shoe49)) throw new Error('Test 49 남성화를 떼면 안 됨: ' + JSON.stringify(shoe49));
+  if (P.sugKw('여성청결제 3개입').some(k => k === '청결제')) throw new Error('Test 49 여성청결제가 청결제로 깎임');
+  console.log('  ✓ 여성청결제·남성화는 그대로 (품목 이름이 훼손되지 않음)');
+
+  // ③ 붙여 쓴 품목은 사전에 있는 말만 합침 (괄사 마사지기처럼 따로 쓰는 두 품목은 안 붙임)
+  const gua49 = P.sugKw('코코스무 문어 괄사 두피 승모근 바디 마사지기 지압 전신 붓기제거');
+  if (gua49.some(k => /괄사마사지기/.test(k))) throw new Error('Test 49 따로 쓰는 두 품목을 붙임: ' + JSON.stringify(gua49));
+  console.log('  ✓ 괄사 + 마사지기 → 괄사마사지기로 붙이지 않음 (사전 compoundJoins 만 합침)');
+
+  // ④ 새 진행 만들기 규격 — pname 은 빈 자리를 유지(상품 순서 1:1), kwfix 는 항목 단위로 1200자
+  if (!/pname: guides\.map\(g => String\(g\.guide \|\| ""\)\.trim\(\)\.slice\(0, 40\)\)\.join\(" \/ "\)/.test(scriptContent)) {
+    throw new Error('Test 49 pname 이 빈 자리를 지움(.filter(Boolean)) — 상품 순서와 1:1이 아님');
+  }
+  if (/pname: guides\.map\([^;]*?\.[^;]*?filter\(Boolean\)\.join/.test(scriptContent)) throw new Error('Test 49 pname 에 .filter(Boolean) 이 남음');
+  if (/JSON\.stringify\(kwfx\)\.slice\(0, 1200\)/.test(scriptContent)) throw new Error('Test 49 kwfix 를 글자 중간에서 자름 (JSON 깨짐)');
+  if (!/kwfit\.concat\(\[x\]\)/.test(scriptContent)) throw new Error('Test 49 kwfix 항목 단위 절단 코드가 없음');
+  // 실제로 많이 쌓였을 때 — JSON 이 유효하고 넘친 항목은 통째로 빠지는지 (한 번 돌려 확인)
+  const bigG = [];
+  for (let i = 0; i < 9; i++) {
+    const gg = { pno: String(9100000000 + i), pname: '아주 긴 상품명 ' + i + ' ' + '가나다라마바사아자차카타파하'.repeat(5), seller: '판매처' + i, keyword: '키워드' + i, guide: '가이드' + i, platform: '쿠팡', daily: '1', total: '1', url: 'https://www.coupang.com/vp/products/' + (9100000000 + i), days: [{ n: '1' }] };
+    P.kwMemSave(gg, '아주긴키워드' + i);
+    bigG.push(gg);
+  }
+  P.setGuides(bigG); P.setCur(0); P.render();
+  const h49 = getElem('make-run').href || '';
+  const kf49 = decodeURIComponent((h49.match(/[?&]kwfix=([^&]*)/) || [])[1] || '');
+  let arr49 = null;
+  try { arr49 = JSON.parse(kf49); } catch (e) { throw new Error('Test 49 kwfix JSON 이 깨져 못 읽음: ' + kf49.slice(-60)); }
+  if (!arr49 || !arr49.length) throw new Error('Test 49 kwfix 가 비었음');
+  if (kf49.length > 1200) throw new Error('Test 49 kwfix 가 1200자를 넘음: ' + kf49.length);
+  if (arr49.length >= bigG.length) throw new Error('Test 49 넘치는 항목이 그대로 실림: ' + arr49.length + ' / ' + bigG.length);
+  arr49.forEach(x => { if (!x || !('pno' in x) || !('kw' in x)) throw new Error('Test 49 잘린 항목이 섞임: ' + JSON.stringify(x)); });
+  console.log('  ✓ pname 빈 자리 유지 · kwfix 항목 단위 1200자 (' + bigG.length + '건 중 ' + arr49.length + '건 · ' + kf49.length + '자)');
+
+  // ⑤ 사전에 v209 목록이 한 곳(genderPrefix·genderKeep·compoundJoins)에 있음
+  const dict49 = JSON.parse(require('fs').readFileSync(path.resolve(__dirname, '../kw_dict.json'), 'utf8'));
+  ['genderPrefix', 'genderKeep', 'compoundJoins'].forEach(k => { if (!Array.isArray(dict49[k]) || !dict49[k].length) throw new Error('Test 49 kw_dict.json 에 ' + k + ' 가 없음'); });
+  if (dict49.genderPrefix.indexOf('여성') < 0 || dict49.genderKeep.indexOf('여성청결제') < 0 || dict49.compoundJoins.indexOf('고구마말랭이') < 0) throw new Error('Test 49 v209 사전 단어가 없음');
+  if (dict49.nouns.indexOf('타이즈') < 0 || dict49.nouns.indexOf('바람막이') < 0 || dict49.modifiers.indexOf('기모') < 0 || dict49.modifiers.indexOf('등산') < 0) throw new Error('Test 49 품목(타이즈·바람막이)·수식어(기모·등산)가 사전에 없음');
+  console.log('  ✓ 사전(genderPrefix ' + dict49.genderPrefix.length + '·genderKeep ' + dict49.genderKeep.length + '·compoundJoins ' + dict49.compoundJoins.length + ')·타이즈/바람막이/기모/등산');
+
+  console.log('✓ v209 합성어 접두·꼬리·붙여 쓴 품목 시험 통과');
 }
 
 console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (42개 샘플 전원 일치)');
