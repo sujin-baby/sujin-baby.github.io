@@ -895,7 +895,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   ];
   function openGpSheet() {
     var h = '<button class="sheet-close" data-close="1">✕</button>' +
-      '<div class="sheet-num">지텔프 켈리</div>' +
+      '<div class="sheet-num">지텔프 문법</div>' +
       '<div class="sheet-title">G-POINT 1~33 요약 암기표</div>' +
       gpTableHtml(false) +
       '<button class="btn primary wide" data-close="1" style="margin-top:10px">확인</button>';
@@ -1773,7 +1773,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         pool.forEach(function (q) { byId[q.i] = q; });
         pool = opt.ids.map(function (i) { return byId[i]; }).filter(Boolean);
       }
-      title = opt.title || '지텔프 문법 · 켈리 카페 기출';
+      title = opt.title || '지텔프 문법 · G-POINT 기출';
     } else if (mode === 'wrong') {
       pool = poolWrong();
       title = '오답 집중 복습';
@@ -1800,7 +1800,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       if (mode === 'wrong') toast('아직 오답이 없어요. 먼저 문제를 풀어 주세요.');
       else if (mode === 'lecture') toast('이 강의 문제가 아직 없어요. 다른 강의를 체크해 보세요.');
       else if (mode === 'ids') toast('다시 풀 문제가 없어요.');
-      else if (mode === 'gp') toast('이 포인트의 켈리 기출이 아직 없어요.');
+      else if (mode === 'gp') toast('이 포인트 기출이 아직 없어요.');
       else if (mode === 'weakUnit') toast('이 단원에 연결된 기출이 아직 없어요.');
       else toast('아직 체크한 진도가 없어요. 스테이지에서 1강부터 체크해 주세요.');
       return;
@@ -3318,6 +3318,14 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       { t: "위클리 테스트 5회(경찰의수사종결~진술조서적용범위)", k: "해설", s: "26.02.10 · 형사법 올인원 위클리 테스트 5회(경찰의수사종결~진술조서적용범위)(해설)", u: "https://drive.google.com/file/d/1eXaCpGIubgkk8YUsxxKBrzCxVXUlx7PL/view" },
       { t: "위클리 테스트 6회(진술조서 증거능력 인정범위~증거 끝", k: "해설", s: "26.02.18 · 형사법 올인원 위클리 테스트 6회(진술조서 증거능력 인정범위~증거 끝(해설)", u: "https://drive.google.com/file/d/1_qQnF9fldNZo1byuIbRBj8LBy3E9gK0-/view" },
     ] },
+    { sub: "지텔프 · 김준기 D-1 어법 모의고사", rows: [
+      { t: "D-1 어법 모의고사 1회 (26문항)", k: "문제", s: "24.07.27 · 김준기 지텔프 D-1 어법 모의고사 1회 문제지(정답·해설은 앱 문항에 수록)", u: "https://drive.google.com/file/d/14VnCCgqyR3QXwlcOSG6h2bUZbgnQP7-v/view" },
+      { t: "D-1 어법 모의고사 2회 (26문항)", k: "문제", s: "24.07.27 · 김준기 지텔프 D-1 어법 모의고사 2회 문제지(정답·해설은 앱 문항에 수록)", u: "https://drive.google.com/file/d/16ffvOerPSr6J-jMCLnZBWhFJDc9Nad5a/view" },
+      { t: "D-1 어법 모의고사 3회 (26문항)", k: "문제", s: "24.07.27 · 김준기 지텔프 D-1 어법 모의고사 3회 문제지(정답·해설은 앱 문항에 수록)", u: "https://drive.google.com/file/d/1pFvC9Pb9DYIML-jXw7TBOtUTbquY1QjD/view" },
+      { t: "보충자료 1 · Chapter 1 시제편", k: "보충", s: "김준기 G-TELP 문법 2강 · 시제 요약표와 기출 경향 예문(정답 표기 없는 수업용)", u: "https://drive.google.com/file/d/1vFphouAf-LUaQLIboW_IuuxKXJjA9pG3/view" },
+      { t: "보충자료 2 · Chapter 3 준동사편", k: "보충", s: "김준기 G-TELP 문법 8강 · 준동사 기출 예문 모음과 가주어·진주어 요약(정답 표기 없는 수업용)", u: "https://drive.google.com/file/d/1PwR4dn8ELaEW1cppCf-UOW7Vfb-k8azh/view" },
+      { t: "보충자료 3 · Chapter 4 조동사", k: "보충", s: "김준기 G-TELP 문법 11강 · 조동사 기출 경향 A~F 예문(정답 표기 없는 수업용)", u: "https://drive.google.com/file/d/1h3bOLuAfMI53UxSG9MjQMxEB6p8aKXOB/view" },
+    ] },
   ];   /* 통합 시험지는 헌법 1~20번을 뺀 편집본 링크만 넣었다 · 자료실은 지금 고른 과목 것만 보여준다 */
 
   /* ============================================================
@@ -3624,7 +3632,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
 
   /* ---------- G-POINT 표 (모달·탭 공용) ---------- */
   function gpTableHtml(inline) {
-    var h = inline ? '<div class="gp-note">조건(힌트)은 <b class="gp-cond">파랑</b>, 정답 공식은 <b class="gp-ans">노랑</b>. 항목을 누르면 그 포인트 켈리 기출이 나와요.</div>' : '';
+    var h = inline ? '<div class="gp-note">조건(힌트)은 <b class="gp-cond">파랑</b>, 정답 공식은 <b class="gp-ans">노랑</b>. 항목을 누르면 그 포인트 기출이 나와요.</div>' : '';
     if (!inline) {
       h += '<div class="gp-jump">';
       GP_TABLE.forEach(function (grp, gi) {
@@ -3801,7 +3809,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   function startGp(n) {
     var pool = gpQuestions(n);
     if (!pool.length) {
-      toast('G-POINT ' + n + '에 연결된 켈리 기출이 아직 없어요 · 같은 단원 문항으로 대신할 수는 있지만, 새 문제를 지어내지는 않아요');
+      toast('G-POINT ' + n + '에 연결된 기출이 아직 없어요 · 같은 단원 문항으로 대신할 수는 있지만, 새 문제를 지어내지는 않아요');
       return;
     }
     var checkedGp = !!ckMap('gtp33')[n];
@@ -3822,7 +3830,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     save();
     if ($('#sheet') && !$('#sheet').classList.contains('hidden')) closeSheet();
     var ids = order.map(function (q) { return q.i; });
-    startSession('gp', { n: n, ids: ids, title: '지텔프 문법 · 켈리 카페 기출 ' + ids.length + '문제' });
+    startSession('gp', { n: n, ids: ids, title: '지텔프 문법 · G-POINT 기출 ' + ids.length + '문제' });
   }
 
   /* ---------- 📂 자료실 ---------- */
@@ -3847,7 +3855,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       '<p class="lib-sub">내 드라이브(jinleeda1@gmail.com)에만 있는 파일이라, 폰의 구글 계정이 같아야 바로 열려요. 2026년 2차 통합 시험지는 <b>헌법 1~20번을 뺀 편집본</b>만 올렸어요.</p>';
     if (!groups.length) {
       h += '<div class="lib-group"><div class="lib-gh">' + esc(s ? s.name : '') + ' <span>0개</span></div>' +
-        '<p class="lib-sub">' + esc(s ? s.name : '지금 과목') + ' 자료는 아직 없어요. 자료실은 형사법·경찰학·범죄학 강의 자료만 모아 둬요.</p></div>';
+        '<p class="lib-sub">' + esc(s ? s.name : '지금 과목') + ' 자료는 아직 없어요. 자료실은 형사법·경찰학·범죄학 강의 자료와 지텔프(김준기) 자료를 모아 둬요.</p></div>';
       return h;
     }
     var tot = 0, openedSub = 0;
@@ -3909,11 +3917,12 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var gp = S.subj === 'gtelp';
     $$('#memoSeg .seg-b').forEach(function (b) {
       var seg = b.getAttribute('data-seg');
-      var show = (seg === 'gp') ? gp : (seg === 'lib' || seg === 'law') ? !gp : true;
+      /* G-POINT·조문은 경찰 과목 전용, 자료실은 지텔프(김준기 자료)에도 있다 */
+      var show = (seg === 'gp' || seg === 'law') ? !gp : true;
       b.classList.toggle('hidden', !show);
     });
     if (MEMO.seg === 'gp' && !gp) MEMO.seg = 'card';
-    if ((MEMO.seg === 'lib' || MEMO.seg === 'law') && gp) MEMO.seg = 'card';
+    if (MEMO.seg === 'law' && gp) MEMO.seg = 'card';
     var gb = $('#gpBtn'), lb = $('#libBtn');
     if (gb) gb.classList.toggle('hidden', !gp);
     if (lb) lb.classList.toggle('hidden', gp);
