@@ -1986,7 +1986,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3752,6 +3752,7 @@ function checkFullInner_() {
       try { koziWeekend1_(); } catch (e) {}
       try { koziFix2_(); } catch (e) {}
       try { orvecFold1_(); } catch (e) {}
+      try { numFold1_(); } catch (e) {}
       try { if (!props.getProperty('EDITC1')) { ensureEditTab_(); props.setProperty('EDITC1', Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm')); } } catch (e) { note_('폼수정 날짜 칸 실패: ' + e); }   // (11/18 한 번) C1 날짜 고르기 바로 (정리가 밀려 늦게 생기던 것)
       try { upAcctOpen1_(); } catch (e) {}
       try { exp135_(); } catch (e) {}
@@ -9364,6 +9365,63 @@ function orvecFold1_() {
     fo.setName(names[0]);
     props.setProperty('ORVECFOLD1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 폴더 이름 ' + old + ' → ' + names[0]);
   } catch (e) { props.setProperty('ORVECFOLD1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/21 사용자 승인 '응 숫자 빼') 이미 만든 명단 시트·폼·폴더 이름에서 끝 인원 숫자(와 날짜·'(업체명)') 빼기 — 숫자는 카톡 방제 뒤에만
+//  폴더 ID 끝 6자리로 찾고, 지금 이름이 아래 옛 이름일 때만 바꿈(손으로 바꾼 건 안 건드림). 시트 끝 ' (응답)'은 남김. 방제·한눈에·월급시트는 안 건드림
+//  [달, 폴더 ID 끝, 새 이름, 옛 이름들(폴더·시트·폼)]
+const NUMFOLD_LIST = [
+  ['2026년 11월', 'C4tIX7', '#택 오르베카 엔부사과', ['#택 오르베카 엔부사과 30']],
+  ['2026년 11월', 'WUK5yC', '# 비전이공이공 황금향 토스', ['# 비전이공이공 황금향 토스5']],
+  ['2026년 11월', 'lj7IWn', '# 도레미파머스 부사사과', ['# 도레미파머스 부사사과20']],
+  ['2026년 11월', 'PVgDDE', '#택 실/빈 김상사 케이블타이', ['# 택 실/빈 김상사 케이블타이5']],
+  ['2026년 11월', 'mqUvHL', '# 실 제이컴퍼니 크리노바', ['# 실 제이컴퍼니 크리노바5']],
+  ['2026년 11월', 'BgccHZ', '#택 과일쏙 사과감귤 토스', ['#택 과일쏙 사과감귤 토스6']],
+  ['2026년 11월', '_b9jEn', '#택 그린문스토어 황금향', ['#택 그린문스토어 황금향30']],
+  ['2026년 11월', 'hiqhhE', '업)택 지니네농수산 메주', ['업)택11.12 지니네농수산 메주30']],
+  ['2026년 11월', 'lM1h4s', '# 실 유앤아이푸드틈새막이', ['# 실 유앤아이푸드틈새막이5']],
+  ['2026년 11월', 'JO_5PZ', '# 도레미파머스마켓 사과', ['# 도레미파머스마켓 사과20']],
+  ['2026년 11월', 'GAxg4R', '#실 빌랑 흡착장난감', ['#11.11 실 빌랑 흡착장난감 4', '#실 빌랑 흡착장난감 4']],
+  ['2026년 11월', 'v1Uw8k', '#택 실버반석 네쿠 털깔창', ['#택11.11 실버반석 네쿠 털깔창5']],
+  ['2026년 11월', 'l5Vkax', '#택 싱싱곳간 시나노골드', ['#택 싱싱곳간 시나노골드10']],
+  ['2026년 11월', 'iEvKm8', '# 앨비나프레시 설향딸기', ['# 앨비나프레시 설향딸기20']],
+  ['2026년 11월', 'yCWbpB', '#택 데이디시나노골드사과', ['#택 데이디시나노골드사과30']],
+  ['2026년 10월', 'vf_Jz5', '#택 모두의농수산감홍사과', ['#택 모두의농수산감홍사과5']],
+  ['2026년 10월', 'fkfbjJ', '#택 모두의농수산옥광밤외', ['#택10.15 (업체명)옥광밤외', '#택10.15 모두의농수산옥광밤외12']],
+  ['2026년 10월', 'pk0njn', '#택 모두의농수산옥광밤외', ['#택10.14 모두의농수산옥광밤외', '#택10.14 모두의농수산옥광밤외12']]
+];
+function numFold1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('NUMFOLD1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
+  const t0 = Date.now(), done = String(props.getProperty('NUMFOLD1_DONE') || '').split(',').filter(Boolean), log = [], miss = [];
+  const ns = function (x) { return String(x).replace(/\s*\(응답\)\s*$/, '').replace(/\s+/g, ''); };
+  try {
+    const root = rootFolder_(), byMonth = {};
+    NUMFOLD_LIST.forEach(function (x) {
+      if (done.indexOf(x[1]) >= 0 || Date.now() - t0 > 90000) return;
+      if (!(x[0] in byMonth)) { byMonth[x[0]] = {}; const mi = root.getFoldersByName(x[0]); if (mi.hasNext()) { const it = mi.next().getFolders(); while (it.hasNext()) { const f = it.next(); byMonth[x[0]][f.getId().slice(-6)] = f; } } }
+      const fo = byMonth[x[0]][x[1]];
+      if (!fo) { miss.push(x[1]); done.push(x[1]); return; }
+      const want = x[2], olds = x[3].map(ns), got = [];
+      const ren = function (kind, cur, set) {
+        const tail = (String(cur).match(/\s*\(응답\)\s*$/) || [''])[0];
+        if (ns(cur) === ns(want) || olds.indexOf(ns(cur)) < 0) return;
+        set(want + tail); got.push(kind);
+      };
+      ren('폴더', fo.getName(), function (n) { fo.setName(n); });
+      const fs = fo.getFilesByType(MimeType.GOOGLE_SHEETS); while (fs.hasNext()) { const f = fs.next(); ren('시트', f.getName(), function (n) { f.setName(n); }); }
+      const ff = fo.getFilesByType(MimeType.GOOGLE_FORMS);
+      while (ff.hasNext()) {
+        const f = ff.next(); ren('폼 파일', f.getName(), function (n) { f.setName(n); });
+        try { const fm = FormApp.openById(f.getId()); ren('폼 제목', fm.getTitle(), function (n) { fm.setTitle(n); }); } catch (e) { got.push('폼 제목 못 엶'); }
+      }
+      log.push(want + (got.length ? ' (' + got.join('·') + ')' : ' (이미 됨)'));
+      done.push(x[1]);
+    });
+    props.setProperty('NUMFOLD1_DONE', done.join(','));
+    const prev = String(props.getProperty('NUMFOLD1_LOG') || '');
+    props.setProperty('NUMFOLD1_LOG', (prev + (prev ? ' / ' : '') + log.join(' / ') + (miss.length ? ' / 폴더 못 찾음 ' + miss.join(',') : '')).slice(-3000));
+    if (NUMFOLD_LIST.every(function (x) { return done.indexOf(x[1]) >= 0; })) props.setProperty('NUMFOLD1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 폴더 ' + NUMFOLD_LIST.length + '개 확인' + (miss.length ? ', 못 찾음 ' + miss.length : ''));
+  } catch (e) { props.setProperty('NUMFOLD1_DONE', done.join(',')); props.setProperty('NUMFOLD1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 function cableFmt1_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('CABLEFMT1') || '');
