@@ -47,5 +47,8 @@ sh.rows = sh.rows.slice(0, 5); maxRows = 6; fmt.length = 0;
 G('paySpareRows_')(sh);
 ok(maxRows === 10, '시트 끝 늘림 ' + maxRows);
 ok([6, 7, 8, 9, 10].every(r => fmt.some(x => x[1] === r)), '여분 5줄 모양 ' + JSON.stringify(fmt));
+// 캠페인 색·여분 줄은 줄 쓰기 전에 매번 (11/16 사용자: 맨 끝 단계라 며칠씩 못 가서 또 연두색·여분 한 줄)
+{ const src = require('fs').readFileSync(process.argv[2], 'utf8'), up = src.slice(src.indexOf('function updatePay_('), src.indexOf('const rid = r.row', src.indexOf('function updatePay_(')));
+  if (!/payColors_\(sh\); paySpareRows_\(sh\);/.test(up)) { console.log('XX 월급시트 색·여분 줄이 줄 쓰기 전에 없음'); process.exit(1); } }
 console.log(fails.length ? 'XX 월급시트 줄 모양 고치기 시험 실패:\n- ' + fails.join('\n- ') : '✓ 월급시트 줄 모양 고치기·여분 줄 시험 통과');
 process.exit(fails.length ? 1 : 0);

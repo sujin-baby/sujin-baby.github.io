@@ -44,7 +44,7 @@ const rowOf = id => where(id)[1];
 const cellOf = (id, c) => { const [b, r] = where(id); return T[b].rows[r - 1][c]; };
 const outSt = id => env.__ss.sheets['보낼메시지'].rows.find(r => r[0] === id)[5];
 // 종류마다 맞는 탭에
-const expect = { m1: '🐥방공지', m2: '🐥방공지', m3: '🐥방공지', m5: '📸포토가이드', m6: '📝할일', m7: '💰리뷰비', m8: '📝할일', m10: '📋명단전달', m11: '📦리뷰취합', n0: '📝할일', n29: '📝할일' };
+const expect = { m1: '🐥방공지', m2: '🐥방공지', m3: '🐥방공지', m5: '⭐리뷰가이드', m6: '📝할일', m7: '💰리뷰비', m8: '📝할일', m10: '📋명단전달', m11: '📦리뷰취합', n0: '📝할일', n29: '📝할일' };
 Object.keys(expect).forEach(id => ok(where(id)[0] === expect[id], id + ' → ' + where(id)[0] + ' (기대 ' + expect[id] + ')'));
 ['m3b', 'm4', 'm9'].forEach(id => ok(rowOf(id) === 0, id + ' 보이면 안 됨'));
 ok(T['🐥방공지'].name === '🐥방공지 2', '탭 이름 개수 ' + T['🐥방공지'].name);
@@ -144,7 +144,8 @@ const coll = t => env.__ss.sheets['진행목록'].rows.find(r => String(r[LH.ind
 const fr = T['💰리뷰비'].rows[rowOf('m14') - 1];
 const wd = ['일', '월', '화', '수', '목', '금', '토'][new Date(t0.getFullYear(), 9, 28).getDay()];
 const rf = rowOf('m14');
-ok(JSON.stringify(fr.slice(4, 11)) === JSON.stringify([t0.getFullYear() + '.10.28.' + wd, '실링팬', '뽀짝오리', '', 2, '=(H' + rf + '*500)+(I' + rf + '*1000)', 'https://x']), '리뷰비 칸 ' + JSON.stringify(fr.slice(4, 11)));
+// (11/17) 주문 날짜는 날짜 값(리뷰비 시트 '유효한 날짜' 규칙), 진행자는 리뷰비 시트 목록 값 '🫶뽀짝오리'
+ok(Object.prototype.toString.call(fr[4]) === '[object Date]' && fr[4].getMonth() === 9 && fr[4].getDate() === 28 && JSON.stringify(fr.slice(5, 11)) === JSON.stringify(['실링팬', '🫶뽀짝오리', '', 2, '=(H' + rf + '*500)+(I' + rf + '*1000)', 'https://x']), '리뷰비 칸 ' + JSON.stringify(fr.slice(4, 11)));
 ok(T['💰리뷰비'].rows[0][4] === '주문 날짜' && T['⏰리뷰독촉'].rows[0][4] === '리뷰 확인이 안 된 분', '머리글 ' + JSON.stringify([T['💰리뷰비'].rows[0][4], T['⏰리뷰독촉'].rows[0][4]]));
 // 리뷰 독촉 탭은 이름만 (11/8)
 env.__ss.sheets['보낼메시지'].rows.splice(1, 0, ['m15', day(-1), '리뷰 독촉', '#10.27 실링팬 2', '⏰ 리뷰 작성 기한이 3일 지났어요\n아직 리뷰 확인이 안 된 분: 주현지, 이슬비\n이미 쓰셨으면 리뷰 캡처를 올려 주시고, 아직이면 오늘 중으로 작성 부탁드려요!', '대기']);

@@ -32,6 +32,13 @@ ok(by('a3').copy === '김철수, 이영희' && by('a3').over === true, '독촉�
 ok(by('a5').copy === '[전원 리뷰완료] #11.16 실 밴드 4 페이백 요청드립니다!\n\n명단시트: https://x', '페이백 한 줄 띄움');
 ok(by('a6').copy === '' && /밴드/.test(by('a6').msg), '리뷰비 요청은 탭에서 복사 ' + JSON.stringify(by('a6')));
 ok(by('a4').todo === true, '할 일 표시');
+// 11/19: 할 일 서브 탭 목록 (전체 + 메시지 탭 이름 그대로, 취왖은 리뷰비로 합쳐져 빠짐)
+const gp = (o && o.groups) || [];
+ok(gp.map(g => g.label).join('|') === '방공지|명단전달|할일|가이드|취합|독촉|리뷰비', '서브 탭 이름·순서 ' + JSON.stringify(gp.map(g => g.label)));
+ok(gp.length === G('MSGV_GROUPS.length') - 1 && gp.every(g => typeof g.i === 'number' && g.i >= 0 && g.i < G('MSGV_GROUPS.length')), '서브 탭 인덱스 ' + JSON.stringify(gp.map(g => g.i)));
+ok(gp.every(g => G('MSGV_GROUPS[' + g.i + '].key') !== 'done'), '취완 탭은 서브 탭에 없음');
+ok(o.items.every(x => gp.some(g => g.i === x.g)), '모든 항목의 g가 서브 탭 중 하나 ' + JSON.stringify(o.items.map(x => x.g)));
+ok(gp.filter(g => g.i === by('a3').g)[0].label === '독촉' && gp.filter(g => g.i === by('a4').g)[0].label === '할일' && gp.filter(g => g.i === by('a6').g)[0].label === '리뷰비' && gp.filter(g => g.i === by('a1').g)[0].label === '방공지', '항목 → 서브 탭 이름');
 ok(by('a1').list === 'https://docs.google.com/spreadsheets/d/S1/edit' && by('a1').rvimg === 'https://drive.google.com/drive/folders/IMGF1', '명단·리뷰이미지 링크 ' + JSON.stringify([by('a1').list, by('a1').rvimg]));
 ok(by('a6').rvimg === 'https://drive.google.com/drive/folders/IMGF1', '리뷰비 줄도 리뷰이미지 ' + by('a6').rvimg);
 // 페이지에서 보냄 → 탭에서 체크한 것과 같게 (체크 시각)
@@ -51,6 +58,16 @@ ok(ed.rows[0][1] === '#11.11 귤 5 (뽀짝오리)', '체크 중이면 그대로 
 ed.rows[3][0] = false; ed.rows[0][1] = '#11.17 실 밴드 4 (뽀짝오리)';
 G('ensureEditTab_()');
 ok(ed.rows[0][1] === '#11.17 실 밴드 4 (뽀짝오리)', '목록에 있는 진행은 그대로');
+// (11/19 피클) C1 날짜가 B1 진행 날짜와 어긋나면 B1 날짜로 맞춤 (C1 '오늘'인데 B1은 다른 날 진행이던 것)
+ok(ed.rows[0][2] === G('editDateLabel_')(day(1)), 'C1 = B1 진행 날짜 ' + ed.rows[0][2]);
+// 날짜가 넘어가 C1 보기가 없어져도 B1 진행 날짜로 (오늘로 안 바꿈)
+ed.rows[0][2] = '11.1(토) 오늘';
+G('ensureEditTab_()');
+ok(ed.rows[0][2] === G('editDateLabel_')(day(1)) && ed.rows[0][1] === '#11.17 실 밴드 4 (뽀짝오리)', '없는 C1 → B1 날짜 ' + ed.rows[0][2]);
+// 사용자가 C1을 고르면 C1이 먼저 (B1이 그날 첫 진행으로)
+ed.rows[0][2] = G('editDateLabel_')(day(0));
+G('editDatePick_')(ed, { source: { toast: function () {} } });
+ok(ed.rows[0][2] === G('editDateLabel_')(day(0)) && ed.rows[0][1] === '#11.16 실 밴드 4 (뽀짝오리)', '고른 C1 그대로·B1 그날 진행 ' + ed.rows[0][1] + ' ' + ed.rows[0][2]);
 // 3) 새벽 점검: 월급시트 같은 날·같은 스토어 비슷한 줄
 const pay = new H.Sheet('11월', [['캠페인명', '스토어'], ['#택11.5 차량용 거치대 3', '더호컴퍼니'], ['#택11.5 더호 차량용 거치대 3', '더호컴퍼니'], ['#11.5 실 샤워기거치대 5', '유앤아이푸드'], ['#택11.6 더호 차량용 거치대 3', '더호컴퍼니'], ['#11.5 실 거치대 2', '다른가게']]);
 env.__PAY = pay;
@@ -59,5 +76,10 @@ const dup = G('paySimilarDups_()');
 ok(dup.length === 1 && /2행 #택11\.5 차량용 거치대 3 \/ 3행 #택11\.5 더호 차량용 거치대 3/.test(dup[0]) && !/샤워기|다른가게|11\.6/.test(dup[0]), '비슷한 줄 ' + JSON.stringify(dup));
 pay.rows.splice(1, 1);
 ok(G('paySimilarDups_()').length === 0, '중복 없으면 알림 없음');
+// (11/19) 서로 다른 의뢰서 진행(명단 시트가 다름)이면 이름이 비슷해도 안 알림 (레깅스 30·50 오알림)
+pay.rows.push(['#11.18 실 탄탄 레깅스 30', '탄탄'], ['#11.18 실 탄탄 레깅스 50', '탄탄']);
+const LHx = G('LIST_HEADER'), mkx = o => LHx.map(h => o[h] !== undefined ? o[h] : '');
+env.__ss.sheets['진행목록'].rows.push(mkx({ '진행일': day(0), '명단 제목': '#11.18 실 탄탄 레깅스 30 (뽀짝오리)', '시트ID': 'LA', '진행 상태': '진행중' }), mkx({ '진행일': day(0), '명단 제목': '#11.18 실 탄탄 레깅스 50 (뽀짝오리)', '시트ID': 'LB', '진행 상태': '진행중' }));
+ok(!G('paySimilarDups_()').some(x => /레깅스/.test(x)), '다른 의뢰서 진행은 안 알림 ' + JSON.stringify(G('paySimilarDups_()')));
 console.log(fails.length ? 'XX 오늘 할 것·폼수정 B1·월급시트 비슷한 줄 시험 실패:\n- ' + fails.join('\n- ') : '✓ 오늘 할 것·폼수정 B1·월급시트 비슷한 줄 시험 통과');
 process.exit(fails.length ? 1 : 0);

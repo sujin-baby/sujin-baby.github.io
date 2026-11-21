@@ -10,10 +10,11 @@ const src = {
 // 판매처 코드: '/* 판매처: 첫 후보가' 부터 '정리'(브랜드샵 지우기) 바로 앞까지
 function sellerCode(s, label) {
   const a = s.indexOf('/* 판매처: 첫 후보가');
-  const ends = ['if (seller) {', 'let opt = readOption();'].map(x => s.indexOf(x, a)).filter(x => x > a);
+  const ends = ['if (seller) {', 'let opt = readOption();', 'let seller = readCoupangSeller();'].map(x => s.indexOf(x, a)).filter(x => x > a);
   const b = ends.length ? Math.min.apply(null, ends) : -1;
   if (a < 0 || b < 0) throw new Error(label + ': 판매처 코드를 못 찾음');
-  return s.slice(a, b);
+  const out = s.slice(a, b);
+  return /const readCoupangSeller =/.test(out) ? out + '\nseller = readCoupangSeller();' : out;   // 11/16 oy.js: 판매처 읽기를 함수로 (렌더링 대기)
 }
 const cases = [
   { t: '화면에 판매자 가입만, 페이지 데이터 없음 → 상품명 첫 단어로 채우지 않고 비움', brands: [], txt: '입점신청\n판매자 가입\n상품 정보', html: '', name: '가을제철 햇감 달콤말랑 시즌한정 홍시용대봉감, 1박스, 3kg 소과', want: '' },
@@ -24,13 +25,19 @@ const cases = [
   { t: '정상 브랜드 칸은 그대로', brands: ['삼성전자'], txt: '판매자: 다른곳', html: '{"vendorName":"x"}', name: 'a b', want: '삼성전자' },
   { t: '상호/대표자', brands: [], txt: '상호/대표자 주식회사 감나무/홍길동', html: '', name: '쿠팡 단독 감', want: '주식회사 감나무' },
   { t: '빈 브랜드 칸은 건너뜀', brands: ['  ', '청송사과'], txt: '', html: '', name: '', want: '청송사과' },
+  // 11/19 팀룸 #88(#89·#91): 쿠팡의 '판매처 보기(2)' 버튼 글자가 판매처로 들어가 방제·명단 제목이 '보기(2)'가 됨
+  { t: '#88 링크 글자 보기(2)는 판매처가 아님 → 페이지 데이터 판매자', brands: ['보기(2)'], txt: '판매자\n보기(2)', html: '{"vendorName":"디에이치컴퍼니"}', name: '에르온 웜마스터 남성용 발열 기모내의', want: '디에이치컴퍼니' },
+  { t: '#88 상품평 보기(12)·더보기 같은 버튼 글자를 건너뛰고 진짜 판매자', brands: ['상품평 보기(12)', '더보기', '디에이치컴퍼니'], txt: '', html: '', name: '기모내의', want: '디에이치컴퍼니' },
+  { t: '#88 판매자 다음 줄이 보기(2)면 다음 후보로', brands: [], txt: '판매자\n보기(2)\n판매자: 디에이치컴퍼니 판매자 상품 보러가기', html: '', name: '기모내의', want: '디에이치컴퍼니' },
+  { t: '#88 판매자 보기(2) 한 덩어리도 판매처가 아님 (다른 후보 없으면 비움)', brands: ['판매자 보기(2)'], txt: '판매자 보기(2)', html: '', name: '기모내의', want: '' },
+  { t: '#88 보기로 시작하는 진짜 상호(보기좋은상회)는 살림', brands: ['보기좋은상회'], txt: '판매자 가입', html: '', name: '기모내의', want: '보기좋은상회' },
 ];
 let fail = 0;
 for (const [label, s] of Object.entries(src)) {
   const code = sellerCode(s, label);
   for (const c of cases) {
     const ctx = {
-      document: { querySelectorAll: () => c.brands.map(t => ({ textContent: t })), documentElement: { innerHTML: c.html } },
+      document: { querySelectorAll: () => c.brands.map(t => ({ textContent: t })), documentElement: { innerHTML: c.html }, body: { innerText: c.txt } },
       txt: c.txt, html: c.html, name: c.name, seller: '',
       jv: k => { const m = c.html.match(new RegExp('"' + k + '"\\s*:\\s*"([^"]+)"')); return m ? m[1] : ''; },
     };
