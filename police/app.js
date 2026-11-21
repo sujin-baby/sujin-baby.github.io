@@ -35,7 +35,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   /* ---------- 시험 일정 ---------- */
   var DTARGET = '2027-08-21';            // 2027년 2차 순경 필기 (예상일)
   var GTELP = '2026-11-29';              // 지텔프 Level 2 (수진 님 응시일)
-  var ENDLESS = 999;                     // [끝까지] — 그 과목 전 문항을 다 낸다(99 상한 없음)
+  var ENDLESS = 999;                     // [끝까지] — 체크한 진도 안에서만, 개수 상한만 없앤다(99 상한 없음)
 
   var RANKS = [
     { n: '순경', xp: 0, e: '👮' },
@@ -1573,14 +1573,11 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     });
     return out;
   }
-  /* [끝까지] — 체크한 진도와 상관없이 그 과목(섞기면 전체) 전 문항.
-     2026년 2차 기출 100문항은 전용 메뉴가 있어 뺀다. */
+  /* [끝까지] — 누적 랜덤 복습과 같은 풀(체크한 강의·G-POINT 안)에서 개수 상한만 없앤 것.
+     안 들은 Unit·안 배운 G-POINT는 여전히 나오지 않는다(예: 지텔프 1~8·13만 체크면 52문제).
+     2026년 2차 기출 100문항은 전용 메뉴가 있어 뺀다(체크 진도에 기출 강좌가 없어 자연히 빠진다). */
   function endlessPool() {
-    return D.questions.filter(function (q) {
-      if (!S.mix && q.s !== S.subj) return false;
-      var c = COURSE[q.c];
-      return !(c && c.kind === 'exam');
-    });
+    return S.mix ? allScopePool() : scopeQPool(S.subj);
   }
   function poolWrong() {
     var ids = Object.keys(S.wrong);
@@ -1787,7 +1784,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       pool = poolForUnit(opt.cid, opt.u);
       title = '🎯 약점 집중 · ' + unitName(opt.cid, opt.u);
     } else if (mode === 'all' && S.qlen >= ENDLESS) {
-      /* [끝까지]는 진도 상한 없이 그 과목 전 문항 (지텔프는 170문항 전체) */
+      /* [끝까지]도 체크한 진도 범위는 그대로 — 개수 상한(99)만 없앤다 */
       pool = endlessPool();
       title = '누적 랜덤 복습 · 끝까지';
     } else {
@@ -4057,8 +4054,16 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   function renderTiles() {
     var sp = subjectPool(S.subj);
     var t1 = $('#tileAllSub');
-    if (t1) t1.textContent = S.qlen >= ENDLESS ? (S.mix ? '전 과목 ' : '전체 ') + endlessPool().length + '문제'
-                                               : (sp.beginner ? '1강 입문 ' : '배운 진도 ') + sp.pool.length + '문제';
+    if (t1) {
+      if (S.qlen >= ENDLESS) {
+        /* [끝까지]도 체크한 진도 안에서만 — 숫자는 실제로 낼 문항 수 */
+        var ep = endlessPool();
+        t1.textContent = ep.length ? ('체크한 진도 전체 ' + ep.length + '문제')
+                                   : ('1강 입문 ' + beginnerPool(S.mix ? null : S.subj).length + '문제');
+      } else {
+        t1.textContent = (sp.beginner ? '1강 입문 ' : '배운 진도 ') + sp.pool.length + '문제';
+      }
+    }
     var wn = poolWrong().length;
     var t2 = $('#tileWrongSub'); if (t2) t2.textContent = wn ? '오답 ' + wn + '문제' : '오답 없음';
     var cd = cardDeck().cards.length;
