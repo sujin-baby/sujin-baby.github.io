@@ -2454,6 +2454,34 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
      · 첫 문장(핵심)은 굵게, 나머지는 문장 단위 단락으로
      · 괄호 속 우리말 해석과 출처는 따로 떼어 맨 아래로
      ============================================================ */
+  /* 켈리 답지 원문 속 보기 기호 (a)~(d)
+     · 원문은 카페 답지의 '원래 보기 순서'(a·b·c·d)로 적혀 있어서, 보기를 섞어 낸 화면에서는 알파벳이 어긋난다
+     · it.order[i] = 화면 i번째 자리에 놓인 원래 보기 인덱스 → 원래 (a)가 지금 몇 번 알파벳인지 계산
+     · 섞지 않았거나(order 정보 없음·원래 순서 그대로) 바꿀 게 없으면 원문을 그대로 둔다
+     · (a)→(b) 뒤 (b)→(c)처럼 연쇄되지 않게, 반드시 한 번의 regex로 동시에 치환한다 */
+  function origLetterMap(q, it) {
+    if (!it || !it.order || !it.order.length) return null;
+    var map = {}, diff = false, i, oi, from, to;
+    for (i = 0; i < it.order.length && i < 4; i++) {
+      oi = Number(it.order[i]);
+      if (!(oi >= 0 && oi < 4)) continue;
+      from = 'abcd'.charAt(oi); to = 'abcd'.charAt(i);
+      map[from] = to;
+      if (from !== to) diff = true;
+    }
+    return diff ? map : null;
+  }
+  function origTextFix(txt, map, mark) {
+    var s = String(txt || '');
+    if (!s || !map) return s;
+    return s.replace(/\(([a-dA-D])\)/g, function (m0, ch) {
+      var lo = ch.toLowerCase(), to = map[lo];
+      if (!to || to === lo) return m0;
+      if (mark) mark.on = true;
+      return '(' + (ch === ch.toUpperCase() ? to.toUpperCase() : to) + ')';
+    });
+  }
+
   function expHtml(q, it) {
     var raw = String(q.e || '').replace(/\r/g, '').trim();
     if (!raw) return '<span class="fb-empty">해설이 아직 없어요.</span>';
@@ -2523,12 +2551,17 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       });
       labSlots.forEach(function (i, n) { blocks[i] = labSorted[n]; });
     }
+    /* 원문 카드의 (a)~(d)를 지금 화면의 보기 알파벳으로 맞춘다 */
+    var omap = origLetterMap(q, it);
     blocks.forEach(function (bk, i) {
       if (bk.k) {
         var cls = bk.k === '해석' ? 'tr' : (bk.k === '풀이' ? 'sol' : (bk.k === '원문' ? 'orig' : 'wrong'));
-        h += '<div class="fb-sec ' + cls + '"><div class="fb-sec-k">' + esc(bk.k === '원문' ? '켈리 답지 원문' : bk.k) + '</div>' +
-          (bk.b ? '<p class="fb-sec-b">' + T(bk.b) + '</p>' : '') +
-          (bk.li.length ? '<ul class="fb-sec-ul">' + bk.li.map(function (x) { return '<li>' + T(x) + '</li>'; }).join('') + '</ul>' : '') +
+        var ohit = { on: false };
+        var kb = bk.k === '원문' ? origTextFix(bk.b, omap, ohit) : bk.b;
+        var kli = bk.k === '원문' ? bk.li.map(function (x) { return origTextFix(x, omap, ohit); }) : bk.li;
+        h += '<div class="fb-sec ' + cls + '"><div class="fb-sec-k">' + esc(bk.k === '원문' ? (ohit.on ? '켈리 답지 원문 · 현재 보기 기준' : '켈리 답지 원문') : bk.k) + '</div>' +
+          (kb ? '<p class="fb-sec-b">' + T(kb) + '</p>' : '') +
+          (kli.length ? '<ul class="fb-sec-ul">' + kli.map(function (x) { return '<li>' + T(x) + '</li>'; }).join('') + '</ul>' : '') +
           '</div>';
         return;
       }
@@ -2548,8 +2581,12 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       else h += '<p class="fb-p">' + T(s) + '</p>';
     });
     if (tr) h += '<div class="fb-tr"><b>해석</b>' + esc(tr) + '</div>';
-    if (orig) h += '<div class="fb-sec orig"><div class="fb-sec-k">켈리 답지 원문</div>' +
-      '<p class="fb-sec-b">' + esc(orig) + '</p></div>';
+    if (orig) {
+      var o2hit = { on: false };
+      var origFixed = origTextFix(orig, omap, o2hit);
+      h += '<div class="fb-sec orig"><div class="fb-sec-k">' + (o2hit.on ? '켈리 답지 원문 · 현재 보기 기준' : '켈리 답지 원문') + '</div>' +
+        '<p class="fb-sec-b">' + esc(origFixed) + '</p></div>';
+    }
     if (src) h += '<div class="fb-src">' + esc(src) + '</div>';
     return h;
   }
