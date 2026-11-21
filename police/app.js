@@ -824,56 +824,61 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
 
 
-  /* ---------- 📘 G-POINT 1~10 요약 암기표 ---------- */
+  /* ---------- 📘 G-POINT 1~33 요약 암기표 ----------
+     2026-11-21 켈리 지텔프 최신 교재(Unit 01~07) 사진 원문 기준으로 전면 재작성.
+     · Unit 01 가정법 1~2 · Unit 02 should 생략 3 · Unit 03 시제 4~10
+     · Unit 04 준동사 11~20 · Unit 05 관계사 21~26 · Unit 06 조동사 27~31 · Unit 07 연결어 32~33
+     · 3번 '주요명제결충'은 교재 원문 표기라 고치지 않는다(수진 님 확인 11/19) */
   var GP_TABLE = [
-    { g: '가정법 1~3', tip: '', rows: [
-      ['1', 'If 과거(-ed, were)', 'wcm + 동원'],
-      ['2', 'If had pp (= Had 주어 pp)', 'wcm + have pp'],
-      ['3', '주요명제결충 + that절', '(should) + 동원']
+    { g: '가정법 1~2', tip: '오답 POINT: if+주어+had+명사·if+주어+could/did는 가정법 과거, if+주어+현재시제는 가정법 문제가 아니에요. 동사 뒤 if가 "~인지 아닌지"면 가정법이 아니고, 두 시제가 섞이면 혼합가정법이에요.',
+      rows: [
+      ['1', 'If 주어 과거동사', '주어 would / could / might + 동사원형'],
+      ['2', 'If 주어 had pp (= Had 주어 pp)', '주어 would / could / might + have pp']
     ] },
-    { g: '진행형 4~7', tip: '6~10번은 시제 힌트는 같고 for/since 유무로 been ~ing 구분', rows: [
-      ['4', '주절 과거 + while ~', 'while절 was/were ~ing'],
-      ['5', 'when 과거 + 주절 ~', '주절 was/were ~ing'],
-      ['6', '현재힌트(now, right now, at the moment)', 'am/are/is ~ing'],
-      ['7', '미래힌트(tomorrow, next~, by) / 시간·조건절 현재', 'will be ~ing']
+    { g: 'should 생략 3', tip: 'that 절 동사 자리가 빈칸이면 (should) 생략형 — 동사원형(또는 be동사원형)이 정답이에요.', rows: [
+      ['3', "'주요명제결충'과 관련된 동사·명사·형용사", 'that 절에 동사원형']
     ] },
-    { g: '완료진행 8~10', tip: '시제 힌트는 같고 for/since 유무로 been ~ing 구분', rows: [
-      ['8', '과거힌트 + for/since/before/until 과거', 'had been ~ing'],
-      ['9', '현재힌트 + for/since', 'has/have been ~ing'],
-      ['10', '미래힌트 + for/since 시간', 'will have been ~ing']
+    { g: '시제 4~10', tip: '오답 POINT: for가 나왔다고 무조건 완료진행이 아니라 for+시간일 때만 정답, since 뒤에 과거시점이 오면 현재완료진행도 가능해요. 켈리쌤 진팁: ing만 정답인 문제가 꼭 나오고, 진행형 6종이 한 문제씩 출제돼요.',
+      rows: [
+      ['4', '주절 과거 + while 과거', 'while절 was / were ~ing'],
+      ['5', 'when 과거 + 주절 빈칸', 'was / were ~ing'],
+      ['6', '현재 힌트 [now, right now, at the moment]', 'am / are / is ~ing'],
+      ['7', '미래 힌트 [tomorrow, next~, by] · by the time·if·when·until·as soon as 절은 현재', 'will be ~ing'],
+      ['8', '과거 힌트 [yesterday, ago, last~] + for·since·before·until 과거 시점', 'had been ~ing'],
+      ['9', '현재 힌트 [now, right now] + for, since', 'has / have been ~ing'],
+      ['10', '미래 힌트 [tomorrow, next~, by, by the time] + for, since', 'will have been ~ing']
     ] },
-    { g: '완료·대과거 11~12', tip: 'Unit 03 시제 마무리', rows: [
-      ['11', 'by+미래시점 / before ~ (진행 아닐 때)', 'will have pp (미래완료)'],
-      ['12', '과거 기준 + before/until/when 과거 (단발/상태)', 'had pp (과거완료)']
+    { g: '준동사 11~20', tip: '오답 POINT: allow·advise·encourage·recommend·require는 목적어와 목적보어의 준동사 형태가 달라요(be caught 뒤는 동명사). 켈리쌤 진팁: ing와 to부정사로 선지를 엇갈리게 내고, ing 3문제·to부정사 3문제가 나와요.',
+      rows: [
+      ['11', '전치사 뒤 빈칸', '~ing (동명사)'],
+      ['12', '주어 자리 빈칸', '~ing (동명사)'],
+      ['13', '동사 뒤 목적어 자리 빈칸', '~ing (동명사)'],
+      ['14', '동사 뒤 목적어 자리 빈칸', 'to 부정사'],
+      ['15', '동사 뒤 (to부정사·~ing 둘 다 가능)', '뜻이 다름 [해석 필요]'],
+      ['16', "부사 자리 빈칸 ('~하기 위하여'로 해석)", 'to 부정사'],
+      ['17', "형용사 자리 빈칸 ('~할, ~하는'으로 해석)", 'to 부정사'],
+      ['18', '가주어 it + 진주어 자리 빈칸', 'to 부정사 (~것)'],
+      ['19', '암기해야 할 to 부정사 표현 (① 목적보어 동사 ② be pp + to부정사 ③ 그 외)', 'to 부정사'],
+      ['20', '동명사의 관용적 표현 (cannot help·be busy·spend time ~ing 등)', '~ing']
     ] },
-    { g: '준동사 13~18', tip: 'Unit 04', rows: [
-      ['13', 'want, hope, expect, decide, plan, refuse, agree, promise', 'to + 동원'],
-      ['14', 'enjoy, finish, quit, give up, avoid, mind, suggest, consider', '~ing (동명사)'],
-      ['15', 'remember / forget / regret / try', '미래 to R / 과거·시험삼아 ~ing'],
-      ['16', '전치사 뒤 / look forward to, be used to, object to', '~ing'],
-      ['17', 'allow·ask·encourage + O / make·let·have + O', 'to R / 동원(수동 pp)'],
-      ['18', '감정·수식 분사', '하게 하면 ~ing / 느끼면·되면 pp']
+    { g: '관계사 21~26', tip: '켈리쌤 진팁: , 뒤에 빈칸이 있으면 that은 소거. 빈칸 앞 단어가 사람인지 사물인지 파악하면 문제의 반은 해결돼요.', rows: [
+      ['21', '사람 선행사 + 뒤에 주어 없음', '① who ② that'],
+      ['22', '사람 선행사 + 뒤에 목적어 없음', '① whom ② who ③ that'],
+      ['23', '사물 선행사 + 뒤에 주어나 목적어 없음', '① which ② that'],
+      ['24', '선행사 존재(뒤에 나오는 주어와 소유의 관계) + 뒷문장 완전', 'whose'],
+      ['25', ', 뒤', 'that은 답에서 소거'],
+      ['26', '뒷문장 완전 + 선행사가 장소나 때', '관계부사 (where, when)']
     ] },
-    { g: '관계사 19~22', tip: 'Unit 05', rows: [
-      ['19', '선행사 + 불완전절 (주어 없음)', '주격 who(사람) / which(사물)'],
-      ['20', '선행사 + S + V (목적어 없음)', '목적격 who(m) / which / that'],
-      ['21', '선행사 + [빈칸] + 명사 + 동사', '소유격 whose'],
-      ['22', '선행사 + 완전한 절', '관계부사 where/when/why/how (전치사+which)']
+    { g: '조동사 27~31', tip: '켈리쌤 진팁: shall은 답이 아닐 가능성이 높아요. 동물이 주어면 능력의 can, "(in order) to V(~하기 위하여)"와 함께 나오면 should·must일 가능성이 높아요.', rows: [
+      ['27', '능력·가능성·허락 / can보다 가능성 낮음·can의 과거', 'can / could'],
+      ['28', '충고·권유·도덕성', 'should'],
+      ['29', '무조건 해야 하는 의무', 'must'],
+      ['30', '미래의 확실한 일·의지·고유 속성·본능·습성 / will보다 확실성 낮음·will의 과거·과거의 습관', 'will / would'],
+      ['31', '약한 추측', 'may, might']
     ] },
-    { g: '조동사 23~27', tip: 'Unit 06', rows: [
-      ['23', '추측 강도', 'must(확신) / may·might(약함) / cannot(~일 리가)'],
-      ['24', '의무·충고', 'should / ought to / had better + 동원'],
-      ['25', '과거 습관·후회', 'used to R(과거상태) / should have pp(후회)'],
-      ['26', '과거 추측', 'must have pp(확신) / may have pp(약함) / cannot have pp(부정)'],
-      ['27', '금지 vs 불필요', 'must not(금지) / don\'t have to(불필요)']
-    ] },
-    { g: '연결어 28~33', tip: 'Unit 07', rows: [
-      ['28', '역접 (문맥 반대)', 'however, nevertheless, on the other hand'],
-      ['29', '양보 (~이지만)', 'although/though + S+V / despite + 명사'],
-      ['30', '원인·결과', 'because + S+V / because of·due to + 명사 / therefore'],
-      ['31', '조건', 'unless(~않는 한), as long as, provided that'],
-      ['32', '시간 기간', 'while + S+V / during + 명사 / for + 숫자기간'],
-      ['33', '추가·예시·요약', 'moreover·in addition / for example / in summary']
+    { g: '연결어 32~33', tip: '접속부사는 없어도 문법적 오류가 없고(해석만 필요), 접속사는 S+V가 없으면 문법적으로 오류예요.', rows: [
+      ['32', '접속부사 뒤 (해석 필요 · 없어도 문법적 오류 없음)', ', S + V'],
+      ['33', '접속사 뒤 (해석 필요 · 없으면 문법적 오류)', 'S + V']
     ] }
   ];
   function openGpSheet() {
