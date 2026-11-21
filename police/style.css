@@ -1559,3 +1559,50 @@ details.lib-group[open] .lib-chev{transform:rotate(180deg)}
 .wi-q .wi-lead{display:block;margin-bottom:3px;color:var(--ink2)}
 .wi-q .wi-ol{display:block;margin:1px 0 0 2px;font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wi-q .wi-ol b{display:inline-block;min-width:15px;margin-right:5px;color:var(--gold);font-weight:900}
+
+/* === 🔁 오늘 루틴 (오답 5 → 진도 5 → OX 10) · ⏱ 순공 타이머 · 🚦 합격 신호등 ===
+   390px 한 화면 폭에서 4줄로 끝나게 만든 콤팩트 카드. 블랙 테마 변수만 쓴다. */
+.routine{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:12px 13px 11px;margin:10px 0 2px;box-shadow:var(--shadow)}
+.routine.alldone{border-color:rgba(52,211,153,.45);box-shadow:0 0 0 1px rgba(52,211,153,.16) inset, var(--shadow)}
+.rt-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}
+.rt-head b{font-size:13px;font-weight:900;letter-spacing:-.3px;color:var(--ink)}
+.rt-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.rt-step{display:flex;align-items:center;gap:5px;min-width:0;padding:8px 7px;border-radius:12px;
+  background:var(--card2);border:1px solid var(--line2);text-align:left;transition:.15s}
+.rt-step:active{transform:translateY(1px)}
+.rs-n{flex:0 0 auto;width:17px;height:17px;border-radius:50%;display:grid;place-items:center;
+  font-size:10px;font-weight:900;background:var(--card3);color:var(--ink2);line-height:1}
+.rs-b{min-width:0;display:flex;flex-direction:column;line-height:1.15}
+.rs-b b{font-size:11.5px;font-weight:800;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rs-b i{font-size:10.5px;font-style:normal;color:var(--ink3);font-weight:800}
+.rt-step.done{background:rgba(52,211,153,.12);border-color:rgba(52,211,153,.42)}
+.rt-step.done .rs-n{background:var(--green);color:#08120e}
+.rt-step.done .rs-b i{color:var(--green)}
+.rt-timer{display:flex;align-items:center;gap:6px;margin-top:8px}
+.rt-lens{display:flex;gap:4px;flex:0 0 auto}
+.rt-len{padding:5px 8px;border-radius:9px;background:var(--card2);border:1px solid var(--line2);
+  font-size:11px;font-weight:800;color:var(--ink2)}
+.rt-len.on{background:var(--c-soft);border-color:var(--c);color:var(--c-dark)}
+.rt-clock{flex:1 1 auto;min-width:0;text-align:center;font-size:16px;font-weight:900;letter-spacing:.4px;
+  color:var(--ink);font-variant-numeric:tabular-nums}
+.rt-clock.run{color:var(--green)}
+.rt-go{flex:0 0 auto;min-width:54px;padding:6px 10px;border-radius:10px;background:var(--c);color:#fff;
+  font-size:11.5px;font-weight:900}
+.rt-go.run{background:var(--card3);color:var(--ink2);border:1px solid var(--line2)}
+.rt-rst{flex:0 0 auto;width:30px;height:30px;border-radius:10px;background:var(--card2);
+  border:1px solid var(--line2);font-size:13px;color:var(--ink2);line-height:1}
+.rt-lights{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.rt-lt{display:inline-flex;align-items:center;gap:3px;padding:4px 7px;border-radius:8px;
+  background:var(--card2);border:1px solid var(--line);font-size:10.5px;font-weight:800;color:var(--ink2)}
+.rt-lt i{font-style:normal;font-size:9.5px;line-height:1}
+.rt-lt em{font-style:normal;font-size:9.5px;font-weight:900;color:var(--ink3)}
+.rt-lt.red{border-color:rgba(248,113,113,.4)} .rt-lt.red em{color:var(--red)}
+.rt-lt.yel{border-color:rgba(255,194,75,.4)} .rt-lt.yel em{color:var(--gold)}
+.rt-lt.grn{border-color:rgba(52,211,153,.4)} .rt-lt.grn em{color:var(--green)}
+.rt-focus{font-size:11.5px;font-weight:800;color:var(--gold);white-space:nowrap}
+@media(max-width:360px){
+  .rt-head b{font-size:12.5px}
+  .rs-b b{font-size:11px}
+  .rt-clock{font-size:15px}
+  .rt-lt{font-size:10px;padding:3px 6px}
+}

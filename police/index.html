@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=2026112028">
+<link rel="stylesheet" href="style.css?v=2026112101">
 </head>
 <body>
 
@@ -65,7 +65,7 @@
 
   <section class="hero" id="hero">
     <div class="mascot-row">
-      <span class="mascot-box"><img class="mascot" src="assets/mascot-happy.png?v=2026112028" width="68" height="68" alt="경찰 오리 마스코트" decoding="async"></span>
+      <span class="mascot-box"><img class="mascot" src="assets/mascot-happy.png?v=2026112101" width="68" height="68" alt="경찰 오리 마스코트" decoding="async"></span>
       <div class="bubble">
         <p class="bub-lead" id="homeBubble">오늘 몫은 오늘 끝내는 게 제일 싸요.</p>
         <div class="bub-memo"><span class="bm-k">오늘의 암기</span><b id="bubMemo">—</b></div>
@@ -91,6 +91,24 @@
       <button class="tile" id="ctaBlank"><span class="t-ico">🧩</span><b>빈칸 채우기</b><i id="tileBlankSub">배운 진도</i></button>
     </div>
     <p class="hero-note" id="heroNote"></p>
+  </section>
+
+  <section class="routine" id="routine" aria-label="오늘 루틴">
+    <div class="rt-head">
+      <b>🔁 오늘 루틴</b>
+      <span class="rt-focus" id="rtFocus">⏱ 오늘 순공 0분</span>
+    </div>
+    <div class="rt-steps" id="rtSteps"></div>
+    <div class="rt-timer">
+      <div class="rt-lens">
+        <button class="rt-len on" data-min="25">25분</button>
+        <button class="rt-len" data-min="50">50분</button>
+      </div>
+      <b class="rt-clock" id="rtClock">25:00</b>
+      <button class="rt-go" id="rtGo">시작</button>
+      <button class="rt-rst" id="rtReset" aria-label="타이머 초기화">↺</button>
+    </div>
+    <div class="rt-lights" id="rtLights"></div>
   </section>
 
   <button class="shield-bar hidden" id="shieldBar">
@@ -207,7 +225,7 @@
     <button class="chip" data-len="5">5문제</button>
     <button class="chip" data-len="10">10문제</button>
     <button class="chip" data-len="20">20문제</button>
-    <button class="chip" data-len="99">끝까지</button>
+    <button class="chip" data-len="999">끝까지</button>
   </div>
   <label class="switch-row">
     <span>다른 과목까지 섞기</span>
@@ -370,7 +388,7 @@
   <div class="ox-body" id="oxBody"></div>
 </div>
 
-<script src="data.js?v=2026112028"></script>
-<script src="app.js?v=2026112028"></script>
+<script src="data.js?v=2026112101"></script>
+<script src="app.js?v=2026112101"></script>
 </body>
 </html>

@@ -35,6 +35,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   /* ---------- 시험 일정 ---------- */
   var DTARGET = '2027-08-21';            // 2027년 2차 순경 필기 (예상일)
   var GTELP = '2026-11-29';              // 지텔프 Level 2 (수진 님 응시일)
+  var ENDLESS = 999;                     // [끝까지] — 그 과목 전 문항을 다 낸다(99 상한 없음)
 
   var RANKS = [
     { n: '순경', xp: 0, e: '👮' },
@@ -58,7 +59,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     ans: 0, ok: 0, muted: false, subj: 'cri', course: {}, qlen: 10, mix: false, days: {},
     dday: DTARGET, ddayNote: '예상일', unit: {}, node: {}, qok: {}, gpSeeded: false, goal: { xp: 50, q: 10 }, bestCombo: 0,
     planLog: {}, planSubj: '', planPerDay: 2, speedBest: 0,
-    xpSpent: 0, shields: {}, cards: {}, gpLast: {}, bossWins: 0
+    xpSpent: 0, shields: {}, cards: {}, gpLast: {}, bossWins: 0,
+    routine: { d: '', w: 0, p: 0, o: 0 }, focus: { d: '', s: 0, len: 25 }
   };
   try {
     var raw = localStorage.getItem(SKEY);
@@ -83,6 +85,10 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!S.dayGoal) S.dayGoal = 30;   /* 오늘 목표 문제 수 (기본 30) */
     if (!S.miniBest) S.miniBest = {}; /* 미니 모의고사 개인 최고 */
     if (!S.miniRuns) S.miniRuns = 0;
+    /* 오늘 루틴 3단계 · 순공 타이머 기록 (날짜가 바뀌면 아래 renderRoutine에서 새로 시작) */
+    if (!S.routine || typeof S.routine !== 'object') S.routine = { d: '', w: 0, p: 0, o: 0 };
+    if (!S.focus || typeof S.focus !== 'object') S.focus = { d: '', s: 0, len: 25 };
+    if (S.qlen === 99) S.qlen = ENDLESS;      /* [끝까지] 상한을 풀기 전에 저장된 선택 이어받기 */
     D.subjects.forEach(function (s) {
       if (!S.course[s.id] || !COURSE[S.course[s.id]]) S.course[s.id] = s.defaultCourse || s.courses[0].id;
     });
@@ -1550,6 +1556,15 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     });
     return out;
   }
+  /* [끝까지] — 체크한 진도와 상관없이 그 과목(섞기면 전체) 전 문항.
+     2026년 2차 기출 100문항은 전용 메뉴가 있어 뺀다. */
+  function endlessPool() {
+    return D.questions.filter(function (q) {
+      if (!S.mix && q.s !== S.subj) return false;
+      var c = COURSE[q.c];
+      return !(c && c.kind === 'exam');
+    });
+  }
   function poolWrong() {
     var ids = Object.keys(S.wrong);
     if (!ids.length) return false;
@@ -1754,6 +1769,10 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     } else if (mode === 'weakUnit') {
       pool = poolForUnit(opt.cid, opt.u);
       title = '🎯 약점 집중 · ' + unitName(opt.cid, opt.u);
+    } else if (mode === 'all' && S.qlen >= ENDLESS) {
+      /* [끝까지]는 진도 상한 없이 그 과목 전 문항 (지텔프는 170문항 전체) */
+      pool = endlessPool();
+      title = '누적 랜덤 복습 · 끝까지';
     } else {
       pool = S.mix ? D.subjects.reduce(function (a, s) { return a.concat(poolForSubject(s.id, mode)); }, []) : poolForSubject(S.subj, mode);
       title = mode === 'today' ? '오늘 들은 강의' : '누적 랜덤 복습';
@@ -1934,6 +1953,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     });
     if (!right) btn.classList.add('wrong');
     OX.done++;
+    routineAdd('o');            /* 오늘 루틴 3단계: 1줄 OX */
     var q = it.q;
     var day = dayRec();
     S.ans++; day.ans = (day.ans || 0) + 1;
@@ -2206,7 +2226,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var c = COURSE[q.c];
     var sp = gpSpec(q) || {};
     var name = sp.base || ((c && c.lec && c.lec[q.gp - 1] && c.lec[q.gp - 1].t) ? c.lec[q.gp - 1].t : '');
-    var kicker = '📘 G-POINT ' + q.gp + (name ? ' · ' + name : '');
+    /* 문제 푸는 중에는 G-POINT 번호를 보여 주지 않는다(수진 님 규칙) — 포인트 이름만 */
+    var kicker = '📘 문법 포인트' + (name ? ' · ' + name : '');
     var main = q.hint || '';
     if (!main && sp.spec) main = sp.spec + ' 구문이 이 문항의 포인트예요.';
     if (!main) {
@@ -2318,6 +2339,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       if (i === q.a) b.classList.add('ok');
     });
     if (!right) btn.classList.add('no');
+    /* 오늘 루틴: 오답 복습은 1단계, 진도 문제는 2단계로 센다 */
+    routineAdd(QS.mode === 'wrong' ? 'w' : (QS.mode === 'all' || QS.mode === 'today' || QS.mode === 'lecture' || QS.mode === 'gp') ? 'p' : '');
     var day = dayRec();
     S.ans++; day.ans = (day.ans || 0) + 1;
     // 단원별 정답 집계
@@ -2706,11 +2729,165 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
   function touchDay() { dayRec(); }
 
+  /* ============================================================
+     🔁 오늘 루틴 (오답 5 → 진도 5 → 1줄 OX 10)
+     ⏱ 25/50분 순공 타이머 · 🚦 과목별 합격 신호등
+     · 기록은 localStorage에 날짜와 함께 저장하고, 날짜가 바뀌면 자동으로 새로 시작한다
+     ============================================================ */
+  var RT_STEPS = [
+    { k: 'w', n: '오답', t: 5, go: function () { startSession('wrong'); } },
+    { k: 'p', n: '진도', t: 5, go: function () { startSession('today'); } },
+    { k: 'o', n: '1줄 OX', t: 10, go: function () { startOx(); } }
+  ];
+  var RT_SUBJ = [{ id: 'crim', n: '형사법' }, { id: 'pol', n: '경찰학' }, { id: 'cri', n: '범죄학' }, { id: 'gtelp', n: '지텔프' }];
+
+  function routineOf() {
+    if (!S.routine || S.routine.d !== todayStr() || typeof S.routine.w !== 'number') {
+      S.routine = { d: todayStr(), w: 0, p: 0, o: 0 };   /* 자정이 지나면 자동 리셋 */
+    }
+    return S.routine;
+  }
+  function routineAdd(k) {
+    if (!k) return;
+    var r = routineOf();
+    var st = RT_STEPS.filter(function (x) { return x.k === k; })[0];
+    if (st && (r[k] || 0) >= st.t) return;          /* 목표를 넘으면 더 세지 않는다 */
+    r[k] = (r[k] || 0) + 1;
+    renderRoutine();
+  }
+  /* 과목별 정답률 — 단원 기록(S.unit)을 과목으로 합산 */
+  function subjAcc(sid) {
+    var a = 0, ok = 0;
+    Object.keys(S.unit || {}).forEach(function (k) {
+      var c = COURSE[String(k).split(':')[0]];
+      if (!c || !c.subj || c.subj.id !== sid) return;
+      var u = S.unit[k] || {};
+      a += u.a || 0; ok += u.ok || 0;
+    });
+    return a ? { a: a, ok: ok, acc: ok / a } : null;
+  }
+  function lightOf(r) {
+    if (!r) return { t: '⚪', c: 'wait', p: '' };
+    var pct = Math.round(r.acc * 100);
+    if (pct < 60) return { t: '🔴', c: 'red', p: pct + '%' };
+    if (pct < 80) return { t: '🟡', c: 'yel', p: pct + '%' };
+    return { t: '🟢', c: 'grn', p: pct + '%' };
+  }
+
+  /* 순공 타이머 상태(저장하지 않는 실행 상태) */
+  var FOCUS = { left: 0, running: false, timer: null, last: 0, acc: 0, hidden: false };
+  function focusOf() {
+    if (!S.focus || S.focus.d !== todayStr() || typeof S.focus.s !== 'number') {
+      S.focus = { d: todayStr(), s: 0, len: (S.focus && S.focus.len) || 25 };   /* 오늘 누적은 날마다 새로 */
+    }
+    return S.focus;
+  }
+  function focusSecs() { return (focusOf().len || 25) * 60; }
+  function focusPersist() { try { localStorage.setItem(SKEY, JSON.stringify(S)); } catch (e) {} }
+  function focusSum() {
+    var f = focusOf(), mins = Math.floor((f.s || 0) / 60), el = $('#rtFocus');
+    if (!el) return;
+    el.textContent = '⏱ 오늘 순공 ' + (mins >= 60 ? Math.floor(mins / 60) + '시간 ' + (mins % 60) + '분' : mins + '분');
+  }
+  function focusDraw() {
+    var cl = $('#rtClock'), go = $('#rtGo'), left = Math.max(0, FOCUS.left || 0);
+    if (cl) {
+      cl.textContent = pad(Math.floor(left / 60)) + ':' + pad(left % 60);
+      cl.classList.toggle('run', !!FOCUS.running);
+    }
+    if (go) {
+      var fresh = left >= focusSecs();
+      go.textContent = FOCUS.running ? '일시정지' : (fresh ? '시작' : '계속');
+      go.classList.toggle('run', !!FOCUS.running);
+    }
+    $$('.rt-len').forEach(function (b) { b.classList.toggle('on', Number(b.getAttribute('data-min')) === (focusOf().len || 25)); });
+  }
+  function focusTick() {
+    if (!FOCUS.running) return;
+    var now = Date.now(), dt = Math.floor((now - FOCUS.last) / 1000);
+    if (dt < 1) return;
+    FOCUS.last += dt * 1000;
+    var f = focusOf(), used = Math.min(dt, FOCUS.left);
+    FOCUS.left -= used;
+    f.s += used;
+    FOCUS.acc += used;
+    if (FOCUS.acc >= 15) { FOCUS.acc = 0; focusPersist(); }   /* 15초마다 저장(배지 깜박임 없이) */
+    focusDraw(); focusSum();
+    if (FOCUS.left <= 0) focusDone();
+  }
+  function focusStart() {
+    if (FOCUS.running) return;
+    if (!FOCUS.left) FOCUS.left = focusSecs();
+    FOCUS.running = true; FOCUS.last = Date.now();
+    clearInterval(FOCUS.timer);
+    FOCUS.timer = setInterval(focusTick, 500);
+    focusDraw();
+  }
+  function focusPause() {
+    if (!FOCUS.running) return;
+    clearInterval(FOCUS.timer); FOCUS.timer = null; FOCUS.running = false;
+    save(); focusDraw();
+  }
+  function focusDone() {
+    clearInterval(FOCUS.timer); FOCUS.timer = null; FOCUS.running = false;
+    save();
+    sfx('done'); confetti(28);
+    toast('⏱ ' + (focusOf().len || 25) + '분 순공 완료! 잠깐 쉬고 한 세트 더 갈까요');
+    FOCUS.left = 0;
+    focusDraw(); focusSum();
+  }
+  function focusSetLen(m) {
+    clearInterval(FOCUS.timer); FOCUS.timer = null; FOCUS.running = false; FOCUS.acc = 0;
+    focusOf().len = m;
+    FOCUS.left = m * 60;
+    save(); focusDraw();
+  }
+  function focusReset() {
+    clearInterval(FOCUS.timer); FOCUS.timer = null; FOCUS.running = false; FOCUS.acc = 0;
+    FOCUS.left = focusSecs();
+    focusDraw();
+  }
+
+  function renderRoutine() {
+    var box = $('#rtSteps');
+    if (!box) return;
+    var r = routineOf(), all = true, h = '';
+    RT_STEPS.forEach(function (st, i) {
+      var v = Math.min(r[st.k] || 0, st.t);
+      if (v < st.t) all = false;
+      h += '<button class="rt-step' + (v >= st.t ? ' done' : '') + '" data-step="' + st.k + '">' +
+        '<span class="rs-n">' + (v >= st.t ? '✓' : (i + 1)) + '</span>' +
+        '<span class="rs-b"><b>' + st.n + '</b><i>' + v + '/' + st.t + '</i></span></button>';
+    });
+    box.innerHTML = h;
+    $$('#rtSteps .rt-step').forEach(function (b) {
+      b.onclick = function () {
+        sfx('tap');
+        var k = b.getAttribute('data-step');
+        RT_STEPS.forEach(function (st) { if (st.k === k) st.go(); });
+      };
+    });
+    var card = $('#routine');
+    if (card) card.classList.toggle('alldone', all);
+    var lt = $('#rtLights');
+    if (lt) {
+      var lh = '';
+      RT_SUBJ.forEach(function (s) {
+        var acc = subjAcc(s.id), L = lightOf(acc);
+        lh += '<span class="rt-lt ' + L.c + '" title="' + esc(s.n) + ' ' +
+          (acc ? acc.a + '문제 · 정답률 ' + L.p : '기록 없음') + '">' +
+          '<i>' + L.t + '</i>' + esc(s.n) + (L.p ? '<em>' + L.p + '</em>' : '') + '</span>';
+      });
+      lt.innerHTML = lh;
+    }
+    focusSum();
+  }
+
   /* ---------- render all ---------- */
   function renderAll() {
     applyTheme(); renderHud(); renderSubtabs(); renderDday(); renderQuest(); renderMascot();
     renderChallenges(); renderPass(); renderDash(); renderWeek(); renderStage(); renderReview(); renderStats();
-    renderTodayPlan(); renderShield(); rebuildMemo();
+    renderTodayPlan(); renderShield(); rebuildMemo(); renderRoutine(); focusDraw();
     if (!$('#view-memo').classList.contains('hidden')) renderMemo();
   }
 
@@ -2772,6 +2949,24 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   if (_mSpeed) _mSpeed.onclick = function () { sfx('tap'); startSession('speed', {}); };
   var _mOx = $('#mOx');
   if (_mOx) _mOx.onclick = function () { sfx('tap'); startOx(); };
+  /* 오늘 루틴 타이머 */
+  FOCUS.left = focusSecs();
+  $$('.rt-len').forEach(function (b) {
+    b.onclick = function () { sfx('tap'); focusSetLen(Number(b.getAttribute('data-min'))); };
+  });
+  var _rtGo = $('#rtGo');
+  if (_rtGo) _rtGo.onclick = function () { sfx('tap'); if (FOCUS.running) focusPause(); else focusStart(); };
+  var _rtRst = $('#rtReset');
+  if (_rtRst) _rtRst.onclick = function () { sfx('tap'); focusReset(); };
+  /* 화면을 벗어난 동안은 순공 시간으로 세지 않는다 */
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      if (FOCUS.running && FOCUS.timer) { clearInterval(FOCUS.timer); FOCUS.timer = null; FOCUS.hidden = true; }
+    } else if (FOCUS.hidden) {
+      FOCUS.hidden = false;
+      if (FOCUS.running) { FOCUS.last = Date.now(); FOCUS.timer = setInterval(focusTick, 500); }
+    }
+  });
   var _gbSet = $('#gbSet');
   if (_gbSet) _gbSet.onclick = function () { sfx('tap'); openGoalSheet(); };
   var _gbBar = $('#goalBar');
@@ -2796,8 +2991,11 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       muted: S.muted, subj: S.subj, course: {}, qlen: 10, mix: false, days: {},
       dday: DTARGET, ddayNote: '예상일', unit: {}, node: {}, qok: {}, gpSeeded: true, goal: { xp: 50, q: 10 },
       planLog: {}, planSubj: 'done', xpSpent: 0, shields: {}, cards: {}, gpLast: {}, bossWins: 0,
-      dayGoal: S.dayGoal || 30, oxBest: 0, oxRuns: 0
+      dayGoal: S.dayGoal || 30, oxBest: 0, oxRuns: 0,
+      routine: { d: todayStr(), w: 0, p: 0, o: 0 }, focus: { d: todayStr(), s: 0, len: 25 }
     };
+    FOCUS.left = 25 * 60; FOCUS.running = false;
+    clearInterval(FOCUS.timer); FOCUS.timer = null;
     scopeCache = null;
     CF.deck = []; BQ = null;
     D.subjects.forEach(function (s) { S.course[s.id] = s.defaultCourse || s.courses[0].id; });
@@ -3839,7 +4037,9 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   /* ---------- 첫 화면 타일 · 방패 ---------- */
   function renderTiles() {
     var sp = subjectPool(S.subj);
-    var t1 = $('#tileAllSub'); if (t1) t1.textContent = (sp.beginner ? '1강 입문 ' : '배운 진도 ') + sp.pool.length + '문제';
+    var t1 = $('#tileAllSub');
+    if (t1) t1.textContent = S.qlen >= ENDLESS ? (S.mix ? '전 과목 ' : '전체 ') + endlessPool().length + '문제'
+                                               : (sp.beginner ? '1강 입문 ' : '배운 진도 ') + sp.pool.length + '문제';
     var wn = poolWrong().length;
     var t2 = $('#tileWrongSub'); if (t2) t2.textContent = wn ? '오답 ' + wn + '문제' : '오답 없음';
     var cd = cardDeck().cards.length;
