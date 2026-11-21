@@ -1550,7 +1550,7 @@ function cp(id){var t=document.getElementById(id||'notice');t.select();
 function go(){
   var d={daily:document.getElementById('daily').value.trim(),title:document.getElementById('title').value.trim(),type:document.getElementById('type').value,
     takdae:document.getElementById('takdae').checked,realship:document.getElementById('realship').checked,
-    platform:document.getElementById('platform').value,desc:document.getElementById('desc').value,fname:window.__FNAME||'',k:window.__K||'',n:window.__N||'',opts:window.__OPTS||'',shop:window.__SHOP||'',slot:window.__SLOT||'',photo:window.__PHOTO||'',date:window.__DATE||'',plan:window.__PLAN||'',slot2:window.__SLOT2||'',day:window.__DAY||'',total:window.__TOTAL||'',room:window.__ROOM||'',thumb:window.__THUMB||'',roomlink:window.__ROOMLINK||'',croom:window.__CROOM||'',rv:window.__RV||'',cart:window.__CART||''};
+    platform:document.getElementById('platform').value,desc:document.getElementById('desc').value,fname:window.__FNAME||'',k:window.__K||'',n:window.__N||'',opts:window.__OPTS||'',shop:window.__SHOP||'',slot:window.__SLOT||'',photo:window.__PHOTO||'',date:window.__DATE||'',plan:window.__PLAN||'',slot2:window.__SLOT2||'',day:window.__DAY||'',total:window.__TOTAL||'',room:window.__ROOM||'',thumb:window.__THUMB||'',roomlink:window.__ROOMLINK||'',croom:window.__CROOM||'',rv:window.__RV||'',cart:window.__CART||'',pname:window.__PNAME||'',kwfix:window.__KWFIX||''};
   if(!d.title){document.getElementById('msg').textContent='명단 제목을 넣어 주세요.';return;}
   document.getElementById('go').disabled=true;
   var t0=Date.now(),tick=function(){var s=Math.round((Date.now()-t0)/1000);document.getElementById('msg').textContent='만드는 중이에요… '+s+'초\\n(보통 30초~1분. 15분 자동 확인이 돌고 있으면 그게 멈출 때까지 1~2분 더 걸릴 수 있어요. 창을 닫지 마세요)';};
@@ -2036,7 +2036,7 @@ function doGet(e) {
     delete p.z64;
   }
   // 생성기 버튼으로 열면(auto=1) 값이 다 채워진 채로 바로 만들기 실행. 같은 요청ID는 한 번만 만들어짐
-  const pre = '<script>window.__CART=' + JSON.stringify(p.cart || '') + ';window.__THUMB=' + JSON.stringify(p.thumb || '') + ';window.__ROOMLINK=' + JSON.stringify(p.roomlink || '') + ';window.__N=' + JSON.stringify(p.n || '') + ';window.__ROOM=' + JSON.stringify(p.room || '') + ';window.__DATE=' + JSON.stringify(p.date || '') + ';window.__SHOP=' + JSON.stringify(p.shop || '') + ';window.__OPTS=' + JSON.stringify(p.opts || '') + ';window.__SLOT=' + JSON.stringify(p.slot || '') + ';window.__PHOTO=' + JSON.stringify(p.photo || '') + ';window.__PLAN=' + JSON.stringify(p.plan || '') + ';window.__SLOT2=' + JSON.stringify(p.slot2 || '') + ';window.__DAY=' + JSON.stringify(p.day || '') + ';window.__TOTAL=' + JSON.stringify(p.total || '') + ';window.__CROOM=' + JSON.stringify(p.croom || '') + ';window.__RV=' + JSON.stringify(p.rv || '') + ';window.__AUTO=' + (p.auto === '1' && p.title ? 'true' : 'false') + ';</' + 'script>';
+  const pre = '<script>window.__PNAME=' + JSON.stringify(String(p.pname || '').slice(0, 300)).replace(/</g, '\\u003c') + ';window.__KWFIX=' + JSON.stringify(String(p.kwfix || '').slice(0, 1500)).replace(/</g, '\\u003c') + ';window.__CART=' + JSON.stringify(p.cart || '') + ';window.__THUMB=' + JSON.stringify(p.thumb || '') + ';window.__ROOMLINK=' + JSON.stringify(p.roomlink || '') + ';window.__N=' + JSON.stringify(p.n || '') + ';window.__ROOM=' + JSON.stringify(p.room || '') + ';window.__DATE=' + JSON.stringify(p.date || '') + ';window.__SHOP=' + JSON.stringify(p.shop || '') + ';window.__OPTS=' + JSON.stringify(p.opts || '') + ';window.__SLOT=' + JSON.stringify(p.slot || '') + ';window.__PHOTO=' + JSON.stringify(p.photo || '') + ';window.__PLAN=' + JSON.stringify(p.plan || '') + ';window.__SLOT2=' + JSON.stringify(p.slot2 || '') + ';window.__DAY=' + JSON.stringify(p.day || '') + ';window.__TOTAL=' + JSON.stringify(p.total || '') + ';window.__CROOM=' + JSON.stringify(p.croom || '') + ';window.__RV=' + JSON.stringify(p.rv || '') + ';window.__AUTO=' + (p.auto === '1' && p.title ? 'true' : 'false') + ';</' + 'script>';
   const fill = pre + '<script>window.__K=' + JSON.stringify(CONFIG.KEY) + ';window.__FNAME=' + JSON.stringify(p.fname || '') + ';(function(){var p=' + JSON.stringify(p).replace(/</g, '\\u003c') + ';var $=function(i){return document.getElementById(i)};if(p.title)$("title").value=p.title;if(p.daily)$("daily").value=p.daily;if(p.desc)$("desc").value=p.desc;if(p.type)$("type").value=p.type;if(p.platform)$("platform").value=p.platform;$("takdae").checked=p.takdae==="1";$("realship").checked=p.realship==="1";autoGo();})();</' + 'script>';
   return HtmlService.createHtmlOutput(DIALOG_HTML + fill).setTitle('새 진행 만들기').addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
@@ -2063,7 +2063,29 @@ function createRun(d) {
   try { out = locked_(function () { props.deleteProperty('WANT_LOCK'); return createRunLocked_(d); }, 240000); }
   finally { props.deleteProperty('WANT_LOCK'); }
   if (!out) throw new Error('자동 확인이 아직 안 끝났어요. 1분 뒤 같은 버튼을 다시 눌러 주세요. (다시 눌러도 두 번 만들어지지 않아요)');
+  try { kwLog_(d); } catch (e) { Logger.log('키워드 기록 실패: ' + e); }
   return out;
+}
+// 생성기가 보낸 짧은 상품명(pname, 상품마다 ' / ', 빈 자리도 유지)·고친 키워드(kwfix, [{pno, seller, pname, kw}])를 숨긴 '키워드기록' 탭에 남김 (11/21 피클 v208 규격)
+//  기록만 함 — 방제·명단·택배 짧은 상품명(shortProduct_)은 안 바꿈. 같은 요청ID는 한 번만. 깨진 kwfix는 버리고 pname만
+const KWLOG_TAB = '키워드기록', KWLOG_HEAD = ['기록 시각', '요청ID', '명단 제목', '짧은 상품명', '상품번호', '판매처', '원래 상품명', '고친 키워드'];
+function kwLog_(d) {
+  const pn = String(d && d.pname || '').trim().slice(0, 300), raw = String(d && d.kwfix || '').trim();
+  let fx = [];
+  if (raw) { try { const j = JSON.parse(raw); if (Array.isArray(j)) fx = j.filter(function (x) { return x && typeof x === 'object' && String(x.kw || '').trim(); }).slice(0, 20); } catch (e) {} }
+  if (!pn && !fx.length) return 0;
+  const ss = adminSs_();
+  let sh = ss.getSheetByName(KWLOG_TAB);
+  if (!sh) { sh = ss.insertSheet(KWLOG_TAB); sh.getRange(1, 1, 1, KWLOG_HEAD.length).setValues([KWLOG_HEAD]).setFontWeight('bold'); sh.setFrozenRows(1); try { sh.hideSheet(); } catch (e) {} }
+  const n = String(d.n || ''), last = sh.getLastRow();
+  if (n && last >= 2 && sh.getRange(2, 2, last - 1, 1).getValues().some(function (v) { return String(v[0]) === n; })) return 0;
+  const t = String(d.title || '').slice(0, 100), now = new Date(), cut = function (v, k) { return String(v == null ? '' : v).trim().slice(0, k); };
+  const rows = fx.length ? fx.map(function (x) { return [now, n, t, pn, cut(x.pno, 20), cut(x.seller, 60), cut(x.pname, 200), cut(x.kw, 60)]; }) : [[now, n, t, pn, '', '', '', '']];
+  const rg = sh.getRange(sh.getLastRow() + 1, 1, rows.length, KWLOG_HEAD.length);
+  try { rg.setNumberFormat('@'); } catch (e) {}   // 상품번호가 숫자로 바뀌지 않게
+  rg.setValues(rows.map(function (r) { return [Utilities.formatDate(r[0], CONFIG.TIMEZONE, 'yyyy-MM-dd HH:mm')].concat(r.slice(1)); }));
+  if (sh.getLastRow() > 2001) sh.deleteRows(2, sh.getLastRow() - 2001);
+  return rows.length;
 }
 function createRunLocked_(d) {
   {
