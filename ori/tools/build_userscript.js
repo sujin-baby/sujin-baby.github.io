@@ -43,7 +43,7 @@ const header = [
   '// ==UserScript==',
   '// @name         오리 상품정보 도우미',
   '// @namespace    https://sujin-baby.github.io/guide/',
-  '// @version      205.0',
+  '// @version      208.0',
   '// @description  쿠팡·네이버·토스·올리브영 화면 오른쪽 아래 단추로 상품 정보를 한 번에 가져와요 (오리방 체험단)',
   '// @author       오리방',
   '// @match        *://*.coupang.com/*',
@@ -59,7 +59,7 @@ const header = [
 
 const intro = [
   '/*',
-  '  오리 상품정보 도우미 (생성기 v205)',
+  '  오리 상품정보 도우미 (생성기 v208)',
   '  - 생성기(guide/index.html)의 \'상품 위치 찾기\' 북마크 코드(bm-src)를 그대로 담고 있어요.',
   '  - 상품 정보를 읽는 규칙을 고치면  node ori/tools/build_userscript.js  를 다시 돌려',
   '    이 파일과 생성기 안의 스크립트(us-src)를 함께 맞춰 주세요. (안 맞으면 CI가 멈춥니다)',
@@ -118,7 +118,7 @@ const wrapperHead = [
   '(function () {',
   '  "use strict";',
   '  if (window.__ORI_HELPER__) return;',
-  '  window.__ORI_HELPER__ = "205.0";',
+  '  window.__ORI_HELPER__ = "208.0";',
   '',
   '  /* 상품 정보 읽기 = 생성기 북마크 코드 그대로. oriMode: "info" 전체 / "pos" 위치 줄만 */',
   '  async function ORI_RUN(oriMode) {',

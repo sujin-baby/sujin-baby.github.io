@@ -42,6 +42,10 @@ function getElem(id) {
 // 입력칸에 값을 넣고 그 칸의 input 핸들러를 실제로 태운다 (#104: 키워드를 직접 고칠 때 방제 이름도 따라 바뀌는지)
 function fireInput(id) { (getElem(id).listeners.input || []).forEach(fn => fn({ target: getElem(id) })); }
 
+/* 브라우저 저장소 대역: 넣은 값은 기억하고, 모르는 열쇠는 예전처럼 'test-key' (열쇠 칸 시험들이 기대하는 값) */
+const LS_MAP = new Map();
+const LS = { getItem: k => (LS_MAP.has(k) ? LS_MAP.get(k) : 'test-key'), setItem: (k, v) => { LS_MAP.set(k, String(v)); }, removeItem: k => { LS_MAP.delete(k); } };
+
 const sandbox = {
   console,
   setTimeout,
@@ -78,7 +82,7 @@ const sandbox = {
     addEventListener: () => {},
     prompt: () => 'test-key',
     alert: () => {},
-    localStorage: { getItem: () => 'test-key', setItem: () => {} },
+    localStorage: LS,
     navigator: {
       userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
       platform: 'iPhone',
@@ -88,7 +92,7 @@ const sandbox = {
   },
   prompt: () => 'test-key',
   alert: () => {},
-  localStorage: { getItem: () => 'test-key', setItem: () => {} },
+  localStorage: LS,
   location: { href: 'https://sujin-baby.github.io/guide/' },
   MutationObserver: function() { return { observe: () => {}, disconnect: () => {} }; }
 };
@@ -2303,11 +2307,13 @@ NonGMO   비닐패키지 로하스인증
   if (nSum.indexOf('🐥가격 : 11,600 (배송비 1,000원 포함)') < 0) throw new Error('Test 46 머리 금액 = 페이지 가격 + 배송비 경우가 깨짐(11,600이어야 함): ' + nSum.split('\n').filter(l => /가격/.test(l)).join(' / '));
 
   // 제보 문구·버전 표시가 v207
-  ['[생성기 v207 제보]', '[가이드 생성기 v207 공지 오류 제보]'].forEach(s => {
-    if (scriptContent.indexOf(s) < 0) throw new Error('Test 46 제보 문구가 v207이 아님: ' + s);
+  // 버전 숫자를 시험에 박으면 다음 버전에서 무조건 빨간불(plantitle 날짜 하드코딩 교훈) → 페이지 표기에서 읽어 비교
+  const GVER = (html.match(/생성기 v(\d+)/) || [])[1] || '';
+  ['[생성기 v' + GVER + ' 제보]', '[가이드 생성기 v' + GVER + ' 공지 오류 제보]'].forEach(s => {
+    if (scriptContent.indexOf(s) < 0) throw new Error('Test 46 제보 문구가 페이지 버전(v' + GVER + ')과 다름: ' + s);
   });
   if (/생성기 v182/.test(scriptContent) || /생성기 v182/.test(html)) throw new Error('Test 46 v182 문구가 남아 있음');
-  if (!/생성기 v207/.test(html)) throw new Error('Test 46 생성기 버전 표시가 v207이 아님');
+  if (!GVER || Number(GVER) < 208) throw new Error('Test 46 생성기 버전 표시가 v208 이상이 아님: ' + GVER);
   console.log('✓ #99 배송비 중복 가산 금지 시험 통과 (10,600 유지 · 안내 문구 · v207)');
 }
 
@@ -2367,6 +2373,129 @@ NonGMO   비닐패키지 로하스인증
   if (getElem('guide').value !== '내가정한이름') throw new Error('Test 47 직접 고친 짧은 상품명이 덮어써짐: ' + getElem('guide').value);
 
   console.log('✓ #104 품목명 면도기·초슬림 수식어 제외·키워드 고치면 방제/명단 제목도 같이 시험 통과');
+}
+
+
+// ==========================================
+// Test 48: v208 — 사전 한 곳(ori/kw_dict.json)·규칙(음식·꼬리·무선이어폰)·고친 키워드 기억 (11/21)
+// ==========================================
+{
+  console.log('-- Test 48: 사전 통합·키워드 규칙(음식/무선이어폰/꼬리)·고친 키워드 기억');
+  const fs2 = require('fs');
+  const { execFileSync } = require('child_process');
+
+  // ① 사전은 한 곳에서 — 어긋나면 'sync_kw.js --check'가 실패
+  try {
+    execFileSync(process.execPath, [path.resolve(__dirname, '../tools/sync_kw.js'), '--check'], { stdio: 'pipe' });
+  } catch (e) {
+    throw new Error('사전이 어긋났어요 (node ori/tools/sync_kw.js 로 맞추세요): ' + String((e.stdout || '') + (e.stderr || '')).slice(0, 400));
+  }
+  console.log('  ✓ sync_kw.js --check 통과 (사전 21곳 일치)');
+
+  // ② 음식 오탐 방지 — 한 글자 접두(고·무·초·저)를 수식어로 보고 잘라내지 않음
+  [['꿀 고구마 3kg 세척고구마', '고구마'], ['무말랭이 1kg 국산 무말랭이', '무말랭이'],
+   ['수제 초콜릿 선물세트', '초콜릿'], ['저당 요구르트 12개입', '요구르트']].forEach(([nm, want]) => {
+    const m = P.suggestKeywords(nm, []).main;
+    if (m !== want) throw new Error('Test 48 음식 키워드가 틀림 (' + nm + ' → ' + JSON.stringify(m) + ', 기대 ' + want + ')');
+    const k = P.sugKw(nm);
+    if (k.some(x => x === '무' || x === '초' || x === '고' || x === '저')) throw new Error('Test 48 한 글자 접두가 키워드로 남음: ' + JSON.stringify(k));
+  });
+  console.log('  ✓ 고구마·무말랭이·초콜릿·저당 — 품목 명사가 키워드(한 글자 접두 안 잘림)');
+
+  // ③ 무선이어폰 — 사전 품목(이어폰) 접미 일치로 잡고 키워드는 붙은 그대로
+  const ie = P.suggestKeywords('무선이어폰 블루투스 5.3 노이즈캔슬링', []);
+  if (ie.main !== '무선이어폰') throw new Error('Test 48 무선이어폰 대표 키워드: ' + JSON.stringify(ie.main));
+  if (!P.sugKw('무선이어폰 블루투스 5.3 노이즈캔슬링').some(k => /무선이어폰/.test(k))) throw new Error('Test 48 무선이어폰 추천에 무선이어폰이 없음');
+  if (P.suggestKeywords('무선 이어폰 케이스', []).main !== '이어폰') throw new Error('Test 48 띄어 쓴 무선 이어폰: ' + P.suggestKeywords('무선 이어폰 케이스', []).main);
+  console.log('  ✓ 무선이어폰 → 무선이어폰(붙은 그대로) · 무선 이어폰 → 이어폰');
+
+  // ④ 꼬리 단어(남성·방수·미니)만 남으면 키워드를 지어내지 않음
+  const tailOnly = P.suggestKeywords('남성 방수 미니', []);
+  if (tailOnly.main) throw new Error('Test 48 꼬리 단어가 대표 키워드로 남음: ' + JSON.stringify(tailOnly.main));
+  if (P.sugKw('남성 방수 미니').length) throw new Error('Test 48 꼬리 단어 추천이 남음: ' + JSON.stringify(P.sugKw('남성 방수 미니')));
+  // 꼬리·규격이 붙어 있어도 그 앞 핵심 명사를 잡음
+  const withTail = P.suggestKeywords('츄리샤 휴대용 초슬림 전동 면도기 전기 면도기 USB충전식 방수 남성 미니', []);
+  if (withTail.main !== '면도기') throw new Error('Test 48 꼬리 붙은 상품명 대표 키워드: ' + JSON.stringify(withTail.main));
+  console.log('  ✓ 꼬리(남성·방수·미니)만 있으면 빈 키워드 · 꼬리가 붙어도 그 앞 품목(면도기)');
+
+  // ⑤ 고친 키워드 기억 — (상품번호·판매처·원래 상품명 → 고친 키워드)를 남기고, 같은 상품이 다시 오면 그대로
+  const PNO = '9911223344';
+  const PNAME = '[츄리샤] 휴대용 초슬림 전동 면도기 전기 면도기 USB충전식 방수 남성 미니';
+  LS.removeItem(P.KW_MEM_KEY);
+  if (P.kwMemFind({ pno: PNO, pname: PNAME })) throw new Error('Test 48 처음인데 기억이 있음');
+  // ㉠ 상품명만 넣어 자동 키워드가 붙은 뒤, 수진 님이 #keyword 를 직접 고침
+  ['keyword', 'guide', 'seller', 'pname', 'pno', 'o-room', 'o-list'].forEach(k => { getElem(k).value = ''; getElem(k).textContent = ''; });
+  P.setGuides([{ pname: PNAME, keyword: '', guide: '', pno: PNO, seller: '실버반석', daily: '5', total: '5', days: [{ n: '5' }], platform: '쿠팡', url: '', kwAuto: true }]);
+  P.setCur(0);
+  getElem('pname').value = PNAME;
+  getElem('pno').value = PNO;
+  getElem('seller').value = '실버반석';
+  fireInput('pname');
+  if (getElem('keyword').value !== '면도기') throw new Error('Test 48 자동 키워드가 면도기가 아님: ' + getElem('keyword').value);
+  getElem('keyword').value = '전동면도기';
+  fireInput('keyword');
+  const memRaw = JSON.parse(LS.getItem(P.KW_MEM_KEY) || '{}');
+  if (!memRaw['p' + PNO] || memRaw['p' + PNO].kw !== '전동면도기') throw new Error('Test 48 고친 키워드가 기억에 없음: ' + JSON.stringify(memRaw));
+  if (memRaw['p' + PNO].seller !== '실버반석' || !/츄리샤/.test(memRaw['p' + PNO].pname)) throw new Error('Test 48 기억에 판매처·원래 상품명이 없음: ' + JSON.stringify(memRaw['p' + PNO]));
+  console.log('  ✓ #keyword 를 고치면 (상품번호·판매처·원래 상품명 → 고친 키워드)가 저장');
+
+  // ㉡ 같은 상품번호가 다시 들어오면 자동 추천 대신 기억한 키워드
+  ['keyword', 'guide', 'seller', 'pname', 'pno'].forEach(k => { getElem(k).value = ''; });
+  P.setGuides([{ pname: PNAME, keyword: '', guide: '', pno: PNO, seller: '실버반석', daily: '5', total: '5', days: [{ n: '5' }], platform: '쿠팡', url: '', kwAuto: true }]);
+  P.setCur(0);
+  getElem('pname').value = PNAME;
+  getElem('pno').value = PNO;
+  getElem('seller').value = '실버반석';
+  fireInput('pname');
+  if (getElem('keyword').value !== '전동면도기') throw new Error('Test 48 같은 상품인데 기억한 키워드가 안 쓰임: ' + getElem('keyword').value);
+  if (getElem('guide').value !== '전동면도기') throw new Error('Test 48 기억한 키워드로 짧은 상품명이 안 바뀜: ' + getElem('guide').value);
+  console.log('  ✓ 같은 상품번호가 다시 오면 기억한 키워드(전동면도기)를 그대로');
+
+  // ㉢ 상품번호가 없으면 같은 상품명으로 기억
+  LS.removeItem(P.KW_MEM_KEY);
+  P.kwMemSave({ pname: '바나바스토어 저주파 마사지기', seller: '바나바' }, '발마사지기');
+  P.setGuides([{ pname: '바나바스토어 저주파 마사지기', keyword: '', guide: '', seller: '', pno: '', daily: '3', total: '3', days: [{ n: '3' }], platform: '쿠팡', url: '', kwAuto: true }]);
+  P.setCur(0);
+  getElem('pno').value = ''; getElem('keyword').value = ''; getElem('guide').value = '';
+  getElem('pname').value = '바나바스토어 저주파 마사지기';
+  fireInput('pname');
+  if (getElem('keyword').value !== '발마사지기') throw new Error('Test 48 상품번호 없이 상품명으로 기억이 안 됨: ' + getElem('keyword').value);
+  console.log('  ✓ 상품번호가 없으면 같은 상품명으로 기억');
+
+  // ㉣ 의뢰서가 준 키워드(1번)가 있으면 기억보다 의뢰서가 먼저
+  P.setGuides([{ pname: PNAME, keyword: '면도날', guide: '면도날', pno: PNO, seller: '실버반석', daily: '5', total: '5', days: [{ n: '5' }], platform: '쿠팡', url: '', kwAuto: false }]);
+  P.setCur(0);
+  getElem('keyword').value = '면도날';
+  getElem('pname').value = PNAME;
+  getElem('pno').value = PNO;
+  fireInput('pname');
+  if (getElem('keyword').value !== '면도날') throw new Error('Test 48 의뢰서 키워드를 기억이 덮어씀: ' + getElem('keyword').value);
+  console.log('  ✓ 의뢰서 1번 키워드가 있으면 그게 먼저 (기억이 덮지 않음)');
+
+  // ⑥ [새 진행 만들기]로 보낼 값 — pname(짧은 상품명)·kwfix(고친 기록)
+  P.kwMemSave({ pno: PNO, pname: PNAME, seller: '실버반석' }, '전동면도기');
+  P.setGuides([{ pname: PNAME, keyword: '전동면도기', guide: '전동면도기', pno: PNO, seller: '실버반석', daily: '5', total: '5', days: [{ n: '5' }], platform: '쿠팡', url: '' }]);
+  P.setCur(0);
+  getElem('o-room').value = '#택11.21 실 실버반석 면도기 5';
+  getElem('keyword').value = '전동면도기';
+  getElem('guide').value = '전동면도기';
+  P.render();
+  const href = getElem('make-run').href || '';
+  if (!/[?&]pname=/.test(href)) throw new Error('Test 48 새 진행 만들기 주소에 pname 이 없음');
+  if (!/pname=[^&]*%EC%A0%84%EB%8F%99%EB%A9%B4%EB%8F%84%EA%B8%B0/.test(href)) throw new Error('Test 48 pname 값이 짧은 상품명이 아님: ' + href.slice(0, 200));
+  const kwfix = decodeURIComponent(((href.match(/[?&]kwfix=([^&]*)/) || [])[1] || ''));
+  if (!/전동면도기/.test(kwfix) || !new RegExp(PNO).test(kwfix)) throw new Error('Test 48 kwfix 규격이 틀림: ' + kwfix);
+  const kf = JSON.parse(kwfix)[0];
+  if (!('pno' in kf) || !('seller' in kf) || !('pname' in kf) || !('kw' in kf)) throw new Error('Test 48 kwfix 항목 규격(pno·seller·pname·kw): ' + kwfix);
+  console.log('  ✓ 새 진행 만들기에 pname·kwfix(pno·seller·pname·kw)를 함께 보냄');
+
+  // ⑦ 사전 파일이 비어 있지 않고, 확장·북마크도 같은 사전을 쓰는지 (한 곳에서 관리)
+  const dict = JSON.parse(fs2.readFileSync(path.resolve(__dirname, '../kw_dict.json'), 'utf8'));
+  ['nouns', 'modifiers', 'tails', 'colors'].forEach(k => { if (!Array.isArray(dict[k]) || !dict[k].length) throw new Error('Test 48 kw_dict.json 에 ' + k + ' 가 없음'); });
+  if (dict.nouns.indexOf('면도기') < 0 || dict.modifiers.indexOf('초슬림') < 0 || dict.modifiers.indexOf('무타공') < 0) throw new Error('Test 48 v207(면도기·초슬림)·확장(무타공) 단어가 한 사전에 없음');
+  console.log('  ✓ 사전(nouns ' + dict.nouns.length + '·수식어 ' + dict.modifiers.length + '·꼬리 ' + dict.tails.length + '·색 ' + dict.colors.length + ')에 생성기·확장 단어가 모두 있음');
+
+  console.log('✓ v208 사전 통합·규칙(음식/무선이어폰/꼬리)·고친 키워드 기억 시험 통과');
 }
 
 console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (42개 샘플 전원 일치)');

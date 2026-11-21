@@ -162,24 +162,40 @@ const ui = (tabId, s) => { if (s && s.title) pushGen({ status: s.title + (s.msg 
 
 /* ---------- 키워드 추천 (생성기와 같은 규칙) ----------
    네추럴라이즈 플래티넘 오메가3 1100 1,202mgx180캡슐 → 오메가3 | 플래티넘 오메가3 | 네추럴라이즈 오메가3 */
-const KW_STOP = /^(탈부착식|탈부착|착붙는|무타공|세라믹|코팅|프리미엄|고급|대용량|소용량|회전|포함|정품|국내산|수입산|신상|신상품|인기|추천|최신|업그레이드|스마트|터치|겨울|여름|봄|가을|방한|보온보냉|보온|보냉|세척솔|대시보드|특가|증정|무료배송|1\+1|세트|단품|미니|슬림|휴대용|접이식|없습니다|없음|오류|권한|사용권한|페이지)$/;
+/* ORI-KW-DICT:BEGIN bg_stop */
+const KW_STOP = /^(?:업그레이드|꿀brix|잘라서쓰는|탈부착식|프리미엄|보온보냉|대시보드|무료배송|산지직송|농장직송|당일수확|당일발송|새벽배송|당도선별|당도보장|brix|파격특가|한정특가|마감임박|붓기제거|닫힘방지|생활방수|초보자용|부드러운|없습니다|사용권한|남녀공용|FREE|탈부착|착붙는|세라믹|대용량|소용량|국내산|수입산|신상품|스마트|세척솔|1\+1|휴대용|접이식|고당도|꿀당도|브릭스|가정용|선물용|제수용|초특가|선착순|승모근|홈케어|원스텝|데일리|초박형|무타공|초슬림|초경량|초미니|초소형|초고속|저소음|무소음|충전식|다기능|올인원|입문용|초보자|가벼운|편안한|필기감|착용감|사용감|그립감|청량감|보온감|페이지|XXL|2XL|3XL|코팅|고급|회전|포함|정품|신상|인기|추천|최신|터치|겨울|여름|가을|방한|보온|보냉|특가|증정|세트|단품|미니|슬림|직송|명품|특품|한정|수선|보호|만능|두피|바디|지압|전신|뷰티|전동|전기|무선|유선|방수|없음|오류|권한|남성|여성|공용|대형|중형|소형|특대|XS|XL|봄|S|M|L)$/i;
+/* ORI-KW-DICT:END bg_stop */
+/* ORI-KW-DICT:BEGIN bg_noun */
+const NOUN_SUFFIX = /(?:괄사마사지기|고구마말랭이|헤어드라이어|에어프라이어|도어스토퍼|도시락가방|프로폴리스|샤인머스캣|방울토마토|호박고구마|초당옥수수|느타리버섯|새송이버섯|케이블타이|코털제거기|칫솔살균기|마사지기|문어괄사|도어체크|보냉가방|크로스백|손잡이백|오메가3|밀크씨슬|마그네슘|부유단감|머루포도|감홍사과|사과대추|꿀고구마|수미감자|자색양파|의성마늘|청양고추|절임배추|열무김치|표고버섯|송이버섯|팽이버섯|다이어리|선정리기|전선정리|고정클립|드라이기|커피머신|거치대|선풍기|텀블러|청소기|마스크|트레이|슬리퍼|스토퍼|도어락|고정기|보냉백|보온백|런치백|파우치|쿨러백|쇼퍼백|에코백|토트백|보냉팩|보온팩|루테인|유산균|콜라겐|비타민|나주배|대봉감|황금향|레드향|한라봉|천혜향|복숭아|토마토|참다래|무화과|아오리|옥광밤|고구마|옥수수|총각무|갓김치|파김치|서리태|말랭이|반건시|건나물|시금치|만년필|형광펜|지우개|정리기|스트랩|와이어|정리함|면도기|이발기|바리깡|고데기|제모기|안마기|믹서기|블렌더|토스터|다리미|체중계|이어폰|캡슐|스틱|분말|가루|원액|오일|세럼|크림|로션|샴푸|패치|패드|매트|괄사|워시|토너|앰플|비누|티슈|세제|치약|칫솔|홀더|걸이|선반|보틀|쿠션|방석|베개|양말|장갑|모자|밴드|말굽|가드|가방|백팩|칼슘|아연|철분|햇배|사과|단감|감귤|포도|거봉|자두|살구|딸기|참외|수박|멜론|메론|키위|부사|홍옥|대추|군밤|햇밤|호두|땅콩|과일|감자|양파|마늘|생강|고추|당근|열무|배추|김치|백미|현미|잡곡|찹쌀|보리|귀리|견과|곶감|나물|상추|깻잎|버섯|볼펜|샤프|연필|마카|노트|수첩|필통|타이|클립|정|환|즙|차|쌀|^배$|^감$|^귤$|^밤$|^잣$|^무$|^콩$|^팥$)$/;
+/* ORI-KW-DICT:END bg_noun */
+/* ORI-KW-DICT:BEGIN bg_color */
+const KW_COLOR = /^(?:아이보리|화이트|그레이|네이비|베이지|옐로우|브라운|블랙|핑크|블루|레드|카키|퍼플|실버|골드|검정|흰색|노랑|파랑|초록|빨강)$/i;
+/* ORI-KW-DICT:END bg_color */
 function suggest(pname) {
   const raw = String(pname || "").replace(/\(.*$/, "").replace(/\[[^\]]*\]/g, " ");
   const dash = raw.split(/\s+-\s+/);
   let toks = dash[0].split(/[\s,]+/).map(t => t.trim()).filter(Boolean);
-  const brand = toks.length >= 3 ? toks[0] : "";
+  /* 첫 단어가 이미 품목 명사(텀블러·면도기·나주배 등)면 브랜드로 자르지 않음 (11/21 v208) */
+  const brand = toks.length >= 3 && !NOUN_SUFFIX.test(toks[0]) ? toks[0] : "";
   if (brand) toks = toks.slice(1);
   const spec = t => /^\d|\d+(mg|g|kg|ml|l|개|캡슐|정|매|p|도|cm|mm|인치|w)\b|x\d/i.test(t) && !/^[가-힣a-z]+\d+$/i.test(t);
-  const isMod = t => /(는|한|된|용)$/.test(t) && t.length <= 4;
-  const cand = toks.filter(t => !spec(t) && !KW_STOP.test(t) && !isMod(t) && t.length >= 2);
+  /* 수식어: ~식·~형·~용은 세 글자 이상만, 사전 품목에 걸리면 품목이 먼저 (11/21 v208) */
+  const isMod = t => NOUN_SUFFIX.test(t) ? false : (/(는|한|된)$/.test(t) && t.length <= 4 || /(식|형|용)$/.test(t) && t.length >= 3 && t.length <= 6);
+  const cand = toks.filter(t => !spec(t) && !KW_STOP.test(t) && !KW_COLOR.test(t) && !isMod(t) && t.length >= 2);
   const mods = toks.filter(t => /용$/.test(t) && t.length <= 4);
   const cat = dash[1] ? dash[1].split(/[\/,]/)[0].trim() : "";
   const tail = t => t.slice(-3);
   const rep = cand.filter(t => t.length >= 4 && cand.some(u => u !== t && u.length >= 4 && tail(u) === tail(t)));
+  /* 뒤쪽이 같은 말이 둘 이상이면 그 꼬리가 품목 — 전동면도기·전기면도기 → 면도기 (11/21 v208) */
+  const repTail = (() => { const c = {}; cand.forEach(t => { for (let L = 4; L >= 2; L--) { if (t.length > L) { const s = t.slice(-L); if (KW_STOP.test(s) || KW_COLOR.test(s) || spec(s)) continue; (c[s] = c[s] || []).push(t); } } }); return Object.keys(c).filter(s => c[s].filter((x, i, a) => a.indexOf(x) === i).length >= 2 && !NOUN_SUFFIX.test(s)).sort((a, b) => b.length - a.length)[0] || ""; })();
   let main;
-  if (rep.length) main = rep[0];
+  const nounMatch = cand.filter(t => NOUN_SUFFIX.test(t))[0] || "";
+  if (nounMatch) main = nounMatch;
+  else if (repTail) main = repTail;
+  else if (rep.length) main = rep[0];
   else if (cat && cat.length >= 2 && !spec(cat) && !/일반|기타/.test(cat)) main = cat;
-  else main = cand.slice(0, 4).pop() || toks[0] || "";
+  else main = cand[cand.length - 1] || "";
+  if (!main) return [];   /* 수식어·꼬리만 있는 상품명은 지어내지 않음 (11/21 v208) */
   const alts = rep.filter(t => t !== main);
   const out = [main];
   const add = s => { s = s.trim(); if (s && out.indexOf(s) === -1) out.push(s); };
