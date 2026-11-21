@@ -10,6 +10,8 @@ for f in ori/ext/*.js ori/test/*.js; do node -c "$f"; done
 node -c teamroom/Room.js && cp teamroom/Loader.gs "${RUNNER_TEMP:-/tmp}/RoomLoader.js" && node -c "${RUNNER_TEMP:-/tmp}/RoomLoader.js" && node teamroom/room_test.js
 echo "== Code.gs ESLint"
 npx -y eslint@8.57.0 --no-eslintrc --env es2021 --parser-options ecmaVersion:2022 ori/Code.gs
+echo "== 키워드 사전 한 곳(ori/kw_dict.json) 일치"
+node ori/tools/sync_kw.js --check
 echo "== 단위 시험"
 export TZ=Asia/Seoul
 node ori/test/ci_test.js

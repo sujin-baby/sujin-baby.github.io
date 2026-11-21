@@ -764,8 +764,8 @@ function runRun(opt) {
   ok(/이미지 주소\|건너뜀/.test(gen), '생성기 runBatch: "이미지 주소·건너뜀" 상태를 받으면 4분 기다리지 않고 다음 상품으로');
   ok(/!isImgUrl\(u\.url\)/.test(gen), '생성기 [열기] 단추(updateProductLink)도 사진 주소는 상품으로 안 만듦');
 
-  /* ---------- 9) 버전·배포물 한 세트 (확장 1.8.10) ---------- */
-  ok(man.version === '1.8.10', 'manifest 버전 1.8.10 (' + man.version + ')');
+  /* ---------- 9) 버전·배포물 한 세트 (확장) — 버전 숫자를 시험에 박지 않고 manifest를 기준으로 본다 ---------- */
+  ok(/^\d+\.\d+\.\d+$/.test(man.version), 'manifest 버전 (' + man.version + ')');
   const ev = (gen.match(/const EXT_VER = "([\d.]+)"/) || [])[1];
   ok(ev === man.version, '생성기 EXT_VER(' + ev + ') = manifest 버전(' + man.version + ')');
   {
@@ -777,7 +777,7 @@ function runRun(opt) {
     ok(String(entries['ext/page.js']).indexOf('const parts = (document.title || "").split(/\\s+:\\s+/);') >= 0, 'zip 안 ext/page.js에 parts 선언 들어감');
     ok(/function readProduct_\(\)/.test(String(entries['ext/page.js'])), 'zip 안 ext/page.js에 readProduct 방어 코드 들어감 (1.8.7)');
     ok(/const late = \/\(coupang\\\.com\|naver\\\.com\)\//.test(String(entries['ext/bg.js'])), 'zip 안 ext/bg.js에 네이버 빈 상품명 재시도 들어감 (1.8.7)');
-    ok(/\"version\":\s*\"1\.8\.10\"/.test(String(entries['ext/manifest.json'])), 'zip 안 ext/manifest.json도 1.8.10');
+    ok(new RegExp('\\\"version\\\":\\s*\\\"' + man.version.replace(/\./g, '\\.') + '\\\"').test(String(entries['ext/manifest.json'])), 'zip 안 ext/manifest.json도 ' + man.version);
     ok(/const cardGroups = \(\) => \{/.test(String(entries['ext/oy.js'])) && /const extra = cards\.filter/.test(String(entries['ext/page.js'])), 'zip 안 ext/page.js·oy.js에 1~2개 결과 고침 들어감 (1.8.9)');
     ok(/customkw:/.test(String(entries['ext/bg.js'])) && /이 키워드로 찾기/.test(String(entries['ext/page.js'])), 'zip 안 ext/bg.js·page.js에 사용자 키워드 재검색 들어감 (1.8.8)');
     ok(/await naverHere\(nt\);/.test(String(entries['ext/bg.js'])), 'zip 안 ext/bg.js에 naverProduct 수정 들어감');
