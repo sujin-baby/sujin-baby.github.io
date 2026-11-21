@@ -102,6 +102,18 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         S.checked['gtp33'] = seed;
       }
     }
+    /* 2026-11-21 최신 교재 재매핑: 화면의 G-POINT 번호가 바뀌었으니 예전에 체크한 진도도 새 번호로 옮긴다.
+       예전 14번(동명사 목적어)은 새 13번(동사 뒤 목적어 ~ing)이다 — 한 번만 옮기고 알려 준다. */
+    if (S.gpVer !== 2) {
+      S.gpVer = 2;
+      var gck = S.checked['gtp33'] || {};
+      if (gck[14] && !gck[13]) {
+        gck[13] = gck[14];
+        delete gck[14];
+        S.checked['gtp33'] = gck;
+        setTimeout(function () { toast('최신 교재 기준으로 진도 번호를 맞췄어요 · 동명사 목적어는 G-POINT 13이에요'); }, 1500);
+      }
+    }
     /* 노베이스 시작: 이제 막 시작한 사람은 범죄학(박상민 올인원)부터 보이게 */
     if (!S.planPerDay) S.planPerDay = 2;
     if (!S.planLog) S.planLog = {};
