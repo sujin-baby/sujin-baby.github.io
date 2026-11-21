@@ -1986,7 +1986,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3753,6 +3753,7 @@ function checkFullInner_() {
       try { koziFix2_(); } catch (e) {}
       try { orvecFold1_(); } catch (e) {}
       try { numFold1_(); } catch (e) {}
+      try { biniPay1_(); } catch (e) {}
       try { if (!props.getProperty('EDITC1')) { ensureEditTab_(); props.setProperty('EDITC1', Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm')); } } catch (e) { note_('폼수정 날짜 칸 실패: ' + e); }   // (11/18 한 번) C1 날짜 고르기 바로 (정리가 밀려 늦게 생기던 것)
       try { upAcctOpen1_(); } catch (e) {}
       try { exp135_(); } catch (e) {}
@@ -8204,6 +8205,27 @@ function rvCol_(sh, lc) {
   return pc > 0 ? pc : -1;
 }
 const PAYBACK_ROOM = '오리명단방(뽀짝)', REVFEE_ROOM = '리뷰비시트';
+// 그날(방) 사람 리뷰가 다 확인됐을 때: 실배송 → 페이백 요청(오리명단방), 그 밖 → 리뷰비 요청(리뷰비시트)
+function dayReqQueue_(r, url, n) {
+  const title = bareTitle_(r['명단 제목']);
+  if (r['실배송'] === 'Y') queueMsg_(PAYBACK_ROOM, '[전원 리뷰완료] ' + title + ' 페이백 요청드립니다!\n\n명단시트: ' + url, '페이백 요청');   // 요청 줄과 명단시트 사이 한 줄 띄움 (11/15 사용자)
+  else queueMsg_(REVFEE_ROOM, [Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'M/d'), title, n + '건', url].join('\t'), '리뷰비 요청');
+  note_('✓ ' + (r['실배송'] === 'Y' ? '페이백' : '리뷰비') + ' 요청 넣음: ' + title);
+}
+// (11/21 한 번) '#11.13 실 에스지엠컴퍼니비니외8' 페이백(리뷰비) 요청이 처음 볼 때 규칙 때문에 안 생겼던 것 → 지금 넣음. 이미 같은 요청 글이 보낼메시지에 있으면 안 넣음
+function biniPay1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('BINIPAY1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
+  try {
+    const r = readRuns_().filter(function (x) { return bareTitle_(x['명단 제목']) === '#11.13 실 에스지엠컴퍼니비니외8'; })[0];
+    if (!r || !r['시트ID']) { props.setProperty('BINIPAY1', '✓ 진행 없음'); return; }
+    const title = bareTitle_(r['명단 제목']), ob = outboxSheet_(), ol = ob.getLastRow();
+    const dup = ol >= 2 && ob.getRange(2, 1, ol - 1, 6).getValues().some(function (y) { return /^(페이백 요청|리뷰비 요청)$/.test(String(y[2])) && String(y[4]).indexOf(title) >= 0; });
+    if (dup) { props.setProperty('BINIPAY1', '✓ 이미 있음'); return; }
+    dayReqQueue_(r, SpreadsheetApp.openById(String(r['시트ID'])).getUrl(), Number(r['인원']) || 0);
+    props.setProperty('BINIPAY1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (r['실배송'] === 'Y' ? '페이백' : '리뷰비') + ' 요청 넣음');
+  } catch (e) { props.setProperty('BINIPAY1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
 function reviewDone_(runs, only) {
   const props = PropertiesService.getScriptProperties(), cut = today_().getTime() - 40 * 86400000;
   // 처음 한 번은 이미 다 체크된 예전 의뢰를 '보낸 걸로' 기억만 (예전에 직접 보낸 취완·보고가 다시 안 들어가게)
@@ -8301,11 +8323,10 @@ function reviewDone_(runs, only) {
         const w = windowOf_(runs, r), ppl = live.filter(function (i) { const t = v[i][cT].getTime(); return t >= w.from && t < w.to; });
         if (!ppl.length || !ppl.every(function (i) { return v[i][cc] === true; })) return;
         props.setProperty(dk2, '1');
-        if (dayReqInit) return;
-        const title = bareTitle_(r['명단 제목']), url = lss.getUrl();
-        if (r['실배송'] === 'Y') queueMsg_(PAYBACK_ROOM, '[전원 리뷰완료] ' + title + ' 페이백 요청드립니다!\n\n명단시트: ' + url, '페이백 요청');   // 요청 줄과 명단시트 사이 한 줄 띄움 (11/15 사용자)
-        else queueMsg_(REVFEE_ROOM, [Utilities.formatDate(r['진행일'], CONFIG.TIMEZONE, 'M/d'), title, ppl.length + '건', url].join('\t'), '리뷰비 요청');
-        note_('✓ ' + (r['실배송'] === 'Y' ? '페이백' : '리뷰비') + ' 요청 넣음: ' + title);
+        // 처음 볼 때 이미 다 끝난 날짜는 취완(A)과 같은 규칙: 의뢰 전체 취완을 이미 넣었거나 진행일 14일 넘은 것만 보낸 걸로 기억
+        //  (11/21 사용자: '#11.13 실 에스지엠컴퍼니비니외8' — 취완은 떴는데 페이백 요청은 처음 볼 때 이미 끝나 있어서 안 생겼음)
+        if (dayReqInit && (props.getProperty('RVDONE_' + sid) || today_().getTime() - dayStart_(r['진행일']) > 14 * 86400000)) return;
+        dayReqQueue_(r, lss.getUrl(), ppl.length);
       });
       if (dayReqInit) props.setProperty('RVDAYREQ_INIT_' + sid, '1');
       // A. 방(날짜)마다: 그 방 사람 리뷰가 다 확인(체크)되면 그 카톡방에 '취완' (사용자 요청 11/8: 의뢰 전체가 끝날 때 한 번이 아니라 방마다)
