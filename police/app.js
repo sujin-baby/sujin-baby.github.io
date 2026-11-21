@@ -848,7 +848,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       ['9', '현재 힌트 [now, right now] + for, since', 'has / have been ~ing'],
       ['10', '미래 힌트 [tomorrow, next~, by, by the time] + for, since', 'will have been ~ing']
     ] },
-    { g: '준동사 11~20', tip: '오답 POINT: allow·advise·encourage·recommend·require는 목적어와 목적보어의 준동사 형태가 달라요(be caught 뒤는 동명사). 켈리쌤 진팁: ing와 to부정사로 선지를 엇갈리게 내고, ing 3문제·to부정사 3문제가 나와요.',
+    { g: '준동사 11~20', tip: '오답 POINT: allow, advise, encourage, recommend, require는 목적어와 목적보어의 준동사 형태가 달라요(be caught 뒤는 동명사). 켈리쌤 진팁: ing와 to부정사로 선지를 엇갈리게 내고, ing 3문제·to부정사 3문제가 나와요.',
       rows: [
       ['11', '전치사 뒤 빈칸', '~ing (동명사)'],
       ['12', '주어 자리 빈칸', '~ing (동명사)'],
