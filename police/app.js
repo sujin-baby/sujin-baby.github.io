@@ -2830,11 +2830,12 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
   function focusDone() {
     clearInterval(FOCUS.timer); FOCUS.timer = null; FOCUS.running = false;
-    save();
-    sfx('done'); confetti(28);
-    toast('⏱ ' + (focusOf().len || 25) + '분 순공 완료! 잠깐 쉬고 한 세트 더 갈까요');
-    FOCUS.left = 0;
+    var len = focusOf().len || 25;
+    FOCUS.left = focusSecs();        /* 다음 세트를 바로 시작할 수 있게 시계를 처음으로 */
     focusDraw(); focusSum();
+    save();
+    toast('⏱ ' + len + '분 순공 완료! 잠깐 쉬고 한 세트 더 갈까요');
+    try { sfx('done'); confetti(28); } catch (e) {}
   }
   function focusSetLen(m) {
     clearInterval(FOCUS.timer); FOCUS.timer = null; FOCUS.running = false; FOCUS.acc = 0;
