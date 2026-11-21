@@ -1591,11 +1591,11 @@ details.lib-group[open] .lib-chev{transform:rotate(180deg)}
 .rt-go.run{background:var(--card3);color:var(--ink2);border:1px solid var(--line2)}
 .rt-rst{flex:0 0 auto;width:30px;height:30px;border-radius:10px;background:var(--card2);
   border:1px solid var(--line2);font-size:13px;color:var(--ink2);line-height:1}
-.rt-lights{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
-.rt-lt{display:inline-flex;align-items:center;gap:3px;padding:4px 7px;border-radius:8px;
-  background:var(--card2);border:1px solid var(--line);font-size:10.5px;font-weight:800;color:var(--ink2)}
-.rt-lt i{font-style:normal;font-size:9.5px;line-height:1}
-.rt-lt em{font-style:normal;font-size:9.5px;font-weight:900;color:var(--ink3)}
+.rt-lights{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.rt-lt{display:inline-flex;align-items:center;gap:2px;padding:3px 6px;border-radius:8px;
+  background:var(--card2);border:1px solid var(--line);font-size:10px;font-weight:800;color:var(--ink2);letter-spacing:-.2px}
+.rt-lt i{font-style:normal;font-size:9px;line-height:1}
+.rt-lt em{font-style:normal;font-size:9px;font-weight:900;color:var(--ink3)}
 .rt-lt.red{border-color:rgba(248,113,113,.4)} .rt-lt.red em{color:var(--red)}
 .rt-lt.yel{border-color:rgba(255,194,75,.4)} .rt-lt.yel em{color:var(--gold)}
 .rt-lt.grn{border-color:rgba(52,211,153,.4)} .rt-lt.grn em{color:var(--green)}
