@@ -29,7 +29,8 @@ function getElem(id) {
       placeholder: '',
       innerHTML: '',
       dataset: {},
-      addEventListener: () => {},
+      listeners: {},
+      addEventListener: (ev, fn) => { (domElements[id].listeners[ev] = domElements[id].listeners[ev] || []).push(fn); },
       dispatchEvent: () => {},
       appendChild: () => {},
       setAttribute: () => {},
@@ -38,6 +39,8 @@ function getElem(id) {
   }
   return domElements[id];
 }
+// 입력칸에 값을 넣고 그 칸의 input 핸들러를 실제로 태운다 (#104: 키워드를 직접 고칠 때 방제 이름도 따라 바뀌는지)
+function fireInput(id) { (getElem(id).listeners.input || []).forEach(fn => fn({ target: getElem(id) })); }
 
 const sandbox = {
   console,
@@ -2299,13 +2302,71 @@ NonGMO   비닐패키지 로하스인증
   const nSum = String(getElem('o-notice').value || '');
   if (nSum.indexOf('🐥가격 : 11,600 (배송비 1,000원 포함)') < 0) throw new Error('Test 46 머리 금액 = 페이지 가격 + 배송비 경우가 깨짐(11,600이어야 함): ' + nSum.split('\n').filter(l => /가격/.test(l)).join(' / '));
 
-  // 제보 문구·버전 표시가 v206
-  ['[생성기 v206 제보]', '[가이드 생성기 v206 공지 오류 제보]'].forEach(s => {
-    if (scriptContent.indexOf(s) < 0) throw new Error('Test 46 제보 문구가 v206이 아님: ' + s);
+  // 제보 문구·버전 표시가 v207
+  ['[생성기 v207 제보]', '[가이드 생성기 v207 공지 오류 제보]'].forEach(s => {
+    if (scriptContent.indexOf(s) < 0) throw new Error('Test 46 제보 문구가 v207이 아님: ' + s);
   });
   if (/생성기 v182/.test(scriptContent) || /생성기 v182/.test(html)) throw new Error('Test 46 v182 문구가 남아 있음');
-  if (!/생성기 v206/.test(html)) throw new Error('Test 46 생성기 버전 표시가 v206이 아님');
-  console.log('✓ #99 배송비 중복 가산 금지 시험 통과 (10,600 유지 · 안내 문구 · v206)');
+  if (!/생성기 v207/.test(html)) throw new Error('Test 46 생성기 버전 표시가 v207이 아님');
+  console.log('✓ #99 배송비 중복 가산 금지 시험 통과 (10,600 유지 · 안내 문구 · v207)');
+}
+
+// ==========================================
+// Test 47: 팀룸 #104 — 키워드는 '면도기'인데 방제가 '초슬림' (11/21)
+// ==========================================
+{
+  console.log('-- Test 47: #104 — 상품명 속 초슬림이 아니라 품목명 면도기가 키워드·방제로');
+  const P104 = '[츄리샤] 휴대용 초슬림 전동 면도기 전기 면도기 USB충전식 방수 남성 미니';
+
+  // ① 대표 키워드 추천이 수식어(초슬림·전동·전기·휴대용·미니·방수)를 빼고 품목명 '면도기'
+  const s104 = P.suggestKeywords(P104, []);
+  if (s104.main !== '면도기') throw new Error('Test 47 대표 키워드가 면도기가 아님: ' + JSON.stringify(s104.main));
+  const kwList104 = P.sugKw(P104);
+  if (!kwList104.length || kwList104.some(k => /초슬림/.test(k))) throw new Error('Test 47 추천 키워드에 초슬림이 남음: ' + JSON.stringify(kwList104));
+  if (!kwList104.some(k => /면도기/.test(k))) throw new Error('Test 47 추천 키워드에 면도기가 없음: ' + JSON.stringify(kwList104));
+
+  // ② 상품명만 넣으면 키워드·짧은 상품명이 면도기로 자동 입력되고 방제도 면도기
+  getElem('req').value = '';
+  ['keyword', 'guide', 'seller', 'pname', 'o-room', 'o-list'].forEach(k => { getElem(k).value = ''; getElem(k).textContent = ''; });
+  getElem('date').value = '2026-11-21';
+  getElem('day').value = '1';
+  getElem('takdae').checked = true;
+  getElem('realship').checked = false;
+  getElem('fruit').checked = false;
+  getElem('cart').checked = false;
+  P.setGuides([{ pname: P104, keyword: '', guide: '', daily: '5', total: '5', days: [{ n: '5' }], platform: '쿠팡', url: '', seller: '' }]);
+  P.setCur(0);
+  getElem('pname').value = P104;
+  fireInput('pname');
+  if (getElem('keyword').value !== '면도기') throw new Error('Test 47 상품명 입력 후 키워드가 면도기가 아님: ' + getElem('keyword').value);
+  if (getElem('guide').value !== '면도기') throw new Error('Test 47 짧은 상품명이 면도기가 아님: ' + getElem('guide').value);
+  const room104 = P.makeRoom('11.21', '5');
+  if (/초슬림/.test(room104)) throw new Error('Test 47 방제에 초슬림이 남음: ' + room104);
+  if (!/면도기/.test(room104)) throw new Error('Test 47 방제에 면도기가 없음: ' + room104);
+
+  // ③ 예전 자동값('초슬림')이 짧은 상품명에 남은 상태에서 사용자가 #keyword를 '면도기'로 고치면 방제·명단 제목도 면도기
+  const gOld = { pname: P104, keyword: '초슬림', guide: '초슬림', kwAuto: true, daily: '5', total: '5', days: [{ n: '5' }], platform: '쿠팡', url: '', seller: '실버반석' };
+  P.setGuides([gOld]);
+  P.setCur(0);
+  getElem('keyword').value = '면도기';
+  getElem('guide').value = '초슬림';
+  fireInput('keyword');
+  if (getElem('guide').value !== '면도기') throw new Error('Test 47 키워드를 고쳐도 짧은 상품명이 안 바뀜: ' + getElem('guide').value);
+  const roomOld = P.makeRoom('11.21', '5');
+  if (/초슬림/.test(roomOld)) throw new Error('Test 47 키워드를 고쳐도 방제에 초슬림이 남음: ' + roomOld);
+  if (!/면도기/.test(roomOld)) throw new Error('Test 47 방제에 면도기가 없음: ' + roomOld);
+  const listOld = String(getElem('o-list').value || getElem('o-list').textContent || '');
+  if (/초슬림/.test(listOld)) throw new Error('Test 47 명단 제목에 초슬림이 남음: ' + listOld);
+  if (!/면도기/.test(listOld)) throw new Error('Test 47 명단 제목에 면도기가 없음: ' + listOld);
+
+  // ④ 짧은 상품명(#guide)을 직접 고친 경우는 키워드를 바꿔도 그 이름 그대로
+  getElem('guide').value = '내가정한이름';
+  fireInput('guide');
+  getElem('keyword').value = '면도날';
+  fireInput('keyword');
+  if (getElem('guide').value !== '내가정한이름') throw new Error('Test 47 직접 고친 짧은 상품명이 덮어써짐: ' + getElem('guide').value);
+
+  console.log('✓ #104 품목명 면도기·초슬림 수식어 제외·키워드 고치면 방제/명단 제목도 같이 시험 통과');
 }
 
 console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (42개 샘플 전원 일치)');
