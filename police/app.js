@@ -2214,7 +2214,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     return null;
   }
 
-  /* 문항 해설 첫머리 [최신 교재 G-POINT 13 · to부정사 (to + 동원) · seem to + 동원]
+  /* 문항 해설 첫머리 [최신 교재 G-POINT 19 · to부정사 암기 표현 (목적보어·be pp·그 외)]
      → 이 문항이 실제로 묻는 표현(base·spec)을 꺼낸다 */
   function gpSpec(q) {
     var m = String(q.e || '').match(/^\[([^\]]*)\]/);
