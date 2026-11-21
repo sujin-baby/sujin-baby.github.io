@@ -421,7 +421,7 @@ function renameRun_(r, title, why) {
   } catch (e) {}
   setRun_(r.row, '카톡방', title); r['카톡방'] = title;
   // 명단 시트·폼·폴더 이름도 같이 (10/26 효자손: 방제만 바뀌고 시트·폼은 '# 실 유앤아이푸드 효자손외'로 남아 서로 달랐음)
-  if (!globalThis.__NO_FILE_RENAME) { try { renameRunFiles_(r, sheetName_(oldTitle), sheetName_(title)); } catch (e) { note_('명단 시트·폼 이름 바꾸기 실패: ' + e); } }   // 명단 시트 이름은 한 번 만들면 안 바꿈 (11/16 사용자)
+  if (!globalThis.__NO_FILE_RENAME) { try { renameRunFiles_(r, sheetName_(oldTitle, tailNum_(oldTitle)), sheetName_(title, tailNum_(title)), sheetName_(oldTitle)); } catch (e) { note_('명단 시트·폼 이름 바꾸기 실패: ' + e); } }   // 명단 시트 이름은 한 번 만들면 안 바꿈 (11/16 사용자)
   try {
     const ob = outboxSheet_(), last = ob.getLastRow();
     if (last >= 2) ob.getRange(2, 1, last - 1, 6).getValues().forEach(function (v, i) {
@@ -435,13 +435,14 @@ function renameRun_(r, title, why) {
 }
 
 // 진행의 명단 시트·폼(제목·파일)·폴더 이름을 옛 이름 → 새 이름 (끝의 ' (응답)'은 그대로). 지금 이름이 옛 이름과 같을 때만 (손으로 바꾼 이름은 안 건드림)
-function renameRunFiles_(r, oldN, newN) {
+//  oldN2: 옛 규칙 이름(상품명에 붙은 인원 숫자까지 남은 것, 11/21 전에 만든 시트)도 같은 이름으로 봄
+function renameRunFiles_(r, oldN, newN, oldN2) {
   oldN = String(oldN || '').trim(); newN = String(newN || '').trim();
   if (!oldN || !newN || oldN === newN) return [];
-  const done = [];
+  const done = [], olds = [oldN, String(oldN2 || '').trim()].filter(Boolean).map(function (x) { return x.replace(/\s+/g, ''); });
   const ren = function (kind, get, set) {
     const cur = String(get()), tail = (cur.match(/\s*\(응답\)\s*$/) || [''])[0], base = cur.slice(0, cur.length - tail.length).trim();
-    if (base.replace(/\s+/g, '') !== oldN.replace(/\s+/g, '')) return;
+    if (olds.indexOf(base.replace(/\s+/g, '')) < 0) return;
     set(newN + tail); done.push(kind);
   };
   const sid = String(r['시트ID'] || ''), fid = String(r['폼ID'] || ''), fo = (String(r['폴더 링크'] || '').match(/[-\w]{25,}/) || [])[0];
@@ -634,9 +635,15 @@ function isFruit_(r) {
 
 // 명단 시트·폼·폴더 이름: 방제에서 날짜와 끝 인원 수를 뺀 것 (#택10.14 모두의농수산옥광밤외12 → #택 모두의농수산옥광밤외, #택10.19 휴대폰거치대 10 → #택 휴대폰거치대)
 //  인원 수는 취소·미구매로 다음 날 밀리면 날마다 바뀌어서 카톡 방제·명단방 문구에만 씀 (사용자 지시 10/18)
-function sheetName_(s) {
-  return noCount_(String(s || '').replace(/\s*\([^)]*\)\s*$/, '').replace(/^([#업택\s]*?)\s*\d{1,2}\.\d{1,2}\s*/, '$1 ').replace(/\s+/g, ' ').trim());
+//  cnt(그날 인원)를 주면 상품명에 붙여 쓴 끝 숫자도 뺌: '# 실 제이컴퍼니 크리노바5'(인원 5) → '# 실 제이컴퍼니 크리노바' (11/21 사용자: 숫자는 카톡 방제 뒤에만). 생성기 sheetBaseName과 같은 규칙
+function sheetName_(s, cnt) {
+  let t = noCount_(String(s || '').replace(/\s*\([^)]*\)\s*$/, '').replace(/^([#업택\s]*?)\s*\d{1,2}\.\d{1,2}\s*/, '$1 ').replace(/\s+/g, ' ').trim());
+  const c = String(cnt == null ? '' : cnt).trim(), tr = (t.match(/(\d+)$/) || [])[1] || '';
+  if (/^\d+$/.test(c) && Number(c) > 0 && tr && tr.length < t.replace(/^[#업택실\/빈\s]+/, '').length && (tr === c || tr.slice(-c.length) === c)) t = t.slice(0, t.length - tr.length).trim();
+  return t;
 }
+// 방제 끝 인원 숫자 ('#11.16 실 가짜상회 크리노바5 (뽀짝오리)' → '5'), 없으면 ''
+function tailNum_(t) { return (bareTitle_(t).match(/(\d+)$/) || [])[1] || ''; }
 function noCount_(t) {
   t = String(t || '').trim();
   const tail = (t.match(/\s*\(응답\)$/) || [''])[0];
@@ -1755,6 +1762,15 @@ function diag_(p) {
       while (it.hasNext()) { const f = it.next(), fs = f.getFilesByType(MimeType.GOOGLE_SHEETS), sn = []; while (fs.hasNext()) sn.push(fs.next().getName()); if (sn.length && sn.indexOf(f.getName()) < 0) res.push(nm + ' | ' + f.getName() + ' → ' + sn.join(' / ') + ' (…' + f.getId().slice(-6) + ')'); }
     });
     out.fnm = res.slice(0, 80);
+    // 이름 끝에 숫자가 남은 폴더·시트 (숫자는 카톡 방제 뒤에만, 11/21 사용자)
+    const num = [], endN = function (x) { return /\d$/.test(String(x).replace(/\s*\(응답\)\s*$/, '')); };
+    [0, 1].forEach(function (b) {
+      const dd = new Date(d0.getFullYear(), d0.getMonth() - b, 1), nm = dd.getFullYear() + '년 ' + (dd.getMonth() + 1) + '월', mi = root.getFoldersByName(nm);
+      if (!mi.hasNext()) return;
+      const it = mi.next().getFolders();
+      while (it.hasNext()) { const f = it.next(), fs = f.getFilesByType(MimeType.GOOGLE_SHEETS), sn = []; while (fs.hasNext()) sn.push(fs.next().getName()); if (endN(f.getName()) || sn.some(endN)) num.push(nm + ' | ' + f.getName() + ' → ' + sn.join(' / ') + ' (…' + f.getId().slice(-6) + ')'); }
+    });
+    out.fnum = num.slice(0, 80);
   } catch (e) { out.fnmErr = String(e); }
   if (p.mfold) try {
     const mf = monthFolder_(new Date()), it = mf.getFolders(), by = {};
@@ -2209,7 +2225,7 @@ function createRunInner_(d) {
     if (!(runDay0 instanceof Date) || runDay0 <= new Date()) form.setAcceptingResponses(true);
   } else {
     // 이름 규칙: 방제에서 날짜 뺀 것. 오리컴퍼니 폴더 안에 의뢰마다 같은 이름의 하위 폴더
-    const fname = sheetName_(d.fname || d.title);
+    const fname = sheetName_(d.fname || d.title, d.daily);
     let mf; try { mf = monthFolder_(/^\d{4}-\d{2}-\d{2}$/.test(String(d.date || '')) ? new Date(d.date + 'T00:00:00') : dayFromTitle_(d.title)); } catch (e) { mf = rootFolder_(); }
     // 같은 이름의 빈 폴더(만들다 실패한 진행이 남긴 것)가 있으면 그걸 씀 (11/17: 전기면도기 폼 만들기가 실패할 때마다 빈 폴더가 하나씩 쌓여 '(1)~(10)'이 생겼음)
     folder = null;
