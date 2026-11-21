@@ -2876,7 +2876,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         var acc = subjAcc(s.id), L = lightOf(acc);
         lh += '<span class="rt-lt ' + L.c + '" title="' + esc(s.n) + ' ' +
           (acc ? acc.a + '문제 · 정답률 ' + L.p : '기록 없음') + '">' +
-          '<i>' + L.t + '</i>' + esc(s.n) + (L.p ? '<em>' + L.p + '</em>' : '') + '</span>';
+          '<span class="rt-ltn"><i>' + L.t + '</i>' + esc(s.n) + '</span>' +
+          (L.p ? '<em>' + L.p + '</em>' : '') + '</span>';
       });
       lt.innerHTML = lh;
     }
