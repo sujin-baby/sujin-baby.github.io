@@ -3838,7 +3838,12 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   /* 고른 과목(형사법·경찰학·범죄학) 자료만 */
   function libGroups() {
     var nm = SUBJ[S.subj] ? SUBJ[S.subj].name : '';
-    return LIB.filter(function (g) { return nm && (g.sub.indexOf(nm) === 0 || g.sub.indexOf('공통') === 0); });
+    return LIB.filter(function (g) {
+      if (!nm) return false;
+      if (g.sub.indexOf(nm) === 0) return true;
+      /* 공통(기출) 묶음은 경찰 과목에만 — 지텔프 자료실은 김준기 자료만 */
+      return nm !== '지텔프' && g.sub.indexOf('공통') === 0;
+    });
   }
   function libRow(it) {
     var kc = it.k === '해설' ? 'a' : 'q';
@@ -3852,7 +3857,10 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var groups = libGroups();
     var h = '<a class="lib-all" href="' + LIB_FOLDER + '" target="_blank" rel="noopener">' +
       '<b>📂 구글 드라이브 폴더 전체 열기</b><i>미래인재경찰 자료실 ↗</i></a>' +
-      '<p class="lib-sub">내 드라이브(jinleeda1@gmail.com)에만 있는 파일이라, 폰의 구글 계정이 같아야 바로 열려요. 2026년 2차 통합 시험지는 <b>헌법 1~20번을 뺀 편집본</b>만 올렸어요.</p>';
+      '<p class="lib-sub">내 드라이브(jinleeda1@gmail.com)에만 있는 파일이라, 폰의 구글 계정이 같아야 바로 열려요. ' +
+      (s && s.id === 'gtelp'
+        ? '김준기 강좌 자료는 <b>문제지 원문만</b> 올렸고, 정답·해설은 앱 문항(모의고사·누적 복습·검색)에서 봐요.'
+        : '2026년 2차 통합 시험지는 <b>헌법 1~20번을 뺀 편집본</b>만 올렸어요.') + '</p>';
     if (!groups.length) {
       h += '<div class="lib-group"><div class="lib-gh">' + esc(s ? s.name : '') + ' <span>0개</span></div>' +
         '<p class="lib-sub">' + esc(s ? s.name : '지금 과목') + ' 자료는 아직 없어요. 자료실은 형사법·경찰학·범죄학 강의 자료와 지텔프(김준기) 자료를 모아 둬요.</p></div>';
