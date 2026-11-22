@@ -850,15 +850,15 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     { g: 'should 생략 3', tip: 'that 절 동사 자리가 빈칸이면 (should) 생략형 — 동사원형(또는 be동사원형)이 정답이에요.', rows: [
       ['3', "'주요명제결충'과 관련된 동사·명사·형용사", 'that 절에 동사원형']
     ] },
-    { g: '시제 4~10', tip: '오답 POINT: for가 나왔다고 무조건 완료진행이 아니라 for+시간일 때만 정답, since 뒤에 과거시점이 오면 현재완료진행도 가능해요. 켈리쌤 진팁: ing만 정답인 문제가 꼭 나오고, 진행형 6종이 한 문제씩 출제돼요.',
+    { g: '시제 4~10', tip: '단서 단어 뜻: now·right now·at the moment·as of this moment = 지금 이 순간 / then = 그때 / up until then = 그때까지 / by then·by the time = 그때쯤·~할 때까지 / until = ~까지 / for + 기간 = ~동안 / since = ~부터(과거 출발점) / ago = ~전에\n오답 POINT: for가 나왔다고 무조건 완료진행이 아니라 for+시간일 때만 정답, since 뒤에 과거시점이 오면 현재완료진행도 가능해요.\n7번 until은 뒤에 현재(미래 얘기) / 8번 until은 뒤에 과거 시점(then=그때 등)이 와요 — 둘 다 until이지만 뒤에 오는 시제로 갈려요.\n켈리쌤 진팁: ing만 정답인 문제가 꼭 나오고, 진행형 6종이 한 문제씩 출제돼요.',
       rows: [
-      ['4', '주절 과거 + while 과거', 'while절 was / were ~ing'],
-      ['5', 'when 과거 + 주절 빈칸', 'was / were ~ing'],
-      ['6', '현재 힌트 [now, right now, at the moment]', 'am / are / is ~ing'],
-      ['7', '미래 힌트 [tomorrow, next~, by] · by the time·if·when·until·as soon as 절은 현재', 'will be ~ing'],
-      ['8', '과거 힌트 [yesterday, ago, last~] + for·since·before·until 과거 시점', 'had been ~ing'],
-      ['9', '현재 힌트 [now, right now] + for, since', 'has / have been ~ing'],
-      ['10', '미래 힌트 [tomorrow, next~, by, by the time] + for, since', 'will have been ~ing']
+      ['4', '주절 과거 + while(=~하는 동안) 과거', 'while절 was / were ~ing'],
+      ['5', 'when(=~했을 때) 과거 + 주절 빈칸', 'was / were ~ing'],
+      ['6', '현재 힌트 [now=지금, right now=바로 지금, at the moment=지금 이 순간]', 'am / are / is ~ing'],
+      ['7', '미래 힌트 [tomorrow=내일, next~=다음~, by=~까지] · by the time=~할 때쯤 · until 뒤에 현재(미래 얘기) · by the time·if·when·until·as soon as 절은 현재', 'will be ~ing'],
+      ['8', '과거 힌트 [yesterday=어제, ago=~전에, last~=지난~] · before=~하기 전에 · until 뒤에 과거 시점(then=그때, 과거동사)', 'had been ~ing'],
+      ['9', '현재 힌트 [now, right now] + for=~동안, since=~부터', 'has / have been ~ing'],
+      ['10', '미래 힌트 [tomorrow, next~, by, by the time=~할 때쯤] + for=~동안, since=~부터', 'will have been ~ing']
     ] },
     { g: '준동사 11~20', tip: '오답 POINT: allow, advise, encourage, recommend, require는 목적어와 목적보어의 준동사 형태가 달라요(be caught 뒤는 동명사). 켈리쌤 진팁: ing와 to부정사로 선지를 엇갈리게 내고, ing 3문제·to부정사 3문제가 나와요.',
       rows: [
