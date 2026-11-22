@@ -59,5 +59,27 @@ ok(c2 && c2.headWords.indexOf('고당도') < 0, '수식어(고당도)는 상표 
   ok(m.h.indexOf('한담원') >= 0 && m.h.indexOf('최상brick') >= 0 && m.w.indexOf('콜라비') >= 0 && m.w.indexOf('황금향') >= 0 && m.b.indexOf('가짜과일') >= 0, '쌓임 ' + JSON.stringify(m));
   ok(JSON.parse(env.__props.get('RVPRODW_SZ')).h.indexOf('한담원') >= 0, '속성에 저장');
 }
+// 5) 같은 사진: rvDupIn_ (크기·내용 같으면 true), seolDup1_ (종류 폴더 안 겹친 사진은 한 장만)
+{
+  const it = a => { let i = 0; return { hasNext: () => i < a.length, next: () => a[i++] }; };
+  let n = 0; const moved = [];
+  const pic = (name, body) => { const id = 'f' + (++n); return { id, name, body, getId: () => id, getName: () => name, getSize: () => body.length, getMimeType: () => 'image/jpeg', getBlob: () => ({ getBytes: () => Array.from(Buffer.from(body)) }), moveTo(d) { moved.push(name + '→' + d.getName()); } }; };
+  const dir = (name, files, kids) => { const f = { name, files: files || [], kids: kids || [], getName: () => name, getFiles: () => it(f.files), getFolders: () => it(f.kids), getParents: () => it(f.par ? [f.par] : []), createFolder(nm) { const c = dir(nm); f.kids.push(c); return c; } }; (kids || []).forEach(k => { k.par = f; }); return f; };
+  const enc = s => Array.from(Buffer.from(s));
+  env.Utilities.computeDigest = (a, bytes) => enc(require('crypto').createHash('md5').update(Buffer.from(bytes)).digest('hex'));
+  const a1 = pic('10.jpeg', 'AAAA'), a2 = pic('10.jpeg', 'AAAA'), b1 = pic('11.jpeg', 'BBBB'), c1 = pic('14.jpeg', 'CCCC'), c2 = pic('14.jpeg', 'CCCC'), d1 = pic('99.jpeg', 'DDDD'), e1 = pic('98.jpeg', 'DDDE');
+  const photo = dir('포토 (4개)', [a1, b1, a2]), text = dir('텍스트 (2개)', [c1, c2, e1]);
+  const img = dir('리뷰이미지', [], [photo, text]), parent = dir('#택 가짜과일 설향딸기외', [], [img]);
+  env.__img2 = img;
+  ok(G('rvDupIn_')(pic('new.jpeg', 'BBBB'), img) === true && G('rvDupIn_')(pic('new2.jpeg', 'ZZZZ'), img) === false && G('rvDupIn_')(d1, img) === false, 'rvDupIn_');
+  env.__ss.sheets['진행목록'] = new H.Sheet('진행목록', [LH.slice(), mk({ '진행일': day(-3), '명단 제목': '#택1.1 오늘과일 설향딸기외20 (뽀짝오리)', '시트ID': 'SD', '진행 상태': '진행중', '인원': 20 })]);
+  env.__props.set('RVIMG_SD', 'IMGD');
+  G("DriveApp.getFolderById = function () { return __img2; }; rvCountDirs_ = function () {};");
+  let e5 = ''; try { G('seolDup1_()'); } catch (e) { e5 = String(e.stack || e); }
+  ok(!e5, '오류5 ' + e5);
+  ok(moved.length === 2 && moved.every(m => /→같은 사진 \(압축 제외\)$/.test(m)) && moved.some(m => /^10\.jpeg/.test(m)) && moved.some(m => /^14\.jpeg/.test(m)), '겹친 2장만 ' + moved.join(','));
+  ok(/^✓ .* 같은 사진 2장/.test(String(env.__props.get('SEOLDUP1'))), '기록 ' + env.__props.get('SEOLDUP1'));
+  ok(parent.kids.some(k => k.name === '같은 사진 (압축 제외)'), '같은 사진 폴더는 리뷰이미지 밖(의뢰 폴더)');
+}
 console.log(fails.length ? 'XX 받는 곳 사진 의뢰 찾기 시험 실패:\n- ' + fails.join('\n- ') : '✓ 받는 곳 사진: 한 의뢰에만 있는 상표 먼저·사라진 상품명 기억 시험 통과');
 process.exit(fails.length ? 1 : 0);
