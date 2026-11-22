@@ -1206,7 +1206,27 @@ body.boss .quiz::before{content:"";position:absolute;inset:0;pointer-events:none
 .fb-sec.orig{background:rgba(150,140,215,.07);border-color:rgba(150,140,215,.22);border-style:dashed}
 .fb-sec.orig .fb-sec-k{background:#c9c1ee}
 .fb-sec.orig .fb-sec-b{font-size:13px;line-height:1.6;color:var(--ink3)}
-@media(max-width:390px){ .fb-sec{padding:9px 11px 10px} .fb-sec-b{font-size:13.5px;line-height:1.64} .fb-sec-ul li{font-size:13px} }
+/* 💡 연결어 3초 꿀팁 — 해석 카드 바로 밑(지텔프 Unit 07 · G-POINT 32~33) */
+.fb-tip{margin:0 0 11px;padding:11px 12px 12px;border-radius:12px;
+  background:linear-gradient(165deg,rgba(255,194,75,.12),rgba(255,194,75,.035));
+  border:1px solid rgba(255,194,75,.34)}
+.fb-tip-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 6px;font-size:12.5px;font-weight:900;
+  color:var(--gold);letter-spacing:-.2px;line-height:1.4;margin:0 0 9px}
+.fb-tip-h span{font-size:10px;font-weight:800;color:var(--ink3);letter-spacing:0}
+.fb-tip-g{display:grid;grid-template-columns:64px minmax(0,1fr);gap:7px 9px;align-items:start}
+.fb-tip-c{font-size:10px;font-weight:900;color:#1a1200;background:var(--gold);border-radius:7px;
+  padding:3px 4px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35}
+.fb-tip-t{margin:0;font-size:12.5px;line-height:1.62;color:var(--ink2);word-break:keep-all;overflow-wrap:anywhere}
+.fb-tip-t b{color:var(--ink);font-weight:900;letter-spacing:-.2px}
+.fb-tip-t i{font-style:normal;font-weight:900;color:var(--gold)}
+.fb-tip-t em{display:block;font-style:normal;font-size:10.5px;font-weight:700;color:var(--ink3);margin-top:1px}
+.fb-tip-sub{margin:11px 0 7px;padding-top:9px;border-top:1px dashed rgba(255,194,75,.3);
+  font-size:10.5px;font-weight:900;color:var(--ink3);letter-spacing:-.1px;line-height:1.5}
+.fb-tip-note{margin:9px 0 0;font-size:10.5px;line-height:1.6;color:var(--ink3);word-break:keep-all}
+.fb-tip-note b{color:var(--ink2);font-weight:800}
+@media(max-width:390px){ .fb-sec{padding:9px 11px 10px} .fb-sec-b{font-size:13.5px;line-height:1.64} .fb-sec-ul li{font-size:13px}
+  .fb-tip{padding:10px 11px 11px} .fb-tip-g{grid-template-columns:60px minmax(0,1fr);gap:7px 8px}
+  .fb-tip-t{font-size:12px;line-height:1.6} }
 .fb-head{font-size:15.5px;margin-bottom:9px}
 @media(max-width:390px){ .feedback{max-height:70vh;padding:14px 15px calc(12px + var(--safe-b))}
   .fb-text{font-size:14px;line-height:1.66} .fb-key{font-size:14.5px} }

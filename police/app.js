@@ -2548,6 +2548,31 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     });
   }
 
+  /* 💡 연결어 문제(지텔프 Unit 07 · G-POINT 32~33) 해석 카드 바로 밑에 붙는 '영포자용 3초 꿀팁'
+     · 수진 님 "이거다모르겠어 해석이랑푸는꿀팁좀줘" → 뜻을 다 몰라도 자리·방향만으로 풀리게
+     · 일반 문제 피드백과 미니 모의고사 채점 해설이 같은 expHtml을 쓰므로 한 곳에만 넣으면 둘 다 나온다 */
+  function isConQ(q) {
+    return !!q && q.s === 'gtelp' && (q.gp === 32 || q.gp === 33 || q.u === 6);
+  }
+  function conTipHtml() {
+    var row = function (k, t) { return '<div class="fb-tip-c">' + k + '</div><div class="fb-tip-t">' + t + '</div>'; };
+    return '<div class="fb-tip">' +
+      '<div class="fb-tip-h">💡 연결어 3초 꿀팁<span>해석 안 하고 자리만 봐도 절반은 풀려요</span></div>' +
+      '<div class="fb-tip-g">' +
+        row(', 콤마', '<i>접속부사</i> <b>Nevertheless</b> 그럼에도 · <b>However</b> 하지만 · <b>In addition</b> 게다가 · <b>As a result</b> 그 결과 · <b>For example</b> 예를 들어<em>Despite · Although이 오면 이 자리에서는 탈락</em>') +
+        row('명사만', '<i>전치사</i> <b>Despite</b> ~에도 불구하고<em>뒤에 주어+동사가 오면 탈락</em>') +
+        row('주어+동사', '<i>접속사</i> <b>Although · Even though</b> 비록 ~일지라도 · <b>While</b> ~인 반면에 · <b>Supposing that</b> 만약 ~라면(=If)') +
+      '</div>' +
+      '<div class="fb-tip-sub">접속부사가 둘 이상이면 — 앞뒤 방향만</div>' +
+      '<div class="fb-tip-g">' +
+        row('반대', '<b>Nevertheless · However</b><em>not·no·never·don’t·didn’t·can’t·without 또는 + ↔ -</em>') +
+        row('같은 방향', '<b>As a result · Therefore · In addition</b><em>- → - , + → + (하나 더 보탤 때 In addition)</em>') +
+        row('A, B, C', '<b>For example</b><em>쉼표로 나열된 예시가 보이면</em>') +
+      '</div>' +
+      '<p class="fb-tip-note">시험장에서는 <b>① 자리 → ② 방향</b>만 보세요. 뜻을 다 몰라도 답이 나와요.</p>' +
+      '</div>';
+  }
+
   function expHtml(q, it) {
     var raw = String(q.e || '').replace(/\r/g, '').trim();
     if (!raw) return '<span class="fb-empty">해설이 아직 없어요.</span>';
@@ -2581,6 +2606,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     });
     var isPol = q.s !== 'gtelp';
     var T = function (s) { return isPol ? hlText(s) : esc(s); };
+    var tip = isConQ(q) ? conTipHtml() : '', tipDone = false;
     var h = '';
     if (chip) h += '<div class="fb-gp">📘 ' + esc(chip) + '</div>';
     if (isPol) h += '<div class="fb-legend">빨간 <span class="hl-trap">함정 표현</span> · 노란 <span class="hl-num">숫자·기간</span> 먼저 확인</div>';
@@ -2629,6 +2655,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
           (kb ? '<p class="fb-sec-b">' + T(kb) + '</p>' : '') +
           (kli.length ? '<ul class="fb-sec-ul">' + kli.map(function (x) { return '<li>' + T(x) + '</li>'; }).join('') + '</ul>' : '') +
           '</div>';
+        /* 연결어 문항은 해석 카드 바로 밑에 꿀팁 (원문 카드보다 위) */
+        if (tip && !tipDone && bk.k === '해석') { h += tip; tipDone = true; }
         return;
       }
       var s = bk.t;
@@ -2646,13 +2674,18 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       else if (i === 0) h += '<p class="fb-key">' + T(s) + '</p>';
       else h += '<p class="fb-p">' + T(s) + '</p>';
     });
-    if (tr) h += '<div class="fb-tr"><b>해석</b>' + esc(tr) + '</div>';
+    if (tr) {
+      h += '<div class="fb-tr"><b>해석</b>' + esc(tr) + '</div>';
+      if (tip && !tipDone) { h += tip; tipDone = true; }
+    }
     if (orig) {
       var o2hit = { on: false };
       var origFixed = origTextFix(orig, omap, o2hit);
       h += '<div class="fb-sec orig"><div class="fb-sec-k">' + (o2hit.on ? '켈리 답지 원문 · 현재 보기 기준' : '켈리 답지 원문') + '</div>' +
         '<p class="fb-sec-b">' + esc(origFixed) + '</p></div>';
     }
+    /* 해석 카드가 없는 연결어 문항은 피드백 맨 아래(출처 위)에 붙인다 */
+    if (tip && !tipDone) { h += tip; tipDone = true; }
     if (src) h += '<div class="fb-src">' + esc(src) + '</div>';
     return h;
   }
