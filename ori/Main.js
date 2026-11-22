@@ -1998,7 +1998,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3793,6 +3793,7 @@ function checkFullInner_() {
       try { obClear2_(); } catch (e) {}
       try { seolKol1_(); } catch (e) {}
       try { seolDup1_(); } catch (e) {}
+      try { starFix1_(); } catch (e) {}
       try { if (!props.getProperty('EDITC1')) { ensureEditTab_(); props.setProperty('EDITC1', Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm')); } } catch (e) { note_('폼수정 날짜 칸 실패: ' + e); }   // (11/18 한 번) C1 날짜 고르기 바로 (정리가 밀려 늦게 생기던 것)
       try { upAcctOpen1_(); } catch (e) {}
       try { exp135_(); } catch (e) {}
@@ -9324,6 +9325,30 @@ function stuckTodoDel1_() {
 // (11/21 한 번, 사용자 "저거는 오늘과일 설향딸기외 폴더로 가야해") '어느 의뢰인지 모름'의 '한담원 제주 콜라비' 리뷰 사진(11/19, 5장) → 설향딸기외 리뷰이미지 종류 폴더로
 //  설향딸기외의 토스 콜라비 상품명이 공지에서 사라져 과일쏙·온드프레시 콜라비와 동점이었음. 사진 설명(AI)으로 종류 폴더를 정함 (받는 곳 나누기와 같은 길)
 // (11/22 한 번) seolKol1_이 옮긴 콜라비 5장이 설향딸기외 리뷰이미지에 이미 있던 같은 사진과 겹침 → 종류 폴더 안 같은 사진(MD5)은 한 장만 남기고 '같은 사진 (압축 제외)'로
+// (11/22 한 번, 사용자 "청솔농장 포기김치 리뷰이미지 텍스트도 왜 다 별점에 가 있어?") 업체에 안 보낸 의뢰 중 의뢰서에 별점리뷰가 없는 의뢰의 '별점' 폴더 사진 → 글 다시 묻기, 글 있으면 텍스트로
+//  한 번에 60초까지, 남으면 다음 확인에서 이어서 (사진 설명 recheck 표시로 다시 안 물음)
+function starFix1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('STARFIX1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3 || !geminiKey_()) return;
+  try {
+    const runs = readRuns_(), by = {}, cut = today_().getTime() - 40 * 86400000;
+    runs.forEach(function (r) { const sid = String(r['시트ID'] || ''); if (sid && r['진행일'] instanceof Date && r['진행일'].getTime() >= cut) (by[sid] = by[sid] || []).push(r); });
+    const t0 = Date.now(), log = String(props.getProperty('STARFIX1_LOG') || ''), add = [];
+    let left = 0;
+    Object.keys(by).forEach(function (sid) {
+      const mine = by[sid], imgId = props.getProperty('RVIMG_' + sid);
+      if (!imgId || rvSentAny_(mine) || !rvNoStar_(sid, mine)) return;
+      if (Date.now() - t0 > 60000) { left++; return; }
+      const img = DriveApp.getFolderById(imgId), r = rvStarRecheck_(img, Math.max(5000, 60000 - (Date.now() - t0)));
+      left += r.left;
+      if (r.moved) { try { rvCountDirs_(img, rvCartOf_(sid)); } catch (e) {} props.setProperty('RVZIPSOON_' + sid, String(Date.now())); add.push(campOf_(mine[0]['명단 제목']) + ' ' + r.moved + '장'); }
+    });
+    const nl = (log + (add.length ? (log ? ' / ' : '') + add.join(' / ') : '')).slice(-1500);
+    if (add.length) props.setProperty('STARFIX1_LOG', nl);
+    props.setProperty('STARFIX1', left ? '진행 중 (남은 ' + left + ') ' + nl.slice(-300) : '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 별점 → 텍스트: ' + (nl || '옮긴 것 없음'));
+    if (add.length) note_('✓ 별점 폴더 글 다시 확인 → 텍스트: ' + add.join(', '));
+  } catch (e) { props.setProperty('STARFIX1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
 function seolDup1_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SEOLDUP1') || '');
   if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
@@ -9889,6 +9914,36 @@ function rvPhotoFix1_() {
     if (moved.length) note_('✓ 포토리뷰 없는 의뢰의 포토 폴더 사진 → 텍스트로: ' + moved.join(', '));
   } catch (e) { props.setProperty('RVPHOTOFIX1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
+// 글 다시 묻기: 리뷰 작성자가 직접 쓴 본문 글이 있는지만 (쿠팡 '맛 만족해요' 같은 선택 문구 말고). 모르면 null
+//  (11/22 청솔농장 포기김치: 의뢰서는 텍스트 17·포토 3인데 AI가 글 있는 리뷰를 다 '별점'으로 봄)
+function geminiTextAgain_(blob) {
+  const t = geminiAsk_([{ text: '쇼핑몰 리뷰 캡처예요. 리뷰 작성자가 직접 입력한 리뷰 본문 글(한 문장 이상, 잘려서 "더보기"로 끝나도 됨)이 보이나요? "맛 만족해요"·"양 적당해요"처럼 고르는 선택 문구, 상품명·옵션·판매자 글은 본문이 아니에요. JSON 하나로만 답하세요: {"written": true 또는 false}' }, { inline_data: { mime_type: String(blob.getContentType() || 'image/jpeg'), data: Utilities.base64Encode(blob.getBytes()) } }], true);
+  const m = String(t).match(/"written"\s*:\s*(true|false)/);
+  return m ? m[1] === 'true' : null;
+}
+// 의뢰서에 별점리뷰가 없는 의뢰인지 (생성기 리뷰 정보 RV_ 기준, 모르면 false)
+function rvNoStar_(sid, mine) { let e = null; try { e = rvExpect_(sid, mine || []); } catch (x) {} return !!(e && e['별점'] === 0 && (e['텍스트'] + e['포토']) > 0); }
+// 별점리뷰가 없는 의뢰의 '별점' 폴더 사진을 글 다시 묻기로 확인 → 글이 있으면 '텍스트'로 (사진 설명에 recheck 표시, 다시 안 물음). 돌려줌: { moved, left }
+function rvStarRecheck_(img, budgetMs) {
+  const t0 = Date.now(), out = { moved: 0, left: 0 };
+  let star = null, text = null; const di = img.getFolders();
+  while (di.hasNext()) { const f = di.next(), t = rvTypeOf_(f.getName()); if (t === '별점') star = f; else if (t === '텍스트') text = f; }
+  if (!star) return out;
+  const it = star.getFiles();
+  while (it.hasNext()) {
+    const x = it.next(); let o = null;
+    try { const ds = String(x.getDescription() || ''); if (/^AI \{/.test(ds)) o = JSON.parse(ds.slice(3)); } catch (e) {}
+    if (!/^image\//.test(x.getMimeType()) || (o && o.recheck)) continue;
+    if (Date.now() - t0 > budgetMs) { out.left++; continue; }
+    let w = null; try { w = geminiTextAgain_(x.getBlob()); } catch (e) { if (e && e.quota) { out.left++; break; } }
+    o = o || { kind: 'review', stars: 0, text: false, photo: false, product: '', site: '' };
+    o.recheck = 1; if (w === true) o.text = true;
+    try { x.setDescription('AI ' + JSON.stringify(o)); } catch (e) {}
+    if (w === true) { text = text || rvSubDir_(img, '텍스트'); x.moveTo(text); out.moved++; }
+    Utilities.sleep(1500);
+  }
+  return out;
+}
 // 포토 다시 묻기: 참여자가 리뷰에 직접 붙인 사진이 있는지만 (상품명 옆 작은 대표 썸네일은 빼고). 모르면 null
 function geminiPhotoAgain_(blob) {
   const t = geminiAsk_([{ text: '쇼핑몰 리뷰 캡처예요. 리뷰 작성자가 리뷰에 직접 첨부한 사진(본문 위아래나 별점 아래의 사진 타일, 보통 1장 이상 크게 보임)이 있나요? 화면 맨 위 상품명 옆에 있는 작은 상품 대표 썸네일 하나는 첨부 사진이 아니에요. JSON 하나로만 답하세요: {"attached": true 또는 false}' }, { inline_data: { mime_type: String(blob.getContentType() || 'image/jpeg'), data: Utilities.base64Encode(blob.getBytes()) } }], true);
@@ -10003,6 +10058,7 @@ function rvAiSort_(f, sid, props) {
   });
   if (Number(props.getProperty('GEMINI_WAIT') || 0) > Date.now()) { setQ(left.length > 0); return left.length; }
   const noPhoto = rvNoPhoto_(sid, props);
+  let noStar = false; try { noStar = rvNoStar_(sid, readRuns_().filter(function (r) { return String(r['시트ID']) === String(sid); })); } catch (e) {}
   const t0 = Date.now();
   let done = 0, moved = {};
   for (let i = 0; i < left.length; i++) {
@@ -10023,6 +10079,8 @@ function rvAiSort_(f, sid, props) {
     // 의뢰서에 포토리뷰가 없는 의뢰에서 AI가 포토라고 하면 한 번 더 물어봄 (상품 썸네일을 첨부 사진으로 잘못 보는 일, 11/16 더호 차량용 거치대).
     //  무조건 텍스트로 보내지 않음: 의뢰서에 없어도 참여자가 사진을 붙이는 일이 있음 (11/16 과일쏙 못난이사과외 포토리뷰가 텍스트로 감)
     if (noPhoto && o.kind === 'review' && o.photo) { try { if (geminiPhotoAgain_(x.getBlob()) === false) o.photo = false; } catch (e) {} }
+    // 의뢰서에 별점리뷰가 없는데 AI가 글 없음(별점)이라고 하면 글이 있는지 한 번 더 (11/22 청솔농장). 무조건 텍스트로 안 보냄: 정말 별점만 남긴 사람은 별점에 남아야 확인됨
+    if (o.kind === 'review' && !o.photo && !o.text && noStar) { o.recheck = 1; try { if (geminiTextAgain_(x.getBlob()) === true) o.text = true; } catch (e) {} }
     const d = rvAiDir_(o);
     try { x.setDescription('AI ' + JSON.stringify(o)); } catch (e) {}
     x.moveTo(dirOf(d));
@@ -10225,6 +10283,10 @@ function rvInboxSort_(runs) {
     if (!c) { put(x, sub(inbox, RV_INBOX_UNKNOWN)); unknown++; }
     else {
       const img = c.img = c.img || DriveApp.getFolderById(c.imgId);
+      if (o.kind === 'review' && !o.photo && !o.text && !o.recheck && c.sid) {
+        if (c.noStar === undefined) { try { const rr = runs || readRuns_(); c.noStar = rvNoStar_(c.sid, rr.filter(function (r) { return String(r['시트ID']) === String(c.sid); })); } catch (e) { c.noStar = false; } }
+        if (c.noStar) { o.recheck = 1; try { if (geminiTextAgain_(x.getBlob()) === true) o.text = true; } catch (e) {} try { x.setDescription('AI ' + JSON.stringify(o)); } catch (e) {} }
+      }
       const dn = rvAiDir_(o);
       let home = img; if (RV_SKIP_RE.test(dn)) { try { const pp = img.getParents(); if (pp.hasNext()) home = pp.next(); } catch (e) {} }
       let dup = false; try { dup = rvDupIn_(x, img); } catch (e) {}
