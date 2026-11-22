@@ -2328,6 +2328,8 @@ function createRunInner_(d) {
   // 생성기가 넘긴 리뷰 정보(상품별 리뷰 종류·개수, 리뷰 안내, 공지 종류)를 의뢰(명단 시트)마다 저장 → 리뷰 배정 페이지가 씀
   // 상품 페이지 주소 (한눈에 탭 '상품' 칸 링크)
   if (d.urls) { try { PropertiesService.getScriptProperties().setProperty('PURL_' + ss.getId(), String(d.urls).slice(0, 2000)); } catch (e) {} }
+  // 그날 공지의 상품 낱말을 의뢰마다 쌓아 둠 (일부 상품이 먼저 끝나 공지에서 빠져도 리뷰 사진을 이 의뢰로, 11/21 설향딸기외 토스 콜라비)
+  try { rvProdRemember_(ss.getId(), d.desc); } catch (e) {}
   // 장바구니건 (10/28): 한 사람이 상품 N개를 한 번에. 진행목록 인원·총건수는 사람, 방 제목·명단 시트 이름·한눈에·월급시트 건수는 물건 수(사람 × N)
   if (Number(d.cart) > 1) { try { PropertiesService.getScriptProperties().setProperty('CART_' + ss.getId(), String(Number(d.cart))); globalThis.__CARTMAP = null; } catch (e) {} }
   // 썸네일 주소·카톡방 링크 (생성기가 넘기면): 보낼 메시지함 방 공지 옆 사진, [이 방 열기] (10/30)
@@ -10044,29 +10046,43 @@ function rvPendingCamps_(runs, props) {
       try { props.setProperty('RVOPTW_' + sid, JSON.stringify(ow)); } catch (e) {}
     }
     ow.w.forEach(function (w) { words[w] = 1; });
-    const brandW = {}, headW = {};
+    const brandW = {}, headW = {}, descs = [];
     mine.forEach(function (r) {
       rvWords_(campOf_(r['명단 제목']).replace(/외(?=\s|\d|$)/g, ' ')).forEach(function (w) { words[w] = 1; nameW[w] = 1; });   // '효자손외' → '효자손' (11/3: '외'가 붙어 캡처 속 '효자손'과 안 맞았음)
-      String(formDescRead_(r['폼ID'], descAge_(r))).split('\n').forEach(function (l) {
-        if (!/상품명|키워드|판매처/.test(l)) return;
-        const ws = rvWords_(l.replace(/^.*?[:：]/, ''));
-        ws.forEach(function (w) { words[w] = 1; });
-        // 상표: 판매처 낱말 전부, 상품명 첫 낱말 (11/21 '한담원 제주 콜라비' — 다른 콜라비 의뢰와 가르는 말)
-        if (/판매처/.test(l)) ws.forEach(function (w) { if (!RV_HEAD_STOP.test(w) && !/^(쿠팡|네이버|스마트스토어|토스|로켓|로켓배송|판매자로켓|공식|공식몰|스토어|마켓)$/.test(w)) brandW[w] = 1; }); else if (/상품명/.test(l) && ws[0] && !RV_HEAD_STOP.test(ws[0])) headW[ws[0]] = 1;
-      });
+      descs.push(String(formDescRead_(r['폼ID'], descAge_(r))));
     });
-    // 지금 공지에 없어진 상품도 기억 (11/21 설향딸기외: 공지가 쿠팡 상품으로 바뀌어 먼저 한 토스 콜라비 상품명이 사라져 다른 콜라비 의뢰와 동점)
-    let pm = null; try { pm = JSON.parse(all['RVPRODW_' + sid] || 'null'); } catch (e) {}
-    pm = pm && pm.w ? pm : { w: [], b: [], h: [] };
-    const addTo = function (arr, ks, cap) { ks.forEach(function (k) { if (arr.indexOf(k) < 0) arr.push(k); }); return arr.slice(-cap); };
-    const nw = addTo(pm.w.slice(), Object.keys(words).filter(function (w) { return !nameW[w]; }), 120), nb = addTo((pm.b || []).slice(), Object.keys(brandW), 30), nh = addTo((pm.h || []).slice(), Object.keys(headW), 30);
-    if (nw.length !== pm.w.length || nb.length !== (pm.b || []).length || nh.length !== (pm.h || []).length) { try { props.setProperty('RVPRODW_' + sid, JSON.stringify({ w: nw, b: nb, h: nh })); } catch (e) {} }
-    nw.forEach(function (w) { words[w] = 1; }); nb.forEach(function (w) { brandW[w] = 1; }); nh.forEach(function (w) { headW[w] = 1; });
+    // 지금 공지 + 예전 공지에 있던 상품(먼저 끝난 상품)까지 (11/21 설향딸기외: 공지가 쿠팡 상품으로 바뀌어 먼저 한 토스 콜라비 상품명이 사라져 다른 콜라비 의뢰와 동점)
+    const pm = rvProdRemember_(sid, descs.join('\n'), all['RVPRODW_' + sid]);
+    pm.w.forEach(function (w) { words[w] = 1; }); pm.b.forEach(function (w) { brandW[w] = 1; }); pm.h.forEach(function (w) { headW[w] = 1; });
     out.push({ sid: sid, name: campOf_(mine[0]['명단 제목']), imgId: imgId, words: Object.keys(words), nameWords: Object.keys(nameW), brandWords: Object.keys(brandW), headWords: Object.keys(headW), day: mine.reduce(function (m, r) { return Math.max(m, r['진행일'].getTime()); }, 0) });
   });
   return out;
 }
 // 캡처 속 상품 이름 → 의뢰 (낱말이 가장 많이 겹치는 의뢰, 같으면 못 정함). 압축 기다리는 의뢰가 하나뿐이면 그 의뢰
+// 공지(폼 설명)의 상품명·키워드·판매처 줄 낱말 → { w: 낱말, b: 판매처(상표), h: 상품명 첫 낱말(산지·수식어 빼고) }
+function rvProdWordsOf_(text) {
+  const w = {}, b = {}, h = {};
+  String(text || '').split('\n').forEach(function (l) {
+    if (!/상품명|키워드|판매처/.test(l)) return;
+    const ws = rvWords_(l.replace(/^.*?[:：]/, ''));
+    ws.forEach(function (x) { w[x] = 1; });
+    // 상표: 판매처 낱말 전부, 상품명 첫 낱말 (11/21 '한담원 제주 콜라비' — 다른 콜라비 의뢰와 가르는 말)
+    if (/판매처/.test(l)) ws.forEach(function (x) { if (!RV_HEAD_STOP.test(x) && !/^(쿠팡|네이버|스마트스토어|토스|로켓|로켓배송|판매자로켓|공식|공식몰|스토어|마켓)$/.test(x)) b[x] = 1; });
+    else if (/상품명/.test(l) && ws[0] && !RV_HEAD_STOP.test(ws[0])) h[ws[0]] = 1;
+  });
+  return { w: Object.keys(w), b: Object.keys(b), h: Object.keys(h) };
+}
+// 의뢰(명단 시트)마다 공지에 나왔던 상품 낱말을 쌓아 둠 (RVPRODW_<시트ID>) — 한 의뢰서에서 일부 상품이 먼저 끝나 공지에서 빠져도 리뷰 사진을 그 의뢰로 (11/21 사용자)
+//  진행 만들 때(그날 공지)와 받는 곳 사진 나눌 때 부름. raw: 이미 읽은 속성 값(없으면 읽음). 돌려주는 값 = 쌓인 전체
+function rvProdRemember_(sid, text, raw) {
+  const props = PropertiesService.getScriptProperties(), k = 'RVPRODW_' + sid;
+  let pm = null; try { pm = JSON.parse(raw !== undefined ? raw || 'null' : props.getProperty(k) || 'null'); } catch (e) {}
+  pm = pm && pm.w ? { w: pm.w, b: pm.b || [], h: pm.h || [] } : { w: [], b: [], h: [] };
+  const now = rvProdWordsOf_(text), add = function (arr, ks, cap) { const a = arr.slice(); ks.forEach(function (x) { if (a.indexOf(x) < 0) a.push(x); }); return a.slice(-cap); };
+  const nw = add(pm.w, now.w, 120), nb = add(pm.b, now.b, 30), nh = add(pm.h, now.h, 30);
+  if (sid && (nw.length !== pm.w.length || nb.length !== pm.b.length || nh.length !== pm.h.length)) { try { props.setProperty(k, JSON.stringify({ w: nw, b: nb, h: nh })); } catch (e) {} }
+  return { w: nw, b: nb, h: nh };
+}
 // 상품명 첫 낱말 중 상표로 안 보는 말: 산지·일반 수식어 (제주 콜라비·국내산 무 같은 것)
 const RV_HEAD_STOP = /^(유기농|무농약|친환경|햇|햇것|국내산|국산|국내|수입|산지직송|당일수확|당일출고|당일발송|정품|프리미엄|고당도|꿀|특품|특상품|특상|대과|가정용|선물용|제철|신선|무료배송|명품|최상급|최고급|냉장|냉동|제주|제주도|논산|청송|성주|나주|영주|충주|문경|상주|안동|의성|고흥|해남|완도|부산|대구|강원|경북|경남|전남|전북|충남|충북|하우스|노지)$|산$|인증$/;
 function rvMatchCamp_(product, camps) {

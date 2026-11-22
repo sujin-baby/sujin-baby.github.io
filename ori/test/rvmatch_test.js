@@ -50,5 +50,14 @@ ok(c2 && c2.headWords.indexOf('고당도') < 0, '수식어(고당도)는 상표 
   ok(moved.join(',') === 'k1.jpeg→포토 (3개),k2.jpeg→텍스트 (0개)', '옮긴 것 ' + moved.join(','));
   ok(/^✓ .* 2장 → #택1.1 오늘과일 설향딸기외20/.test(String(env.__props.get('SEOLKOL1'))), '기록 ' + env.__props.get('SEOLKOL1'));
 }
+// 4) 진행 만들 때 그날 공지 상품을 기억: 토스 날(콜라비) → 쿠팡 날(설향딸기·황금향)로 바뀌어도 한담원이 남음
+{
+  const src = require('fs').readFileSync(process.argv[2], 'utf8');
+  ok(/try \{ rvProdRemember_\(ss\.getId\(\), d\.desc\); \}/.test(src), '진행 만들 때 기억');
+  G("rvProdRemember_('SZ', '🐥판매처 : 가짜과일\\n🐥상품명 : 한담원 제주 콜라비 특상품 3kg\\n🐥★키워드 : 콜라비')");
+  const m = G("rvProdRemember_('SZ', '🐥판매처 : 가짜과일\\n🐥상품명 : [당도보장] 최상brick 고당도 제주 황금향')");
+  ok(m.h.indexOf('한담원') >= 0 && m.h.indexOf('최상brick') >= 0 && m.w.indexOf('콜라비') >= 0 && m.w.indexOf('황금향') >= 0 && m.b.indexOf('가짜과일') >= 0, '쌓임 ' + JSON.stringify(m));
+  ok(JSON.parse(env.__props.get('RVPRODW_SZ')).h.indexOf('한담원') >= 0, '속성에 저장');
+}
 console.log(fails.length ? 'XX 받는 곳 사진 의뢰 찾기 시험 실패:\n- ' + fails.join('\n- ') : '✓ 받는 곳 사진: 한 의뢰에만 있는 상표 먼저·사라진 상품명 기억 시험 통과');
 process.exit(fails.length ? 1 : 0);
