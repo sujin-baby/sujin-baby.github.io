@@ -2352,6 +2352,11 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (xpAvail() < HINT_COST) { toast('힌트권에는 ' + HINT_COST + ' P가 필요해요 · 지금 ' + xpAvail() + ' P'); return; }
     if (!spendXp(HINT_COST)) return;
     QS.hintUsed = true;
+    showHintCard(it, q);
+  }
+
+  /* 힌트 카드를 띄우고 그 문항에 사용 기록을 남긴다 — 일반 문제·미니 모의고사 공용 */
+  function showHintCard(it, q) {
     it.hintUsed = true;
     var h = hintFor(q);
     var box = $('#hintBox');
@@ -4426,7 +4431,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   function openMiniSheet() {
     var h = '<button class="sheet-close" data-close="1">✕</button>' +
       '<div class="sheet-num">실전 감각</div><div class="sheet-title">🎯 미니 모의고사</div>' +
-      '<div class="sheet-meta">타이머가 돌아가고, 푸는 동안에는 정답·해설이 뜨지 않아요. 끝나고 <b>제출 및 일괄 채점</b>을 누르면 총점·소요 시간·오답·문항별 해설을 한 번에 볼 수 있어요.</div>' +
+      '<div class="sheet-meta">타이머가 돌아가고, 푸는 동안에는 정답·해설이 뜨지 않아요. 힌트는 문항마다 <b>🎟️ 힌트 −30 P</b>로 볼 수 있어요. 끝나고 <b>제출 및 일괄 채점</b>을 누르면 총점·소요 시간·오답·문항별 해설을 한 번에 볼 수 있어요.</div>' +
       '<div class="mini-pick">';
     miniCfgs().forEach(function (c) {
       var best = (S.miniBest || {})[c.id];
@@ -4547,6 +4552,14 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (n < 0 || n >= MINI.items.length) return;
     MINI.i = n; renderMini(); sfx('tap');
   }
+  function miniUseHint() {
+    if (!MINI || MINI.over) return;
+    var it = MINI.items[MINI.i], q = it.q;
+    if (it.hintUsed) return;
+    if (xpAvail() < HINT_COST) { toast('힌트권에는 ' + HINT_COST + ' P가 필요해요 · 지금 ' + xpAvail() + ' P'); return; }
+    if (!spendXp(HINT_COST)) return;
+    showHintCard(it, q);
+  }
   function miniPick(i) {
     if (!MINI || MINI.over) return;
     var cur = MINI.i;
@@ -4568,8 +4581,9 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var badge = srcBadge(q), keys = ['A', 'B', 'C', 'D'];
     var done = MINI.items.filter(function (x) { return x.pick != null; }).length;
     var h = '<div class="q-tags"><span class="q-tag">' + esc(qTag(q)) + '</span>' +
-      '<span class="q-src ' + badge.k + '">' + esc(badge.t) + '</span></div>' +
-      stemHtml(q.q) + '<div class="opts mini-opts">';
+      '<span class="q-src ' + badge.k + '">' + esc(badge.t) + '</span>' +
+      '<button class="hint-btn" id="qHint">🎟️ 힌트 -' + HINT_COST + ' P</button></div>' +
+      stemHtml(q.q) + '<div id="hintBox"></div><div class="opts mini-opts">';
     q.o.forEach(function (o, i) {
       h += '<button class="opt' + (it.pick === i ? ' picked' : '') + '" data-i="' + i + '">' +
         '<span class="k">' + keys[i] + '</span><span>' + esc(o) + '</span></button>';
@@ -4589,6 +4603,14 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     $$('#qBody .opt').forEach(function (b) {
       b.onclick = function () { miniPick(Number(b.getAttribute('data-i'))); };
     });
+    /* 모의고사 중에도 힌트권 사용 가능 — 한 문항당 1회, 돌아와도 카드가 남는다 */
+    var mh = $('#qHint');
+    if (mh) mh.onclick = miniUseHint;
+    if (it.hintUsed && it.hintHtml) {
+      var mhbx = $('#hintBox');
+      if (mhbx) { mhbx.innerHTML = it.hintHtml; mhbx.classList.add('show'); }
+      if (mh) { mh.disabled = true; mh.textContent = '💡 힌트 확인함'; }
+    }
     $$('#qBody .omr-b').forEach(function (b) {
       b.onclick = function () { MINI.i = Number(b.getAttribute('data-j')); renderMini(); sfx('tap'); };
     });
