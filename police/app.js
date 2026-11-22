@@ -4387,10 +4387,37 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       return c && c.exam && (!sid || q.s === sid);
     });
   }
+  /* 지텔프 문법은 실제 시험 단원 출제 비율로 뽑는다 — Unit 01~07 = 6/2/6/6/2/2/2 (26문항) */
+  var GT_MIX = [6, 2, 6, 6, 2, 2, 2];
+  function gtMix(n) {
+    var tot = GT_MIX.reduce(function (a, b) { return a + b; }, 0);
+    if (n === tot) return GT_MIX.slice();
+    /* 다른 개수는 같은 비율을 정수로 맞춰 축소한다(최대 잔여 방식) */
+    var raw = GT_MIX.map(function (q) { return q * n / tot; });
+    var out = raw.map(function (x) { return Math.floor(x); });
+    var left = n - out.reduce(function (a, b) { return a + b; }, 0);
+    raw.map(function (x, i) { return { i: i, r: x - out[i] }; })
+      .sort(function (a, b) { return b.r - a.r; })
+      .forEach(function (o, k) { if (k < left) out[o.i]++; });
+    return out;
+  }
+  function gtPick(n) {
+    var pool = D.questions.filter(function (q) { return q.s === 'gtelp' && q.gp; });
+    var byU = {};
+    pool.forEach(function (q) { (byU[q.u] = byU[q.u] || []).push(q); });
+    var picked = [];
+    gtMix(n).forEach(function (k, u) { if (k > 0) picked = picked.concat(qs(byU[u] || [], k)); });
+    /* 단원 보유 문항이 모자라면 다른 단원의 미선택 문항에서 보충해 개수를 정확히 맞춘다 */
+    if (picked.length < n) {
+      picked = picked.concat(qs(pool.filter(function (q) { return picked.indexOf(q) < 0; }), n - picked.length));
+    }
+    /* 실제 시험처럼 단원(Unit 01→07) 순서로 내고, 단원 안에서는 섞는다 */
+    return picked.slice(0, n).sort(function (a, b) { return a.u - b.u; });
+  }
   function miniCfgs() {
     return [
-      { id: 'gt10', grp: '지텔프', name: '지텔프 문법 10문제', sub: '10문제 · 8분 · G-POINT 랜덤', n: 10, sec: 45, kind: 'gt' },
-      { id: 'gt26', grp: '지텔프', name: '지텔프 실전 26문제', sub: '26문제 · 20분 · 실전 문법', n: 26, sec: 46, kind: 'gt' },
+      { id: 'gt10', grp: '지텔프', name: '지텔프 문법 10문제', sub: '10문제 · 8분 · 실제 단원 비율', n: 10, sec: 45, kind: 'gt' },
+      { id: 'gt26', grp: '지텔프', name: '지텔프 실전 26문제', sub: '26문제 · 20분 · 실제 단원 비율', n: 26, sec: 46, kind: 'gt' },
       { id: 'pol10', grp: '경찰', name: '경찰 3과목 10문제', sub: '10문제 · 10분 · 형사법·경찰학·범죄학', n: 10, sec: 60, kind: 'pol' },
       { id: 'pol20', grp: '경찰', name: '경찰 3과목 20문제', sub: '20문제 · 20분 · 형사법·경찰학·범죄학', n: 20, sec: 60, kind: 'pol' },
       { id: 'ex100', grp: '경찰', name: '2026년 2차 실전 100문항', sub: '형사법 40 · 경찰학 40 · 범죄학 20 · 100분', n: 100, sec: 60, kind: 'exam' }
@@ -4457,8 +4484,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!cfg) return;
     var picked = [], note = '';
     if (cfg.kind === 'gt') {
-      picked = qs(D.questions.filter(function (q) { return q.s === 'gtelp' && q.gp; }), cfg.n);
-      note = 'G-POINT 랜덤';
+      picked = gtPick(cfg.n);
+      note = '실전 단원 비율 ' + gtMix(cfg.n).join('·');
     } else if (cfg.kind === 'exam') {
       picked = examBank(null).slice(0, cfg.n);
       note = '2026년 2차 기출';
