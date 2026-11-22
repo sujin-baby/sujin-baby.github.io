@@ -1739,14 +1739,30 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var wl = $('#stWrong'); wl.innerHTML = '';
     var arr = D.questions.filter(function (q) { return S.wrong[q.i]; })
       .sort(function (a, b) { return ((S.wrong[b.i] || {}).c || 1) - ((S.wrong[a.i] || {}).c || 1); });
-    if (!arr.length) wl.innerHTML = '<div class="empty">틀린 문제가 여기에 쌓입니다. 맞히면 자동으로 지워져요.</div>';
+    if (!arr.length) wl.innerHTML = '<div class="empty">틀린 문제는 여기 자동으로 쌓입니다. 맞힌 문제도 피드백에서 🔖 오답노트 담기를 누르면 헷갈린 문제로 담겨요.</div>';
     arr.slice(0, 40).forEach(function (q) {
+      var w = S.wrong[q.i], cN = w.c || 0;
+      /* 직접 담은 문제(mark)와 틀린 횟수(c)를 구분해서 보여 준다 */
+      var tag = (w.mark && !cN)
+        ? '<span class="wi-tag mk">' + esc(qLabel(q)) + ' · 🤔 헷갈려서 담음</span>'
+        : '<span class="wi-tag">' + esc(qLabel(q)) + ' · ' + (cN || 1) + '번 틀림' + (w.mark ? ' · 🤔 헷갈림' : '') + '</span>';
       var d = document.createElement('div');
       d.className = 'wrong-item';
-      d.innerHTML = '<span class="wi-tag">' + esc(qLabel(q)) + ' · ' + (S.wrong[q.i].c || 1) + '번 틀림</span>' +
+      d.innerHTML = '<div class="wi-head">' + tag +
+        '<button class="wi-del" data-i="' + esc(String(q.i)) + '" aria-label="오답노트에서 빼기">✕ 빼기</button></div>' +
         '<div class="wi-q">' + stemFlat(q.q) + '</div>' +
         '<div class="wi-e">정답: ' + esc(q.o[q.a]) + '<br>' + esc(expShort(q)) + '</div>';
       wl.appendChild(d);
+    });
+    $$('#stWrong .wi-del').forEach(function (b) {
+      b.onclick = function (ev) {
+        if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+        var id = b.getAttribute('data-i');
+        if (!id || !S.wrong[id]) return;
+        delete S.wrong[id];
+        save(); renderStats(); renderReview(); renderDash();
+        sfx('tap'); toast('오답노트에서 뺐어요');
+      };
     });
     var nW = D.questions.filter(function (q) { return S.wrong[q.i]; }).length;
     $('#stWrongGo').classList.toggle('hidden', !nW);
@@ -1977,12 +1993,11 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var gain;
     if (right) {
       OX.ok++; S.ok++; u.ok++; day.ok = (day.ok || 0) + 1;
-      S.qok[q.i] = (S.qok[q.i] || 0) + 1; delete S.wrong[q.i];
+      S.qok[q.i] = (S.qok[q.i] || 0) + 1; clearWrongOnRight(q);
       gain = 4;
       sfx('ok');
     } else {
-      var w = S.wrong[q.i] || { c: 0 };
-      S.wrong[q.i] = { c: (w.c || 0) + 1, d: todayStr() };
+      addWrong(q);
       gain = 1;
       sfx('no');
     }
@@ -2154,6 +2169,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     $('#qBody').innerHTML = h;
     $('#qBody').scrollTop = 0;
     $('#qFb').classList.add('hidden');
+    syncFbMark(q);                      /* 새 문제로 넘어가면 담기 버튼도 그 문제 상태로 */
     $$('#qBody .opt').forEach(function (b) {
       b.onclick = function () { answer(Number(b.getAttribute('data-i')), b); };
     });
@@ -2185,6 +2201,51 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     });
     if (!QS.speed) fb(r.right, q, r.gain, r.bonus);
     QS.sel = r.oi;
+  }
+
+  /* ============================================================
+     🔖 오답노트 담기 (수진 님 "맞은 문제는 오답노트에 안 들어가서 아쉽")
+     · 틀린 문제: c(틀린 횟수)를 쌓는다
+     · 맞혔지만 헷갈리는 문제: c:0 · mark:true로 담아 '틀린 횟수'와 구분한다
+     · 직접 담은 표시(mark)는 나중에 그 문제를 또 맞혀도 지우지 않는다 — 사용자가 뺄 때만 뺀다
+     ============================================================ */
+  function addWrong(q) {
+    var w = S.wrong[q.i] || { c: 0 };
+    var o = { c: (w.c || 0) + 1, d: todayStr() };
+    if (w.mark) o.mark = true;
+    S.wrong[q.i] = o;
+    return o;
+  }
+  function clearWrongOnRight(q) {
+    var w = S.wrong[q.i];
+    if (!w) return;
+    if (w.mark) return;     /* 헷갈려서 직접 담은 문제는 맞혀도 남긴다 */
+    delete S.wrong[q.i];
+  }
+  function syncFbMark(q) {
+    var b = $('#fbMark');
+    if (!b || !q) return;
+    var on = !!S.wrong[q.i];
+    b.classList.toggle('on', on);
+    b.textContent = on ? '✅ 오답노트 담김' : '🔖 오답노트 담기';
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.setAttribute('data-i', String(q.i));
+  }
+  function toggleFbMark() {
+    if (!QS || !QS.items) return;
+    var it = QS.items[QS.i], q = it && it.q;
+    if (!q) return;
+    if (S.wrong[q.i]) {
+      delete S.wrong[q.i];
+      toast('오답노트에서 뺐어요');
+    } else {
+      S.wrong[q.i] = { c: 0, d: todayStr(), mark: true };
+      toast('오답노트에 담았어요 · 헷갈린 문제는 맞혀도 다시 볼 수 있어요');
+    }
+    save();
+    syncFbMark(q);
+    renderStats(); renderReview(); renderDash();
+    sfx('tap');
   }
 
   function syncQNav() {
@@ -2376,7 +2437,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       else if (QS.combo > 5 && QS.combo % 5 === 0) bonus = 10;
       var total = (gain + bonus) * (QS.xpMult || 1);
       QS.xp += total; S.xp += total; day.xp = (day.xp || 0) + total;
-      delete S.wrong[q.i];
+      clearWrongOnRight(q);
       setCombo(QS.combo, bonus);
       sfx(bonus >= 10 ? 'combo5' : bonus >= 5 ? 'combo3' : QS.combo > 1 ? 'combo' : 'ok');
       if (QS.combo >= 3) {
@@ -2402,8 +2463,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     } else {
       QS.combo = 0;
       QS.xp += 3; S.xp += 3; day.xp = (day.xp || 0) + 3;
-      var w = S.wrong[q.i] || { c: 0 };
-      S.wrong[q.i] = { c: (w.c || 0) + 1, d: todayStr() };
+      addWrong(q);
       if (QS.wrongIds.indexOf(q.i) < 0) QS.wrongIds.push(q.i);
       setCombo(0, 0);
       document.body.classList.remove('fever');
@@ -2436,6 +2496,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     el.querySelector('.fb-text').innerHTML = expHtml(q, QS && QS.items[QS.i]);
     var b = $('#fbNext');
     b.textContent = QS.i + 1 >= QS.items.length ? '결과 보기 →' : '다음 문제 →';
+    syncFbMark(q);
     syncQNav();
     /* 해설이 패널에 다 안 들어가면 스크롤 안내(아래 흐림) 표시 */
     requestAnimationFrame(function () {
@@ -3033,6 +3094,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     closeQuiz(); renderAll();
   };
   $('#fbNext').onclick = nextQ;
+  var _fbMarkBtn = $('#fbMark'); if (_fbMarkBtn) _fbMarkBtn.onclick = toggleFbMark;
   var _fbPrev = $('#fbPrev'); if (_fbPrev) _fbPrev.onclick = goPrev;
   var _qPrev = $('#qPrev'); if (_qPrev) _qPrev.onclick = goPrev;
   $('#stWrongGo').onclick = function () { startSession('wrong'); };
@@ -4526,8 +4588,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     MINI.items.forEach(function (it) {
       var q = it.q;
       if (it.pick == null) {
-        var w0 = S.wrong[q.i] || { c: 0 };
-        S.wrong[q.i] = { c: (w0.c || 0) + 1, d: todayStr() };
+        addWrong(q);
         wrongIds.push(q.i);
         it.gain = 0;
         return;
@@ -4543,12 +4604,11 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       if (right) {
         ok++; S.ok++; u.ok++; nd.ok++; day.ok = (day.ok || 0) + 1;
         S.qok[q.i] = (S.qok[q.i] || 0) + 1;
-        delete S.wrong[q.i];
+        clearWrongOnRight(q);
         S.xp += 10; day.xp = (day.xp || 0) + 10;
         earned += 10; it.gain = 10;
       } else {
-        var w = S.wrong[q.i] || { c: 0 };
-        S.wrong[q.i] = { c: (w.c || 0) + 1, d: todayStr() };
+        addWrong(q);
         wrongIds.push(q.i);
         S.xp += 3; day.xp = (day.xp || 0) + 3;
         earned += 3; it.gain = 3;
