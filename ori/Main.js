@@ -1992,7 +1992,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3783,6 +3783,7 @@ function checkFullInner_() {
       try { numFold1_(); } catch (e) {}
       try { biniPay1_(); } catch (e) {}
       try { obClear2_(); } catch (e) {}
+      try { seolKol1_(); } catch (e) {}
       try { if (!props.getProperty('EDITC1')) { ensureEditTab_(); props.setProperty('EDITC1', Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm')); } } catch (e) { note_('폼수정 날짜 칸 실패: ' + e); }   // (11/18 한 번) C1 날짜 고르기 바로 (정리가 밀려 늦게 생기던 것)
       try { upAcctOpen1_(); } catch (e) {}
       try { exp135_(); } catch (e) {}
@@ -5397,7 +5398,7 @@ function propsCleanup_(runs) {
     // 한 번에 조금씩 (11/16: 한꺼번에 지우다 15분 확인이 6분 제한에 걸려 끊김 → 보고·나머지 단계가 안 돎). 남으면 다음 확인에서 이어서
     if (n >= 120 || Date.now() - t0 > 20000 || late_(200)) { left++; return; }
     let del = false, m;
-    if ((m = k.match(/^(?:LISTK_|LISTH_|RVSEEN_|RVQMOD_|THUMB_|RVSTUCK_|RVSTUCKMSG_)([-\w]{25,})$/))) del = !live[m[1]];
+    if ((m = k.match(/^(?:LISTK_|LISTH_|RVSEEN_|RVQMOD_|THUMB_|RVSTUCK_|RVSTUCKMSG_|RVPRODW_)([-\w]{25,})$/))) del = !live[m[1]];
     else if ((m = k.match(/^(?:RVTXT_|RVSIG_)RVMSGD_[-\w]+_(\d{8})$/))) del = m[1] < old30;
     else if (/^MSGV_S_/.test(k)) del = Number(all[k]) < s3;
     if (del) { try { props.deleteProperty(k); n++; } catch (e) {} }
@@ -9286,6 +9287,34 @@ function stuckTodoDel1_() {
 // (11/21 한 번, 사용자 "보낼메시지 대기 다 정리해줘") 대기 글을 보냄으로 (회색 이틀 뒤 사라짐). 남기는 것:
 //  ① 돈·상태가 같이 바뀌는 종류 — 페이백 요청·리뷰비 요청·취완(보냄 = 리뷰 취합 날짜), 포토 가이드(보냄 = 업체 포토 전달함), 리뷰 보고
 //  ② 할 일 중 '[결제금액 확인]' (돈)  ③ 방 공지 중 내일 이후 진행의 구매 공지(폼 링크), 오늘 이후 진행의 리뷰 가이드·포토대기 공지
+// (11/21 한 번, 사용자 "저거는 오늘과일 설향딸기외 폴더로 가야해") '어느 의뢰인지 모름'의 '한담원 제주 콜라비' 리뷰 사진(11/19, 5장) → 설향딸기외 리뷰이미지 종류 폴더로
+//  설향딸기외의 토스 콜라비 상품명이 공지에서 사라져 과일쏙·온드프레시 콜라비와 동점이었음. 사진 설명(AI)으로 종류 폴더를 정함 (받는 곳 나누기와 같은 길)
+function seolKol1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SEOLKOL1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
+  try {
+    const r = readRuns_().filter(function (x) { return /오늘과일\s*설향딸기외/.test(bareTitle_(x['명단 제목'])) && x['시트ID']; })[0];
+    const sid = r ? String(r['시트ID']) : '', imgId = sid ? props.getProperty('RVIMG_' + sid) : '';
+    if (!imgId) { props.setProperty('SEOLKOL1', (st + ' 실패(설향딸기외 리뷰이미지 폴더 없음)').slice(-400)); return; }
+    const img = DriveApp.getFolderById(imgId), ui = rvInbox_().getFoldersByName(RV_INBOX_UNKNOWN);
+    if (!ui.hasNext()) { props.setProperty('SEOLKOL1', '✓ 모름 폴더 없음'); return; }
+    const it = ui.next().getFiles(), got = {};
+    while (it.hasNext()) {
+      const x = it.next(); let o = null;
+      try { const ds = String(x.getDescription() || ''); if (/^AI \{/.test(ds)) o = JSON.parse(ds.slice(3)); } catch (e) { o = null; }
+      if (!o || !/한담원/.test(String(o.product || '')) || !/콜라비/.test(String(o.product || ''))) continue;
+      const dn = rvAiDir_(o);
+      let home = img; if (RV_SKIP_RE.test(dn)) { try { const pp = img.getParents(); if (pp.hasNext()) home = pp.next(); } catch (e) {} }
+      const dest = rvSubDir_(home, dn);
+      try { x.moveTo(dest); } catch (e) { x.makeCopy(x.getName(), dest); }
+      got[dn] = (got[dn] || 0) + 1;
+    }
+    const n = Object.keys(got).reduce(function (a, k) { return a + got[k]; }, 0);
+    if (n) { try { rvCountDirs_(img, rvCartOf_(sid)); } catch (e) {} props.setProperty('RVZIPSOON_' + sid, String(Date.now())); }
+    props.setProperty('SEOLKOL1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + n + '장 → ' + bareTitle_(r['명단 제목']) + ' 리뷰이미지 (' + Object.keys(got).map(function (k) { return k + ' ' + got[k]; }).join(', ') + ')');
+    if (n) note_('✓ 모름 폴더 콜라비 리뷰 사진 ' + n + '장 → 설향딸기외 리뷰이미지');
+  } catch (e) { props.setProperty('SEOLKOL1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
 function obClear2_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('OBCLEAR2') || '');
   if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
@@ -10015,21 +10044,42 @@ function rvPendingCamps_(runs, props) {
       try { props.setProperty('RVOPTW_' + sid, JSON.stringify(ow)); } catch (e) {}
     }
     ow.w.forEach(function (w) { words[w] = 1; });
+    const brandW = {}, headW = {};
     mine.forEach(function (r) {
       rvWords_(campOf_(r['명단 제목']).replace(/외(?=\s|\d|$)/g, ' ')).forEach(function (w) { words[w] = 1; nameW[w] = 1; });   // '효자손외' → '효자손' (11/3: '외'가 붙어 캡처 속 '효자손'과 안 맞았음)
-      String(formDescRead_(r['폼ID'], descAge_(r))).split('\n').forEach(function (l) { if (/상품명|키워드|판매처/.test(l)) rvWords_(l.replace(/^.*?[:：]/, '')).forEach(function (w) { words[w] = 1; }); });
+      String(formDescRead_(r['폼ID'], descAge_(r))).split('\n').forEach(function (l) {
+        if (!/상품명|키워드|판매처/.test(l)) return;
+        const ws = rvWords_(l.replace(/^.*?[:：]/, ''));
+        ws.forEach(function (w) { words[w] = 1; });
+        // 상표: 판매처 낱말 전부, 상품명 첫 낱말 (11/21 '한담원 제주 콜라비' — 다른 콜라비 의뢰와 가르는 말)
+        if (/판매처/.test(l)) ws.forEach(function (w) { if (!RV_HEAD_STOP.test(w) && !/^(쿠팡|네이버|스마트스토어|토스|로켓|로켓배송|판매자로켓|공식|공식몰|스토어|마켓)$/.test(w)) brandW[w] = 1; }); else if (/상품명/.test(l) && ws[0] && !RV_HEAD_STOP.test(ws[0])) headW[ws[0]] = 1;
+      });
     });
-    out.push({ sid: sid, name: campOf_(mine[0]['명단 제목']), imgId: imgId, words: Object.keys(words), nameWords: Object.keys(nameW), day: mine.reduce(function (m, r) { return Math.max(m, r['진행일'].getTime()); }, 0) });
+    // 지금 공지에 없어진 상품도 기억 (11/21 설향딸기외: 공지가 쿠팡 상품으로 바뀌어 먼저 한 토스 콜라비 상품명이 사라져 다른 콜라비 의뢰와 동점)
+    let pm = null; try { pm = JSON.parse(all['RVPRODW_' + sid] || 'null'); } catch (e) {}
+    pm = pm && pm.w ? pm : { w: [], b: [], h: [] };
+    const addTo = function (arr, ks, cap) { ks.forEach(function (k) { if (arr.indexOf(k) < 0) arr.push(k); }); return arr.slice(-cap); };
+    const nw = addTo(pm.w.slice(), Object.keys(words).filter(function (w) { return !nameW[w]; }), 120), nb = addTo((pm.b || []).slice(), Object.keys(brandW), 30), nh = addTo((pm.h || []).slice(), Object.keys(headW), 30);
+    if (nw.length !== pm.w.length || nb.length !== (pm.b || []).length || nh.length !== (pm.h || []).length) { try { props.setProperty('RVPRODW_' + sid, JSON.stringify({ w: nw, b: nb, h: nh })); } catch (e) {} }
+    nw.forEach(function (w) { words[w] = 1; }); nb.forEach(function (w) { brandW[w] = 1; }); nh.forEach(function (w) { headW[w] = 1; });
+    out.push({ sid: sid, name: campOf_(mine[0]['명단 제목']), imgId: imgId, words: Object.keys(words), nameWords: Object.keys(nameW), brandWords: Object.keys(brandW), headWords: Object.keys(headW), day: mine.reduce(function (m, r) { return Math.max(m, r['진행일'].getTime()); }, 0) });
   });
   return out;
 }
 // 캡처 속 상품 이름 → 의뢰 (낱말이 가장 많이 겹치는 의뢰, 같으면 못 정함). 압축 기다리는 의뢰가 하나뿐이면 그 의뢰
+// 상품명 첫 낱말 중 상표로 안 보는 말: 산지·일반 수식어 (제주 콜라비·국내산 무 같은 것)
+const RV_HEAD_STOP = /^(유기농|무농약|친환경|햇|햇것|국내산|국산|국내|수입|산지직송|당일수확|당일출고|당일발송|정품|프리미엄|고당도|꿀|특품|특상품|특상|대과|가정용|선물용|제철|신선|무료배송|명품|최상급|최고급|냉장|냉동|제주|제주도|논산|청송|성주|나주|영주|충주|문경|상주|안동|의성|고흥|해남|완도|부산|대구|강원|경북|경남|전남|전북|충남|충북|하우스|노지)$|산$|인증$/;
 function rvMatchCamp_(product, camps) {
   if (!camps.length) return null;
   const p = String(product || '').replace(/\s+/g, '');
   // 의뢰 이름 낱말이 먼저, 나머지(공지 상품명·옵션) 낱말은 같을 때만 (11/8: '시온스 양모볼외'에도 같은 발마사지기가 있어서 공지 상품명 낱말이 더 많이 겹친 예전 의뢰로 감
   //  → 이름에 '발마사지기'가 있는 '시온스 발마사지기'가 이기게)
-  const sc = camps.map(function (c) { const nw = c.nameWords || []; return { c: c, n: 100 * nw.filter(function (w) { return p.indexOf(w) >= 0; }).length + c.words.filter(function (w) { return p.indexOf(w) >= 0; }).length }; }).sort(function (a, b) { return b.n - a.n; });
+  // 캡처 상품명에 든 상표(판매처·상품명 첫 낱말)가 한 의뢰에만 있으면 그 의뢰가 먼저 (11/21: '한담원 제주 콜라비' 사진이 이름에 콜라비가 든 다른 의뢰 둘과 동점이라 '모름'으로 갔음)
+  //  다른 의뢰의 낱말·이름에도 있는 말이면 안 셈 (같은 상품이 두 의뢰에 있으면 예전처럼 의뢰 이름 낱말로)
+  //  판매처 낱말은 캡처 어디에 있어도, 상품명 첫 낱말(산지·수식어 빼고)은 캡처 상품명이 그 말로 시작할 때만
+  const only = function (c, w) { return camps.every(function (o) { return o === c || ((o.words || []).indexOf(w) < 0 && (o.nameWords || []).indexOf(w) < 0 && (o.brandWords || []).indexOf(w) < 0 && (o.headWords || []).indexOf(w) < 0); }); };
+  const brand = function (c) { return (c.brandWords || []).filter(function (w) { return p.indexOf(w) >= 0 && only(c, w); }).length + (c.headWords || []).filter(function (w) { return p.indexOf(w) === 0 && only(c, w); }).length; };
+  const sc = camps.map(function (c) { const nw = c.nameWords || []; return { c: c, n: 1000 * brand(c) + 100 * nw.filter(function (w) { return p.indexOf(w) >= 0; }).length + c.words.filter(function (w) { return p.indexOf(w) >= 0; }).length }; }).sort(function (a, b) { return b.n - a.n; });
   if (sc[0].n > 0 && (sc.length === 1 || sc[1].n < sc[0].n)) return sc[0].c;
   return camps.length === 1 ? camps[0] : null;
 }
