@@ -1772,6 +1772,12 @@ function diag_(p) {
     });
     out.fnum = num.slice(0, 80);
   } catch (e) { out.fnmErr = String(e); }
+  // &tools=진행 글자: 진행 도우미 속도 (첫 화면 · 웹에서 진행 고르기 · 시트 옆 창에서 진행 고르기, 단계별 ms). 보기(info)만 — 아무것도 안 바꿈 (11/22 피클 '진행 도우미 느림')
+  if (p.tools) try {
+    const a = toolAction_({ act: 'info', full: true }), t = (a.runs || []).filter(function (x) { return x.title.indexOf(String(p.tools)) >= 0; })[0];
+    const b = t ? toolAction_({ act: 'info', title: t.title, full: true }) : null, c = t ? toolAction_({ act: 'info', title: t.title }) : null;
+    out.tools = { run: t ? bareTitle_(t.title) : '', first: a.took, pickWeb: b && b.took, pickSide: c && c.took, sideHasToday: !!(c && c.today), dups: b ? (b.dups || []).length : null, todayItems: ((a.today || {}).items || []).length, status: (a.status || []).length };
+  } catch (e) { out.toolsErr = String(e && e.stack || e).slice(0, 500); }
   // &inbox=1: 리뷰 사진 받는 곳 맨 바깥 파일 (형식·크기·만든 때·AI 설명·이미 본 것인지, 읽기만, 11/21 안 열리는 카카오톡 파일)
   if (p.inbox) try {
     const ib = rvInbox_(), it = ib.getFiles(), done = String(PropertiesService.getScriptProperties().getProperty('RVINBOX_DONE') || '').split(','), o = [];
@@ -2056,7 +2062,7 @@ function createRun(d) {
   //  보기·공지 저장은 진행목록 줄을 안 바꿔서 15분 확인이 돌고 있어도 바로 (기다리면 버튼이 안 눌리는 것처럼 보임)
   // 예전에 열어 둔 진행 도우미 화면(동작이 다름)에서 누른 건 하지 않고 다시 열라고 알림
   if (d.act && !/^(info|sent)$/.test(d.act) && String(d.pv || '') !== TOOLS_PV)
-    return Object.assign(toolAction_({ act: 'info', title: d.title }), { msg: '⚠ 진행 도우미 화면이 예전 것이에요. 저장 안 했어요.\n창을 닫고 다시 열어 주세요 (시트 옆이면 X 누르고 한눈에 체크칸 다시, 휴대폰이면 새로고침).' });
+    return Object.assign(toolAction_({ act: 'info', title: d.title, full: d.full }), { msg: '⚠ 진행 도우미 화면이 예전 것이에요. 저장 안 했어요.\n창을 닫고 다시 열어 주세요 (시트 옆이면 X 누르고 한눈에 체크칸 다시, 휴대폰이면 새로고침).' });
   if (d.act && /^(info|sent|assign|unassign|move)$/.test(d.act)) return toolAction_(d);
   if (d.act) return locked_(function () { return toolAction_(d); }, 30000) || { msg: '다른 작업 중이에요. 잠시 뒤 다시 눌러 주세요.' };
   // 15분 확인이 돌고 있으면 다음 단계에서 멈추라고 알리고 기다림 (예전엔 60초 넘게 기다리면 아무것도 안 하고 화면만 멈춰 있었음)
@@ -6400,7 +6406,7 @@ function toolsPage_(o, mode) {
 // 웹(휴대폰)에서 버튼을 누르면 이 주소로 다시 열림: ?p=tools&a=동작&t=진행&x=공지&n=인원&ts=시각들&nc=한 번만 표시
 function toolsRequest_(p) {
   const d = { k: CONFIG.KEY, act: String(p.a || 'info'), title: String(p.t || ''), text: String(p.x || ''), n: Number(p.n) || 0,
-    times: p.ts ? String(p.ts).split(',').filter(Boolean) : [], to: String(p.to || ''), pv: String(p.pv || '') };
+    times: p.ts ? String(p.ts).split(',').filter(Boolean) : [], to: String(p.to || ''), pv: String(p.pv || ''), full: true };   // 웹은 누를 때마다 페이지를 새로 그림 → 현황·할 일도 늘 다
   if (d.act !== 'info' && p.nc) {
     // 새로고침해도 같은 버튼이 두 번 실행되지 않게 (최근 30개 기억)
     const props = PropertiesService.getScriptProperties();
@@ -6411,11 +6417,11 @@ function toolsRequest_(p) {
   }
   try {
     let o = createRun(d);
-    if (o && o.saved) o = Object.assign(toolAction_({ act: 'info', title: o.title }), { msg: o.msg });
+    if (o && o.saved) o = Object.assign(toolAction_({ act: 'info', title: o.title, full: true }), { msg: o.msg });
     return o;
   } catch (e) {
     let o = {};
-    try { o = toolAction_({ act: 'info', title: d.title }); } catch (e2) {}
+    try { o = toolAction_({ act: 'info', title: d.title, full: true }); } catch (e2) {}
     return Object.assign(o, { msg: '오류: ' + (e && e.message || e) + '\n(캡처해서 보내 주세요)' });
   }
 }
@@ -6776,11 +6782,45 @@ function reviewPage_(p) {
 
 function toolsUrl_() { return (CONFIG.WEBAPP_URL || '') + '?p=tools&k=' + CONFIG.KEY; }
 
+// 진행 도우미 요청 하나 처리. 속도 (11/22 피클 인계 '진행 도우미 너무 느려'):
+//  · 진행목록은 한 번만 읽음 (인원이 바뀌는 삭제·추가 모집·옮기기 뒤에만 한 번 더)
+//  · 현황·할 일·블랙리스트(overview)는 첫 화면·바꾸는 동작에서만. 시트 옆 창(google.script.run)에서 진행만 고를 때는 빼서 보냄 — 화면은 받은 값만 다시 그려서(if (o.today)·if (o.status)) 앞의 것이 그대로 남음
+//    휴대폰 웹(d.full)은 누를 때마다 페이지를 새로 그려서 늘 다 보냄
+//  · 공지 저장(assign)은 저장 뒤 화면이 한 번 더 부르므로(웹은 toolsRequest_가) 저장 응답에서 overview를 두 번 만들지 않음
 function toolAction_(d) {
-  const runs = readRuns_();
+  const tm = {}, t00 = Date.now(), lap = function (k, fn) { const a = Date.now(); try { return fn(); } finally { tm[k] = (tm[k] || 0) + Date.now() - a; } };
+  const runs = lap('진행목록', readRuns_);
   const list = runs.filter(function (r) { return r['진행 상태'] !== '종료' && r['폼ID'] && r['시트ID']; })
     .sort(function (a, b) { return (b['진행일'] || 0) - (a['진행일'] || 0); });
   const out = { runs: list.map(function (r) { return { title: String(r['명단 제목']), label: bareTitle_(r['명단 제목']) + '  (' + (Number(r['인원']) || 0) + '/' + (r['목표인원'] || '?') + '명)' }; }) };
+  list.__all = runs;   // toolRunPart_가 다시 안 읽게
+  const lean = !d.full && d.act === 'info' && !!String(d.title || '');
+  if (d.act === 'sent' && d.id) markMsg_(String(d.id), '보냄');
+  if (!lean && d.act !== 'assign') lap('현황·할 일', function () { toolOverview_(out, runs); });
+  out.took = tm; tm.전체 = 0;
+  const done = function (o) { tm.전체 = Date.now() - t00; return o; };
+  let r = list.filter(function (x) { return String(x['명단 제목']) === String(d.title || ''); })[0];
+  // 공지를 붙여넣으면 어느 진행인지 알아서 찾음 (진행을 안 골라도 됨)
+  if (d.act === 'assign' && String(d.text || '').trim()) {
+    const found = findRunByNotice_(list, String(d.text));
+    // 직접 고른 진행이 있고 같은 의뢰면 그걸로 (자동으로 찾은 것보다 우선)
+    const same = function (a, b) { return a && b && campKey_(a['캠페인'] || a['명단 제목']) === campKey_(b['캠페인'] || b['명단 제목']); };
+    let note = '';
+    if (r && (same(r, found.run) || (!found.run && noticeMatches_(r, d.text)))) { /* 고른 진행 그대로 */ }
+    else if (found.run) { if (r) note = '⚠ 고른 진행(' + bareTitle_(r['명단 제목']) + ')과 공지 상품이 달라서 공지에 맞는 진행으로 저장했어요.\n'; r = found.run; }
+    else if (!r || !noticeMatches_(r, d.text)) { out.msg = found.msg || '⚠ 이 공지가 어느 진행 건지 못 찾았어요. (저장 안 함)'; toolOverview_(out, runs); return done(out); }
+    out.msg = note + assignRun_(r, String(d.text));
+    // 저장은 여기서 끝. 중복·모자란 인원은 화면이 바로 이어서 따로 불러옴 (저장 결과가 빨리 보이게)
+    //  시트 옆 창은 이어 부르는 게 가벼운 보기(lean)라 저장 뒤 바뀐 할 일(이름 넣은 방 공지)·현황을 여기서 실어 보냄. 웹은 toolsRequest_가 다 불러옴
+    out.title = String(r['명단 제목']); out.saved = true;
+    if (!d.full) lap('현황·할 일', function () { toolOverview_(out, runs); });
+    return done(out);
+  }
+  if (d.act === 'assign') lap('현황·할 일', function () { toolOverview_(out, runs); });   // 공지 없이 누른 저장(안 함)도 예전처럼 현황을 보냄
+  return done(toolRunPart_(d, out, r, list, lap));
+}
+// 현황(오늘·앞으로·지난 진행)·마지막 확인·블랙리스트·할 일 (첫 화면·바꾸는 동작 뒤)
+function toolOverview_(out, runs) {
   // 휴대폰에서 한눈에 탭 대신 보는 현황 (한눈에 탭은 명단 시트 20여 개를 실시간으로 불러와서 휴대폰 앱에서 잘 안 뜸, 10/20)
   try {
     const t0 = today_().getTime(), md = function (x) { return (x.getMonth() + 1) + '/' + x.getDate(); };
@@ -6794,25 +6834,13 @@ function toolAction_(d) {
         formEdit: r['폼ID'] ? 'https://docs.google.com/forms/d/' + String(r['폼ID']).trim() + '/edit' : '' };
     });
     out.last = String(PropertiesService.getScriptProperties().getProperty('LAST_REPORT') || '');
-    out.black = Object.keys(blacklist_()).map(function (k) { return blacklist_()[k]; });
+    const bl = blacklist_(); out.black = Object.keys(bl).map(function (k) { return bl[k]; });
   } catch (e) { out.status = []; }
-  if (d.act === 'sent' && d.id) markMsg_(String(d.id), '보냄');
   try { out.today = todayItems_(runs); } catch (e) { out.today = { items: [], later: 0, tabs: [], err: String(e.message || e) }; }
-  let r = list.filter(function (x) { return String(x['명단 제목']) === String(d.title || ''); })[0];
-  // 공지를 붙여넣으면 어느 진행인지 알아서 찾음 (진행을 안 골라도 됨)
-  if (d.act === 'assign' && String(d.text || '').trim()) {
-    const found = findRunByNotice_(list, String(d.text));
-    // 직접 고른 진행이 있고 같은 의뢰면 그걸로 (자동으로 찾은 것보다 우선)
-    const same = function (a, b) { return a && b && campKey_(a['캠페인'] || a['명단 제목']) === campKey_(b['캠페인'] || b['명단 제목']); };
-    let note = '';
-    if (r && (same(r, found.run) || (!found.run && noticeMatches_(r, d.text)))) { /* 고른 진행 그대로 */ }
-    else if (found.run) { if (r) note = '⚠ 고른 진행(' + bareTitle_(r['명단 제목']) + ')과 공지 상품이 달라서 공지에 맞는 진행으로 저장했어요.\n'; r = found.run; }
-    else if (!r || !noticeMatches_(r, d.text)) { out.msg = found.msg || '⚠ 이 공지가 어느 진행 건지 못 찾았어요. (저장 안 함)'; return out; }
-    out.msg = note + assignRun_(r, String(d.text));
-    // 저장은 여기서 끝. 중복·모자란 인원은 화면이 바로 이어서 따로 불러옴 (저장 결과가 빨리 보이게)
-    out.title = String(r['명단 제목']); out.saved = true;
-    return out;
-  }
+  return out;
+}
+// 고른 진행 부분 (배정 비우기·옮기기·삭제·추가 모집 + 중복·모자란 인원·같은 의뢰 다른 날)
+function toolRunPart_(d, out, r, list, lap) {
   if (!r) return out;   // 진행을 고르기 전에는 아무것도 안 함
   if (d.act === 'unassign') { writeAssign_(r, []); out.msg = '이 진행 배정을 비웠어요.'; }
   if (d.act === 'move' && d.to) {
@@ -6820,7 +6848,7 @@ function toolAction_(d) {
     out.msg = to ? moveAssign_(r, to) : '옮길 진행을 못 찾았어요.';
     if (to) r = to;
   }
-  if (d.act === 'remove') { out.msg = deleteRun_(r); return Object.assign(toolAction_({ act: 'info' }), { msg: out.msg }); }
+  if (d.act === 'remove') { out.msg = deleteRun_(r); return Object.assign(toolAction_({ act: 'info', full: d.full }), { msg: out.msg }); }
   if (d.act === 'delete' && (d.times || []).length) out.msg = deleteRunTimes_(r, d.times.map(Number));
   if (d.act === 'more') out.msg = addMoreRun_(r, Number(d.n) || 0);
   out.empty = !(Number(r['인원']) > 0);
@@ -6830,13 +6858,16 @@ function toolAction_(d) {
   // 같은 의뢰의 다른 날 (배정을 잘못된 날에 넣었을 때 옮기기 버튼)
   out.alts = list.filter(function (x) { return x !== r && campKey_(x['캠페인'] || x['명단 제목']) === campKey_(r['캠페인'] || r['명단 제목']); })
     .map(function (x) { return { title: String(x['명단 제목']), label: bareTitle_(x['명단 제목']) }; });
-  const me = readRuns_().filter(function (x) { return String(x['명단 제목']) === String(r['명단 제목']) || (sameRunTitle_(x['명단 제목'], r['명단 제목']) && String(x['시트ID']) === String(r['시트ID'])); })[0] || r;
+  // 인원·진행이 바뀌는 동작 뒤에만 진행목록을 다시 읽음 (그 밖에는 맨 위에서 읽은 것)
+  const runs2 = /^(delete|more|move)$/.test(String(d.act)) ? lap('진행목록', readRuns_) : list.__all || null;
+  const fresh = runs2 || lap('진행목록', readRuns_);
+  const me = fresh.filter(function (x) { return String(x['명단 제목']) === String(r['명단 제목']) || (sameRunTitle_(x['명단 제목'], r['명단 제목']) && String(x['시트ID']) === String(r['시트ID'])); })[0] || r;
   out.title = String(me['명단 제목']);
   out.sheet = String(me['시트 링크'] || '');
   out.formEdit = me['폼ID'] ? 'https://docs.google.com/forms/d/' + String(me['폼ID']).trim() + '/edit' : '';
   out.count = Number(me['인원']) || 0; out.target = Number(me['목표인원']) || 0;
-  try { out.dups = dupList_(me); } catch (e) { out.dups = []; out.dupErr = e.message; }
-  try { out.short = shortByOption_(readRuns_(), me); } catch (e) { out.short = {}; }
+  try { out.dups = lap('중복', function () { return dupList_(me, fresh); }); } catch (e) { out.dups = []; out.dupErr = e.message; }
+  try { out.short = shortByOption_(fresh, me); } catch (e) { out.short = {}; }
   const as = assignSheet_(), last = as.getLastRow();
   out.assigned = last >= 2 && as.getRange(2, 1, last - 1, 1).getValues().some(function (x) { return String(x[0]) === out.title; });
   return out;
@@ -7017,10 +7048,10 @@ function noticeMatches_(r, text) {
 }
 
 // 이 진행 폼 응답 중 중복(한 명단 시트에서 계정, 전화번호, 주소 중 하나가 먼저 낸 응답과 같음)
-function dupList_(r) {
+function dupList_(r, runs) {
   const ss = SpreadsheetApp.openById(r['시트ID']);
   const own = rawFor_(ss, r['폼ID']);
-  const w = windowOf_(readRuns_(), r);   // 보여 주는 건 그 진행 날짜 응답만 (다른 날 응답과 겹치는 것도 잡음)
+  const w = windowOf_(runs || readRuns_(), r);   // 보여 주는 건 그 진행 날짜 응답만 (다른 날 응답과 겹치는 것도 잡음)
   const rows = [];
   ss.getSheets().filter(function (t) { return !!t.getFormUrl(); }).forEach(function (t) {
     const h = rawHead_(t), last = t.getLastRow();
