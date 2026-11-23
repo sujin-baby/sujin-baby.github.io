@@ -2047,7 +2047,7 @@ function diag_(p) {
 function doGet(e) {
   const p = (e && e.parameter) || {};
   if (p.p === 'diag' && globalThis.__DIAGKEY && p.k === globalThis.__DIAGKEY) return ContentService.createTextOutput(diagText_(p)).setMimeType(ContentService.MimeType.JSON);
-  if (p.k !== CONFIG.KEY) return HtmlService.createHtmlOutput('<p style="font-size:18px">열쇠가 바뀌었거나 링크가 올바르지 않아요.<br>관리 시트 <b>한눈에</b> 탭 표 아래 <b>▶ 가이드 생성기</b> 링크(또는 <b>사용법</b> 탭 맨 위 링크)를 한 번 눌러 주세요.</p>');
+  if (p.k !== CONFIG.KEY) return HtmlService.createHtmlOutput('<p style="font-size:17px;line-height:1.6;padding:16px">열쇠가 바뀌었거나 링크가 올바르지 않아요.<br>관리 시트 <b>한눈에</b> 탭의 <b>▶ 진행 도우미</b>·<b>▶ 가이드 생성기</b>(또는 상단 <b>체험단 도구</b> 메뉴)에서 다시 열어 주세요.</p>').addMetaTag('viewport', 'width=device-width, initial-scale=1');
   if (p.p === 'queue') return ContentService.createTextOutput(queueText_());
   if (p.p === 'reqraw') return ContentService.createTextOutput(reqRawSave_(p));   // 생성기가 처음 붙여넣은 의뢰서 조각 (11/8)
   // 읽기 전용 점검 (10/24): 진행목록·일정·보낼메시지·트리거·최근 확인 결과를 JSON으로. 아무것도 안 바꿈 (원격으로 버그 원인 찾기용)
@@ -2089,7 +2089,7 @@ function createRun(d) {
   // 예전에 열어 둔 진행 도우미 화면(동작이 다름)에서 누른 건 하지 않고 다시 열라고 알림
   if (d.act && !/^(info|sent)$/.test(d.act) && String(d.pv || '') !== TOOLS_PV)
     return Object.assign(toolAction_({ act: 'info', title: d.title, full: d.full }), { msg: '⚠ 진행 도우미 화면이 예전 것이에요. 저장 안 했어요.\n창을 닫고 다시 열어 주세요 (시트 옆이면 X 누르고 한눈에 체크칸 다시, 휴대폰이면 새로고침).' });
-  if (d.act && /^(info|sent|assign|unassign|move)$/.test(d.act)) return toolAction_(d);
+  if (d.act && /^(info|sent|assign|unassign|move|recruit)$/.test(d.act)) return toolAction_(d);
   if (d.act) return locked_(function () { return toolAction_(d); }, 30000) || { msg: '다른 작업 중이에요. 잠시 뒤 다시 눌러 주세요.' };
   // 15분 확인이 돌고 있으면 다음 단계에서 멈추라고 알리고 기다림 (예전엔 60초 넘게 기다리면 아무것도 안 하고 화면만 멈춰 있었음)
   // 공지(폼 설명)가 비었으면 안 만듦 (10/26 효자손외·양배추채칼외: 공지가 구매 시간 한 줄만 남은 채로 폼·방 공지가 만들어졌음)
@@ -5301,7 +5301,9 @@ function todayItems_(runs) {
   //  취완은 리뷰비 탭으로 합쳐져 있어(11/16) 따로 두지 않음
   out.groups = MSGV_GROUPS.map(function (g, i) {
     const lb = String(g.base).replace(/^[^가-힣A-Za-z0-9]+/, '');
-    return { i: i, key: g.key, label: lb.length > 3 && lb.indexOf('리뷰') === 0 ? lb.slice(2) : lb, merged: !!g.merged || '' };
+    let label = lb.length > 3 && lb.indexOf('리뷰') === 0 ? lb.slice(2) : lb;
+    if (label === '방공지·가이드') label = '방·가이드';
+    return { i: i, key: g.key, label: label, merged: !!g.merged || '' };
   }).filter(function (g) { return !g.merged; });
   if (last < 2) return out;
   const t0 = dayStart_(today_()), known = {};
@@ -5326,7 +5328,7 @@ function todayItems_(runs) {
     const fee = kind === '리뷰비 요청' ? msgvFeeCells_(x) : null;
     out.items.push({ id: String(x[0]), g: gi, gname: MSGV_GROUPS[gi].base, kind: kind, room: String(x[3]), msg: fee ? (fee[0] instanceof Date ? Utilities.formatDate(fee[0], CONFIG.TIMEZONE, 'yyyy.MM.dd') : fee[0]) + ' · ' + fee[1] + ' · ' + fee[4] + '건' : String(x[4]).slice(0, 1500),
       copy: copy.slice(0, 3000), over: due !== null && due < t0, day: due !== null ? md(new Date(due)) : '', list: String(lk.list || ''), rvimg: String(lk.img || ''), link: link, todo: kind === '할 일' });
-    if (kind === '방 공지') { try { out.items[out.items.length - 1].img = thumbOfRoom_(String(x[3]), ctx.runs, ctx.all); } catch (e) {} }   // 썸네일 (길게 눌러 저장)
+    if (/^(방 공지|포토 가이드|리뷰)$/.test(kind)) { try { out.items[out.items.length - 1].img = thumbOfRoom_(String(x[3]), ctx.runs, ctx.all); } catch (e) {} }   // 썸네일 (길게 눌러 저장)
   });
   out.items.sort(function (a, b) { return a.g - b.g || (b.over ? 1 : 0) - (a.over ? 1 : 0); });
   out.items = out.items.slice(0, 300);
@@ -6962,9 +6964,11 @@ function toolOverview_(out, runs) {
       if (st2.length >= 25 && dayStart_(st2All[i]['진행일']) !== dayStart_(st2All[i - 1]['진행일'])) break;
       st2.push(st2All[i]);
     }
+    let recMap = {}; try { recMap = JSON.parse(PropertiesService.getScriptProperties().getProperty('DASH_RECRUIT') || '{}') || {}; } catch (e) {}
     out.status = st0.concat(st1, st2).map(function (r) {
-      const got = Number(r['인원']) || 0, goal = Number(r['목표인원']) || 0;
-      return { d: md(r['진행일']), t: bareTitle_(r['명단 제목']), got: got, goal: goal, g: grp(r), done: r['마감 시각'] instanceof Date, real: r['실배송'] === 'Y',
+      const got = Number(r['인원']) || 0, goal = Number(r['목표인원']) || 0, bt = bareTitle_(r['명단 제목']);
+      return { d: md(r['진행일']), t: bt, got: got, goal: goal, g: grp(r), done: r['마감 시각'] instanceof Date, real: r['실배송'] === 'Y',
+        rec: !!(recMap[bt] || recMap[memoKey_(r)]),
         sheet: String(r['시트 링크'] || ''),
         formEdit: r['폼ID'] ? 'https://docs.google.com/forms/d/' + String(r['폼ID']).trim() + '/edit' : '' };
     });
@@ -6987,6 +6991,22 @@ function toolOverview_(out, runs) {
 // 고른 진행 부분 (배정 비우기·옮기기·삭제·추가 모집 + 중복·모자란 인원·같은 의뢰 다른 날)
 function toolRunPart_(d, out, r, list, lap) {
   if (!r) return out;   // 진행을 고르기 전에는 아무것도 안 함
+  if (d.act === 'recruit') {
+    const props = PropertiesService.getScriptProperties(), bt = bareTitle_(r['명단 제목']), mk = memoKey_(r);
+    let rec = {}; try { rec = JSON.parse(props.getProperty('DASH_RECRUIT') || '{}') || {}; } catch (e) {}
+    const on = d.n !== undefined ? Number(d.n) === 1 : !(rec[bt] || rec[mk]);
+    if (on) { rec[bt] = true; if (mk) rec[mk] = true; } else { delete rec[bt]; if (mk) delete rec[mk]; }
+    props.setProperty('DASH_RECRUIT', JSON.stringify(rec));
+    try {
+      const dsh = adminSs_().getSheetByName(DASH_TAB);
+      if (dsh && dsh.getLastRow() >= 2) {
+        const vals = dsh.getRange(2, 2, Math.min(dsh.getLastRow() - 1, Math.max(60, (list.__all || list).length + 5)), 1).getValues();
+        vals.forEach(function (v, i) { if (String(v[0]).replace(/\s*\([^)]*\)\s*$/, '').trim() === bt) dsh.getRange(i + 2, 16).setValue(on); });
+      }
+    } catch (e) {}
+    out.msg = on ? '✅ 모집완료로 체크했어요.' : '모집완료 체크를 풀었어요.';
+    if (out.status) out.status.forEach(function (s) { if (s.t === bt) s.rec = on; });
+  }
   if (d.act === 'unassign') { writeAssign_(r, []); out.msg = '이 진행 배정을 비웠어요.'; }
   if (d.act === 'move' && d.to) {
     const to = list.filter(function (x) { return String(x['명단 제목']) === String(d.to); })[0];
@@ -7011,6 +7031,7 @@ function toolRunPart_(d, out, r, list, lap) {
   out.sheet = String(me['시트 링크'] || '');
   out.formEdit = me['폼ID'] ? 'https://docs.google.com/forms/d/' + String(me['폼ID']).trim() + '/edit' : '';
   out.count = Number(me['인원']) || 0; out.target = Number(me['목표인원']) || 0;
+  try { const rm = JSON.parse(PropertiesService.getScriptProperties().getProperty('DASH_RECRUIT') || '{}') || {}; out.rec = !!(rm[bareTitle_(me['명단 제목'])] || rm[memoKey_(me)]); } catch (e) { out.rec = false; }
   try { out.dups = lap('중복', function () { return dupList_(me, fresh); }); } catch (e) { out.dups = []; out.dupErr = e.message; }
   try { out.short = shortByOption_(fresh, me); } catch (e) { out.short = {}; }
   const as = assignSheet_(), last = as.getLastRow();
@@ -7449,6 +7470,7 @@ const TOOLS_HTML = String.raw`
 <div class="pane on" id="pane-stat" role="tabpanel">
   <div class="card">
     <h2>📊 진행 현황 (한눈에)</h2>
+    <div class="subtabs" id="statflt" style="margin-bottom:6px"></div>
     <p class="hint" id="statlast">15분마다 자동으로 최신 인원을 확인합니다.</p>
     <div id="stat"></div>
   </div>
@@ -7499,6 +7521,7 @@ const TOOLS_HTML = String.raw`
 
 <div class="card" id="card5" style="display:none">
   <h2>⚙️ 진행 관리</h2>
+  <button id="b6" class="btn-outline" style="margin-bottom:8px;width:100%">☑️ 모집완료 체크하기</button>
   <div style="display:flex;gap:8px;margin-top:8px">
     <button id="b4" class="btn-outline">이 진행 배정 비우기</button>
     <button id="b5" class="btn-outline-danger">이 진행 지우기 (0명일 때만)</button>
@@ -7545,7 +7568,7 @@ tabTo((INIT && INIT.title) ? 'manage' : 'stat', false);   // 첫 화면은 현�
 function say(t) { $('msg').style.display = t ? 'block' : 'none'; $('msg').textContent = t || ''; if (t) $('msg').scrollIntoView({ block: 'nearest' }); }
 function busy(on, label) {
   running = on;
-  ['b1','b2','b3','b4','b5'].forEach(function (b) { $(b).style.opacity = on ? .6 : 1; });
+  ['b1','b2','b3','b4','b5','b6'].forEach(function (b) { if ($(b)) $(b).style.opacity = on ? .6 : 1; });
   clearInterval(tick);
   if (on && label) { var t0 = Date.now(); say(label); tick = setInterval(function () { say(label + ' ' + Math.round((Date.now() - t0) / 1000) + '초'); }, 1000); }
 }
@@ -7681,6 +7704,63 @@ function todoPaint() {
   });
   if (TODO.later) { var lt = document.createElement('p'); lt.className = 'hint'; lt.textContent = '내일 이후 보낼 것 ' + TODO.later + '개는 그날 여기에 나와요.'; box.appendChild(lt); }
 }
+function statPaint() {
+  var list0 = window.__STAT_LIST || [], flt = window.__STAT_FLT || '', blacks = window.__STAT_BLACK || [];
+  var fb = $('statflt');
+  if (fb) {
+    fb.innerHTML = '';
+    var defs = [
+      ['', '전체', list0.length],
+      ['left', '남은 것만', list0.filter(function (x) { return x.goal > 0 && x.got < x.goal && !x.rec && !x.done; }).length],
+      ['open', '모집중만', list0.filter(function (x) { return !x.rec; }).length],
+      ['real', '실배송만', list0.filter(function (x) { return x.real; }).length]
+    ];
+    defs.forEach(function (d) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'sb' + (flt === d[0] ? ' on' : '') + (d[2] ? '' : ' zero');
+      b.textContent = d[1] + ' ';
+      var s = document.createElement('span'); s.className = 'n'; s.textContent = String(d[2]); b.appendChild(s);
+      b.onclick = function () { window.__STAT_FLT = d[0]; statPaint(); };
+      fb.appendChild(b);
+    });
+  }
+  var list = list0.filter(function (x) {
+    if (flt === 'left') return x.goal > 0 && x.got < x.goal && !x.rec && !x.done;
+    if (flt === 'open') return !x.rec;
+    if (flt === 'real') return x.real;
+    return true;
+  });
+  var sb = $('stat'); sb.innerHTML = '';
+  if (blacks.length) { var bl = document.createElement('div'); bl.textContent = '⛔ 블랙리스트 (받으면 안 됨): ' + blacks.join(', '); bl.style.cssText = 'font-weight:900;color:var(--alert);background:var(--alert-bg);border:2px solid var(--alert);border-radius:10px;padding:8px 10px;margin:6px 0'; sb.appendChild(bl); }
+  if (!list.length) { var em = document.createElement('div'); em.className = 'subempty'; em.textContent = '해당하는 진행이 없어요.'; sb.appendChild(em); return; }
+  var heads = ['오늘', '앞으로', '지난 진행'], lastG = -1;
+  list.forEach(function (x) {
+    if (x.g !== lastG) { var h = document.createElement('div'); h.textContent = heads[x.g]; h.style.cssText = 'font-weight:900;font-size:14px;margin:12px 0 4px;color:var(--pink-deep);letter-spacing:.03em'; sb.appendChild(h); lastG = x.g; }
+    var row = document.createElement('div'), left = x.goal ? x.goal - x.got : 0;
+    row.style.cssText = 'padding:9px 10px;margin-bottom:6px;border-radius:10px;font-size:14.5px;' + (x.real ? 'background:#fff9db;border:1.5px solid #f59f00;border-left:4px solid #f59f00' : 'background:#fff;border:1.5px solid var(--pink-bg)');
+    var b = document.createElement('div');
+    b.textContent = (x.d && x.t.indexOf(x.d) === -1) ? (x.d + ' ' + x.t) : x.t;
+    b.style.cssText = 'font-weight:900;line-height:1.35;color:var(--ink);word-break:keep-all;overflow-wrap:break-word';
+    row.appendChild(b);
+    var bot = document.createElement('div');
+    bot.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px';
+    var c = document.createElement('span');
+    c.textContent = (x.done ? '마감 ' : x.rec ? '모집완료 ' : '') + x.got + '/' + x.goal + (!x.done && !x.rec && left > 0 ? ' (남은 ' + left + ')' : '');
+    c.style.cssText = 'font-size:13px;white-space:nowrap;font-weight:900;color:' + ((x.done || x.rec) ? 'var(--ok)' : left > 0 && x.g === 0 ? 'var(--alert)' : 'var(--ink)');
+    bot.appendChild(c);
+    if (x.sheet || x.formEdit) {
+      var ln = document.createElement('div'); ln.className = 'stlnk'; ln.style.marginTop = '0';
+      [['📋 명단', x.sheet, 'l'], ['✏️ 폼 수정', x.formEdit, 'f']].forEach(function (p) {
+        if (!p[1]) return;
+        var la = document.createElement('a'); la.className = p[2]; la.href = p[1]; la.target = '_blank'; la.rel = 'noopener'; la.textContent = p[0];
+        ln.appendChild(la);
+      });
+      bot.appendChild(ln);
+    }
+    row.appendChild(bot);
+    sb.appendChild(row);
+  });
+}
 function show(o) {
   if (o.today) today(o.today); else if (o.outbox) outbox(o.outbox);
   var alts = ((o.msg && /저장했어요|옮겼어요/.test(o.msg)) || JUST) ? (o.alts || []) : [];
@@ -7707,36 +7787,11 @@ function show(o) {
     });
   }
   if (o.status) {
-    var sb = $('stat'); sb.innerHTML = '';
-    if (o.last) $('statlast').textContent = '마지막 확인: ' + o.last;
-    if (o.black && o.black.length) { var bl = document.createElement('div'); bl.textContent = '⛔ 블랙리스트 (받으면 안 됨): ' + o.black.join(', '); bl.style.cssText = 'font-weight:900;color:var(--alert);background:var(--alert-bg);border:2px solid var(--alert);border-radius:10px;padding:8px 10px;margin:6px 0'; sb.appendChild(bl); }
-    var heads = ['오늘', '앞으로', '지난 진행'], lastG = -1;
-    o.status.forEach(function (x) {
-      if (x.g !== lastG) { var h = document.createElement('div'); h.textContent = heads[x.g]; h.style.cssText = 'font-weight:900;font-size:14px;margin:12px 0 4px;color:var(--pink-deep);letter-spacing:.03em'; sb.appendChild(h); lastG = x.g; }
-      var row = document.createElement('div'), left = x.goal ? x.goal - x.got : 0;
-      row.style.cssText = 'padding:9px 10px;margin-bottom:6px;border-radius:10px;font-size:14.5px;' + (x.real ? 'background:#fff9db;border:1.5px solid #f59f00;border-left:4px solid #f59f00' : 'background:#fff;border:1.5px solid var(--pink-bg)');
-      var b = document.createElement('div');
-      b.textContent = (x.d && x.t.indexOf(x.d) === -1) ? (x.d + ' ' + x.t) : x.t;
-      b.style.cssText = 'font-weight:900;line-height:1.35;color:var(--ink);word-break:keep-all;overflow-wrap:break-word';
-      row.appendChild(b);
-      var bot = document.createElement('div');
-      bot.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px';
-      var c = document.createElement('span');
-      c.textContent = x.done ? '마감 ' + x.got + '/' + x.goal : x.got + '/' + x.goal + (left > 0 ? ' (남은 ' + left + ')' : '');
-      c.style.cssText = 'font-size:13px;white-space:nowrap;font-weight:900;color:' + (x.done ? 'var(--ok)' : left > 0 && x.g === 0 ? 'var(--alert)' : 'var(--ink)');
-      bot.appendChild(c);
-      if (x.sheet || x.formEdit) {
-        var ln = document.createElement('div'); ln.className = 'stlnk'; ln.style.marginTop = '0';
-        [['📋 명단', x.sheet, 'l'], ['✏️ 폼 수정', x.formEdit, 'f']].forEach(function (p) {
-          if (!p[1]) return;
-          var la = document.createElement('a'); la.className = p[2]; la.href = p[1]; la.target = '_blank'; la.rel = 'noopener'; la.textContent = p[0];
-          ln.appendChild(la);
-        });
-        bot.appendChild(ln);
-      }
-      row.appendChild(bot);
-      sb.appendChild(row);
-    });
+    window.__STAT_LIST = o.status;
+    window.__STAT_BLACK = o.black || [];
+    if (window.__STAT_FLT === undefined) window.__STAT_FLT = '';
+    if ($('statlast') && o.last) $('statlast').textContent = '마지막 확인: ' + o.last;
+    statPaint();
   }
   var sel = $('run'); sel.innerHTML = '<option value="">자동으로 찾기 (모르면 이대로)</option>';
   (o.runs || []).forEach(function (r) { var op = document.createElement('option'); op.value = r.title; op.textContent = r.label; sel.appendChild(op); });
@@ -7745,6 +7800,10 @@ function show(o) {
   if (o.msg) say(o.msg);
   ['card3','card4','card5'].forEach(function (c) { $(c).style.display = sel.value ? '' : 'none'; });
   if (!sel.value) { $('asg').textContent = ''; if ($('runlnk')) $('runlnk').innerHTML = ''; return; }
+  if ($('b6')) {
+    $('b6').textContent = o.rec ? '✅ 모집완료됨 (누르면 해제)' : '☑️ 모집완료 체크하기';
+    $('b6').onclick = function () { go({ act: 'recruit', n: o.rec ? '0' : '1' }, '저장 중…'); };
+  }
   $('asg').innerHTML = o.assigned ? '<span class="ok">✔ 이 진행은 공지를 넣어 뒀어요. 다시 넣으면 새로 바뀌어요.</span>' : '아직 공지를 안 넣었어요.';
   var rl = $('runlnk');
   if (rl) {
