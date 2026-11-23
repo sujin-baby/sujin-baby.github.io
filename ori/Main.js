@@ -5664,14 +5664,13 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
       const notices = pend.concat(sent).filter(function (xs) { return String(xs[0][2]) === '방 공지' && !isNoticeReview_(xs[0][4]); });
       const guides = pend.concat(sent).filter(function (xs) { return !(String(xs[0][2]) === '방 공지' && !isNoticeReview_(xs[0][4])); });
       const byRoom = {}, orderRooms = [];
-      const addRoom = function (rk, rawRoom) { if (!byRoom[rk]) { byRoom[rk] = { room: rawRoom, n: null, g: [] }; orderRooms.push(rk); } return byRoom[rk]; };
-      notices.forEach(function (xs) { const rk = roomKey_(xs[0][3]) || String(xs[0][0]); const b = addRoom(rk, String(xs[0][3] || '')); if (!b.n) b.n = xs[0]; });
+      const addRoom = function (rk, rawRoom) { if (!byRoom[rk]) { byRoom[rk] = { room: rawRoom, n: [], g: [] }; orderRooms.push(rk); } return byRoom[rk]; };
+      notices.forEach(function (xs) { const rk = roomKey_(xs[0][3]) || String(xs[0][0]); addRoom(rk, String(xs[0][3] || '')).n.push(xs[0]); });
       guides.forEach(function (xs) { const rk = roomKey_(xs[0][3]) || String(xs[0][0]); addRoom(rk, String(xs[0][3] || '')).g.push(xs[0]); });
       const paired = [];
       orderRooms.forEach(function (rk) {
-        const b = byRoom[rk];
-        if (!b.g.length) paired.push({ n: b.n, g: null });
-        else b.g.forEach(function (gx, idx) { paired.push({ n: idx === 0 ? b.n : null, g: gx }); });
+        const b = byRoom[rk], cnt = Math.max(b.n.length, b.g.length);
+        for (let idx = 0; idx < cnt; idx++) paired.push({ n: b.n[idx] || null, g: b.g[idx] || null });
       });
       const rowPrio = function (p) {
         const np = p.n && msgvPending_(p.n[5]), gp = p.g && msgvPending_(p.g[5]);
@@ -6438,7 +6437,7 @@ function msgViewEdit_(e, gi) {
   const sentNote = [];
   for (let i = 0; i < n; i++) {
     const idStr = String(ids[i][0]), row = r0 + i;
-    if (!idStr) continue;
+    if (!idStr) { const vv = vals[i][0]; if (vv !== '' && vv != null) sh.getRange(row, 2).setValue(''); continue; }
     const v = vals[i][0], on = v === true || String(v).toUpperCase() === 'TRUE';
     // 방금 다시 그려져서 이 줄에 다른 메시지가 들어왔으면 (옛 화면을 보고 누른 것) 체크 되돌림
     if (prev && prev[row - 1] !== undefined && prev[row - 1] !== idStr) { sh.getRange(row, 2).setValue(!on); moved.push(row); continue; }
@@ -13212,7 +13211,7 @@ function buildDashboard_(force) {
     sh.getRange(2, 1, runs.length, 1).setNumberFormat('M/d');
     sh.getRange(2, 4, runs.length, 4).setNumberFormat('0');   // 총건수, 그날 목표, 신청, 남은은 숫자로 (날짜로 보이지 않게)
     sh.getRange(2, 8, runs.length, 1).setNumberFormat('M/d HH:mm');
-    try { sh.setColumnWidth(15, 180); } catch (e) {}
+    try { sh.setColumnWidth(15, 180); sh.setColumnWidth(16, 68); } catch (e) {}
   }
   // 아래: 명단 내용 (중복, 금액, 옵션 확인 표시는 여기서만. 명단 시트는 업체도 봐서 깨끗하게 둠)
   const rules = [], takCutRows = {}, listBlocks = [];
