@@ -234,7 +234,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v211 ('20건 / 30건'처럼 숫자 뒤에 건·개·명이 붙은 슬래시 일차 인원도 일차별로 파싱)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v212 (같은 상품 실배·빈 링크 2줄 의뢰서 1개 가이드 유지)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -433,7 +433,7 @@ details.help-box summary {
             <span style="font-weight: 900; font-size: 14px; color: var(--pink-deep, #ff5fa8); display:flex; align-items:center; gap:5px;">
               <span>💬 AI 다이렉트 대화 · 공지 수정 요청</span>
             </span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v211</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v212</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 10px;">
             공지가 이상하게 나왔거나 수정이 필요한가요? 여기서 메시지를 보내면 <b>피클(생성기)</b>과 <b>클로드(시트)</b>에게 실시간으로 전달돼요!
@@ -1541,7 +1541,7 @@ details.help-box summary {
 // @noframes
 // ==/UserScript==
 /*
-  오리 상품정보 도우미 (생성기 v211)
+  오리 상품정보 도우미 (생성기 v212)
   - 생성기(guide/index.html)의 '상품 위치 찾기' 북마크 코드(bm-src)를 그대로 담고 있어요.
   - 상품 정보를 읽는 규칙을 고치면  node ori/tools/build_userscript.js  를 다시 돌려
     이 파일과 생성기 안의 스크립트(us-src)를 함께 맞춰 주세요. (안 맞으면 CI가 멈춥니다)
@@ -2900,6 +2900,19 @@ details.help-box summary {
           const m2 = t.match(/(\d+)\s*(?:건|명|개)/);
           return m2 ? m2[1] : "";
         };
+        const plats = urls.map(u => platformOf(u.url));
+        const samePlat = plats.every(p => p && p === plats[0]);
+        const basePid = u => (urlInfo(u).split(" - ")[0] || "").trim();
+        const pids = urls.map(u => basePid(u.url));
+        const samePid = samePlat && pids.every(p => p && p === pids[0]);
+        const hasExplicitUrlCount = urls.every(u => Boolean((u.label.match(/(\d+)\s*(?:건|명|개)/) || [])[1] || tagCount(u.prev)));
+        const hasPerUrlPrice = !!(head.headPrices && head.headPrices.length === urls.length);
+        // 같은 플랫폼의 같은 상품 ID URL이 여러 줄(예: '실배링크 카키2 블랙1' / '빈 링크 카키1,블랙1')인데
+        // 각 URL에 '5건 실배'/'10건 빈'처럼 명시적 건수도 없고 가격도 나뉘지 않았으면 하나의 상품(1개 가이드)으로 유지 (#114, 11/23)
+        if (samePid && !hasExplicitUrlCount && !hasPerUrlPrice) {
+          expanded.push(g);
+          return;
+        }
         let subCounts = urls.map((u, idx) => {
           const m = u.label.match(/(\d+)\s*(?:건|명|개)/);
           if (m) return m[1];
@@ -5976,7 +5989,7 @@ details.help-box summary {
 
       const mention = aiTarget === "claude" ? "@claude" : aiTarget === "all" ? "@모두" : "@피클";
       const lines = [
-        mention + " [생성기 v211 제보]",
+        mention + " [생성기 v212 제보]",
         "• 내용: " + desc,
         "• 가이드 번호: " + curG + " / " + totalG + " (" + (g.platform || "쿠팡") + ")"
       ];
@@ -6038,7 +6051,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v211 공지 오류 제보]",
+        "🚨 [가이드 생성기 v212 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",
