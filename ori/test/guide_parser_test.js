@@ -2611,7 +2611,31 @@ console.log('\n[Test 50] 프로토콜(https://) 없는 상품 URL 정상 분리 
   console.log('✓ Test 50: 3개 상품 모두 분리 · 줄눈보수펜(화이트 2개 · 10500) 누락 없음');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (43개 샘플 전원 일치)');
+// 51. 11/23 유러피안 샐러드야채: '4. 일 진행 건수 : 20건 / 30건', '3. 총 구매 건수 : 50건' → 1일차 20 · 2일차 30 (3일차 10으로 쪼개지지 않음)
+console.log('\n[Test 51] 20건 / 30건 슬래시 일차별 건수 파싱 (건·개·명 포함)');
+{
+  const req51 = `#입금대행 실배송 10900
+
+1. 검색 키워드 : 유러피안 샐러드야채
+3. 총 구매 건수 : 50건
+4. 일 진행 건수 : 20건 / 30건
+5. 상품주소(URL) : https://www.coupang.com/vp/products/9812345678
+6. 구매옵션 : 1팩
+9. 입금자명 : 홍길동
+10. 택배대행 Y/N : N`;
+  const r51 = P.parseAll(req51);
+  const g51 = r51.guides[0];
+  const d51 = (g51.days || []).map(x => String(x.n));
+  if (d51.join(',') !== '20,30') throw new Error('Test 51 days 불일치: ' + JSON.stringify(d51));
+  if (String(g51.daily) !== '20' || String(g51.total) !== '50') throw new Error('Test 51 daily/total 불일치: ' + g51.daily + '/' + g51.total);
+
+  const req51b = req51.replace('50건', '60명').replace('20건 / 30건', '10명 / 20명 / 30명');
+  const d51b = (P.parseAll(req51b).guides[0].days || []).map(x => String(x.n));
+  if (d51b.join(',') !== '10,20,30') throw new Error('Test 51b days 불일치: ' + JSON.stringify(d51b));
+  console.log('✓ Test 51: 20건 / 30건 → [20, 30], 10명 / 20명 / 30명 → [10, 20, 30]');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (44개 샘플 전원 일치)');
 process.exit(0);
 
 
