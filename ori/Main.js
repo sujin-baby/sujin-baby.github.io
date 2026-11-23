@@ -2057,7 +2057,6 @@ function doGet(e) {
   if (p.p === 'rank') return rankPage_(p);
   if (p.p === 'review') return reviewPage_(p);
   if (p.p === 'tools') {
-    try { ensureCheckTrigger_(); } catch (e) {}
     return toolsPage_(toolsRequest_(p), 'web');
   }
   if (p.p === 'outbox') {
@@ -5242,10 +5241,12 @@ function saveRoomLink_(room, url) {
   return { ok: true, link: m[0], msg: '✔ ' + k + ' 방 링크 저장' };
 }
 // 방 공지 옆 썸네일: 그 방 진행의 명단 시트에 저장된 썸네일 주소 (생성기가 넘긴 것)
-function thumbOfRoom_(room, runs) {
-  const k = roomKey_(room), props = PropertiesService.getScriptProperties();
+function thumbOfRoom_(room, runs, allProps) {
+  const k = roomKey_(room);
   const r = runs.filter(function (x) { const rm = roomKey_(x['카톡방'] || x['명단 제목']); return x['시트ID'] && (rm === k || sameRunTitle_(rm, k)); })[0];
-  return r ? (props.getProperty('THUMB_' + r['시트ID']) || '') : '';
+  if (!r) return '';
+  if (allProps) return allProps['THUMB_' + r['시트ID']] || '';
+  return PropertiesService.getScriptProperties().getProperty('THUMB_' + r['시트ID']) || '';
 }
 
 // PC 도우미용: 한 줄에 하나, ID 탭 방이름(base64) 탭 메시지(base64). 방 이름이 있는 대기 건만
@@ -5325,7 +5326,7 @@ function todayItems_(runs) {
     const fee = kind === '리뷰비 요청' ? msgvFeeCells_(x) : null;
     out.items.push({ id: String(x[0]), g: gi, gname: MSGV_GROUPS[gi].base, kind: kind, room: String(x[3]), msg: fee ? (fee[0] instanceof Date ? Utilities.formatDate(fee[0], CONFIG.TIMEZONE, 'yyyy.MM.dd') : fee[0]) + ' · ' + fee[1] + ' · ' + fee[4] + '건' : String(x[4]).slice(0, 1500),
       copy: copy.slice(0, 3000), over: due !== null && due < t0, day: due !== null ? md(new Date(due)) : '', list: String(lk.list || ''), rvimg: String(lk.img || ''), link: link, todo: kind === '할 일' });
-    if (kind === '방 공지') { try { out.items[out.items.length - 1].img = thumbOfRoom_(String(x[3]), ctx.runs); } catch (e) {} }   // 썸네일 (길게 눌러 저장)
+    if (kind === '방 공지') { try { out.items[out.items.length - 1].img = thumbOfRoom_(String(x[3]), ctx.runs, ctx.all); } catch (e) {} }   // 썸네일 (길게 눌러 저장)
   });
   out.items.sort(function (a, b) { return a.g - b.g || (b.over ? 1 : 0) - (a.over ? 1 : 0); });
   out.items = out.items.slice(0, 300);
