@@ -5710,13 +5710,16 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
         const allDone = (!lx || lSent) && (!gx || gSent);
         const lc = lx && String(lx[2]) === '명단 전달' ? msgvListCamp_(lx[4]) : '';
         const dispRoom = lc || String(rx[3] || '');
+        let lnote = '';
+        if (lc && payForList[lc]) lnote = payForList[lc].filter(function (v, i, a) { return a.indexOf(v) === i; }).join('\n');
+        if (lc && !lSent) { const lw = listWarn_(lc); if (lw) lnote = lw + (lnote ? '\n' + lnote : ''); }
         return {
           type: 'msg', id: lx ? String(lx[0]) : '', sent: lSent,
           day: msgvDay_(refD), over: lOd || gOd, today: refD instanceof Date && refD.getTime() === t0,
           room: dispRoom + (rx[5] === '방 못 찾음' ? ' ⚠방 못 찾음' : ''), boldTo: 0,
           msg: lx ? String(lx[4]) : '', bg: allDone ? '#f3f3f3' : msgvRoomBg_(dispRoom, colors),
           guide: gx ? { id: String(gx[0]), sent: gSent, over: gOd, msg: String(gx[4]), reqF: rq ? String(rq.f || '') : '', reqNote: rq ? String(rq.note || '') : '', reqUrl: rq ? String(rq.url || '') : '' } : null,
-          reqF: null, reqNote: '', reqUrl: '', listNote: lc && payForList[lc] ? payForList[lc].join('\n') : '', fee: null, kind: String(rx[2]), chwan: null, names: null, links: null
+          reqF: null, reqNote: '', reqUrl: '', listNote: lnote, fee: null, kind: String(rx[2]), chwan: null, names: null, links: null
         };
       });
     } else {
