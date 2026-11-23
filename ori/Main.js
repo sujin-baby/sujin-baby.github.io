@@ -2030,7 +2030,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -2101,7 +2101,7 @@ function createRun(d) {
   if (!String(d.desc || '').split('\n').some(function (l) { return l.trim() && !isSlotLine_(l); }))
     throw new Error('공지(폼 설명)가 비어 있어요. 생성기에서 공지를 복사해 이 화면 폼 설명 칸에 붙여넣고 다시 만들기를 눌러 주세요.');
   const props = PropertiesService.getScriptProperties();
-  props.setProperty('WANT_LOCK', String(Date.now()));
+  try { props.setProperty('WANT_LOCK', String(Date.now())); } catch (e) {}   // 저장 공간이 차도 직접 하는 일은 되게 (11/24 폼수정 탭이 안 불러와졌음)
   let out;
   try { out = locked_(function () { props.deleteProperty('WANT_LOCK'); return createRunLocked_(d); }, 240000); }
   finally { props.deleteProperty('WANT_LOCK'); }
@@ -3722,6 +3722,7 @@ function checkFullInner_() {
   let changed = false;
   // 단계들이 같이 쓰는 것 (단계마다 진행목록을 새로 읽음: 앞 단계가 진행을 바꿀 수 있어서)
   let runs = [], times = {}, errs = {}, listed = {}, obAll = [];
+  try { propsSqueeze_(); } catch (e) { note_('속성 정리(공간) 실패: ' + e); }   // 저장 공간이 차면 아래 단계가 다 멈춤 (11/24)
   const S = cfLoad_();
   cfKilled_(S);
   // ── 매번 (급하고 빠른 것): 진행목록 정리, 다음 일차·다음 날 진행 만들기, 새 진행 한눈에, 보낼메시지·폼 열기
@@ -3830,6 +3831,7 @@ function checkFullInner_() {
       try { salad30_(); } catch (e) {}
       try { tan40_(); } catch (e) {}
       try { tanSil1_(); } catch (e) {}
+      try { lpDup1_(); } catch (e) {}
       try { if (!props.getProperty('EDITC1')) { ensureEditTab_(); props.setProperty('EDITC1', Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm')); } } catch (e) { note_('폼수정 날짜 칸 실패: ' + e); }   // (11/18 한 번) C1 날짜 고르기 바로 (정리가 밀려 늦게 생기던 것)
       try { upAcctOpen1_(); } catch (e) {}
       try { exp135_(); } catch (e) {}
@@ -5439,27 +5441,41 @@ const MSGV_FIXED_BG = { '내 할 일': '#fff8e1', '사장님': '#e0f2f1', '리�
 function msgvSigHash_(sig) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, String(sig), Utilities.Charset.UTF_8)); }
 // 속성 정리 (11/16 '데이터 용량 오류': 속성 3,800개·한글이라 한도 500KB에 닿음). 하루 한 번, 캐시성 속성만:
 //  진행목록에 없거나 15일 넘게 지난 종료 명단 시트의 LISTK_/LISTH_/RVSEEN_/RVQMOD_/THUMB_, 15일 지난 날짜 리뷰 글 캐시(RVMSGD_/RVTXT_/RVSIG_/RVPH_), 사흘 지난 MSGV_S_
-function propsCleanup_(runs) {
+function propsCleanup_(runs, force, all0) {
   const props = PropertiesService.getScriptProperties(), tk = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
-  if (props.getProperty('PROPCLEAN_15_DAY') === tk) return 0;
+  if (!force && props.getProperty('PROPCLEAN_15_DAY') === tk) return 0;
   try { props.deleteProperty('PROPCLEAN_DAY'); } catch (e) {}
-  const all = props.getProperties(), live = {}, cut15 = Date.now() - 15 * 86400000;
-  (runs || readRuns_()).forEach(function (r) { const sid = String(r['시트ID'] || ''); if (sid && !(r['진행 상태'] === '종료' && r['진행일'] instanceof Date && r['진행일'].getTime() < cut15)) live[sid] = 1; });
-  const old15 = Utilities.formatDate(new Date(cut15), CONFIG.TIMEZONE, 'yyyyMMdd'), s3 = Date.now() - 3 * 86400000;
+  const all = all0 || props.getProperties(), live = {}, last = {}, cut15 = Date.now() - 15 * 86400000;
+  (runs || readRuns_()).forEach(function (r) {
+    const sid = String(r['시트ID'] || ''); if (!sid) return;
+    if (!(r['진행 상태'] === '종료' && r['진행일'] instanceof Date && r['진행일'].getTime() < cut15)) live[sid] = 1;
+    if (r['진행일'] instanceof Date) last[sid] = Math.max(last[sid] || 0, r['진행일'].getTime());
+  });
+  // 리뷰 가이드 글 사본(RVTXT_/RVSIG_/RVPH_ RVMSGD_)은 마감 뒤 이틀까지만 다시 맞추므로 4일 지난 건 안 씀 (11/24: 15일 치가 쌓여 저장 공간이 차서 한눈에·명단·월급시트가 멈췄음)
+  const old4 = Utilities.formatDate(new Date(Date.now() - 4 * 86400000), CONFIG.TIMEZONE, 'yyyyMMdd'), s2 = Date.now() - 2 * 86400000, cut10 = Date.now() - 10 * 86400000;
   let n = 0, left = 0;
-  const t0 = Date.now();
+  const t0 = Date.now(), capN = force ? 900 : 150, capT = force ? 45000 : 20000;
   Object.keys(all).forEach(function (k) {
     // 한 번에 조금씩 (11/16: 한꺼번에 지우다 15분 확인이 6분 제한에 걸려 끊김 → 보고·나머지 단계가 안 돎). 남으면 다음 확인에서 이어서
-    if (n >= 150 || Date.now() - t0 > 20000 || late_(200)) { left++; return; }
+    if (n >= capN || Date.now() - t0 > capT || late_(200)) { left++; return; }
     let del = false, m;
-    if ((m = k.match(/^(?:LISTK_|LISTH_|RVSEEN_|RVQMOD_|THUMB_|RVSTUCK_|RVSTUCKMSG_|RVPRODW_)([-\w]{25,})$/))) del = !live[m[1]];
-    else if ((m = k.match(/^(?:(?:RVTXT_|RVSIG_|RVPH_)?RVMSGD_)[-\w]+_(\d{8})$/))) del = m[1] < old15;
-    else if (/^MSGV_S_/.test(k)) del = Number(all[k]) < s3;
+    if ((m = k.match(/^(?:LISTK_|LISTH_|RVSEEN_|RVQMOD_|RVSTUCK_|RVSTUCKMSG_|RVPRODW_)([-\w]{25,})$/))) del = !live[m[1]];
+    else if ((m = k.match(/^THUMB_([-\w]{25,})$/))) del = !live[m[1]] || (last[m[1]] || 0) < cut10;   // 썸네일은 보낼메시지 방 공지 옆에만 씀
+    else if ((m = k.match(/^GRANT_[-\w]{25,}_([-\w]{25,})$/))) del = !live[m[1]];   // 끝난 명단 시트 IMPORTRANGE 허용 기록
+    else if ((m = k.match(/^(?:(?:RVTXT_|RVSIG_|RVPH_)?RVMSGD_)[-\w]+_(\d{8})$/))) del = m[1] < old4;
+    else if (/^MSGV_S_/.test(k)) del = Number(all[k]) < s2;
     if (del) { try { props.deleteProperty(k); n++; } catch (e) {} }
   });
   if (!left) props.setProperty('PROPCLEAN_15_DAY', tk);
-  if (n) note_('✓ 속성 정리(15일): 안 쓰는 캐시 ' + n + '개 지움' + (left ? ' (남은 건 다음 확인에서)' : ''));
+  if (n) note_('✓ 속성 정리' + (force ? '(공간 거의 참)' : '') + ': 안 쓰는 캐시 ' + n + '개 지움' + (left ? ' (남은 건 다음 확인에서)' : ''));
   return n;
+}
+// 저장 공간(스크립트 속성)이 거의 차면 바로 정리 (15분 확인 맨 앞, 다른 단계가 쓰기 전에). 이름+값 글자 수 기준
+function propsSqueeze_() {
+  const props = PropertiesService.getScriptProperties(), all = props.getProperties();
+  let size = 0; Object.keys(all).forEach(function (k) { size += k.length + String(all[k]).length; });
+  if (size < 430000) return 0;
+  return propsCleanup_(null, true, all);
 }
 function msgvPending_(st) { return st === '대기' || st === '방 못 찾음'; }
 // 메시지마다 체크한 시각: 속성 MSGV_S_<번호> 하나씩 (11/8: 여러 개를 빨리 체크하면 한 덩어리(MSGV_SENTAT)를 서로 덮어써서 체크한 게 바로 사라졌음). 예전 덩어리도 같이 읽음
@@ -8077,10 +8093,10 @@ function onAdminEdit(e) {
   if (!action) return;
   const props = PropertiesService.getScriptProperties();
   if (nm0 === EDIT_TAB && a10 !== 'B1') { try { sh0.getRange('G1').setValue('⏳ 처리 중… (자동 확인이 돌고 있으면 1~2분 걸려요)'); } catch (err) {} }
-  props.setProperty('WANT_LOCK', String(Date.now()));
+  try { props.setProperty('WANT_LOCK', String(Date.now())); } catch (e) {}   // 저장 공간이 차도 직접 하는 일은 되게 (11/24 폼수정 탭이 안 불러와졌음)
   let ran = false, out;
   try { out = locked_(function () { ran = true; props.deleteProperty('WANT_LOCK'); return onAdminEditInner_(e); }, 270000); }
-  finally { props.deleteProperty('WANT_LOCK'); if (ran) cfDirty_(true); }   // 직접 하신 일 뒤 15분 확인은 단계를 건너뛰지 않고 전부
+  finally { props.deleteProperty('WANT_LOCK'); if (ran) { try { cfDirty_(true); } catch (e) {} } }   // 직접 하신 일 뒤 15분 확인은 단계를 건너뛰지 않고 전부
   if (!ran) {
     const msg = '⚠ 자동 확인이 안 끝나서 못 했어요. 1~2분 뒤 다시 해 주세요 (붙여넣기면 다시 붙여넣기)';
     try { if (nm0 === EDIT_TAB) sh0.getRange('G1').setValue(msg); else e.source.toast(msg, '체험단', 10); } catch (err) {}
@@ -9664,6 +9680,33 @@ function tanSil1_() {
     const bad = /안 바뀜|없음/.test(out.join(' '));
     props.setProperty('TANSIL1', ((bad ? st + ' 실패(' : '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ') + out.join(', ') + (bad ? ')' : '')).slice(-900));
   } catch (e) { props.setProperty('TANSIL1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/24 한 번, 사용자: 롱패딩 후리스 두 번 낸 사람 한 명 삭제) #택11.24 동대문청년 롱패딩 후리스 4(요청ID 9ynp4el7-2) 그날 응답 중 이름·전화번호가 같은 두 줄의 나중 것 하나 지움
+//  (폼 응답·응답 탭·명단 탭, deleteRunTimes_). 이름+번호가 같은 겹친 줄이 정확히 하나일 때만 (아니면 안 지우고 기록)
+function lpDup1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('LPDUP1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
+  try {
+    const runs = readRuns_(), r = runs.filter(function (y) { return String(y['요청ID']) === '9ynp4el7-2'; })[0];
+    if (!r) { props.setProperty('LPDUP1', (st + ' 실패(진행 없음)').slice(-400)); return; }
+    const w = windowOf_(runs, r), seen = {}, later = [];
+    SpreadsheetApp.openById(r['시트ID']).getSheets().filter(function (t) { return !!t.getFormUrl(); }).forEach(function (t) {
+      const lr = t.getLastRow(), lc = t.getLastColumn(); if (lr < 2 || lc < 2) return;
+      const h = t.getRange(1, 1, 1, lc).getValues()[0].map(hk_);
+      const cN = h.findIndex(function (x) { return /계정명|수령인|이름/.test(x) && !MATCH.nick.test(x); }), cP = h.findIndex(function (x) { return /전화|연락처|휴대폰/.test(x); });
+      t.getRange(2, 1, lr - 1, lc).getValues().filter(function (x) { return x[0] instanceof Date && x[0].getTime() >= w.from && x[0].getTime() < w.to; })
+        .sort(function (a, b) { return a[0] - b[0]; }).forEach(function (x) {
+          const nm = cN >= 0 ? String(x[cN]).replace(/\s+/g, '') : '', ph = cP >= 0 ? String(x[cP]).replace(/\D/g, '').slice(-8) : '';
+          if (!nm || ph.length < 7) return;
+          const k = nm + '|' + ph;
+          if (seen[k]) later.push(x[0]); else seen[k] = 1;
+        });
+    });
+    if (later.length !== 1) { props.setProperty('LPDUP1', (st + ' 실패(이름·번호 같은 겹친 줄 ' + later.length + '개라 안 지움)').slice(-400)); return; }
+    deleteRunTimes_(r, later);
+    props.setProperty('LPDUP1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 겹친 응답 1개 지움 (' + Utilities.formatDate(later[0], CONFIG.TIMEZONE, 'MM-dd HH:mm:ss') + ')');
+    note_('✓ 롱패딩 후리스 11.24 겹친 응답 1개 지움');
+  } catch (e) { props.setProperty('LPDUP1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 function salad30_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SALAD30') || '');
