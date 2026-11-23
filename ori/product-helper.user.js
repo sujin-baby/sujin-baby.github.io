@@ -13,7 +13,7 @@
 // @noframes
 // ==/UserScript==
 /*
-  오리 상품정보 도우미 (생성기 v209)
+  오리 상품정보 도우미 (생성기 v210)
   - 생성기(guide/index.html)의 '상품 위치 찾기' 북마크 코드(bm-src)를 그대로 담고 있어요.
   - 상품 정보를 읽는 규칙을 고치면  node ori/tools/build_userscript.js  를 다시 돌려
     이 파일과 생성기 안의 스크립트(us-src)를 함께 맞춰 주세요. (안 맞으면 CI가 멈춥니다)
