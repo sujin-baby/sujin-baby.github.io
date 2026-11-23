@@ -12735,7 +12735,7 @@ function dashStatus_(r) {
 }
 // 한눈에 진행 줄 색: 내일(+1)·모레(+2)·… 다음 진행일까지 날짜마다 다른 색 (오늘은 연두 #d9ead3, 진행완료 회색·빨강·주황·노랑 알림 색과 안 겹치게)
 const DASH_DAY_COLORS = ['#cfe2f3', '#d9d2e9', '#ead1dc', '#d0e0e3', '#fce5cd', '#e6e6e6', '#f3f3f3'];
-const DASH_VER = '43';   // 43: 내일부터 다음 진행일까지 날짜마다 다른 색 (11/20) · 42: 주말 진행도 다음 진행일까지 하늘색 (11/20) · 41: 의뢰 총건수 = 리뷰 구성 화면 링크 (11/19) · 40: 택배 옮김 머리글에 오늘 옮길 진행 수·인원 (11/18)
+const DASH_VER = '44';   // 44: P열 모집완료 체크박스 (11/24) · 43: 내일부터 다음 진행일까지 날짜마다 다른 색 (11/20) · 42: 주말 진행도 다음 진행일까지 하늘색 (11/20) · 41: 의뢰 총건수 = 리뷰 구성 화면 링크 (11/19) · 40: 택배 옮김 머리글에 오늘 옮길 진행 수·인원 (11/18)
 // 한눈에 '리뷰 취합할 것' 칸에 보일 것: 의뢰 전체 리뷰가 끝난(RVRPT_) 의뢰 중 업체 전송 체크 안 했거나 체크한 지 3일 안 된 것. 최근 40일 진행만, 기대평 빼고
 //  날마다 취합하던 줄은 없앰 (사용자 요청 10/26: 날짜별로 말고 한 캠페인이 다 끝나면 그때 한 번에)
 function rvItems_(allRuns, props) {
@@ -12904,26 +12904,32 @@ function buildDashboard_(force) {
   const rvItems = rvItems_(allRuns, props);
   const sig = JSON.stringify(rvItems) + '|' + DASH_VER + '|' + show.join(',') + '|' + runs.map(dashStatus_).join(',') + '|' + props.getProperty('RUN_ERRORS') + '|' + order.map(function (id) { return id + ':' + sheets[id].n; }).join(',') + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태'] + ':' + r['진행일'] + ':' + r['택배 옮김']; }).join('|');
   let sh = ss.getSheetByName(DASH_TAB);
-  // 한눈에 탭 O열 메모 보존: 방제별로 읽어 스크립트 속성에 영구 보관 (15분 재실행 시에도 절대 날아가지 않게)
-  let savedMemos = {};
+  // 한눈에 탭 O열 메모 & P열 모집완료 체크 보존: 방제별로 읽어 스크립트 속성에 영구 보관 (15분 재실행 시에도 절대 날아가지 않게)
+  let savedMemos = {}, savedRecruit = {};
   try { savedMemos = JSON.parse(props.getProperty('DASH_MEMOS') || '{}'); } catch (e) {}
+  try { savedRecruit = JSON.parse(props.getProperty('DASH_RECRUIT') || '{}'); } catch (e) {}
   if (sh && sh.getLastRow() >= 2) {
     try {
       // 진행 줄 수만큼 다 읽음 (11/16: 60줄까지만 읽어서 61줄 아래 진행에 적은 메모는 저장이 안 되고 다시 그릴 때 지워졌음)
       const oldRows = Math.min(sh.getLastRow() - 1, Math.max(60, runs.length + 5));
-      const oldData = sh.getRange(2, 2, oldRows, 14).getValues(); // B열(0) ~ O열(13)
+      const oldData = sh.getRange(2, 2, oldRows, 15).getValues(); // B열(0) ~ P열(14)
       oldData.forEach(function (row, oi) {
         const title = String(row[0]).replace(/\s*\([^)]*\)\s*$/, '').trim();
-        const memo = String(row[13] || '').trim();
+        let memo = String(row[13] || '').trim();
+        const rec = row[14] === true;
         if (oi >= 60 && !runs.some(function (x) { return bareTitle_(x['명단 제목']) === title; })) return;   // 61줄 아래는 진행 줄만 (아래 명단 덩어리 칸은 메모가 아님)
         if (title && title.charAt(0) !== '■') {
-          // 진행(명단 시트 + 진행일)으로도 저장: 방제가 바뀌어도 메모가 따라가게 (11/16 방제 바뀐 진행의 메모가 지워졌음)
+          // 진행(명단 시트 + 진행일)으로도 저장: 방제가 바뀌어도 메모·모집완료가 따라가게 (11/16 방제 바뀐 진행의 메모가 지워졌음)
           const rx = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === title; })[0], mk = rx ? memoKey_(rx) : '';
+          if (/^모집완(료)?$/.test(memo)) { savedRecruit[title] = true; if (mk) savedRecruit[mk] = true; memo = ''; }
           if (memo) { savedMemos[title] = memo; if (mk) savedMemos[mk] = memo; }
-          else if (row[13] === '') { delete savedMemos[title]; if (mk) delete savedMemos[mk]; } // 수진 님이 직접 지운 경우 반영
+          else if (row[13] === '' || /^모집완(료)?$/.test(String(row[13] || '').trim())) { delete savedMemos[title]; if (mk) delete savedMemos[mk]; } // 수진 님이 직접 지운 경우 반영
+          if (rec) { savedRecruit[title] = true; if (mk) savedRecruit[mk] = true; }
+          else if (row[14] === false) { delete savedRecruit[title]; if (mk) delete savedRecruit[mk]; }
         }
       });
       props.setProperty('DASH_MEMOS', JSON.stringify(savedMemos));
+      props.setProperty('DASH_RECRUIT', JSON.stringify(savedRecruit));
     } catch (e) {}
   }
   // 한눈에 탭에서 방제를 직접 고쳐 둔 게 있으면 다시 만들기 전에 진행목록에 반영
@@ -12961,7 +12967,7 @@ function buildDashboard_(force) {
   const q = function (t) { return '"' + String(t).replace(/"/g, '""') + '"'; };
   // D = 의뢰서 총 구매 건수, E = 그날 목표 (그날 하루 받을 인원)
   // K = 상품 페이지 링크(글자는 플랫폼: 쿠팡·네이버·올리브영·토스 …). 택배시트 링크는 아래 줄 월급시트 옆에 하나만 (사용자 요청 10/21)
-  const head = ['진행일', '방제', '상태', '의뢰 총건수', '그날 목표', '신청', '남은', '마감 시각', '명단', '폼', '상품', '틀린 옵션', '택배 옮김', '확인 필요', '메모'];
+  const head = ['진행일', '방제', '상태', '의뢰 총건수', '그날 목표', '신청', '남은', '마감 시각', '명단', '폼', '상품', '틀린 옵션', '택배 옮김', '확인 필요', '메모', '모집완료'];
   let obNotices = []; try { const ob0 = outboxSheet_(), ol0 = ob0.getLastRow(); if (ol0 >= 2) obNotices = ob0.getRange(2, 4, ol0 - 1, 2).getValues().filter(function (v) { return /🐥\s*상품번호/.test(String(v[1])); }); } catch (e) {}
   let errs = {};
   try { errs = JSON.parse(props.getProperty('RUN_ERRORS') || '{}'); } catch (e) {}
@@ -13011,7 +13017,7 @@ function buildDashboard_(force) {
   runs.forEach(function (r, i) {
     const rr = i + 2, x = sheets['b' + i];
     // 줄이 밀리면 예전 줄의 체크칸·드롭다운 규칙이 남아 방제 칸에 '잘못됨: 유효성 검사 규칙 위반'이 뜸 (11/2) → 위 표 줄 규칙은 먼저 지움 (택배 옮김 체크칸은 아래에서 다시)
-    try { sh.getRange(rr, 1, 1, 15).clearDataValidations(); } catch (e) {}
+    try { sh.getRange(rr, 1, 1, 16).clearDataValidations(); } catch (e) {}
     // 기대평은 건수로 (의뢰 총건수 405, 그날 목표·신청 = 사람 × 그 주 건수, 사용자 요청 10/24)
     const per = isExpect_(r) ? expPer_(r) : cartN_(r), mixDay = isExpect_(r) && !!EXP_MIX[dateTok_(r['명단 제목'])];   // A·B묶음 섞인 기대평 날은 건수를 직접 셈 (10/26)
     sh.getRange(rr, 1, 1, 5).setValues([[r['진행일'], String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, ''), dashStatus_(r), isExpect_(r) ? expTotal_(r) : ((Number(r['총건수']) || 0) * per || ''), (mixDay ? expCount_(r, Number(r['목표인원']) || 0, allRuns) : (Number(r['목표인원']) || 0) * per) || r['목표인원']]]);
@@ -13058,7 +13064,7 @@ function buildDashboard_(force) {
     // 오류가 없어지면 칸도 비움 (10/31: 다시 그릴 때 시트를 통째로 안 지워서 옛 오류가 몇 시간 남아 있었음)
     if (errs[r['명단 제목']]) sh.getRange(rr, 14).setValue('⚠ ' + errs[r['명단 제목']]).setFontColor('#b91c1c');
     else sh.getRange(rr, 14).clearContent();
-    // O열 메모 복원: 수진 님이 입력한 메모 영구 보존
+    // O열 메모 & P열 모집완료 체크 복원: 수진 님이 입력한 메모·체크 영구 보존
     const bTitle = String(r['명단 제목']).replace(/\s*\([^)]*\)\s*$/, '').trim();
     const memoV = savedMemos[bTitle] || savedMemos[memoKey_(r)];
     if (memoV) {
@@ -13066,6 +13072,7 @@ function buildDashboard_(force) {
     } else {
       sh.getRange(rr, 15).clearContent();
     }
+    sh.getRange(rr, 16).insertCheckboxes().setValue(!!(savedRecruit[bTitle] || savedRecruit[memoKey_(r)]));
     if (x.chk) {
       const c = colLetter_(x.chk), rg = c + (x.top + 2) + ':' + c + (x.top + 1 + x.n);
       // 틀린 게 없으면 빈칸 (11/8 사용자: 0이 최근 진행에만 있다가 없어져 헷갈림. 숫자는 틀린 게 있을 때만)
