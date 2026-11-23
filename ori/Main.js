@@ -7595,23 +7595,27 @@ function show(o) {
     o.status.forEach(function (x) {
       if (x.g !== lastG) { var h = document.createElement('div'); h.textContent = heads[x.g]; h.style.cssText = 'font-weight:900;font-size:14px;margin:12px 0 4px;color:var(--pink-deep);letter-spacing:.03em'; sb.appendChild(h); lastG = x.g; }
       var row = document.createElement('div'), left = x.goal ? x.goal - x.got : 0;
-      row.style.cssText = 'padding:8px 4px;border-bottom:1.5px solid var(--pink-bg);font-size:14.5px' + (x.real ? ';background:var(--yellow);border-radius:8px;padding:8px' : '');
-      var top = document.createElement('div');
-      top.style.cssText = 'display:flex;gap:8px;align-items:baseline';
-      var a = document.createElement('span'); a.textContent = x.d; a.style.cssText = 'min-width:44px;color:var(--ink-soft);font-weight:700';
-      var b = document.createElement('span'); b.textContent = x.t; b.style.cssText = 'flex:1;min-width:0;font-weight:700;word-break:keep-all;overflow-wrap:break-word';
-      var c = document.createElement('span'); c.textContent = x.done ? '마감 ' + x.got + '/' + x.goal : x.got + '/' + x.goal + (left > 0 ? ' (남은 ' + left + ')' : '');
-      c.style.cssText = 'white-space:nowrap;font-weight:900;color:' + (x.done ? 'var(--ok)' : left > 0 && x.g === 0 ? 'var(--alert)' : 'var(--ink)');
-      top.appendChild(a); top.appendChild(b); top.appendChild(c); row.appendChild(top);
+      row.style.cssText = 'padding:9px 10px;margin-bottom:6px;border-radius:10px;font-size:14.5px;' + (x.real ? 'background:#fff9db;border:1.5px solid #f59f00;border-left:4px solid #f59f00' : 'background:#fff;border:1.5px solid var(--pink-bg)');
+      var b = document.createElement('div');
+      b.textContent = (x.d && x.t.indexOf(x.d) === -1) ? (x.d + ' ' + x.t) : x.t;
+      b.style.cssText = 'font-weight:900;line-height:1.35;color:var(--ink);word-break:keep-all;overflow-wrap:break-word';
+      row.appendChild(b);
+      var bot = document.createElement('div');
+      bot.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px';
+      var c = document.createElement('span');
+      c.textContent = x.done ? '마감 ' + x.got + '/' + x.goal : x.got + '/' + x.goal + (left > 0 ? ' (남은 ' + left + ')' : '');
+      c.style.cssText = 'font-size:13px;white-space:nowrap;font-weight:900;color:' + (x.done ? 'var(--ok)' : left > 0 && x.g === 0 ? 'var(--alert)' : 'var(--ink)');
+      bot.appendChild(c);
       if (x.sheet || x.formEdit) {
-        var ln = document.createElement('div'); ln.className = 'stlnk';
+        var ln = document.createElement('div'); ln.className = 'stlnk'; ln.style.marginTop = '0';
         [['📋 명단', x.sheet, 'l'], ['✏️ 폼 수정', x.formEdit, 'f']].forEach(function (p) {
           if (!p[1]) return;
           var la = document.createElement('a'); la.className = p[2]; la.href = p[1]; la.target = '_blank'; la.rel = 'noopener'; la.textContent = p[0];
           ln.appendChild(la);
         });
-        row.appendChild(ln);
+        bot.appendChild(ln);
       }
+      row.appendChild(bot);
       sb.appendChild(row);
     });
   }
