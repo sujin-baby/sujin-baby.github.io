@@ -2025,7 +2025,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3821,6 +3821,8 @@ function checkFullInner_() {
       try { seolKol1_(); } catch (e) {}
       try { seolDup1_(); } catch (e) {}
       try { starFix1_(); } catch (e) {}
+      try { bijeonRen1_(); } catch (e) {}
+      try { tanDel1_(); } catch (e) {}
       try { if (!props.getProperty('EDITC1')) { ensureEditTab_(); props.setProperty('EDITC1', Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm')); } } catch (e) { note_('폼수정 날짜 칸 실패: ' + e); }   // (11/18 한 번) C1 날짜 고르기 바로 (정리가 밀려 늦게 생기던 것)
       try { upAcctOpen1_(); } catch (e) {}
       try { exp135_(); } catch (e) {}
@@ -9359,6 +9361,40 @@ function stuckTodoDel1_() {
 // (11/22 한 번) seolKol1_이 옮긴 콜라비 5장이 설향딸기외 리뷰이미지에 이미 있던 같은 사진과 겹침 → 종류 폴더 안 같은 사진(MD5)은 한 장만 남기고 '같은 사진 (압축 제외)'로
 // (11/22 한 번, 사용자 "청솔농장 포기김치 리뷰이미지 텍스트도 왜 다 별점에 가 있어?") 업체에 안 보낸 의뢰 중 의뢰서에 별점리뷰가 없는 의뢰의 '별점' 폴더 사진 → 글 다시 묻기, 글 있으면 텍스트로
 //  한 번에 60초까지, 남으면 다음 확인에서 이어서 (사진 설명 recheck 표시로 다시 안 물음)
+// (11/23 한 번, 사용자 "11.23·11.24 둘 다 비전이공이공 한라봉 토스로 다 바꿔") 방제·명단 제목·카톡방·명단 시트·폼·폴더·보낼메시지·월급시트 같이 (renameRun_). 20자라 날짜에 붙여 씀(11.23 모양 그대로)
+function bijeonRen1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('BIJEONREN1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
+  try {
+    const out = [];
+    [['zofdhj1x-2', '#11.24비전이공이공 한라봉 토스5'], ['zofdhj1x', '#11.23비전이공이공 한라봉 토스5']].forEach(function (x) {
+      const r = readRuns_().filter(function (y) { return String(y['요청ID']) === x[0]; })[0];
+      if (!r) { out.push(x[0] + ' 없음'); return; }
+      if (bareTitle_(r['명단 제목']) === x[1]) { out.push(x[1] + ' 이미 됨'); return; }
+      out.push(renameRun_(r, x[1], '사용자 11/23: 한라봉 토스') ? x[1] : x[1] + ' 안 바뀜');
+    });
+    props.setProperty('BIJEONREN1', (/안 바뀜|없음/.test(out.join(' ')) ? (st + ' 실패(') : '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ') + out.join(', ') + (/안 바뀜|없음/.test(out.join(' ')) ? ')' : ''));
+  } catch (e) { props.setProperty('BIJEONREN1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/23 한 번, 사용자 "#11.24 탄탄상점 레깅스 30 이 캠페인 잘못 만들었어, 실 붙여야 하는데 안 붙여서 지워줘") 그 의뢰(요청ID tcmlx6ic) 진행 11.23·11.24(둘 다 0명)와 일정 대기 줄 지움.
+//  응답이 하나라도 있으면 안 지움. 명단 시트·폼 파일은 그대로 (deleteRun_: 진행목록 줄·안 보낸 메시지·배정·월급시트 줄·다음 일차 계획)
+function tanDel1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('TANDEL1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
+  try {
+    const mine = function () { return readRuns_().filter(function (y) { return /^tcmlx6ic(-\d+)?$/.test(String(y['요청ID'])) && /탄탄상점\s*레깅스/.test(bareTitle_(y['명단 제목'])) && !/(^|[\s#\d.])실(\/빈)?(\s|$)/.test(bareTitle_(y['명단 제목'])); }); };
+    const rs = mine();
+    if (rs.some(function (y) { return Number(y['인원']) > 0; })) { props.setProperty('TANDEL1', (st + ' 실패(응답 있음: ' + rs.map(function (y) { return bareTitle_(y['명단 제목']) + ' ' + y['인원'] + '명'; }).join(', ') + ')').slice(-400)); return; }
+    const out = [];
+    // 아래 줄부터 (줄 번호가 밀리지 않게), 1일차(tcmlx6ic)는 다음 일차 계획(대기)도 같이 지움
+    rs.sort(function (a, b) { return b.row - a.row; }).forEach(function (y) { out.push(deleteRun_(readRuns_().filter(function (z) { return String(z['요청ID']) === String(y['요청ID']); })[0])); });
+    let plans = 0;
+    const ps = planSheet_(), pl = ps.getLastRow();
+    if (pl >= 2) { const v = ps.getRange(2, 1, pl - 1, 9).getValues(); for (let i = v.length - 1; i >= 0; i--) if (/^tcmlx6ic-\d+$/.test(String(v[i][0])) && String(v[i][8]) === '대기') { ps.deleteRow(i + 2); plans++; } }
+    props.setProperty('TANDEL1', ('✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(' / ') || '지울 진행 없음') + (plans ? ' / 일정 대기 ' + plans + '줄 더' : '')).slice(0, 1000));
+    note_('✓ 탄탄상점 레깅스(실 빠진 의뢰) 지움: ' + out.length + '개');
+  } catch (e) { props.setProperty('TANDEL1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
 function starFix1_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('STARFIX1') || '');
   if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3 || !geminiKey_()) return;
