@@ -13,7 +13,7 @@ function setup() {
     ['ax7568r3-3', '코지클로 남자타이즈', 3, new Date(2026, 10, 24), '#택11.24 코지클로 남자타이즈10', '#택11.24 코지클로 남자타이즈10 (뽀짝오리)', 10, '[]', '대기', '{}'],
     ['ax7568r3-2', '코지클로 남자타이즈', 2, new Date(2026, 10, 23), '#택11.23 코지클로 남자타이즈10', '#택11.23 코지클로 남자타이즈10 (뽀짝오리)', 10, '[]', '생성됨', '{}'],
     ['qqq-2', '다른 상품', 2, new Date(2026, 10, 24), '#11.24 실 다른 상품 5', '#11.24 실 다른 상품 5 (뽀짝오리)', 5, '[]', '대기', '{}']]);
-  G("globalThis.__FILES = 0; globalThis.__PAYREN = []; renameRunFiles_ = function () { __FILES++; return []; }; updatePay_ = function () {}; payRename_ = function (a, b) { __PAYREN.push(a + '→' + b + (globalThis.__PAY_RENAME_ANY ? ' any' : '')); };");
+  G("today_ = function () { return new Date(2026, 10, 20); }; globalThis.__FILES = 0; globalThis.__PAYREN = []; renameRunFiles_ = function () { __FILES++; return []; }; updatePay_ = function () {}; payRename_ = function (a, b) { __PAYREN.push(a + '→' + b + (globalThis.__PAY_RENAME_ANY ? ' any' : '')); };");
   return { env, G };
 }
 // 1) 한 번 바꾸기

@@ -5328,7 +5328,7 @@ function todayItems_(runs) {
     if (kind === '방 공지') { try { out.items[out.items.length - 1].img = thumbOfRoom_(String(x[3]), ctx.runs); } catch (e) {} }   // 썸네일 (길게 눌러 저장)
   });
   out.items.sort(function (a, b) { return a.g - b.g || (b.over ? 1 : 0) - (a.over ? 1 : 0); });
-  out.items = out.items.slice(0, 80);
+  out.items = out.items.slice(0, 300);
   return out;
 }
 
