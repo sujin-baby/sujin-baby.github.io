@@ -3684,7 +3684,7 @@ function cfFresh_(st, sig, sub) {
 // 매번 하는 급하고 빠른 단계 (건너뛰거나 미루지 않음)
 function cfAlways_(S, name, fn) { cfDo_(S, name, fn, null); }
 // 나머지 단계: 건너뛸 것(방금 함) 빼고, 오래 밀린 것 먼저, 남은 시간 안에 끝날 것만. 못 한 건 1분 뒤 확인이 이어서
-const CF_URGENT = ['폼 인원', '명단 시트', '명단 전달·리뷰 가이드'];
+const CF_URGENT = ['폼 인원', '명단 시트'];
 function cfRun_(S, list) {
   const now = Date.now(), sig = cfSig_(readRuns_());
   const skipped = (globalThis.__CF_SKIP || []).slice(), deferred = [];
@@ -3695,13 +3695,13 @@ function cfRun_(S, list) {
     return !fresh;
   });
   const od = function (x) { return now - (x.st.d || 0) > CF_OVERDUE; };
-  // 밀린 단계가 여럿이면 사람이 기다리는 것(폼 인원·명단 시트·명단 전달) 먼저 (11/24: 저장 공간이 찬 뒤 다 밀렸을 때 '리뷰 확인'이 가장 오래 밀려
+  // 밀린 단계가 여럿이면 사람이 기다리는 것(폼 인원·명단 시트) 먼저 (11/24: 저장 공간이 찬 뒤 다 밀렸을 때 '리뷰 확인'이 가장 오래 밀려
   //  매번 먼저 3분을 써서 폼 인원·명단 시트가 계속 1분 뒤로 밀림 → 목쿠션외 11.24 응답이 명단 시트에 안 뜸)
   const urgent = function (x) { return CF_URGENT.indexOf(x.p.n) >= 0; };
   todo.sort(function (a, b) {
     const A = od(a), B = od(b);
     if (A !== B) return A ? -1 : 1;
-    if (A && urgent(a) !== urgent(b)) return urgent(a) ? -1 : 1;
+    if (A && a.st.d && b.st.d && urgent(a) !== urgent(b)) return urgent(a) ? -1 : 1;   // 한 번도 안 돈 처음엔 정해진 순서대로
     if (A && (a.st.d || 0) !== (b.st.d || 0)) return (a.st.d || 0) - (b.st.d || 0);
     return a.i - b.i;
   });
