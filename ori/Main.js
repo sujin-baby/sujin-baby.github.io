@@ -2025,7 +2025,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3824,6 +3824,7 @@ function checkFullInner_() {
       try { bijeonRen1_(); } catch (e) {}
       try { tanDel1_(); } catch (e) {}
       try { salad30_(); } catch (e) {}
+      try { tan40_(); } catch (e) {}
       try { if (!props.getProperty('EDITC1')) { ensureEditTab_(); props.setProperty('EDITC1', Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm')); } } catch (e) { note_('폼수정 날짜 칸 실패: ' + e); }   // (11/18 한 번) C1 날짜 고르기 바로 (정리가 밀려 늦게 생기던 것)
       try { upAcctOpen1_(); } catch (e) {}
       try { exp135_(); } catch (e) {}
@@ -9400,6 +9401,28 @@ function tanDel1_() {
 }
 // (11/23 한 번, 사용자 "내일 거 유러피안 샐러드야채 30이어야 하는데 왜 20이야") 의뢰서 '일 진행 건수 : 20건 / 30건' = 1일차 20·2일차 30인데 20·20·10으로 만들어짐
 //  → 하루 인원 바꾸기(changeDaily_)로 11.24부터 30: 11.24 진행 30(방제·목표·폼 설명·안 보낸 공지), 남는 11.25 일정 취소
+// (11/23 한 번, 사용자 "23일 30건 24일 30건 25일 40건 총 100건이잖아 26일은 뭔데?") 의뢰서 '하루 구매하는 건수 : 30 -> 30 -> 40'인데 30·30·30·10으로 만들어짐
+//  → 일정 탭 11.25 줄(tcmlx6ic-3)을 40으로(방제·명단 제목·건수·인원), 11.26 줄(tcmlx6ic-4)은 취소. 진행(11.23·11.24)은 그대로
+function tan40_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('TAN40') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
+  try {
+    const ps = planSheet_(), pl = ps.getLastRow(), v = pl >= 2 ? ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues() : [], out = [];
+    const anchor = readRuns_().filter(function (y) { return String(y['요청ID']) === 'tcmlx6ic'; })[0];
+    const cnt = function (t, c) { return String(t).replace(/\d+(\s*(\([^)]*\))?\s*)$/, c + '$1'); };
+    v.forEach(function (x, i) {
+      if (String(x[0]) === 'tcmlx6ic-3' && x[8] === '대기') {
+        let cc = []; try { cc = JSON.parse(x[7]); } catch (e) {}
+        cc = (cc || []).map(function (g) { g = (g || []).slice(); g[0] = 40; if (g[1] && g[1].length === 1) g[1] = [40]; return g; });
+        const tc = anchor ? titleCount_(anchor, 40) : 40;
+        ps.getRange(i + 2, 5, 1, 4).setValues([[cnt(x[4], tc), cnt(x[5], tc), 40, JSON.stringify(cc)]]);
+        out.push(bareTitle_(x[5]) + ' → ' + bareTitle_(cnt(x[5], tc)));
+      }
+      if (String(x[0]) === 'tcmlx6ic-4' && x[8] === '대기') { ps.getRange(i + 2, 9).setValue('취소 (하루 인원 바꿈)'); out.push(bareTitle_(x[5]) + ' 취소'); }
+    });
+    props.setProperty('TAN40', out.length ? '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + out.join(', ') : (st + ' 실패(일정 줄 없음)').slice(-400));
+  } catch (e) { props.setProperty('TAN40', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
 function salad30_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SALAD30') || '');
   if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
