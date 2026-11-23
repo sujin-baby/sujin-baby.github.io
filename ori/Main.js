@@ -6868,7 +6868,15 @@ function toolOverview_(out, runs) {
     const st = runs.filter(function (r) { return r['진행 상태'] !== '종료' && r['진행일'] instanceof Date; });
     const grp = function (r) { const t = dayStart_(r['진행일']); return t === t0 ? 0 : t > t0 ? 1 : 2; };
     st.sort(function (a, b) { return grp(a) - grp(b) || (grp(a) === 2 ? b['진행일'] - a['진행일'] : a['진행일'] - b['진행일']); });
-    out.status = st.slice(0, 40).map(function (r) {
+    const st0 = st.filter(function (r) { return grp(r) === 0; });
+    const st1 = st.filter(function (r) { return grp(r) === 1; });
+    const st2All = st.filter(function (r) { return grp(r) === 2; });
+    const st2 = [];
+    for (let i = 0; i < st2All.length; i++) {
+      if (st2.length >= 25 && dayStart_(st2All[i]['진행일']) !== dayStart_(st2All[i - 1]['진행일'])) break;
+      st2.push(st2All[i]);
+    }
+    out.status = st0.concat(st1, st2).map(function (r) {
       const got = Number(r['인원']) || 0, goal = Number(r['목표인원']) || 0;
       return { d: md(r['진행일']), t: bareTitle_(r['명단 제목']), got: got, goal: goal, g: grp(r), done: r['마감 시각'] instanceof Date, real: r['실배송'] === 'Y',
         sheet: String(r['시트 링크'] || ''),
