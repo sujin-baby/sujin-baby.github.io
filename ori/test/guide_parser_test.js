@@ -2669,6 +2669,30 @@ https://www.coupang.com/vp/products/9673586755?vendorItemId=96222565304
   console.log('✓ Test 52: 가이드 1개 · 총 5건 · 일 2건 · 실/빈 유지');
 }
 
+// 53. 11/23 슬랙 제보: 탄탄상점 레깅스 — 30 -> 30 ->40 (3개 이상 화살표 일차 인원 + 2줄 라벨)
+console.log('\n[Test 53] 3개 이상 화살표 일차 인원 파싱 (30 -> 30 ->40 / 10→20→30)');
+{
+  const req53 = `#입금대행
+1. 검색 키워드 : 탄탄상점 레깅스
+2. 키워드 검색 시 현재 순위 : 1위
+3. 총 결제하신 건수 : 100건
+4. 하루 구매하는건수 (어뷰징 피하기위해 
+조금씩 변동될수 있습니다 : 30 -> 30 ->40
+5. 상품주소(URL) : https://www.coupang.com/vp/products/9812345678
+6. 구매옵션 : 블랙
+9. 입금자명 : 홍길동
+10. 택배대행 Y/N : N`;
+  const g53 = P.parseAll(req53).guides[0];
+  const d53 = (g53.days || []).map(x => String(x.n));
+  if (d53.join(',') !== '30,30,40') throw new Error('Test 53 days 불일치: ' + JSON.stringify(d53));
+  if (String(g53.daily) !== '30' || String(g53.total) !== '100') throw new Error('Test 53 daily/total 불일치: ' + g53.daily + '/' + g53.total);
+
+  const req53b = req53.replace('100건', '60건').replace('30 -> 30 ->40', '10→20→30');
+  const d53b = (P.parseAll(req53b).guides[0].days || []).map(x => String(x.n));
+  if (d53b.join(',') !== '10,20,30') throw new Error('Test 53b days 불일치: ' + JSON.stringify(d53b));
+  console.log('✓ Test 53: 30 -> 30 ->40 → [30, 30, 40], 10→20→30 → [10, 20, 30]');
+}
+
 console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (44개 샘플 전원 일치)');
 process.exit(0);
 
