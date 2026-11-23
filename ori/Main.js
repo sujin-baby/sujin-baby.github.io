@@ -3906,6 +3906,15 @@ function checkFullInner_() {
       cfCut_();
       try { payChkRecheck1_(runs); } catch (e) { note_('결제금액 확인 다시 보기 실패: ' + e); }
     } },
+    // 명단 전달·리뷰 가이드 안전망 (마감 때 바로 넣으므로 보통 할 게 없음): 리뷰 확인이 시간을 다 쓰기 전에 먼저 실행 (need: 30)
+    { n: '명단 전달·리뷰 가이드', need: 30, run: function () {
+      runs = readRuns_();
+      try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
+      cfCut_();
+      try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
+      cfCut_();
+      try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
+    } },
     // 리뷰 체크 확인(취완·독촉·리뷰 보고)은 15분마다 (11/2 사용자 요청). 한눈에를 그리기 전에 해서 '리뷰 취합할 것'이 바로 보이게
     { n: '리뷰 확인', need: 30, run: function () {
       let rvCut = false;
@@ -3927,15 +3936,6 @@ function checkFullInner_() {
           note_(left.length ? '⚠ 한눈에 오류 칸(' + bad.slice(0, 3).join(', ') + ')을 다시 그렸는데 ' + left.length + '개 남음: ' + left.slice(0, 3).join(', ') + why : '✓ 한눈에 오류 칸 ' + bad.length + '개(' + bad.slice(0, 3).join(', ') + ') 다시 그려서 고침');
         }
       } catch (e) { if (e && e.yieldLock) throw e; note_('한눈에 오류 칸 확인 실패: ' + e); }
-    } },
-    // 명단 전달·리뷰 가이드 안전망 (마감 때 바로 넣으므로 보통 할 게 없음): 한눈에 뒤 (11/18 194초 걸려 한눈에가 두 번 밀림)
-    { n: '명단 전달·리뷰 가이드', need: 90, run: function () {
-      runs = readRuns_();
-      try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
-      cfCut_();
-      try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
-      cfCut_();
-      try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
     } },
     { n: '리뷰 사진', need: 30, run: function () {
       // 진행 중 의뢰 리뷰이미지에 바로 올린 사진도 대기열로 (11/15)
@@ -5511,6 +5511,8 @@ function listWarn_(lc) {
     const r = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === bareTitle_(lc); })[0] || runs.filter(function (x) { return sameRunTitle_(x['명단 제목'], lc); })[0];
     if (r && r['시트ID'] && !isExpect_(r)) {
       const goal = Number(r['목표인원']) || 0, got = Number(r['인원']) || 0;
+      const ck = 'LW_' + r['시트ID'] + '_' + goal + '_' + got;
+      try { const hit = CacheService.getScriptCache().get(ck); if (hit !== null) return (memo[lc] = hit); } catch (e) {}
       if (goal && got > goal) out.push('⚠ 목표 ' + goal + '명인데 폼 ' + got + '개 (' + (got - goal) + '개 많음) → 중복·초과 확인하고 보내기');
       const w = windowOf_(runs, r), seen = {};
       SpreadsheetApp.openById(r['시트ID']).getSheets().filter(function (t) { return !!t.getFormUrl(); }).forEach(function (t) {
@@ -5533,6 +5535,9 @@ function listWarn_(lc) {
       const ph = keys.filter(function (k) { return seen[k].names.length > 1; }).map(function (k) { return seen[k].names.join('·') + ' (번호 끝 ' + seen[k].ph.slice(-4) + ')'; });
       if (same.length) out.push('⚠ 같은 사람이 폼을 두 번 냄: ' + same.join(', ') + ' → 한 줄 빼고 보내기');
       if (ph.length) out.push('⚠ 이름은 다른데 전화번호가 같음: ' + ph.join(', ') + ' → 같은 사람인지 확인하고 보내기');
+      const res = out.join('\n');
+      try { CacheService.getScriptCache().put(ck, res, 600); } catch (e) {}
+      return (memo[lc] = res);
     }
   } catch (e) {}
   return (memo[lc] = out.join('\n'));
