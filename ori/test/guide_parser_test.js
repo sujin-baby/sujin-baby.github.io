@@ -2635,6 +2635,40 @@ console.log('\n[Test 51] 20건 / 30건 슬래시 일차별 건수 파싱 (건·�
   console.log('✓ Test 51: 20건 / 30건 → [20, 30], 10명 / 20명 / 30명 → [10, 20, 30]');
 }
 
+// 52. 11/23 팀룸 #114: 카라비너 카드지갑 — 같은 상품(9673586755)에 '실배링크 카키2 블랙1' + '빈 링크 카키1,블랙1' 2줄이 있어도
+//     각 URL에 '5건 실배' 같은 명시적 건수가 없으면 1개 가이드(총 5, 일 2)로 유지
+console.log('\n[Test 52] 같은 상품 실배·빈 링크 2줄 의뢰서 1개 가이드 유지 (#114)');
+{
+  const req52 = `#입금대행 실3 빈2 
+
+1. 검색 키워드(미노출시 저희가 키워드땁니다):카라비너 카드지갑
+2. 키워드 검색 시 현재 순위 :모르시면 비워두세요
+3. 총 결제하신 건수 : 5개
+4. 하루 구매하는건수 (어뷰징 피하기위해 
+조금씩 변동될수 있습니다 : 2개
+5. 상품주소(URL) : 
+
+실배링크 카키2 블랙1
+https://www.coupang.com/vp/products/9673586755?vendorItemId=95855820070
+
+빈 링크  카키1,블랙1
+
+https://www.coupang.com/vp/products/9673586755?vendorItemId=96222565304
+6. 구매옵션 : 카키(3개), 블랙(2개)
+7. 포토제공 (몇명)  /포토없음  선택: 포토제공3개 / 포토없음 2개
+8. 리뷰 가이드 : 자율
+9. 입금하실 입금자명 : 김영근
+10.택배대행 Y/N: N`;
+  const r52 = P.parseAll(req52);
+  if (!r52.silbin) throw new Error('Test 52 silbin이어야 함');
+  if (r52.guides.length !== 1) throw new Error('Test 52 가이드가 1개여야 함: ' + r52.guides.length);
+  const g52 = r52.guides[0];
+  if (String(g52.total) !== '5') throw new Error('Test 52 총건수 5 불일치: ' + g52.total);
+  if (String(g52.daily) !== '2') throw new Error('Test 52 일진행건수 2 불일치: ' + g52.daily);
+  if (g52.keyword !== '카라비너 카드지갑') throw new Error('Test 52 키워드 불일치: ' + g52.keyword);
+  console.log('✓ Test 52: 가이드 1개 · 총 5건 · 일 2건 · 실/빈 유지');
+}
+
 console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (44개 샘플 전원 일치)');
 process.exit(0);
 
