@@ -1626,3 +1626,14 @@
 - **고침 ③**: `copyText(text, tabId, noPush)` — `noPush`면 클립보드 복사만 하고 생성기에는 안 보냄. `naverProduct`는 `copyText(out, tab.id, true)`, 결과는 **`naverHere(nt)`가 검색 화면을 실제로 읽은 뒤**에 보냄: 찾았으면 위치까지 넣은 `out`(`copyText`), 못 찾았으면 `pushGen({ status: "이 화면(1페이지)에는 없어요 (위치 없이 상품 정보만 넣었어요)" })` + `pushGen({ text: infoLines(t) })`. 화면을 못 읽음·네이버 접속 제한·찾을 상품 없음은 각각 `(건너뜀)` 상태를 보내 4분 대기를 없앰.
 - **버전·패키지**: `manifest.json` **1.8.9 → 1.8.10**, `ori/product-locator.zip`·`EXT_ZIP`·`EXT_VER` 재생성(`python3 ori/tools/pack_ext.py`), 유저스크립트 `@version` **205.0**, 생성기 표시 **v205**. **PC 확장은 1.8.10으로 다시 깔아야** 적용됨(`chrome://extensions` ↻ → 생성기 새로고침).
 - **시험**: `guide_parser_test.js` Test 43 — `isImgUrl`(이미지 확장자·호스트 / 상품 주소는 아님), 사진 주소가 `g.url`에 안 들어가고 `g.thumb`에 들어감, 사진만 있는 의뢰서는 상품 주소가 빔, `updateProductLink`가 사진 주소를 거름. `naverprod_test.js` 8-5 — `bg.js isImgUrl`, `autoRun`이 사진 주소면 탭을 안 열고 '건너뜀'을 보냄(상품 주소는 예전처럼 엶), `copyText(noPush)`, `naverProduct` 순서(noPush 복사 → `naverHere`), `naverHere`가 찾음/못 찾음/못 읽음/접속 제한/대상 없음 모두 생성기에 결과·상태를 보냄, `runBatch`가 `건너뜀`을 받으면 다음 상품으로. `bash ori/test/run_ci.sh` 전체 통과.
+
+### 2026-11-24 `🐥방공지` 분리·`📋명단전달·가이드` 병합 · 가독성 개편 · 중복 경고 복원 · 속성 15일 정리 (피클, 사용자 요청)
+
+- **`📋명단전달·가이드` 양옆 병합 (`55a9faa` → `9377f2d` → `f8406ff`, `MSGV_VER = '17'`)**:
+  - `🐥방공지`는 단독 탭으로 복원하고, `📋명단전달·가이드`(`pair: true`) 한 줄에 `B 명단 보냄 · C 날짜 · D 방제 · E 명단 글 · F 비고 · G 가이드 보냄 · H 리뷰가이드 · I 의뢰서` 배치 (`⭐리뷰가이드` `merged: 'list'`, 진행 도우미 알약 라벨 `'명단·가이드'`).
+  - **가독성 개편 (`9377f2d`)**: D열에 `'오리명단방'` 대신 실제 방제(`lc || rx[3]`) 표시, 열 너비 축소(`D:230, E:260, F:200, G:48, H:340, I:220`), `F` 포함 `1~10열` `CLIP` 및 행 높이 `40px` 고정(1행 `28px`).
+  - **비고 중복 경고 복원 (`f8406ff`)**: `grp.pair` 분기에서 빠졌던 `listWarn_(lc)`를 `listNote`에 복원해 폼 2번 이상 제출자 경고가 `F열 비고`에 다시 표시되도록 수정.
+  - **시험 정비**: `msgview_test.js`(7열 가이드 체크)·`today_test.js`·`exp2tak_test.js` 업데이트.
+- **속성 저장용량(500KB) 초과 해결 — `propsCleanup_` 15일 기준 강화**:
+  - `한눈에` 새 진행 추가·`ensureReviewGuideMsgs_`가 `속성 저장용량 한도를 초과했습니다`로 멈춰 `이불형제`·`유앤아이푸드`·`동대문청년` 리뷰 가이드가 생성되지 않은 문제 확인.
+  - `propsCleanup_(runs)` 기준을 **30일 → 15일**(`PROPCLEAN_15_DAY`)로 단축하고, `RVMSGD_`/`RVTXT_RVMSGD_`/`RVSIG_RVMSGD_`/`RVPH_RVMSGD_` 4종 모두 15일 초과 시 정리하며, `종료` 상태이면서 15일 지난 진행의 `LISTK_/LISTH_/RVSEEN_/RVQMOD_/THUMB_`도 정리 대상에 포함. `ensureReviewGuideMsgs_` 시작 시 오늘 아직 안 돌았으면 먼저 `propsCleanup_`을 실행해 즉시 용량을 확보.

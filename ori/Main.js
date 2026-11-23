@@ -4413,6 +4413,7 @@ function receivers_(r, w) {
 }
 function ensureReviewGuideMsgs_(runs) {
   const props = PropertiesService.getScriptProperties(), now = Date.now();
+  try { if (props.getProperty('PROPCLEAN_15_DAY') !== Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd')) propsCleanup_(runs); } catch (e) {}
   let assign = null;
   const obc = {};   // 보낼메시지는 이번에 한 번만 읽음 (진행마다 다시 맞추기에서 읽어서 느렸음, 11/18)
   const namesOf = function (x) {
@@ -5432,26 +5433,27 @@ const MSGV_ROOM_BG = ['#fde2e4', '#dbeafe', '#dcfce7', '#fef3c7', '#f3e8ff', '#f
 const MSGV_FIXED_BG = { '내 할 일': '#fff8e1', '사장님': '#e0f2f1', '리뷰비시트': '#fce4ec' };
 function msgvSigHash_(sig) { return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, String(sig), Utilities.Charset.UTF_8)); }
 // 속성 정리 (11/16 '데이터 용량 오류': 속성 3,800개·한글이라 한도 500KB에 닿음). 하루 한 번, 캐시성 속성만:
-//  진행목록에 없는 명단 시트의 LISTK_/LISTH_/RVSEEN_/RVQMOD_/THUMB_, 30일 지난 날짜 리뷰 글 캐시(RVTXT_/RVSIG_ RVMSGD_), 사흘 지난 MSGV_S_
+//  진행목록에 없거나 15일 넘게 지난 종료 명단 시트의 LISTK_/LISTH_/RVSEEN_/RVQMOD_/THUMB_, 15일 지난 날짜 리뷰 글 캐시(RVMSGD_/RVTXT_/RVSIG_/RVPH_), 사흘 지난 MSGV_S_
 function propsCleanup_(runs) {
   const props = PropertiesService.getScriptProperties(), tk = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
-  if (props.getProperty('PROPCLEAN_DAY') === tk) return 0;
-  const all = props.getProperties(), live = {};
-  (runs || readRuns_()).forEach(function (r) { const sid = String(r['시트ID'] || ''); if (sid) live[sid] = 1; });   // 진행목록에 남아 있는 명단 시트 것은 그대로
-  const old30 = Utilities.formatDate(new Date(Date.now() - 30 * 86400000), CONFIG.TIMEZONE, 'yyyyMMdd'), s3 = Date.now() - 3 * 86400000;
+  if (props.getProperty('PROPCLEAN_15_DAY') === tk) return 0;
+  try { props.deleteProperty('PROPCLEAN_DAY'); } catch (e) {}
+  const all = props.getProperties(), live = {}, cut15 = Date.now() - 15 * 86400000;
+  (runs || readRuns_()).forEach(function (r) { const sid = String(r['시트ID'] || ''); if (sid && !(r['진행 상태'] === '종료' && r['진행일'] instanceof Date && r['진행일'].getTime() < cut15)) live[sid] = 1; });
+  const old15 = Utilities.formatDate(new Date(cut15), CONFIG.TIMEZONE, 'yyyyMMdd'), s3 = Date.now() - 3 * 86400000;
   let n = 0, left = 0;
   const t0 = Date.now();
   Object.keys(all).forEach(function (k) {
     // 한 번에 조금씩 (11/16: 한꺼번에 지우다 15분 확인이 6분 제한에 걸려 끊김 → 보고·나머지 단계가 안 돎). 남으면 다음 확인에서 이어서
-    if (n >= 120 || Date.now() - t0 > 20000 || late_(200)) { left++; return; }
+    if (n >= 150 || Date.now() - t0 > 20000 || late_(200)) { left++; return; }
     let del = false, m;
     if ((m = k.match(/^(?:LISTK_|LISTH_|RVSEEN_|RVQMOD_|THUMB_|RVSTUCK_|RVSTUCKMSG_|RVPRODW_)([-\w]{25,})$/))) del = !live[m[1]];
-    else if ((m = k.match(/^(?:RVTXT_|RVSIG_)RVMSGD_[-\w]+_(\d{8})$/))) del = m[1] < old30;
+    else if ((m = k.match(/^(?:(?:RVTXT_|RVSIG_|RVPH_)?RVMSGD_)[-\w]+_(\d{8})$/))) del = m[1] < old15;
     else if (/^MSGV_S_/.test(k)) del = Number(all[k]) < s3;
     if (del) { try { props.deleteProperty(k); n++; } catch (e) {} }
   });
-  if (!left) props.setProperty('PROPCLEAN_DAY', tk);
-  if (n) note_('✓ 속성 정리: 안 쓰는 캐시 ' + n + '개 지움' + (left ? ' (남은 건 다음 확인에서)' : ''));
+  if (!left) props.setProperty('PROPCLEAN_15_DAY', tk);
+  if (n) note_('✓ 속성 정리(15일): 안 쓰는 캐시 ' + n + '개 지움' + (left ? ' (남은 건 다음 확인에서)' : ''));
   return n;
 }
 function msgvPending_(st) { return st === '대기' || st === '방 못 찾음'; }
