@@ -10085,7 +10085,7 @@ function rvStarRecheck_(img, budgetMs) {
 }
 // 포토 다시 묻기: 참여자가 리뷰에 직접 붙인 사진이 있는지만 (상품명 옆 작은 대표 썸네일은 빼고). 모르면 null
 function geminiPhotoAgain_(blob) {
-  const t = geminiAsk_([{ text: '쇼핑몰 리뷰 캡처예요. 리뷰 작성자가 리뷰에 직접 첨부한 사진(본문 위아래나 별점 아래의 사진 타일, 보통 1장 이상 크게 보임)이 있나요? 화면 맨 위 상품명 옆에 있는 작은 상품 대표 썸네일 하나는 첨부 사진이 아니에요. JSON 하나로만 답하세요: {"attached": true 또는 false}' }, { inline_data: { mime_type: String(blob.getContentType() || 'image/jpeg'), data: Utilities.base64Encode(blob.getBytes()) } }], true);
+  const t = geminiAsk_([{ text: '쇼핑몰 리뷰 캡처예요. 리뷰 작성자가 리뷰에 직접 첨부한 사진(본문 위아래나 별점 아래의 사진 타일, 보통 1장 이상 크게 보임)이 있나요? 화면 맨 위 상품명 옆에 있는 작은 상품 대표 썸네일이나, 작성자 이름·닉네임 옆의 작은 동그란 프로필 사진은 첨부 사진이 아니에요. JSON 하나로만 답하세요: {"attached": true 또는 false}' }, { inline_data: { mime_type: String(blob.getContentType() || 'image/jpeg'), data: Utilities.base64Encode(blob.getBytes()) } }], true);
   const m = String(t).match(/"attached"\s*:\s*(true|false)/);
   return m ? m[1] === 'true' : null;
 }
