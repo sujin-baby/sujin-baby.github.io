@@ -33,7 +33,7 @@ function ori_() {
     let k = 0;
     for (let i = 0; i < src.length; i += size) chunks['ori_src_' + (k++)] = src.slice(i, i + size);
     chunks.ori_src_n = String(k);
-    try { cache.putAll(chunks, 600); } catch (e) {}
+    try { cache.putAll(chunks, 60); } catch (e) {}   // 1분 (11/24 사용자: 고친 게 늦게 반영됨. 예전 600 = 10분)
   }
   (0, eval)(src);
   globalThis.__ORI_LOADED = true;
