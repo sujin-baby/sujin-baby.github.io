@@ -5511,7 +5511,7 @@ function listWarn_(lc) {
     const r = runs.filter(function (x) { return bareTitle_(x['명단 제목']) === bareTitle_(lc); })[0] || runs.filter(function (x) { return sameRunTitle_(x['명단 제목'], lc); })[0];
     if (r && r['시트ID'] && !isExpect_(r)) {
       const goal = Number(r['목표인원']) || 0, got = Number(r['인원']) || 0;
-      const ck = 'LW_' + r['시트ID'] + '_' + goal + '_' + got;
+      const ck = 'LW_' + r['시트ID'] + '_' + bareTitle_(lc) + '_' + goal + '_' + got;
       try { const hit = CacheService.getScriptCache().get(ck); if (hit !== null) return (memo[lc] = hit); } catch (e) {}
       if (goal && got > goal) out.push('⚠ 목표 ' + goal + '명인데 폼 ' + got + '개 (' + (got - goal) + '개 많음) → 중복·초과 확인하고 보내기');
       const w = windowOf_(runs, r), seen = {};
