@@ -1805,6 +1805,11 @@ function diag_(p) {
     const b = t ? toolAction_({ act: 'info', title: t.title, full: true }) : null, c = t ? toolAction_({ act: 'info', title: t.title }) : null;
     out.tools = { run: t ? bareTitle_(t.title) : '', first: a.took, pickWeb: b && b.took, pickSide: c && c.took, sideHasToday: !!(c && c.today), dups: b ? (b.dups || []).length : null, todayItems: ((a.today || {}).items || []).length, status: (a.status || []).length };
   } catch (e) { out.toolsErr = String(e && e.stack || e).slice(0, 500); }
+  // &edit=1: 폼수정 탭 B1·불러온 줄 수·첫/끝 타임스탬프·EDIT_MARKS 진행 (읽기만, 11/24 명단 안 뜸)
+  if (p.edit) try {
+    const es = adminSs_().getSheetByName(EDIT_TAB), el = es.getLastRow(), ev = el >= 4 ? es.getRange(4, 2, el - 3, 1).getValues().filter(function (x) { return x[0] instanceof Date; }).map(function (x) { return Utilities.formatDate(x[0], CONFIG.TIMEZONE, 'MM-dd HH:mm:ss'); }) : [];
+    out.edit = { b1: String(es.getRange('B1').getValue()), c1: String(es.getRange('C1').getValue()), g1: String(es.getRange('G1').getValue()).slice(0, 200), rows: ev.length, times: ev.slice(0, 12), marksRun: String(PropertiesService.getScriptProperties().getProperty('EDIT_MARKS') || '').split('|')[0] };
+  } catch (e) { out.editErr = String(e); }
   // &inbox=1: 리뷰 사진 받는 곳 맨 바깥 파일 (형식·크기·만든 때·AI 설명·이미 본 것인지, 읽기만, 11/21 안 열리는 카카오톡 파일)
   if (p.inbox) try {
     const ib = rvInbox_(), it = ib.getFiles(), done = String(PropertiesService.getScriptProperties().getProperty('RVINBOX_DONE') || '').split(','), o = [];
@@ -8421,7 +8426,11 @@ function loadEditTab_(sh, msg) {
 function refreshEditTab_() {
   const sh = adminSs_().getSheetByName(EDIT_TAB);
   if (!sh || !String(sh.getRange('B1').getValue()).trim()) return;
-  if (editMarks_(sh) !== PropertiesService.getScriptProperties().getProperty('EDIT_MARKS')) return;
+  // 같은 진행에서 체크만 손으로 바꿨으면 그대로 둠. B1(진행)이 지난번 불러온 것과 다르면 표가 다른 진행 것이라 다시 불러옴
+  //  (11/24 사용자: B1은 롱패딩 후리스인데 다른 캠페인 응답 한 줄만 남아 계속 기다려도 명단이 안 뜸 — B1만 바뀌고 불러오기가 잠금에 막힌 뒤로
+  //   B1이 표시에 들어간 EDIT_MARKS와 달라서 15분 새로고침이 계속 건너뜀)
+  const cur = editMarks_(sh), saved = String(PropertiesService.getScriptProperties().getProperty('EDIT_MARKS') || ''), b1 = String(sh.getRange('B1').getValue());
+  if (cur !== saved && saved.indexOf(b1 + '|') === 0) return;
   loadEditTab_(sh);
 }
 function loadEditTab0_(sh, msg) {
