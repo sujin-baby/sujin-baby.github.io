@@ -234,7 +234,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v212 (같은 상품 실배·빈 링크 2줄 의뢰서 1개 가이드 유지)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v213 (화살표 A -> B -> C 일차 인원 파싱)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -433,7 +433,7 @@ details.help-box summary {
             <span style="font-weight: 900; font-size: 14px; color: var(--pink-deep, #ff5fa8); display:flex; align-items:center; gap:5px;">
               <span>💬 AI 다이렉트 대화 · 공지 수정 요청</span>
             </span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v212</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v213</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 10px;">
             공지가 이상하게 나왔거나 수정이 필요한가요? 여기서 메시지를 보내면 <b>피클(생성기)</b>과 <b>클로드(시트)</b>에게 실시간으로 전달돼요!
@@ -1541,7 +1541,7 @@ details.help-box summary {
 // @noframes
 // ==/UserScript==
 /*
-  오리 상품정보 도우미 (생성기 v212)
+  오리 상품정보 도우미 (생성기 v213)
   - 생성기(guide/index.html)의 '상품 위치 찾기' 북마크 코드(bm-src)를 그대로 담고 있어요.
   - 상품 정보를 읽는 규칙을 고치면  node ori/tools/build_userscript.js  를 다시 돌려
     이 파일과 생성기 안의 스크립트(us-src)를 함께 맞춰 주세요. (안 맞으면 CI가 멈춥니다)
@@ -3431,6 +3431,15 @@ details.help-box summary {
       }
     }
     if (!r.days.length && /^\s*\d+\s*[건개명]?\s*\/\s*\d+/.test(dv)) dv.split("/").map(x => (x.match(/^\s*(\d+)/) || x.match(/(\d+)/) || ["", ""])[1]).filter(Boolean).forEach(n => r.days.push({ n: n, br: [] }));
+    // '20건 -> 30건'·'20명 => 30명'·'20 → 30'·'30 -> 30 -> 40' 화살표 일차 표기는 적힌 순서 그대로 배열로 읽음 (11/17 v189, 11/23 v213)
+    if (!r.days.length && /\d+\s*[건개명]?\s*(?:->|=>|→)\s*\d+/.test(dv)) {
+      const arrowParts = dv.split(/\s*(?:->|=>|→)\s*/).map(x => (x.match(/(\d+)/) || ["", ""])[1]).filter(Boolean);
+      const tot = Number(r.total) || 0;
+      const sum = arrowParts.reduce((a, b) => a + Number(b), 0);
+      if (arrowParts.length >= 3 || (arrowParts.length === 2 && (tot === 0 || sum === tot))) {
+        arrowParts.forEach(n => r.days.push({ n: String(n), br: [] }));
+      }
+    }
     // '3-2'(1일차 3, 2일차 2) 또는 '2~3' 일진행 건수 표기 지원: '-'이거나 앞 숫자가 크면 적은 순서 그대로(3-2 → [3,2]), '~'이면서 앞이 작으면 큰 수 먼저 (11/16 v184)
     // '20건 -> 30건'·'20명 => 30명'·'20 → 30' 범위/화살표 표기는 적힌 순서 그대로 [20, 30] (11/17 v189)
     if (!r.days.length && /(\d+)\s*[건개명]?\s*(?:->|=>|→|[-~])\s*(\d+)\s*[건개명]?/.test(dv)) {
@@ -5989,7 +5998,7 @@ details.help-box summary {
 
       const mention = aiTarget === "claude" ? "@claude" : aiTarget === "all" ? "@모두" : "@피클";
       const lines = [
-        mention + " [생성기 v212 제보]",
+        mention + " [생성기 v213 제보]",
         "• 내용: " + desc,
         "• 가이드 번호: " + curG + " / " + totalG + " (" + (g.platform || "쿠팡") + ")"
       ];
@@ -6051,7 +6060,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v212 공지 오류 제보]",
+        "🚨 [가이드 생성기 v213 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",
