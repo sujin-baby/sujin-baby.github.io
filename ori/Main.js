@@ -5302,7 +5302,7 @@ function todayItems_(runs) {
   out.groups = MSGV_GROUPS.map(function (g, i) {
     const lb = String(g.base).replace(/^[^가-힣A-Za-z0-9]+/, '');
     let label = lb.length > 3 && lb.indexOf('리뷰') === 0 ? lb.slice(2) : lb;
-    if (label === '방공지·가이드') label = '방·가이드';
+    if (label === '명단전달·가이드') label = '명단·가이드';
     return { i: i, key: g.key, label: label, merged: !!g.merged || '' };
   }).filter(function (g) { return !g.merged; });
   if (last < 2) return out;
@@ -5416,13 +5416,13 @@ function msgvLinks_(x, ctx) {
  *  - B칸 체크 = 보낼메시지 그 줄 '보냄' (번호로 찾아서), 체크 풀면 '대기'. 체크한 줄은 그 자리에서 회색만 (줄이 안 움직여 옆 줄을 잘못 누르지 않게)
  *  - 보낼메시지가 바뀌면 실행이 끝날 때 바뀐 탭만 다시 그림. 다시 그린 지 20초 안에 누른 칸이 다른 메시지로 밀렸으면 체크를 되돌리고 알림
  */
-const MSGV_CHWAN_COL = 3, MSGV_PAIR_GCOL = 6, MSGV_PAIR_IDCOL = 9;   // 리뷰비 탭 취완 체크칸 (C), 방공지·가이드 탭 가이드 보냄(F)·가이드ID(I)
-const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '15', MSGV_COLS = 5;   // 15: 방공지+리뷰가이드 양옆 합침 (11/24)   // 11: 리뷰비 탭 취완 체크 C칸으로, L칸 리뷰이미지 (11/16)   // 10: 리뷰독촉 탭 리뷰이미지 링크 칸, 페이백 글 한 줄 띄움·줄 높이 (11/15)   // 9: 리뷰비 탭 L칸에 걸린 취완은 취완 탭에서 뺌, 페이백 줄 E~K 합침 (11/15)   // 8: 명단전달 F열 '비고'(가격 틀리게 산 사람) 및 할일 탭 중복 제외 (11/11)   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
+const MSGV_CHWAN_COL = 3, MSGV_PAIR_GCOL = 7, MSGV_PAIR_IDCOL = 10;   // 리뷰비 탭 취완 체크칸 (C), 명단전달·가이드 탭 가이드 보냄(G)·가이드ID(J)
+const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '16', MSGV_COLS = 5;   // 16: 명단전달+리뷰가이드 양옆 합침 (11/24)   // 11: 리뷰비 탭 취완 체크 C칸으로, L칸 리뷰이미지 (11/16)   // 10: 리뷰독촉 탭 리뷰이미지 링크 칸, 페이백 글 한 줄 띄움·줄 높이 (11/15)   // 9: 리뷰비 탭 L칸에 걸린 취완은 취완 탭에서 뺌, 페이백 줄 E~K 합침 (11/15)   // 8: 명단전달 F열 '비고'(가격 틀리게 산 사람) 및 할일 탭 중복 제외 (11/11)   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
 const MSGV_GROUPS = [
-  { key: 'notice', base: '🐥방공지·가이드', t: '🐥 방 공지 · 리뷰 가이드', k: ['방 공지'], bg: '#eee6f7', tab: '#b48fd9', pair: true },
-  { key: 'list', base: '📋명단전달', t: '📋 명단 전달 (오리명단방)', k: ['명단 전달', '업체 명단'], bg: '#d9ead2', tab: '#7fbf6a' },
+  { key: 'notice', base: '🐥방공지', t: '🐥 방 공 지 (카톡방에 보낼 것)', k: ['방 공지'], bg: '#eee6f7', tab: '#b48fd9' },
+  { key: 'list', base: '📋명단전달·가이드', t: '📋 명단 전달 · 리뷰 가이드', k: ['명단 전달', '업체 명단'], bg: '#d9ead2', tab: '#7fbf6a', pair: true },
   { key: 'todo', base: '📝할일', t: '📝 내 할 일 · 사장님', k: ['할 일'], other: true, bg: '#fff1cc', tab: '#f2c94c' },
-  { key: 'photo', base: '⭐리뷰가이드', t: '⭐ 리뷰 가이드 · 포토 가이드', k: ['포토 가이드', '리뷰'], bg: '#cfe1f3', tab: '#6fa8dc', req: true, merged: 'notice' },
+  { key: 'photo', base: '⭐리뷰가이드', t: '⭐ 리뷰 가이드 · 포토 가이드', k: ['포토 가이드', '리뷰'], bg: '#cfe1f3', tab: '#6fa8dc', req: true, merged: 'list' },
   { key: 'report', base: '📦리뷰취합', t: '📦 리뷰 취합 보고 (사장님께)', k: ['리뷰 보고'], bg: '#d0dfe2', tab: '#76a5af', req: true },
   { key: 'nag', base: '⏰리뷰독촉', t: '⏰ 리뷰 독촉 · 안 산 사람', k: ['리뷰 독촉', '안 산 사람'], bg: '#fbe4cd', tab: '#f6a35b', req: true, links: [[7, 'list', '명단'], [8, 'img', '리뷰이미지']] },   // 리뷰이미지 링크 (11/15 사용자)
   { key: 'pay', base: '💰리뷰비', t: '💰 리뷰비 · 페이백 요청', k: ['리뷰비 요청', '페이백 요청'], bg: '#ead1dc', tab: '#d36f9a', fee: true, links: [[12, 'img', '리뷰이미지']] },   // L칸 리뷰이미지 (11/16 사용자 승인)
@@ -5663,21 +5663,31 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
     };
     let lines = [];
     if (grp.pair) {
-      const notices = pend.concat(sent).filter(function (xs) { return String(xs[0][2]) === '방 공지' && !isNoticeReview_(xs[0][4]); });
-      const guides = pend.concat(sent).filter(function (xs) { return !(String(xs[0][2]) === '방 공지' && !isNoticeReview_(xs[0][4])); });
-      const byRoom = {}, orderRooms = [];
-      const addRoom = function (rk, rawRoom) { if (!byRoom[rk]) { byRoom[rk] = { room: rawRoom, n: [], g: [] }; orderRooms.push(rk); } return byRoom[rk]; };
-      notices.forEach(function (xs) { const rk = roomKey_(xs[0][3]) || String(xs[0][0]); addRoom(rk, String(xs[0][3] || '')).n.push(xs[0]); });
-      guides.forEach(function (xs) { const rk = roomKey_(xs[0][3]) || String(xs[0][0]); addRoom(rk, String(xs[0][3] || '')).g.push(xs[0]); });
+      const isList = function (xs) { return String(xs[0][2]) === '명단 전달' || String(xs[0][2]) === '업체 명단'; };
+      const lists = pend.concat(sent).filter(isList);
+      const guides = pend.concat(sent).filter(function (xs) { return !isList(xs); });
+      const bucketsPair = [], addPair = function (camp, rawRoom) {
+        let hit = null;
+        if (camp) hit = bucketsPair.filter(function (b) { return b.camp && sameCamp(b.camp, camp); })[0] || null;
+        if (!hit) { hit = { camp: camp, room: rawRoom, l: [], g: [] }; bucketsPair.push(hit); }
+        return hit;
+      };
+      lists.forEach(function (xs) {
+        const c = String(xs[0][2]) === '명단 전달' ? (msgvListCamp_(xs[0][4]) || String(xs[0][3] || '')) : String(xs[0][3] || '');
+        addPair(c, String(xs[0][3] || '')).l.push(xs[0]);
+      });
+      guides.forEach(function (xs) {
+        addPair(String(xs[0][3] || ''), String(xs[0][3] || '')).g.push(xs[0]);
+      });
       const paired = [];
-      orderRooms.forEach(function (rk) {
-        const b = byRoom[rk], cnt = Math.max(b.n.length, b.g.length);
-        for (let idx = 0; idx < cnt; idx++) paired.push({ n: b.n[idx] || null, g: b.g[idx] || null });
+      bucketsPair.forEach(function (b) {
+        const cnt = Math.max(b.l.length, b.g.length);
+        for (let idx = 0; idx < cnt; idx++) paired.push({ l: b.l[idx] || null, g: b.g[idx] || null });
       });
       const rowPrio = function (p) {
-        const np = p.n && msgvPending_(p.n[5]), gp = p.g && msgvPending_(p.g[5]);
-        if (gp || np) {
-          const d = gp && p.g[1] instanceof Date ? dayStart_(p.g[1]) : np && p.n[1] instanceof Date ? dayStart_(p.n[1]) : t0;
+        const lp = p.l && msgvPending_(p.l[5]), gp = p.g && msgvPending_(p.g[5]);
+        if (gp || lp) {
+          const d = gp && p.g[1] instanceof Date ? dayStart_(p.g[1]) : lp && p.l[1] instanceof Date ? dayStart_(p.l[1]) : t0;
           return d < t0 ? 1 : d === t0 ? 2 : 3;
         }
         return 4;
@@ -5685,26 +5695,27 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
       paired.sort(function (a, b) {
         const pa = rowPrio(a), pb = rowPrio(b);
         if (pa !== pb) return pa - pb;
-        const ta = tm(a.g || a.n), tb = tm(b.g || b.n);
+        const ta = tm(a.g || a.l), tb = tm(b.g || b.l);
         return pa <= 2 ? (ta - tb) : (tb - ta);
       });
       lines = paired.map(function (p) {
-        const nx = p.n, gx = p.g, rx = nx || gx;
-        const nSent = nx ? !msgvPending_(nx[5]) : true, gSent = gx ? !msgvPending_(gx[5]) : true;
-        const nOd = nx && !nSent && nx[1] instanceof Date && nx[1].getTime() < t0;
+        const lx = p.l, gx = p.g, rx = lx || gx;
+        const lSent = lx ? !msgvPending_(lx[5]) : true, gSent = gx ? !msgvPending_(gx[5]) : true;
+        const lOd = lx && !lSent && lx[1] instanceof Date && lx[1].getTime() < t0;
         const gOd = gx && !gSent && gx[1] instanceof Date && gx[1].getTime() < t0;
-        if (nOd) over++;
+        if (lOd) over++;
         if (gOd) over++;
         const rq = gx && reqOf ? (reqOf(gx) || {}) : null;
-        const refD = (gx && !gSent ? gx[1] : null) || (nx && nx[1]) || (gx && gx[1]);
-        const allDone = (!nx || nSent) && (!gx || gSent);
+        const refD = (gx && !gSent ? gx[1] : null) || (lx && lx[1]) || (gx && gx[1]);
+        const allDone = (!lx || lSent) && (!gx || gSent);
+        const lc = lx && String(lx[2]) === '명단 전달' ? msgvListCamp_(lx[4]) : '';
         return {
-          type: 'msg', id: nx ? String(nx[0]) : '', sent: nSent,
-          day: msgvDay_(refD), over: nOd || gOd, today: refD instanceof Date && refD.getTime() === t0,
+          type: 'msg', id: lx ? String(lx[0]) : '', sent: lSent,
+          day: msgvDay_(refD), over: lOd || gOd, today: refD instanceof Date && refD.getTime() === t0,
           room: String(rx[3] || '') + (rx[5] === '방 못 찾음' ? ' ⚠방 못 찾음' : ''), boldTo: 0,
-          msg: nx ? String(nx[4]) : '', bg: allDone ? '#f3f3f3' : msgvRoomBg_(rx[3], colors),
+          msg: lx ? String(lx[4]) : '', bg: allDone ? '#f3f3f3' : msgvRoomBg_(lc || rx[3], colors),
           guide: gx ? { id: String(gx[0]), sent: gSent, over: gOd, msg: String(gx[4]), reqF: rq ? String(rq.f || '') : '', reqNote: rq ? String(rq.note || '') : '', reqUrl: rq ? String(rq.url || '') : '' } : null,
-          reqF: null, reqNote: '', reqUrl: '', listNote: '', fee: null, kind: String(rx[2]), chwan: null, names: null, links: null
+          reqF: null, reqNote: '', reqUrl: '', listNote: lc && payForList[lc] ? payForList[lc].join('\n') : '', fee: null, kind: String(rx[2]), chwan: null, names: null, links: null
         };
       });
     } else {
@@ -5781,11 +5792,11 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
     try { sh.getBandings().forEach(function (b) { b.remove(); }); } catch (e) {}
     try { sh.setFrozenColumns(0); } catch (e) {}
     const linkMax = grp.links ? Math.max.apply(null, grp.links.map(function (lk) { return lk[0]; })) : 0;
-    const keepC = grp.fee ? 13 : grp.pair ? 10 : grp.links ? linkMax + 1 : MSGV_COLS + 1;   // 리뷰비 탭은 E~K + L 취완 체크 + M 취완 번호(숨김), 방공지·가이드 탭은 F 가이드보냄 + G 리뷰가이드 + H 의뢰서 + I 가이드ID(숨김)
+    const keepC = grp.fee ? 13 : grp.pair ? 11 : grp.links ? linkMax + 1 : MSGV_COLS + 1;   // 리뷰비 탭은 E~K + L 취완 체크 + M 취완 번호(숨김), 명단전달·가이드 탭은 F 비고 + G 가이드보냄 + H 리뷰가이드 + I 의뢰서 + J 가이드ID(숨김)
     try { const mc = Number(sh.getMaxColumns()) || 0; if (mc > keepC) sh.deleteColumns(keepC + 1, mc - keepC); else if (mc && mc < keepC) sh.insertColumnsAfter(mc, keepC - mc); } catch (e) {}
     try {
-      sh.setColumnWidth(1, 20); sh.setColumnWidth(2, 46); sh.setColumnWidth(3, 82); sh.setColumnWidth(4, grp.fee ? 130 : 230); sh.setColumnWidth(5, grp.fee ? 120 : grp.req ? 520 : grp.pair ? 500 : 600); sh.setColumnWidth(6, grp.pair ? 56 : grp.req ? 420 : grp.fee ? 150 : grp.key === 'list' ? 320 : 20);
-      if (grp.pair) { sh.setColumnWidth(7, 500); sh.setColumnWidth(8, 360); sh.setColumnWidth(9, 20); sh.setColumnWidth(10, 20); sh.getRange(1, 6, sh.getMaxRows(), 1).setHorizontalAlignment('center').setVerticalAlignment('middle'); sh.getRange(1, 7, sh.getMaxRows(), 2).setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP); sh.hideColumns(9); }
+      sh.setColumnWidth(1, 20); sh.setColumnWidth(2, 46); sh.setColumnWidth(3, 82); sh.setColumnWidth(4, grp.fee ? 130 : 230); sh.setColumnWidth(5, grp.fee ? 120 : grp.req ? 520 : grp.pair ? 480 : 600); sh.setColumnWidth(6, grp.key === 'list' ? 260 : grp.req ? 420 : grp.fee ? 150 : 20);
+      if (grp.pair) { sh.setColumnWidth(7, 56); sh.setColumnWidth(8, 500); sh.setColumnWidth(9, 360); sh.setColumnWidth(10, 20); sh.setColumnWidth(11, 20); sh.getRange(1, 7, sh.getMaxRows(), 1).setHorizontalAlignment('center').setVerticalAlignment('middle'); sh.getRange(1, 8, sh.getMaxRows(), 2).setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP); sh.hideColumns(10); }
       if (grp.links) {
         if (grp.key === 'done') { sh.setColumnWidth(5, 200); }
         grp.links.forEach(function (lk) { sh.setColumnWidth(lk[0], lk[1] === 'img' ? 90 : 60); sh.getRange(1, lk[0], sh.getMaxRows(), 1).setHorizontalAlignment('center').setVerticalAlignment('middle'); });
@@ -5811,7 +5822,7 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
     const l = lines[i] || { type: 'none' };
     let v = ['', '', '', '', ''], st = msgvStyle_(l), dv = null;
     if (l.type === 'title') { v = ['', title, '', '', '']; st = { bg: [null, grp.bg, grp.bg, grp.bg, grp.bg], fc: [null, '#3b2a4d', '#3b2a4d', '#3b2a4d', '#6b5a7a'], fw: ['normal', 'bold', 'bold', 'bold', 'normal'] }; }
-    else if (l.type === 'hdr') { v = ['', '보냄', '날짜', '카톡방', grp.pair ? '방공지' : grp.fee ? '주문 날짜' : grp.key === 'nag' ? '리뷰 확인이 안 된 분' : '메시지']; st = { bg: [null, '#fbe9f2', '#fbe9f2', '#fbe9f2', '#fbe9f2'], fc: [null, '#7a2e57', '#7a2e57', '#7a2e57', '#7a2e57'], fw: ['normal', 'bold', 'bold', 'bold', 'bold'] }; }
+    else if (l.type === 'hdr') { v = ['', '보냄', '날짜', '카톡방', grp.pair ? '명단 글' : grp.fee ? '주문 날짜' : grp.key === 'nag' ? '리뷰 확인이 안 된 분' : '메시지']; st = { bg: [null, '#fbe9f2', '#fbe9f2', '#fbe9f2', '#fbe9f2'], fc: [null, '#7a2e57', '#7a2e57', '#7a2e57', '#7a2e57'], fw: ['normal', 'bold', 'bold', 'bold', 'bold'] }; }
     else if (l.type === 'sec') { v = ['', '', '', l.room || '', l.msg || '']; }
     else if (l.type === 'empty') { v = ['', '', '', '보낼 것 없어요 ✓', '']; st = { bg: [null, null, null, null, null], fc: [null, null, null, '#9e9e9e', null], fw: ['normal', 'normal', 'normal', 'normal', 'normal'] }; }
     else if (l.type === 'msg') { v = [l.id, l.id ? !!l.sent : '', l.day, l.room, l.fee ? l.fee[0] : l.names != null ? l.names : l.msg]; dv = l.id ? cb : null; }
@@ -5882,9 +5893,9 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
     try { fcr.setNumberFormat('General'); } catch (e) {}
     prg.setValues(pv).setBackgrounds(pb).setFontColors(pfc).setFontWeights(pfw);
     fcr.setDataValidations(pd);
-    sh.getRange(1, 8, n, 1).setNotes(pn);
+    sh.getRange(1, 9, n, 1).setNotes(pn);
     try {
-      sh.getRange(1, 8, n, 1).setRichTextValues(pv.map(function (v, i) { const gd = (lines[i] || {}).guide, b = SpreadsheetApp.newRichTextValue().setText(String(v[2])); if (gd && gd.reqUrl && String(v[2])) b.setLinkUrl(gd.reqUrl); return [b.build()]; }));
+      sh.getRange(1, 9, n, 1).setRichTextValues(pv.map(function (v, i) { const gd = (lines[i] || {}).guide, b = SpreadsheetApp.newRichTextValue().setText(String(v[2])); if (gd && gd.reqUrl && String(v[2])) b.setLinkUrl(gd.reqUrl); return [b.build()]; }));
     } catch (e) {}
   }
   if (grp.key === 'list') {

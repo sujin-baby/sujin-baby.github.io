@@ -44,11 +44,11 @@ const rowOf = id => where(id)[1];
 const cellOf = (id, c) => { const [b, r] = where(id); return T[b].rows[r - 1][c]; };
 const outSt = id => env.__ss.sheets['보낼메시지'].rows.find(r => r[0] === id)[5];
 // 종류마다 맞는 탭에
-const expect = { m1: '🐥방공지·가이드', m2: '🐥방공지·가이드', m3: '🐥방공지·가이드', m6: '📝할일', m7: '💰리뷰비', m8: '📝할일', m10: '📋명단전달', m11: '📦리뷰취합', n0: '📝할일', n29: '📝할일' };
+const expect = { m1: '🐥방공지', m2: '🐥방공지', m3: '🐥방공지', m6: '📝할일', m7: '💰리뷰비', m8: '📝할일', m10: '📋명단전달·가이드', m11: '📦리뷰취합', n0: '📝할일', n29: '📝할일' };
 Object.keys(expect).forEach(id => ok(where(id)[0] === expect[id], id + ' → ' + where(id)[0] + ' (기대 ' + expect[id] + ')'));
 ['m3b', 'm4', 'm9'].forEach(id => ok(rowOf(id) === 0, id + ' 보이면 안 됨'));
-ok(!tab('⭐리뷰가이드'), '리뷰가이드 탭 없음 (방공지·가이드 탭으로 합침)');
-ok(T['🐥방공지·가이드'].name === '🐥방공지·가이드 3', '탭 이름 개수 ' + T['🐥방공지·가이드'].name);
+ok(!tab('⭐리뷰가이드'), '리뷰가이드 탭 없음 (명단전달·가이드 탭으로 합침)');
+ok(T['🐥방공지'].name === '🐥방공지 2', '탭 이름 개수 ' + T['🐥방공지'].name);
 ok(!tab('✅취완'), '취완 탭 없음 (리뷰비 탭으로 합침)');
 ok(T['📝할일'].name === '📝할일 33', '할일 탭 이름 ' + T['📝할일'].name);
 const pr = ids(T['📝할일']).indexOf('p0,p1,p2') + 1;
@@ -59,16 +59,16 @@ ok(pr && / · 3건/.test(T['📝할일'].rows[pr - 1][3]), '건수 표시 ' + (p
 ok(rowOf('m1') < rowOf('m2') && rowOf('m2') < rowOf('m3'), '방 공지 순서 (오늘 → 내일 → 보낸 것)');
 ok(cellOf('m3', 1) === true && cellOf('m1', 1) === false, '체크 값');
 ok(cellOf('m1', 4) === '★★★자정 구매★★★\n거치대 공지', '메시지 전체 글');
-ok(JSON.stringify(T['🐥방공지·가이드'].rows[0].slice(1, 5)) === JSON.stringify(['보냄', '날짜', '카톡방', '방공지']), '1행 머리글 ' + JSON.stringify(T['🐥방공지·가이드'].rows[0]));
-const m5r = T['🐥방공지·가이드'].rows.findIndex(r => String(r[8] || '') === 'm5') + 1;
-ok(m5r > 0 && T['🐥방공지·가이드'].rows[m5r - 1][6] === '포토 가이드 글', '포토 가이드 양옆 배치 ' + m5r);
+ok(JSON.stringify(T['🐥방공지'].rows[0].slice(1, 5)) === JSON.stringify(['보냄', '날짜', '카톡방', '메시지']), '1행 머리글 ' + JSON.stringify(T['🐥방공지'].rows[0]));
+const m5r = T['📋명단전달·가이드'].rows.findIndex(r => String(r[9] || '') === 'm5') + 1;
+ok(m5r > 0 && T['📋명단전달·가이드'].rows[m5r - 1][7] === '포토 가이드 글', '포토 가이드 양옆 배치 ' + m5r);
 ok(env.__props.get('MSGV_HIDE1') === '1', '보낼메시지 숨김 표시');
 // 바뀐 게 없으면 다시 안 그림
 ok(G('msgViewBuild_(false)') === false, '바뀐 게 없는데 다시 그림');
 // 체크 → 보냄 (그린 지 20초 지난 뒤)
 BASES.forEach((b, i) => env.__props.set('MSGV_AT_' + G('MSGV_GROUPS[' + i + '].key'), String(Date.now() - 60000)));
 const edit = (sh, row, v, col) => { col = col || 2; sh.cell(row, col)[col - 1] = v; G('onAdminEdit')({ range: sh.getRange(row, col), source: { toast() {} }, value: String(v) }); };
-const N = T['🐥방공지·가이드'];
+const N = T['🐥방공지'];
 let r1 = rowOf('m1');
 edit(N, r1, true);
 ok(outSt('m1') === '보냄', '체크했는데 보냄 아님: ' + outSt('m1'));
@@ -92,7 +92,7 @@ ok(['p0', 'p1', 'p2'].every(id => outSt(id) === '보냄'), '묶은 줄 체크가
 env.__ss.sheets['보낼메시지'].rows.splice(1, 0, ['m0', day(0), '방 공지', '#택11.9 새 방 5', '새 공지', '대기']);
 G('msgViewBuild_(false)');
 ok(rowOf('m0') > 0 && rowOf('m0') <= r1, '새 메시지 위에 들어옴');
-ok(N.name === '🐥방공지·가이드 3' || G('msgvGroupOfName_("🐥방공지·가이드 3")') === 0, '이름 규칙');
+ok(N.name === '🐥방공지 2' || G('msgvGroupOfName_("🐥방공지 2")') === 0, '이름 규칙');
 const victim = ids(N)[r1 - 1];
 ok(victim !== 'm1', '시험 준비 (줄이 안 밀림)');
 edit(N, r1, true);
@@ -200,8 +200,8 @@ env.__ss.sheets['보낼메시지'].rows.splice(1, 0,
 G('msgViewBuild_(true)');
 const rList = rowOf('mlist1');
 ok(rList > 0, '명단전달 행 생성');
-ok(T['📋명단전달'].rows[0][5] === '비고', '명단전달 F1 헤더 비고: ' + T['📋명단전달'].rows[0][5]);
-ok(T['📋명단전달'].rows[rList - 1][5] === '정진아: 12,900원 결제 (공지 7,740원, 더 비싸게 삼)', '명단전달 F열 결제 오류자 노출: ' + T['📋명단전달'].rows[rList - 1][5]);
+ok(T['📋명단전달·가이드'].rows[0][5] === '비고', '명단전달 F1 헤더 비고: ' + T['📋명단전달·가이드'].rows[0][5]);
+ok(T['📋명단전달·가이드'].rows[rList - 1][5] === '정진아: 12,900원 결제 (공지 7,740원, 더 비싸게 삼)', '명단전달 F열 결제 오류자 노출: ' + T['📋명단전달·가이드'].rows[rList - 1][5]);
 ok(where('mpay1')[0] !== '📝할일', '할일 탭에서 중복 제외됨: ' + where('mpay1')[0]);
 // 명단을 이미 보낸 뒤 새로 생긴 결제금액 확인은 F칸에 보일 데가 없으니 할일 탭에 그대로 (11/15). 명단보다 먼저 생긴 건 계속 뺌
 env.__ss.sheets['보낼메시지'].rows.splice(1, 0,
@@ -227,6 +227,6 @@ ok(where('mpay1')[0] !== '📝할일', '안 보낸 명단의 결제금액 확인
   delete RP.merge;
 }
 // 탭 이름에 없는 사용자 탭은 종류 탭으로 안 봄
-ok(G('msgvGroupOfName_("🐥방공지·가이드 메모")') === -1 && G('msgvGroupOfName_("한눈에")') === -1, '탭 이름 구분');
+ok(G('msgvGroupOfName_("🐥방공지 메모")') === -1 && G('msgvGroupOfName_("한눈에")') === -1, '탭 이름 구분');
 console.log(fails.length ? 'XX 메시지 종류별 탭 시험 실패:\n- ' + fails.join('\n- ') : '✓ 메시지 종류별 탭 시험 통과 (탭 ' + BASES.length + '개)');
 process.exit(fails.length ? 1 : 0);
