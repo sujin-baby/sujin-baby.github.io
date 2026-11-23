@@ -5414,13 +5414,13 @@ function msgvLinks_(x, ctx) {
  *  - B칸 체크 = 보낼메시지 그 줄 '보냄' (번호로 찾아서), 체크 풀면 '대기'. 체크한 줄은 그 자리에서 회색만 (줄이 안 움직여 옆 줄을 잘못 누르지 않게)
  *  - 보낼메시지가 바뀌면 실행이 끝날 때 바뀐 탭만 다시 그림. 다시 그린 지 20초 안에 누른 칸이 다른 메시지로 밀렸으면 체크를 되돌리고 알림
  */
-const MSGV_CHWAN_COL = 3;   // 리뷰비 탭 취완 체크칸 (C, 보냄 B 바로 옆. 11/16 전엔 L)
-const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '14', MSGV_COLS = 5;   // 11: 리뷰비 탭 취완 체크 C칸으로, L칸 리뷰이미지 (11/16)   // 10: 리뷰독촉 탭 리뷰이미지 링크 칸, 페이백 글 한 줄 띄움·줄 높이 (11/15)   // 9: 리뷰비 탭 L칸에 걸린 취완은 취완 탭에서 뺌, 페이백 줄 E~K 합침 (11/15)   // 8: 명단전달 F열 '비고'(가격 틀리게 산 사람) 및 할일 탭 중복 제외 (11/11)   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
+const MSGV_CHWAN_COL = 3, MSGV_PAIR_GCOL = 6, MSGV_PAIR_IDCOL = 9;   // 리뷰비 탭 취완 체크칸 (C), 방공지·가이드 탭 가이드 보냄(F)·가이드ID(I)
+const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '15', MSGV_COLS = 5;   // 15: 방공지+리뷰가이드 양옆 합침 (11/24)   // 11: 리뷰비 탭 취완 체크 C칸으로, L칸 리뷰이미지 (11/16)   // 10: 리뷰독촉 탭 리뷰이미지 링크 칸, 페이백 글 한 줄 띄움·줄 높이 (11/15)   // 9: 리뷰비 탭 L칸에 걸린 취완은 취완 탭에서 뺌, 페이백 줄 E~K 합침 (11/15)   // 8: 명단전달 F열 '비고'(가격 틀리게 산 사람) 및 할일 탭 중복 제외 (11/11)   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
 const MSGV_GROUPS = [
-  { key: 'notice', base: '🐥방공지', t: '🐥 방 공지', k: ['방 공지'], bg: '#eee6f7', tab: '#b48fd9' },
+  { key: 'notice', base: '🐥방공지·가이드', t: '🐥 방 공지 · 리뷰 가이드', k: ['방 공지'], bg: '#eee6f7', tab: '#b48fd9', pair: true },
   { key: 'list', base: '📋명단전달', t: '📋 명단 전달 (오리명단방)', k: ['명단 전달', '업체 명단'], bg: '#d9ead2', tab: '#7fbf6a' },
   { key: 'todo', base: '📝할일', t: '📝 내 할 일 · 사장님', k: ['할 일'], other: true, bg: '#fff1cc', tab: '#f2c94c' },
-  { key: 'photo', base: '⭐리뷰가이드', t: '⭐ 리뷰 가이드 · 포토 가이드', k: ['포토 가이드', '리뷰'], bg: '#cfe1f3', tab: '#6fa8dc', req: true },
+  { key: 'photo', base: '⭐리뷰가이드', t: '⭐ 리뷰 가이드 · 포토 가이드', k: ['포토 가이드', '리뷰'], bg: '#cfe1f3', tab: '#6fa8dc', req: true, merged: 'notice' },
   { key: 'report', base: '📦리뷰취합', t: '📦 리뷰 취합 보고 (사장님께)', k: ['리뷰 보고'], bg: '#d0dfe2', tab: '#76a5af', req: true },
   { key: 'nag', base: '⏰리뷰독촉', t: '⏰ 리뷰 독촉 · 안 산 사람', k: ['리뷰 독촉', '안 산 사람'], bg: '#fbe4cd', tab: '#f6a35b', req: true, links: [[7, 'list', '명단'], [8, 'img', '리뷰이미지']] },   // 리뷰이미지 링크 (11/15 사용자)
   { key: 'pay', base: '💰리뷰비', t: '💰 리뷰비 · 페이백 요청', k: ['리뷰비 요청', '페이백 요청'], bg: '#ead1dc', tab: '#d36f9a', fee: true, links: [[12, 'img', '리뷰이미지']] },   // L칸 리뷰이미지 (11/16 사용자 승인)
@@ -5660,27 +5660,56 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
         links: grp.links && linkOf ? (linkOf(x) || {}) : null };
     };
     let lines = [];
-    if (grp.key === 'notice') {
-      const buyP = pend.filter(function (xs) { return !isNoticeReview_(xs[0][4]); });
-      const revP = pend.filter(function (xs) { return isNoticeReview_(xs[0][4]); });
-      const buyS = sent.filter(function (xs) { return !isNoticeReview_(xs[0][4]); });
-      const revS = sent.filter(function (xs) { return isNoticeReview_(xs[0][4]); });
-      const buyLines = buyP.concat(buyS).map(toLine);
-      const revLines = revP.concat(revS).map(toLine);
-      if (buyLines.length && revLines.length) {
-        lines = buyLines.concat([{
-          type: 'sec', id: '', sent: false, day: '', over: false, today: false,
-          room: '🐥 리뷰내용 가이드' + (revP.length ? ' (' + revP.length + '건)' : ''),
-          msg: '━━━ 위: 🛒 구매 가이드 / 아래: 🐥 리뷰내용 가이드 ━━━',
-          bg: '#eee6f7', reqF: null, reqNote: '', reqUrl: '', fee: null, links: null, chwan: null
-        }]).concat(revLines);
-      } else {
-        lines = buyLines.concat(revLines);
-      }
+    if (grp.pair) {
+      const notices = pend.concat(sent).filter(function (xs) { return String(xs[0][2]) === '방 공지' && !isNoticeReview_(xs[0][4]); });
+      const guides = pend.concat(sent).filter(function (xs) { return !(String(xs[0][2]) === '방 공지' && !isNoticeReview_(xs[0][4])); });
+      const byRoom = {}, orderRooms = [];
+      const addRoom = function (rk, rawRoom) { if (!byRoom[rk]) { byRoom[rk] = { room: rawRoom, n: null, g: [] }; orderRooms.push(rk); } return byRoom[rk]; };
+      notices.forEach(function (xs) { const rk = roomKey_(xs[0][3]) || String(xs[0][0]); const b = addRoom(rk, String(xs[0][3] || '')); if (!b.n) b.n = xs[0]; });
+      guides.forEach(function (xs) { const rk = roomKey_(xs[0][3]) || String(xs[0][0]); addRoom(rk, String(xs[0][3] || '')).g.push(xs[0]); });
+      const paired = [];
+      orderRooms.forEach(function (rk) {
+        const b = byRoom[rk];
+        if (!b.g.length) paired.push({ n: b.n, g: null });
+        else b.g.forEach(function (gx, idx) { paired.push({ n: idx === 0 ? b.n : null, g: gx }); });
+      });
+      const rowPrio = function (p) {
+        const np = p.n && msgvPending_(p.n[5]), gp = p.g && msgvPending_(p.g[5]);
+        if (gp || np) {
+          const d = gp && p.g[1] instanceof Date ? dayStart_(p.g[1]) : np && p.n[1] instanceof Date ? dayStart_(p.n[1]) : t0;
+          return d < t0 ? 1 : d === t0 ? 2 : 3;
+        }
+        return 4;
+      };
+      paired.sort(function (a, b) {
+        const pa = rowPrio(a), pb = rowPrio(b);
+        if (pa !== pb) return pa - pb;
+        const ta = tm(a.g || a.n), tb = tm(b.g || b.n);
+        return pa <= 2 ? (ta - tb) : (tb - ta);
+      });
+      lines = paired.map(function (p) {
+        const nx = p.n, gx = p.g, rx = nx || gx;
+        const nSent = nx ? !msgvPending_(nx[5]) : true, gSent = gx ? !msgvPending_(gx[5]) : true;
+        const nOd = nx && !nSent && nx[1] instanceof Date && nx[1].getTime() < t0;
+        const gOd = gx && !gSent && gx[1] instanceof Date && gx[1].getTime() < t0;
+        if (nOd) over++;
+        if (gOd) over++;
+        const rq = gx && reqOf ? (reqOf(gx) || {}) : null;
+        const refD = (gx && !gSent ? gx[1] : null) || (nx && nx[1]) || (gx && gx[1]);
+        const allDone = (!nx || nSent) && (!gx || gSent);
+        return {
+          type: 'msg', id: nx ? String(nx[0]) : '', sent: nSent,
+          day: msgvDay_(refD), over: nOd || gOd, today: refD instanceof Date && refD.getTime() === t0,
+          room: String(rx[3] || '') + (rx[5] === '방 못 찾음' ? ' ⚠방 못 찾음' : ''), boldTo: 0,
+          msg: nx ? String(nx[4]) : '', bg: allDone ? '#f3f3f3' : msgvRoomBg_(rx[3], colors),
+          guide: gx ? { id: String(gx[0]), sent: gSent, over: gOd, msg: String(gx[4]), reqF: rq ? String(rq.f || '') : '', reqNote: rq ? String(rq.note || '') : '', reqUrl: rq ? String(rq.url || '') : '' } : null,
+          reqF: null, reqNote: '', reqUrl: '', listNote: '', fee: null, kind: String(rx[2]), chwan: null, names: null, links: null
+        };
+      });
     } else {
       lines = pend.concat(sent).map(toLine);
     }
-    const sig = JSON.stringify(lines.map(function (l) { return [l.id, l.sent ? 1 : 0, l.day, l.over ? 1 : 0, l.room, (l.msg || '').length, (l.msg || '').slice(0, 80), l.bg, l.reqF, (l.reqNote || '').length, l.reqUrl, l.fee, l.links, l.chwan, l.listNote]; }));
+    const sig = JSON.stringify(lines.map(function (l) { return [l.id, l.sent ? 1 : 0, l.day, l.over ? 1 : 0, l.room, (l.msg || '').length, (l.msg || '').slice(0, 80), l.bg, l.reqF, (l.reqNote || '').length, l.reqUrl, l.fee, l.links, l.chwan, l.listNote, l.guide ? [l.guide.id, l.guide.sent ? 1 : 0, (l.guide.msg || '').length, l.guide.reqF] : null]; }));
     return { lines: lines, pend: pend.length, over: over, sig: sig, name: grp.base + (pend.length ? ' ' + pend.length : '') };
   });
   return { groups: groups, colors: colors };
@@ -5751,10 +5780,11 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
     try { sh.getBandings().forEach(function (b) { b.remove(); }); } catch (e) {}
     try { sh.setFrozenColumns(0); } catch (e) {}
     const linkMax = grp.links ? Math.max.apply(null, grp.links.map(function (lk) { return lk[0]; })) : 0;
-    const keepC = grp.fee ? 13 : grp.links ? linkMax + 1 : MSGV_COLS + 1;   // 리뷰비 탭은 E~K + L 취완 체크 + M 취완 번호(숨김), 링크 있는 탭은 마지막 링크 칸 + 빈 칸
+    const keepC = grp.fee ? 13 : grp.pair ? 10 : grp.links ? linkMax + 1 : MSGV_COLS + 1;   // 리뷰비 탭은 E~K + L 취완 체크 + M 취완 번호(숨김), 방공지·가이드 탭은 F 가이드보냄 + G 리뷰가이드 + H 의뢰서 + I 가이드ID(숨김)
     try { const mc = Number(sh.getMaxColumns()) || 0; if (mc > keepC) sh.deleteColumns(keepC + 1, mc - keepC); else if (mc && mc < keepC) sh.insertColumnsAfter(mc, keepC - mc); } catch (e) {}
     try {
-      sh.setColumnWidth(1, 20); sh.setColumnWidth(2, 46); sh.setColumnWidth(3, 82); sh.setColumnWidth(4, grp.fee ? 130 : 230); sh.setColumnWidth(5, grp.fee ? 120 : grp.req ? 520 : 600); sh.setColumnWidth(6, grp.req ? 420 : grp.fee ? 150 : grp.key === 'list' ? 320 : 20);
+      sh.setColumnWidth(1, 20); sh.setColumnWidth(2, 46); sh.setColumnWidth(3, 82); sh.setColumnWidth(4, grp.fee ? 130 : 230); sh.setColumnWidth(5, grp.fee ? 120 : grp.req ? 520 : grp.pair ? 500 : 600); sh.setColumnWidth(6, grp.pair ? 56 : grp.req ? 420 : grp.fee ? 150 : grp.key === 'list' ? 320 : 20);
+      if (grp.pair) { sh.setColumnWidth(7, 500); sh.setColumnWidth(8, 360); sh.setColumnWidth(9, 20); sh.setColumnWidth(10, 20); sh.getRange(1, 6, sh.getMaxRows(), 1).setHorizontalAlignment('center').setVerticalAlignment('middle'); sh.getRange(1, 7, sh.getMaxRows(), 2).setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP); sh.hideColumns(9); }
       if (grp.links) {
         if (grp.key === 'done') { sh.setColumnWidth(5, 200); }
         grp.links.forEach(function (lk) { sh.setColumnWidth(lk[0], lk[1] === 'img' ? 90 : 60); sh.getRange(1, lk[0], sh.getMaxRows(), 1).setHorizontalAlignment('center').setVerticalAlignment('middle'); });
@@ -5780,10 +5810,10 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
     const l = lines[i] || { type: 'none' };
     let v = ['', '', '', '', ''], st = msgvStyle_(l), dv = null;
     if (l.type === 'title') { v = ['', title, '', '', '']; st = { bg: [null, grp.bg, grp.bg, grp.bg, grp.bg], fc: [null, '#3b2a4d', '#3b2a4d', '#3b2a4d', '#6b5a7a'], fw: ['normal', 'bold', 'bold', 'bold', 'normal'] }; }
-    else if (l.type === 'hdr') { v = ['', '보냄', '날짜', '카톡방', grp.fee ? '주문 날짜' : grp.key === 'nag' ? '리뷰 확인이 안 된 분' : '메시지']; st = { bg: [null, '#fbe9f2', '#fbe9f2', '#fbe9f2', '#fbe9f2'], fc: [null, '#7a2e57', '#7a2e57', '#7a2e57', '#7a2e57'], fw: ['normal', 'bold', 'bold', 'bold', 'bold'] }; }
+    else if (l.type === 'hdr') { v = ['', '보냄', '날짜', '카톡방', grp.pair ? '방공지' : grp.fee ? '주문 날짜' : grp.key === 'nag' ? '리뷰 확인이 안 된 분' : '메시지']; st = { bg: [null, '#fbe9f2', '#fbe9f2', '#fbe9f2', '#fbe9f2'], fc: [null, '#7a2e57', '#7a2e57', '#7a2e57', '#7a2e57'], fw: ['normal', 'bold', 'bold', 'bold', 'bold'] }; }
     else if (l.type === 'sec') { v = ['', '', '', l.room || '', l.msg || '']; }
     else if (l.type === 'empty') { v = ['', '', '', '보낼 것 없어요 ✓', '']; st = { bg: [null, null, null, null, null], fc: [null, null, null, '#9e9e9e', null], fw: ['normal', 'normal', 'normal', 'normal', 'normal'] }; }
-    else if (l.type === 'msg') { v = [l.id, !!l.sent, l.day, l.room, l.fee ? l.fee[0] : l.names != null ? l.names : l.msg]; dv = cb; }
+    else if (l.type === 'msg') { v = [l.id, l.id ? !!l.sent : '', l.day, l.room, l.fee ? l.fee[0] : l.names != null ? l.names : l.msg]; dv = l.id ? cb : null; }
     vals.push(v); bgs.push(st.bg); fcs.push(st.fc); fws.push(st.fw); als.push(msgvAlign_(l)); dvs.push([dv]);
   }
   const rg = sh.getRange(1, 1, n, MSGV_COLS);
@@ -5818,6 +5848,42 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
     // 휴대폰에서는 메모가 잘 안 보여서: 의뢰서 파일이 있으면 F칸을 누르면 의뢰서 전체가 열리게 (11/8 사용자: 모바일로 자주 일함)
     try {
       fr.setRichTextValues(fv.map(function (v, i) { const l = lines[i] || {}, b = SpreadsheetApp.newRichTextValue().setText(String(v[0])); if (l.reqUrl && String(v[0])) b.setLinkUrl(l.reqUrl); return [b.build()]; }));
+    } catch (e) {}
+  }
+  if (grp.pair) {
+    // F: 가이드 보냄 체크, G: 리뷰가이드 메시지, H: 의뢰서 (누르면 전체), I: 가이드 ID(숨김)
+    const pv = [], pb = [], pfc = [], pfw = [], pd = [], pn = [], cbG = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+    for (let i = 0; i < n; i++) {
+      const l = lines[i] || { type: 'none' }, gd = l.guide;
+      if (l.type === 'hdr') {
+        pv.push(['가이드\n보냄', '리뷰가이드', '의뢰서 (누르면 전체)', '']);
+        pb.push(['#fbe9f2', '#fbe9f2', '#fbe9f2', null]);
+        pfc.push(['#7a2e57', '#7a2e57', '#7a2e57', null]);
+        pfw.push(['bold', 'bold', 'bold', 'normal']);
+        pd.push([null]); pn.push(['']);
+      } else if (l.type === 'msg' && gd) {
+        const cBg = gd.sent ? '#f3f3f3' : gd.over ? '#fff5f5' : '#eaf4fc';
+        pv.push([!!gd.sent, gd.msg, gd.reqF || '', gd.id]);
+        pb.push([cBg, cBg, gd.sent ? '#f3f3f3' : '#fafafa', null]);
+        pfc.push([gd.sent ? '#9e9e9e' : '#000000', gd.sent ? '#9e9e9e' : '#000000', gd.sent ? '#9e9e9e' : '#555555', null]);
+        pfw.push(['normal', 'normal', 'normal', 'normal']);
+        pd.push([cbG]); pn.push([gd.reqNote || '']);
+      } else {
+        pv.push(['', '', '', '']);
+        pb.push([null, null, null, null]);
+        pfc.push([null, null, null, null]);
+        pfw.push(['normal', 'normal', 'normal', 'normal']);
+        pd.push([null]); pn.push(['']);
+      }
+    }
+    const prg = sh.getRange(1, MSGV_PAIR_GCOL, n, 4), fcr = sh.getRange(1, MSGV_PAIR_GCOL, n, 1);
+    fcr.clearDataValidations();
+    try { fcr.setNumberFormat('General'); } catch (e) {}
+    prg.setValues(pv).setBackgrounds(pb).setFontColors(pfc).setFontWeights(pfw);
+    fcr.setDataValidations(pd);
+    sh.getRange(1, 8, n, 1).setNotes(pn);
+    try {
+      sh.getRange(1, 8, n, 1).setRichTextValues(pv.map(function (v, i) { const gd = (lines[i] || {}).guide, b = SpreadsheetApp.newRichTextValue().setText(String(v[2])); if (gd && gd.reqUrl && String(v[2])) b.setLinkUrl(gd.reqUrl); return [b.build()]; }));
     } catch (e) {}
   }
   if (grp.key === 'list') {
@@ -6356,6 +6422,7 @@ function msgViewEdit_(e, gi) {
   const props = PropertiesService.getScriptProperties(), key = MSGV_GROUPS[gi].key;
   const toast = function (t, s) { try { e.source.toast(t, '메시지 모아보기', s || 8); } catch (err) {} };
   if (MSGV_GROUPS[gi].fee && c0 === MSGV_CHWAN_COL && c1 === MSGV_CHWAN_COL && r0 >= 2) return msgvChwanEdit_(e, sh, r0, n, toast);
+  if (MSGV_GROUPS[gi].pair && c0 === MSGV_PAIR_GCOL && c1 === MSGV_PAIR_GCOL && r0 >= 2) return msgvPairGuideEdit_(e, sh, r0, n, toast);
   if (c0 !== 2 || c1 !== 2 || r0 < 2) {
     toast('이 탭은 보기용이라 글을 고쳐도 저장 안 돼요. 원래대로 돌려 놨어요. 보낸 뒤 왼쪽 보냄 칸만 체크해 주세요', 10);
     try { msgViewBuild_(true, gi); } catch (err) {}
@@ -6399,6 +6466,24 @@ function msgViewEdit_(e, gi) {
   if (sentNote.length && !moved.length) toast(sentNote.filter(function (x, i, a) { return a.indexOf(x) === i; }).join(' · '), 10);
   if (moved.length) toast('목록이 방금 다시 그려져서 ' + moved.join(', ') + '행 체크는 되돌렸어요. 메시지를 다시 확인하고 체크해 주세요', 12);
   else if (gone.length) toast(gone.join(', ') + '행 메시지는 이미 지워진 거예요 (곧 목록에서 빠져요)', 10);
+}
+
+// 방공지·가이드 탭 F칸 '가이드 보냄' 체크 → I칸 가이드 메시지 번호만 보냄/대기 (방공지 B칸과 따로)
+function msgvPairGuideEdit_(e, sh, r0, n, toast) {
+  const ids = sh.getRange(r0, MSGV_PAIR_IDCOL, n, 1).getValues(), vals = sh.getRange(r0, MSGV_PAIR_GCOL, n, 1).getValues();
+  const ob = outboxSheet_(), ol = ob.getLastRow(), orows = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues() : [], at = {}, props = PropertiesService.getScriptProperties();
+  orows.forEach(function (x, i) { at[String(x[0])] = i; });
+  for (let i = 0; i < n; i++) {
+    const id = String(ids[i][0] || '').trim(), v = vals[i][0], on = v === true || String(v).toUpperCase() === 'TRUE';
+    if (!id || at[id] == null) { if (v !== '' && v != null) sh.getRange(r0 + i, MSGV_PAIR_GCOL).setValue(''); continue; }
+    const y = orows[at[id]];
+    if (on !== (y[5] === '보냄')) obSet_(ob, id, 6, on ? '보냄' : '대기');
+    try { if (on) props.setProperty('MSGV_S_' + id, String(Date.now())); else props.deleteProperty('MSGV_S_' + id); } catch (err) {}
+    const row = r0 + i, cBg = on ? '#f3f3f3' : '#eaf4fc';
+    try {
+      sh.getRange(row, MSGV_PAIR_GCOL, 1, 3).setBackgrounds([[cBg, cBg, on ? '#f3f3f3' : '#fafafa']]).setFontColors([[on ? '#9e9e9e' : '#000000', on ? '#9e9e9e' : '#000000', on ? '#9e9e9e' : '#555555']]);
+    } catch (err) {}
+  }
 }
 
 // 리뷰비 탭 L칸 '취완' 체크 → 그 줄 M칸 번호의 취완 메시지만 보냄/대기 (리뷰비 요청 B칸과 따로). 취완 탭은 바로 다시 그림
