@@ -234,7 +234,7 @@ details.help-box summary {
 <body ontouchstart="">
 <div class="wrap">
   <header>
-    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v209 (합성어에 붙은 성별·연령(여성·남자·아동·미니)만 떼어 겨울모자로 · 기모·등산 같은 수식어·용도어 대신 품목(타이즈·바람막이) · 고구마 말랭이 → 고구마말랭이처럼 붙여 쓴 품목 · kwfix 는 항목 단위로 1200자(JSON 안 깨짐)·pname 은 상품 순서 그대로 · 아이폰 입력칸 확대 방지 · shopping-phinf 이미지 주소 차단)</span></h1>
+    <h1>체험단 가이드 생성기 <span style="font-size:13px;font-weight:400;color:#888">생성기 v210 (https:// 없이 coupang.com/… 처럼 들어온 상품 URL도 자동 보정해 여러 상품 중 누락 방지 · #111)</span></h1>
     <p>의뢰서를 붙여넣으면 방제, 명단 제목, 공지, 상품 안내가 한 번에 만들어집니다.</p>
   </header>
 
@@ -433,7 +433,7 @@ details.help-box summary {
             <span style="font-weight: 900; font-size: 14px; color: var(--pink-deep, #ff5fa8); display:flex; align-items:center; gap:5px;">
               <span>💬 AI 다이렉트 대화 · 공지 수정 요청</span>
             </span>
-            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v209</span>
+            <span style="font-size: 11px; color: #862e9c; font-weight: bold; background: #f3d9fa; padding: 2px 7px; border-radius: 6px;">생성기 v210</span>
           </div>
           <div style="font-size: 12px; line-height: 1.5; color: #495057; margin-bottom: 10px;">
             공지가 이상하게 나왔거나 수정이 필요한가요? 여기서 메시지를 보내면 <b>피클(생성기)</b>과 <b>클로드(시트)</b>에게 실시간으로 전달돼요!
@@ -1541,7 +1541,7 @@ details.help-box summary {
 // @noframes
 // ==/UserScript==
 /*
-  오리 상품정보 도우미 (생성기 v209)
+  오리 상품정보 도우미 (생성기 v210)
   - 생성기(guide/index.html)의 '상품 위치 찾기' 북마크 코드(bm-src)를 그대로 담고 있어요.
   - 상품 정보를 읽는 규칙을 고치면  node ori/tools/build_userscript.js  를 다시 돌려
     이 파일과 생성기 안의 스크립트(us-src)를 함께 맞춰 주세요. (안 맞으면 CI가 멈춥니다)
@@ -2776,9 +2776,11 @@ details.help-box summary {
 
   // ---------------- 의뢰서 읽기 ----------------
   // 카톡에서 여러 메시지를 같이 복사하면 줄 앞에 붙는 "[오리입니다] [오전 9:48]" 같은 머리를 뗌
+  //  프로토콜(https://) 없이 "coupang.com/vp/products/..." 처럼 들어온 상품 URL도 https:// 를 붙여 정상 분리·인식 (#111, 11/23)
   function cleanReq(text) {
     return String(text || "").replace(/\r/g, "").split("\n")
-      .map(l => l.replace(/^\s*\[[^\]]{1,30}\]\s*\[(?:오전|오후)\s*\d{1,2}:\d{2}\]\s*/, ""))
+      .map(l => l.replace(/^\s*\[[^\]]{1,30}\]\s*\[(?:오전|오후)\s*\d{1,2}:\d{2}\]\s*/, "")
+        .replace(/(^|[\s:：])((?:www\.|m\.|link\.|smartstore\.|m\.smartstore\.|brand\.|shopping\.|store\.|talk\.)?(?:coupang\.com|coupa\.ng|naver\.com|naver\.me|toss\.im|kakao\.com|gmarket\.co\.kr|11st\.co\.kr)\/\S+)/gi, "$1https://$2"))
       .join("\n");
   }
   /* '1번) …', '5번) …'처럼 칸 이름 없이 '번호+번'만 적은 의뢰서 (11/20 사용자: 두부과자 의뢰서)
@@ -5974,7 +5976,7 @@ details.help-box summary {
 
       const mention = aiTarget === "claude" ? "@claude" : aiTarget === "all" ? "@모두" : "@피클";
       const lines = [
-        mention + " [생성기 v209 제보]",
+        mention + " [생성기 v210 제보]",
         "• 내용: " + desc,
         "• 가이드 번호: " + curG + " / " + totalG + " (" + (g.platform || "쿠팡") + ")"
       ];
@@ -6036,7 +6038,7 @@ details.help-box summary {
       const g = (typeof guides !== "undefined" && guides[cur]) ? guides[cur] : {};
 
       const lines = [
-        "🚨 [가이드 생성기 v209 공지 오류 제보]",
+        "🚨 [가이드 생성기 v210 공지 오류 제보]",
         "• 문제 내용: " + (desc || "공지 확인 및 서식 수정 요청"),
         "• 가이드 번호: " + curG + " / " + totalG + "번째 (" + (g.platform || "쿠팡") + ")",
         "",

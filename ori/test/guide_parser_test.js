@@ -2565,7 +2565,53 @@ console.log('-- Test 49: 성별 접두 제거·용도어/수식어 제외·붙�
   console.log('✓ v209 합성어 접두·꼬리·붙여 쓴 품목 시험 통과');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (42개 샘플 전원 일치)');
+// 50. #111 (11/23): 상품 여러 개 중 마지막 상품 URL에 https://가 빠져도(coupang.com/vp/products/...) 앞 상품과 합쳐지지 않고 3개 모두 정상 분리·가격 매칭
+console.log('\n[Test 50] 프로토콜(https://) 없는 상품 URL 정상 분리 (#111)');
+{
+  const req50 = `#입금대행 택대 13300 10500 10800
+
+1. 검색 키워드: 스텐링수세미
+3. 총 결제하신 건수 :10
+4. 하루 진행 건수 : 2/2/2/2/2
+5. 상품주소(URL) :https://www.coupang.com/vp/products/9811732505?vendorItemId=96295845851
+6. 구매옵션 : 1개
+9. 입금하실 입금자명 :임창수
+10.택배대행 Y/N: Y
+===============
+
+1. 검색 키워드: 줄눈보수펜
+3. 총 결제하신 건수 :10
+4. 하루 진행 건수 : 2/2/2/2/2
+5. 상품주소(URL) :https://www.coupang.com/vp/products/9815586771?vendorItemId=96308255226
+6. 구매옵션 : 화이트 2개
+9. 입금하실 입금자명 :임창수
+10.택배대행 Y/N: Y
+==============
+
+1. 검색 키워드: 주방가위
+3. 총 결제하신 건수 : 10
+4. 하루 진행 건수 : 2/2/2/2/2
+5. 상품주소(URL) :coupang.com/vp/products/9785921902?itemId=29298978511&vendorItemId=96214705040
+6. 구매옵션 : 다크블랙
+9. 입금하실 입금자명 :임창수
+10.택배대행 Y/N: Y`;
+  const r50 = P.parseAll(req50);
+  if (r50.guides.length !== 3) throw new Error('Test 50 가이드가 3개로 나뉘지 않음: ' + r50.guides.length);
+  const exp50 = [
+    { kw: '스텐링수세미', opt: '단일옵션', price: '13300', pno: '9811732505' },
+    { kw: '줄눈보수펜', opt: '화이트 2개', price: '10500', pno: '9815586771' },
+    { kw: '주방가위', opt: '다크블랙', price: '10800', pno: '9785921902' },
+  ];
+  exp50.forEach((e, i) => {
+    const g = r50.guides[i];
+    if (g.keyword !== e.kw || g.option !== e.opt || String(g.price) !== e.price || !String(g.pno || '').includes(e.pno)) {
+      throw new Error('Test 50 #' + (i + 1) + ' 불일치: ' + JSON.stringify({ kw: g.keyword, opt: g.option, price: g.price, pno: g.pno }));
+    }
+  });
+  console.log('✓ Test 50: 3개 상품 모두 분리 · 줄눈보수펜(화이트 2개 · 10500) 누락 없음');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (43개 샘플 전원 일치)');
 process.exit(0);
 
 
