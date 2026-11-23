@@ -5417,7 +5417,7 @@ function msgvLinks_(x, ctx) {
  *  - 보낼메시지가 바뀌면 실행이 끝날 때 바뀐 탭만 다시 그림. 다시 그린 지 20초 안에 누른 칸이 다른 메시지로 밀렸으면 체크를 되돌리고 알림
  */
 const MSGV_CHWAN_COL = 3, MSGV_PAIR_GCOL = 7, MSGV_PAIR_IDCOL = 10;   // 리뷰비 탭 취완 체크칸 (C), 명단전달·가이드 탭 가이드 보냄(G)·가이드ID(J)
-const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '16', MSGV_COLS = 5;   // 16: 명단전달+리뷰가이드 양옆 합침 (11/24)   // 11: 리뷰비 탭 취완 체크 C칸으로, L칸 리뷰이미지 (11/16)   // 10: 리뷰독촉 탭 리뷰이미지 링크 칸, 페이백 글 한 줄 띄움·줄 높이 (11/15)   // 9: 리뷰비 탭 L칸에 걸린 취완은 취완 탭에서 뺌, 페이백 줄 E~K 합침 (11/15)   // 8: 명단전달 F열 '비고'(가격 틀리게 산 사람) 및 할일 탭 중복 제외 (11/11)   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
+const MSGV_OLD_TAB = '메시지 모아보기', MSGV_VER = '17', MSGV_COLS = 5;   // 17: 명단전달·가이드 D열 방제 표시·열 너비·행 높이 고정 (11/24)   // 16: 명단전달+리뷰가이드 양옆 합침 (11/24)   // 11: 리뷰비 탭 취완 체크 C칸으로, L칸 리뷰이미지 (11/16)   // 10: 리뷰독촉 탭 리뷰이미지 링크 칸, 페이백 글 한 줄 띄움·줄 높이 (11/15)   // 9: 리뷰비 탭 L칸에 걸린 취완은 취완 탭에서 뺌, 페이백 줄 E~K 합침 (11/15)   // 8: 명단전달 F열 '비고'(가격 틀리게 산 사람) 및 할일 탭 중복 제외 (11/11)   // 6: 1행(제목 줄) 없앰·머리글 짧게·독촉은 이름만 (11/8)   // 5: 리뷰비 총합 칸·명단/리뷰이미지 링크 (11/8)   // 3: F칸 의뢰서 (11/8), 4: 리뷰비 탭 칸 나눔·1행 안내 뺌 (11/8)
 const MSGV_GROUPS = [
   { key: 'notice', base: '🐥방공지', t: '🐥 방 공 지 (카톡방에 보낼 것)', k: ['방 공지'], bg: '#eee6f7', tab: '#b48fd9' },
   { key: 'list', base: '📋명단전달·가이드', t: '📋 명단 전달 · 리뷰 가이드', k: ['명단 전달', '업체 명단'], bg: '#d9ead2', tab: '#7fbf6a', pair: true },
@@ -5709,11 +5709,12 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
         const refD = (gx && !gSent ? gx[1] : null) || (lx && lx[1]) || (gx && gx[1]);
         const allDone = (!lx || lSent) && (!gx || gSent);
         const lc = lx && String(lx[2]) === '명단 전달' ? msgvListCamp_(lx[4]) : '';
+        const dispRoom = lc || String(rx[3] || '');
         return {
           type: 'msg', id: lx ? String(lx[0]) : '', sent: lSent,
           day: msgvDay_(refD), over: lOd || gOd, today: refD instanceof Date && refD.getTime() === t0,
-          room: String(rx[3] || '') + (rx[5] === '방 못 찾음' ? ' ⚠방 못 찾음' : ''), boldTo: 0,
-          msg: lx ? String(lx[4]) : '', bg: allDone ? '#f3f3f3' : msgvRoomBg_(lc || rx[3], colors),
+          room: dispRoom + (rx[5] === '방 못 찾음' ? ' ⚠방 못 찾음' : ''), boldTo: 0,
+          msg: lx ? String(lx[4]) : '', bg: allDone ? '#f3f3f3' : msgvRoomBg_(dispRoom, colors),
           guide: gx ? { id: String(gx[0]), sent: gSent, over: gOd, msg: String(gx[4]), reqF: rq ? String(rq.f || '') : '', reqNote: rq ? String(rq.note || '') : '', reqUrl: rq ? String(rq.url || '') : '' } : null,
           reqF: null, reqNote: '', reqUrl: '', listNote: lc && payForList[lc] ? payForList[lc].join('\n') : '', fee: null, kind: String(rx[2]), chwan: null, names: null, links: null
         };
@@ -5795,8 +5796,8 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
     const keepC = grp.fee ? 13 : grp.pair ? 11 : grp.links ? linkMax + 1 : MSGV_COLS + 1;   // 리뷰비 탭은 E~K + L 취완 체크 + M 취완 번호(숨김), 명단전달·가이드 탭은 F 비고 + G 가이드보냄 + H 리뷰가이드 + I 의뢰서 + J 가이드ID(숨김)
     try { const mc = Number(sh.getMaxColumns()) || 0; if (mc > keepC) sh.deleteColumns(keepC + 1, mc - keepC); else if (mc && mc < keepC) sh.insertColumnsAfter(mc, keepC - mc); } catch (e) {}
     try {
-      sh.setColumnWidth(1, 20); sh.setColumnWidth(2, 46); sh.setColumnWidth(3, 82); sh.setColumnWidth(4, grp.fee ? 130 : 230); sh.setColumnWidth(5, grp.fee ? 120 : grp.req ? 520 : grp.pair ? 480 : 600); sh.setColumnWidth(6, grp.key === 'list' ? 260 : grp.req ? 420 : grp.fee ? 150 : 20);
-      if (grp.pair) { sh.setColumnWidth(7, 56); sh.setColumnWidth(8, 500); sh.setColumnWidth(9, 360); sh.setColumnWidth(10, 20); sh.setColumnWidth(11, 20); sh.getRange(1, 7, sh.getMaxRows(), 1).setHorizontalAlignment('center').setVerticalAlignment('middle'); sh.getRange(1, 8, sh.getMaxRows(), 2).setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP); sh.hideColumns(10); }
+      sh.setColumnWidth(1, 20); sh.setColumnWidth(2, 44); sh.setColumnWidth(3, 76); sh.setColumnWidth(4, grp.fee ? 130 : 230); sh.setColumnWidth(5, grp.fee ? 120 : grp.req ? 520 : grp.pair ? 260 : 600); sh.setColumnWidth(6, grp.key === 'list' ? 200 : grp.req ? 420 : grp.fee ? 150 : 20);
+      if (grp.pair) { sh.setColumnWidth(7, 48); sh.setColumnWidth(8, 340); sh.setColumnWidth(9, 220); sh.setColumnWidth(10, 20); sh.setColumnWidth(11, 20); sh.getRange(1, 7, sh.getMaxRows(), 1).setHorizontalAlignment('center').setVerticalAlignment('middle'); sh.getRange(1, 8, sh.getMaxRows(), 2).setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP); sh.hideColumns(10); }
       if (grp.links) {
         if (grp.key === 'done') { sh.setColumnWidth(5, 200); }
         grp.links.forEach(function (lk) { sh.setColumnWidth(lk[0], lk[1] === 'img' ? 90 : 60); sh.getRange(1, lk[0], sh.getMaxRows(), 1).setHorizontalAlignment('center').setVerticalAlignment('middle'); });
@@ -5916,7 +5917,7 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
       }
     }
     const fr = sh.getRange(1, 6, n, 1);
-    fr.setValues(fv).setNotes(fn).setBackgrounds(fb).setFontColors(fc).setFontWeights(fw).setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+    fr.setValues(fv).setNotes(fn).setBackgrounds(fb).setFontColors(fc).setFontWeights(fw).setWrapStrategy(grp.pair ? SpreadsheetApp.WrapStrategy.CLIP : SpreadsheetApp.WrapStrategy.WRAP);
     try { sh.getRange(1, 6).setHorizontalAlignment('center'); } catch (e) {}
   }
   if (grp.fee) {
@@ -5985,7 +5986,12 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
       try { sh.getRange(2, col).setFontWeight('bold').setFontColor('#7a2e57'); } catch (e) {}
     });
   }
-  try { sh.setRowHeights(1, n, 22); } catch (e) {}
+  if (grp.pair) {
+    try { sh.getRange(1, 1, n, 10).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP); } catch (e) {}
+    try { sh.setRowHeights(1, 1, 28); if (n > 1) sh.setRowHeights(2, n - 1, 40); } catch (e) {}
+  } else {
+    try { sh.setRowHeights(1, n, 22); } catch (e) {}
+  }
   props.setProperty('MSGV_N_' + key, String(lines.length));
   props.setProperty('MSGV_SIG_' + key, msgvSigHash_(g.sig));   // 글 전체 대신 지문만 (11/16 속성 용량 '데이터 용량 오류')
   props.setProperty('MSGV_AT_' + key, String(Date.now()));
