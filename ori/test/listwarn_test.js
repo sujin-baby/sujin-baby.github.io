@@ -20,5 +20,10 @@ ok(/목표 2명인데 폼 3개 \(1개 많음\)/.test(w) && /다다 2번/.test(w)
 G('globalThis.__LISTWARN = null');
 let w2 = G('listWarn_(' + JSON.stringify('#' + md(day(-1)) + ' 실 문풍지외4') + ')');
 ok(w2 === '', '어제 진행은 경고 없음 ' + w2);
+// (11/23) 이름이 다르고 전화번호만 같으면 '같은 사람 두 번'이 아니라 그렇게 (홍길동은 한 번인데 '홍길동 2번'이라 나왔음)
+resp.rows.push([new Date(day(0).getTime() + 5700e3), '홍길동', 'd', '010-1234-5678'], [new Date(day(0).getTime() + 5722e3), '김철수', 'e', '010-1234-5678']);
+G('globalThis.__LISTWARN = null');
+const w3 = G('listWarn_(' + JSON.stringify('#' + md(day(0)) + ' 실 문풍지외2') + ')');
+ok(/이름은 다른데 전화번호가 같음: 홍길동·김철수 \(번호 끝 5678\)/.test(w3) && !/홍길동 2번/.test(w3) && /다다 2번/.test(w3), '전화번호만 같음 ' + w3);
 if (fails.length) { console.log('✗ ' + fails.join('\n✗ ')); process.exit(1); }
 console.log('✓ 명단 전달 비고 경고 시험 통과');

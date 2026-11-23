@@ -5463,11 +5463,16 @@ function listWarn_(lc) {
           const ph = cP >= 0 ? String(x[cP]).replace(/\D/g, '').slice(-8) : '', nm = cN >= 0 ? String(x[cN]).replace(/\s+/g, '') : '';
           const k = ph.length >= 7 ? 'p' + ph : nm ? 'n' + nm : '';
           if (!k) return;
-          (seen[k] = seen[k] || { nm: nm, n: 0 }).n++;
+          const e = (seen[k] = seen[k] || { nm: nm, n: 0, names: [], ph: ph });
+          e.n++; if (nm && e.names.indexOf(nm) < 0) e.names.push(nm);
         });
       });
-      const dup = Object.keys(seen).filter(function (k) { return seen[k].n > 1; }).map(function (k) { return seen[k].nm + ' ' + seen[k].n + '번'; });
-      if (dup.length) out.push('⚠ 같은 사람이 폼을 두 번 냄: ' + dup.join(', ') + ' → 한 줄 빼고 보내기');
+      // 이름이 같으면 '같은 사람 두 번', 이름이 다르고 전화번호만 같으면 그렇게 (11/23 사용자: 한 번 낸 사람이 '2번'으로 나옴 — 이름이 다른 사람이 같은 번호를 적었음)
+      const keys = Object.keys(seen).filter(function (k) { return seen[k].n > 1; });
+      const same = keys.filter(function (k) { return seen[k].names.length <= 1; }).map(function (k) { return seen[k].nm + ' ' + seen[k].n + '번'; });
+      const ph = keys.filter(function (k) { return seen[k].names.length > 1; }).map(function (k) { return seen[k].names.join('·') + ' (번호 끝 ' + seen[k].ph.slice(-4) + ')'; });
+      if (same.length) out.push('⚠ 같은 사람이 폼을 두 번 냄: ' + same.join(', ') + ' → 한 줄 빼고 보내기');
+      if (ph.length) out.push('⚠ 이름은 다른데 전화번호가 같음: ' + ph.join(', ') + ' → 같은 사람인지 확인하고 보내기');
     }
   } catch (e) {}
   return (memo[lc] = out.join('\n'));
