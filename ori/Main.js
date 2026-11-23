@@ -3906,15 +3906,6 @@ function checkFullInner_() {
       cfCut_();
       try { payChkRecheck1_(runs); } catch (e) { note_('결제금액 확인 다시 보기 실패: ' + e); }
     } },
-    // 명단 전달·리뷰 가이드 안전망 (마감 때 바로 넣으므로 보통 할 게 없음): 리뷰 확인이 시간을 다 쓰기 전에 먼저 실행 (need: 30)
-    { n: '명단 전달·리뷰 가이드', need: 30, run: function () {
-      runs = readRuns_();
-      try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
-      cfCut_();
-      try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
-      cfCut_();
-      try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
-    } },
     // 리뷰 체크 확인(취완·독촉·리뷰 보고)은 15분마다 (11/2 사용자 요청). 한눈에를 그리기 전에 해서 '리뷰 취합할 것'이 바로 보이게
     { n: '리뷰 확인', need: 30, run: function () {
       let rvCut = false;
@@ -3936,6 +3927,15 @@ function checkFullInner_() {
           note_(left.length ? '⚠ 한눈에 오류 칸(' + bad.slice(0, 3).join(', ') + ')을 다시 그렸는데 ' + left.length + '개 남음: ' + left.slice(0, 3).join(', ') + why : '✓ 한눈에 오류 칸 ' + bad.length + '개(' + bad.slice(0, 3).join(', ') + ') 다시 그려서 고침');
         }
       } catch (e) { if (e && e.yieldLock) throw e; note_('한눈에 오류 칸 확인 실패: ' + e); }
+    } },
+    // 명단 전달·리뷰 가이드 안전망 (마감 때 바로 넣으므로 보통 할 게 없음): 한눈에 뒤 (need: 30으로 낮춰 건너뜀 감소)
+    { n: '명단 전달·리뷰 가이드', need: 30, run: function () {
+      runs = readRuns_();
+      try { subTime_('알림: 명단 전달', function () { ensureListMsgs_(runs); }); } catch (e) { note_('명단 전달 확인 실패: ' + e); }
+      cfCut_();
+      try { subTime_('알림: 리뷰 가이드', function () { ensureReviewGuideMsgs_(runs); }); } catch (e) { note_('리뷰 가이드 메시지 실패: ' + e); }
+      cfCut_();
+      try { subTime_('알림: 없는 폼', function () { adoptOrphanForms_(runs); }); } catch (e) { note_('진행목록에 없는 폼 확인 실패: ' + e); }
     } },
     { n: '리뷰 사진', need: 30, run: function () {
       // 진행 중 의뢰 리뷰이미지에 바로 올린 사진도 대기열로 (11/15)
