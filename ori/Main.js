@@ -6554,7 +6554,7 @@ const RECIP_RE = /수취인|받는\s*(분|사람)|받으시는/;
 
 // '옥광밤 : 별점 4, 텍스트리뷰 6 / 황금향 : 별점 5, 텍스트리뷰 9' → [{name, mix:[{label,n}]}]  (상품 하나면 '별점 2, 텍스트리뷰 3'만 써도 됨)
 function parseRvMix_(text) {
-  const TYPE = /^(별점|텍스트|글씨|포토|사진|리뷰|한\s*줄|1줄|일반)/;
+  const TYPE = /^(별점|텍스트|글씨|포토|사진|영상|동영상|리뷰|한\s*줄|1줄|일반)/;
   return String(text || '').split(/\s*(?:\/|\n)\s*/).map(function (seg) {
     let m = seg.match(/^\s*([^:：]+?)\s*[:：]\s*(.*)$/), name = '', body = seg;
     if (m) { name = m[1].trim(); body = m[2]; }
@@ -6755,10 +6755,12 @@ function reviewPage_(p) {
     let saved = {};
     try { saved = JSON.parse(pr.getProperty('RV_' + sid) || '{}'); } catch (e) {}
     let desc = '';
-    try { desc = FormApp.openById(chain.runs[0]['폼ID']).getDescription() || ''; } catch (e) {}
+    if (!saved.mix && p.np == null) {
+      try { desc = FormApp.openById(chain.runs[0]['폼ID']).getDescription() || ''; } catch (e) {}
+    }
     // 숫자 칸으로 넣은 개수 (11/2: '상품 : 포토 18 / 텍스트 12'처럼 글로 쓰면 / 가 상품 나눔이라 헷갈림) → 'mix' 글로 합침
     if (p.np != null) {
-      const RT = ['포토대기', '포토리뷰', '텍스트리뷰', '별점'], segs = [];
+      const RT = ['포토대기', '포토리뷰', '영상리뷰', '텍스트리뷰', '별점'], segs = [];
       for (let i = 0; i < Math.min(Number(p.np) || 0, 10); i++) {
         const parts = RT.map(function (t, j) { const n = Number(String(p['n' + i + '_' + j] || '').replace(/\D/g, '')) || 0; return n ? t + ' ' + n : ''; }).filter(Boolean);
         if (parts.length) segs.push((p['pn' + i] ? String(p['pn' + i]).trim() + ' : ' : '') + parts.join(', '));
@@ -6778,16 +6780,16 @@ function reviewPage_(p) {
       '<label>공지 종류<select name="kind">' + Object.keys(RV_KINDS).map(function (x) { return '<option value="' + x + '"' + (x === o.kind ? ' selected' : '') + '>' + RV_KINDS[x] + '</option>'; }).join('') + '</select></label>' +
       (function () {
         // 상품마다 숫자 칸 (의뢰서 전체 개수). 상품 이름은 공지의 상품명, 없으면 의뢰 이름
-        const RT = ['포토대기', '포토리뷰', '텍스트리뷰', '별점'], RTL = ['포토대기 (업체 사진)', '포토리뷰 (직접 찍음)', '텍스트', '별점만'];
+        const RT = ['포토대기', '포토리뷰', '영상리뷰', '텍스트리뷰', '별점'], RTL = ['포토대기 (업체 사진)', '포토리뷰 (직접 찍음)', '영상리뷰', '텍스트', '별점만'];
         const have = parseRvMix_(o.mix);
         let names = noticeProducts_(desc).map(function (x) { return x.name; }).filter(Boolean);
         have.forEach(function (h) { if (h.name && names.indexOf(h.name) < 0) names.push(h.name); });
         if (!names.length) names = [campOf_(chain.runs[0]['명단 제목'])];
-        const lab = function (l) { return /대기/.test(l) ? 0 : /포토|사진/.test(l) ? 1 : /별점/.test(l) ? 3 : 2; };
+        const lab = function (l) { return /대기/.test(l) ? 0 : /포토|사진/.test(l) ? 1 : /영상|동영상/.test(l) ? 2 : /별점/.test(l) ? 4 : 3; };
         return '<div class="lab">리뷰 종류별 개수 <span class="s">(의뢰서 전체 기준. 숫자만 넣으면 돼요)</span></div><input type="hidden" name="np" value="' + names.length + '">' +
           names.map(function (nm, i) {
             const h = have.filter(function (x) { return x.name === nm; })[0] || (names.length === 1 ? have[0] : null) || { mix: [] };
-            const val = [0, 0, 0, 0]; h.mix.forEach(function (m) { val[lab(m.label)] += m.n; });
+            const val = [0, 0, 0, 0, 0]; h.mix.forEach(function (m) { val[lab(m.label)] += m.n; });
             return '<div class="prod">' + (names.length > 1 ? '<div class="pn">' + esc(nm) + '</div>' : '') + '<input type="hidden" name="pn' + i + '" value="' + esc(names.length > 1 ? nm : '') + '"><div class="nums">' +
               RT.map(function (t, j) { return '<label class="num">' + RTL[j] + '<input name="n' + i + '_' + j + '" inputmode="numeric" value="' + (val[j] || '') + '" placeholder="0"></label>'; }).join('') + '</div></div>';
           }).join('');
@@ -6884,6 +6886,16 @@ function toolOverview_(out, runs) {
     });
     out.last = String(PropertiesService.getScriptProperties().getProperty('LAST_REPORT') || '');
     const bl = blacklist_(); out.black = Object.keys(bl).map(function (k) { return bl[k]; });
+    const nowMs = Date.now();
+    out.rvChains = chainsOf_(runs).filter(function (c) {
+      if (!c.runs.length || !c.runs[0]['시트ID']) return false;
+      const last = c.runs[c.runs.length - 1]['진행일'];
+      return last instanceof Date && nowMs - last.getTime() < 21 * 86400000;
+    }).sort(function (a, b) { return b.runs[b.runs.length - 1]['진행일'] - a.runs[a.runs.length - 1]['진행일']; })
+      .map(function (c) {
+        const f = c.runs[0], l = c.runs[c.runs.length - 1];
+        return { sid: String(f['시트ID']), name: campOf_(f['명단 제목']), span: md(f['진행일']) + (c.runs.length > 1 ? '~' + md(l['진행일']) : ''), days: c.runs.length, n: c.runs.reduce(function (a, r) { return a + (Number(r['인원']) || 0); }, 0) };
+      });
   } catch (e) { out.status = []; }
   try { out.today = todayItems_(runs); } catch (e) { out.today = { items: [], later: 0, tabs: [], err: String(e.message || e) }; }
   return out;
@@ -7414,8 +7426,9 @@ const TOOLS_HTML = String.raw`
 <div class="pane" id="pane-review" role="tabpanel">
   <div class="card">
     <h2>⭐ 리뷰 공지 (구매·폼 종료 후)</h2>
-    <p class="hint">의뢰를 선택하면 수취인 이름과 상품을 확인하여 리뷰 종류(별점/텍스트/포토)를 고르게 배정합니다.</p>
-    <a id="rvlink" href="#" target="_top" class="btn-review">리뷰 배정 열기</a>
+    <p class="hint">아래에서 의뢰를 바로 누르면 중간 로딩 없이 리뷰 배정으로 넘어가요. (수취인 이름 기준)</p>
+    <div id="rvlist"></div>
+    <a id="rvlink" href="#" target="_top" class="btn-review" style="margin-top:10px">전체 목록에서 찾기</a>
   </div>
 </div>
 <script>
@@ -7596,6 +7609,19 @@ function show(o) {
     b.onclick = function () { twice(b, a.label + ' 로 옮겨요', function () { go({ act: 'move', title: o.title, to: a.title }, '옮기는 중…'); }); };
     ab.appendChild(b);
   });
+  if (o.rvChains && $('rvlist')) {
+    var rl0 = $('rvlist'); rl0.innerHTML = '';
+    o.rvChains.forEach(function (c) {
+      var a = document.createElement('a');
+      a.href = EXEC + '?p=review&k=' + encodeURIComponent(K) + '&s=' + encodeURIComponent(c.sid);
+      a.target = MODE !== 'web' ? '_blank' : '_top';
+      a.style.cssText = 'display:block;padding:10px 12px;margin:6px 0;background:#fff;border:1.5px solid var(--pink-line);border-radius:10px;color:var(--ink);text-decoration:none;font-weight:900;font-size:14.5px';
+      a.textContent = c.name + ' ';
+      var sp = document.createElement('span'); sp.style.cssText = 'font-weight:500;font-size:12.5px;color:var(--ink-soft)';
+      sp.textContent = c.span + ' · ' + c.days + '일 · ' + c.n + '명';
+      a.appendChild(sp); rl0.appendChild(a);
+    });
+  }
   if (o.status) {
     var sb = $('stat'); sb.innerHTML = '';
     if (o.last) $('statlast').textContent = '마지막 확인: ' + o.last;
