@@ -431,7 +431,34 @@ function renameRun_(r, title, why) {
       if (v[1] instanceof Date) obSet_(ob, v[0], 2, sendDate_(title, v[4], v[2]));
     });
   } catch (e) {}
+  // 상품 부분(날짜·끝 인원 뺀 것)이 바뀌었으면 같은 의뢰의 뒤 날짜 중 아직 시작 안 한 진행(진행예정·0명)과 일정 탭 대기 줄도 같은 이름으로 (11/23 수진 님:
+  //  '비전이공이공 황금향'을 바꿨는데 다음 날 진행·일정이 옛 이름). 옛 이름을 그대로 따르던 것만 (날마다 일부러 다르게 지은 이름은 안 건드림)
+  //  수진 님이 한눈에 탭에서 직접 고친 것만 (한 번 고치기·날짜 옮기기처럼 날마다 따로 바꾸는 코드는 두 번 바뀌지 않게)
+  if (!globalThis.__RENAME_FOLLOW && /^한눈에 탭/.test(String(why || ''))) { try { renameFollow_(r, oldTitle, title + nick); } catch (e) { note_('다음 일차 이름 따라 바꾸기 실패: ' + e); } }
   return true;
+}
+// 방제의 상품 부분 (날짜·택/업 머리·끝 인원·띄어쓰기 뺌): '#11.23비전이공이공 황금향 토스5' → '비전이공이공황금향토스'
+function titleProd_(t) { return bareTitle_(t).replace(/^[#업택)\s]*\d{1,2}\.\d{1,2}/, '').replace(/^[#업택)\s]+/, '').replace(/\d+\s*$/, '').replace(/\s+/g, ''); }
+function renameFollow_(r, oldTitle, newTitle) {
+  const po = titleProd_(oldTitle), pn = titleProd_(newTitle);
+  if (!po || !pn || po === pn || !(r['진행일'] instanceof Date) || !r['시트ID']) return [];
+  const d0 = dayStart_(r['진행일']), iso = function (d) { return Utilities.formatDate(d, CONFIG.TIMEZONE, 'yyyy-MM-dd'); }, done = [];
+  globalThis.__RENAME_FOLLOW = true;
+  try {
+    readRuns_().filter(function (x) { return x.row !== r.row && String(x['시트ID']) === String(r['시트ID']) && x['진행일'] instanceof Date && dayStart_(x['진행일']) > d0 && x['진행 상태'] === '진행예정' && !(Number(x['인원']) > 0) && titleProd_(x['명단 제목']) === po; })
+      .forEach(function (x) { const nt = planDayTitle_(newTitle, iso(x['진행일']), x['명단 제목']); if (titleProd_(nt) === pn && renameRun_(x, nt, '앞 진행 이름 따라')) done.push(bareTitle_(nt)); });
+    const ps = planSheet_(), pl = ps.getLastRow(), rb = String(r['요청ID'] || '').replace(/-\d+$/, '');
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x, i) {
+      if (x[8] !== '대기' || !(x[3] instanceof Date) || dayStart_(x[3]) <= d0 || titleProd_(x[4]) !== po) return;
+      let cfg = {}; try { cfg = JSON.parse(x[9] || '{}') || {}; } catch (e) {}
+      if (rb && String(cfg.base || x[0] || '').replace(/-\d+$/, '') !== rb) return;
+      const nr = planDayTitle_(newTitle, iso(x[3]), x[4]), nk = (String(x[5]).match(/\s*\([^)]*\)\s*$/) || [''])[0];
+      if (titleProd_(nr) !== pn) return;
+      ps.getRange(i + 2, 5, 1, 2).setValues([[nr, nr + nk]]); done.push('(일정) ' + nr);
+    });
+  } finally { globalThis.__RENAME_FOLLOW = false; }
+  if (done.length) note_('✓ 다음 일차도 새 이름으로: ' + done.join(', '));
+  return done;
 }
 
 // 진행의 명단 시트·폼(제목·파일)·폴더 이름을 옛 이름 → 새 이름 (끝의 ' (응답)'은 그대로). 지금 이름이 옛 이름과 같을 때만 (손으로 바꾼 이름은 안 건드림)
@@ -7200,7 +7227,7 @@ const TOOLS_HTML = String.raw`
   }
   .ob pre {
     white-space: pre-wrap; word-break: break-all; margin: 8px 0 0;
-    font: inherit; font-size: 12.5px; max-height: 80px; overflow: hidden;
+    font: inherit; font-size: 12.5px; max-height: 260px; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;   /* 11/23 수진 님: 80px에서 잘리고 스크롤 안 됨 */
     color: var(--ink); background: var(--tint); border: 1.5px solid var(--pink-line);
     border-radius: 10px; padding: 10px;
   }

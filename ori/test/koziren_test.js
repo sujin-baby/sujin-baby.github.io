@@ -37,7 +37,7 @@ function setup() {
   env.__ss.sheets['한눈에'] = new H.Sheet('한눈에', [['진행일', '방제'], ['', '#택11.20 남성용 기모 타이즈10'], ['', '#11.20 실 다른 상품 5'], ['', '#택11.23 코지클로 남자타이즈10']]);
   try { G('buildDashboard_(false)'); } catch (e) {}
   const t = G('readRuns_()').map(r => G('bareTitle_')(r['명단 제목']));
-  ok(t.includes('#택11.20 남성용 기모 타이즈10') && t.includes('#택11.23 코지클로 남자타이즈10') && t.includes('#11.20 실 다른 상품 5'), '한눈에에서 고친 줄만 바뀜 ' + JSON.stringify(t));
+  ok(t.includes('#택11.20 남성용 기모 타이즈10') && t.includes('#택11.23 남성용 기모 타이즈10') && t.includes('#11.20 실 다른 상품 5'), '한눈에에서 고친 줄 + 아직 시작 안 한 다음 날(11/23 수진 님: 다음 일차도 따라) ' + JSON.stringify(t));
   ok(G('__FILES') === 0 && G('__PAYREN').some(x => /코지클로 남자타이즈10→#택11.20 남성용 기모 타이즈10 any/.test(x)), '파일 이름 그대로·월급시트 같이 ' + JSON.stringify(G('__PAYREN')));
 }
 console.log(fails.length ? 'XX 방제 바꾸기 시험 실패:\n- ' + fails.join('\n- ') : '✓ 한눈에 상품 이름 바꾼 방제·코지클로 한 번 바꾸기 시험 통과');
