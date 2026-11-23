@@ -3873,7 +3873,9 @@ function checkFullInner_() {
           if (runs.some(function (x) { return String(x['시트ID']) === id && x['실배송'] === 'Y'; })) props.setProperty('LISTREAL_' + id, '1');
           try { if (subTime_('명단 시트: 값 확인', function () { return fixListRef_(lss); })) note_('✓ 명단 탭을 값으로 바꿈 (열을 지워도 유지): ' + lss.getName()); else { const na = subTime_('명단 시트: 새 응답', function () { return syncList_(lss); }); if (na) note_('✓ 명단 탭에 새 응답 ' + na + '줄: ' + lss.getName()); } } catch (e) { note_('명단 탭 갱신 실패: ' + e); }
           // 총건수 = 이 명단 시트를 쓰는 의뢰의 총건수 (없으면 날마다 목표인원 합)
-          const mine = runs.filter(function (x) { return String(x['시트ID']) === id; });
+          //  같은 명단 시트를 끝난 예전 의뢰와 같이 쓰면(11/23 백발백중 기대평: 1차 총 30·종료 + 2차 총 15) 지금 의뢰 것만 (예전 총건수 30이 들어가 잔여 15로 나왔음)
+          const all0 = runs.filter(function (x) { return String(x['시트ID']) === id; }), live0 = all0.filter(function (x) { return x['진행 상태'] !== '종료'; });
+          const mine = live0.length ? live0 : all0;
           const total = mine.reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0) ||
             mine.reduce(function (a, x) { return a + (Number(x['목표인원']) || 0); }, 0);
           subTime_('명단 시트: 요약', function () { listSummary_(lss, total); });
