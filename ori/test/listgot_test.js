@@ -1,0 +1,20 @@
+// (11/24) 명단 전달 전에 사장님 링크 '명단' 탭 줄 수로 셈 (응답합본만 보고 1명인 명단을 보내라고 뜨던 것)  node listgot_test.js <Main.js>
+const H = require('./harness'); const vm = require('vm');
+const env = H.makeEnv({ main: process.argv[2], props: { OUTBOX_SORTED: '1', OUTBOX_FMT2: '1', LISTV_L1: '1' } }); const G = k => vm.runInContext(k, env);
+const fails = [], ok = (c, m) => { if (!c) fails.push(m); };
+const d0 = new Date(2026, 10, 24), at = h => new Date(d0.getTime() + h * 3600000);
+const list = new H.Sheet('명단', [['총건수'], ['타임스탬프', '계정명(수령인)'], [at(6.5), '홍길동']]);
+Object.getPrototypeOf(list.getRange(1, 1)).getNotes = function () { return this.getValues().map(r => r.map(() => '')); };
+const merge = new H.Sheet('응답합본', [['x'], ['타임스탬프'], [at(6.5)], [at(8.1)]]);
+env.__lss = { getId: () => 'L1', getSheetByName: n => n === '명단' ? list : n === G('MERGE_TAB') ? merge : null };
+const w = { from: d0.getTime(), to: d0.getTime() + 86400000 };
+env.__w = w;
+ok(G('listGot_(__lss, __w)') === 1, '명단 탭 1명 (응답합본 2명이어도) ' + G('listGot_(__lss, __w)'));
+list.rows.push([at(8.1), '김철수']);
+ok(G('listGot_(__lss, __w)') === 2, '명단 탭 2명');
+env.__props.delete('LISTV_L1');
+ok(G('listGot_(__lss, __w)') === 2, '값 명단 탭 없으면 응답합본');
+const src = require('fs').readFileSync(process.argv[2], 'utf8');
+ok(/let got2 = listGot_\(lss2, w\);/.test(src) && /if \(listGot_\(lss, w\) < Number\(r\['인원'\]/.test(src), '마감·안전망 둘 다 명단 탭으로');
+console.log(fails.length ? 'XX 명단 탭 줄 수 시험 실패:\n- ' + fails.join('\n- ') : '✓ 명단 전달 전에 명단 탭 줄 수로 셈 시험 통과');
+process.exit(fails.length ? 1 : 0);

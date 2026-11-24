@@ -4077,10 +4077,12 @@ function checkFullInner_() {
     try { if (photoLate_(r, props)) errs[r['명단 제목']] = (errs[r['명단 제목']] ? errs[r['명단 제목']] + ' / ' : '') + '📷 업체 포토 아직 (사장님께 요청)'; } catch (e) {}
     if (!r['목표인원'] || r['마감 시각'] || n < Number(r['목표인원'])) return;
     // 명단 시트(합본)에 실제로 다 들어왔을 때만 명단 전달 (폼→시트가 늦게 옮겨질 때 4명인데 명단 보내라고 뜬 문제, 10/22)
+    //  사장님이 링크로 보는 '명단' 탭으로 셈 (11/24 피커드 카드지갑: 응답합본엔 2명인데 명단 탭엔 1명인 채로 명단 전달이 나감). 모자라면 먼저 채우고 다시 셈
     try {
-      const lt2 = SpreadsheetApp.openById(r['시트ID']).getSheetByName(MERGE_TAB);
-      const got2 = lt2 && lt2.getLastRow() >= 3 ? lt2.getRange(3, 1, lt2.getLastRow() - 2, 1).getValues().filter(function (x) { const t = tsMs_(x[0]); return isFinite(t) && t >= w.from && t < w.to; }).length : 0;
-      if (got2 < Number(r['목표인원'])) { try { syncList_(SpreadsheetApp.openById(r['시트ID'])); } catch (e) {} cfDirty_(); try { soonCheck_(); } catch (e) {} return; }
+      const lss2 = SpreadsheetApp.openById(r['시트ID']);
+      let got2 = listGot_(lss2, w);
+      if (got2 < Number(r['목표인원'])) { try { syncList_(lss2); } catch (e) {} got2 = listGot_(lss2, w); }
+      if (got2 < Number(r['목표인원'])) { cfDirty_(); try { soonCheck_(); } catch (e) {} return; }
     } catch (e) { return; }
     // 폼은 안 닫음 (사용자 요청 10/21) → 인원이 차면 마감 시각만 적고 명단·리뷰 가이드 메시지
     setRun_(r.row, '마감 시각', new Date());
@@ -4251,6 +4253,19 @@ function priceChangeLines_(me, sib, runs) {
   });
   return firstLines.concat(dayLines);
 }
+// 그 진행 시간(w) 안의 명단 줄 수: 값 명단 탭(LIST_TAB, 사장님 링크)이 있으면 그 탭(지운 응답 메모 줄 빼고), 없으면 응답합본
+function listGot_(lss, w) {
+  const props = PropertiesService.getScriptProperties(), lt = props.getProperty('LISTV_' + lss.getId()) ? lss.getSheetByName(LIST_TAB) : null;
+  if (lt && lt.getLastRow() >= 3) {
+    const hd = lt.getRange(2, 1, 1, Math.max(lt.getLastColumn(), 1)).getValues()[0].map(function (x) { return String(x).trim(); }), cT = hd.indexOf('타임스탬프');
+    if (cT >= 0) {
+      const n = lt.getLastRow() - 2, v = lt.getRange(3, cT + 1, n, 1).getValues(), nt = lt.getRange(3, cT + 1, n, 1).getNotes();
+      return v.filter(function (x, i) { const t = tsMs_(x[0]); return isFinite(t) && t >= w.from && t < w.to && !nt[i][0]; }).length;
+    }
+  }
+  const lt2 = lss.getSheetByName(MERGE_TAB);
+  return lt2 && lt2.getLastRow() >= 3 ? lt2.getRange(3, 1, lt2.getLastRow() - 2, 1).getValues().filter(function (x) { const t = tsMs_(x[0]); return isFinite(t) && t >= w.from && t < w.to; }).length : 0;
+}
 // 이 진행의 명단 전달이 아직 안 보내고 대기 중이면 새로 넣지 않고 그 글을 지금 내용으로 고침 (인원을 늘려 다시 마감될 때 두 줄 생기지 않게, 10/26)
 function pendingListMsg_(r) {
   const ob = outboxSheet_(), ol = ob.getLastRow();
@@ -4292,7 +4307,11 @@ function ensureListMsgs_(runs) {
       if (want === null) want = listMsgText_(r);
       if (String(x[4]) !== want) obSet_(ob, x[0], 5, want);
     });
-    if (!found) { queueListMsgs_(r, true); note_('✓ 명단 전달 메시지 넣음: ' + bareTitle_(r['명단 제목'])); }
+    if (!found) {
+      // 명단 탭이 아직 다 안 찼으면 먼저 채우고, 그래도 모자라면 다음 확인에 (명단 1명인데 명단 전달이 먼저 뜨지 않게, 11/24)
+      try { const lss = SpreadsheetApp.openById(r['시트ID']), w = windowOf_(runs, r); if (listGot_(lss, w) < Number(r['인원'] || r['목표인원'] || 0)) { syncList_(lss); if (listGot_(lss, w) < Number(r['인원'] || r['목표인원'] || 0)) return; } } catch (e) {}
+      queueListMsgs_(r, true); note_('✓ 명단 전달 메시지 넣음: ' + bareTitle_(r['명단 제목']));
+    }
   });
 }
 
