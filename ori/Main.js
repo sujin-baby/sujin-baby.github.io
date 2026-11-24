@@ -2052,7 +2052,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3866,6 +3866,7 @@ function checkFullInner_() {
       try { lpDup1_(); } catch (e) {}
       try { mdDel1_(); } catch (e) {}
       try { pkd3_(); } catch (e) {}
+      try { pdb10_(); } catch (e) {}
       try { if (!props.getProperty('EDITC1')) { ensureEditTab_(); props.setProperty('EDITC1', Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm')); } } catch (e) { note_('폼수정 날짜 칸 실패: ' + e); }   // (11/18 한 번) C1 날짜 고르기 바로 (정리가 밀려 늦게 생기던 것)
       try { upAcctOpen1_(); } catch (e) {}
       try { exp135_(); } catch (e) {}
@@ -9008,6 +9009,8 @@ function rvExpect_(sid, mine) {
   let rv = {}; try { rv = JSON.parse(PropertiesService.getScriptProperties().getProperty('RV_' + sid) || '{}') || {}; } catch (e) {}
   const total = mine.reduce(function (m, x) { return Math.max(m, Number(x['총건수']) || 0); }, 0), out = { 포토: 0, 텍스트: 0, 별점: 0 };
   if (rv.kind === 'confirm') return null;
+  // 사용자가 정한 실제 안내 개수 (11/25 포두부: 앞 5명 포토 안내, 남은 5명 텍스트)
+  if (rv.expect && typeof rv.expect === 'object') { Object.keys(out).forEach(function (k) { out[k] = Number(rv.expect[k]) || 0; }); return out; }
   if (isWongo_(rv)) { out['포토'] = total; return total ? out : null; }   // 원고제공·자율 = 전체 포토리뷰
   if (rv.kind === 'text') { out['텍스트'] = total; return total ? out : null; }
   if (rv.kind === 'photo' || rv.kind === 'self') { out['포토'] = total; return total ? out : null; }
@@ -9801,6 +9804,45 @@ function pkd3_() {
     if (Number(r['목표인원']) === 3) { props.setProperty('PKD3', '✓ 이미 3'); return; }
     props.setProperty('PKD3', ('✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + changeDaily_(r, r['진행일'], 3)).slice(0, 800));
   } catch (e) { props.setProperty('PKD3', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/25 한 번, 사용자 "포두부 총 10건 진행인데 왜 5건 진행으로 생성됐어?") 의뢰서 '3번) 리뷰10개 / 4번) 1건~2건'인데 총 5건(2·2·1)으로 만들어져 5명 끝남
+//  → 사용자가 고른 대로 남은 5건: 11.26 2 · 11.27 2 · 11.30 1 (일정 탭에 대기 줄 추가, 마지막 일정 줄 복사). 진행 3개 총건수 5 → 10
+//  리뷰: 의뢰서 맨 위 '포토2분' (사용자). 앞 5명은 이미 포토리뷰 가이드가 나가서 남은 5명은 텍스트리뷰 → RV_.dayMix로 그날 '텍스트리뷰 N',
+//  리뷰 개수 확인(rvExpect_)은 실제 안내한 대로 포토 5·텍스트 5 (RV_.expect)
+function pdb10_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('PDB10') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
+  try {
+    const runs = readRuns_().filter(function (y) { return /^ngm0mcci(-\d+)?$/.test(String(y['요청ID'])) && /포두부/.test(bareTitle_(y['명단 제목'])); });
+    if (runs.length !== 3) { props.setProperty('PDB10', (st + ' 실패(진행 ' + runs.length + '개)').slice(-400)); return; }
+    const out = [];
+    runs.forEach(function (y) { if (Number(y['총건수']) !== 10) { setRun_(y.row, '총건수', 10); out.push(bareTitle_(y['명단 제목']) + ' 총건수 10'); } });
+    const ps = planSheet_(), pl = ps.getLastRow(), v = pl >= 2 ? ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues() : [];
+    const src = v.filter(function (x) { return String(x[0]) === 'ngm0mcci-3'; })[0];
+    if (!src) { props.setProperty('PDB10', (st + ' 실패(일정 3일차 줄 없음)').slice(-400)); return; }
+    const anchor = runs.filter(function (y) { return String(y['요청ID']) === 'ngm0mcci-3'; })[0] || runs[0];
+    const cnt = function (t, c) { return String(t).replace(/\d+(\s*(\([^)]*\))?\s*)$/, c + '$1'); };
+    const dayMix = {};
+    [[4, new Date(2026, 10, 26), 2], [5, new Date(2026, 10, 27), 2], [6, new Date(2026, 10, 30), 1]].forEach(function (a) {
+      const id = 'ngm0mcci-' + a[0], c = a[2], tc = titleCount_(anchor, c);
+      let cc = []; try { cc = JSON.parse(src[7]); } catch (e) {}
+      cc = (cc || []).map(function (g) { g = (g || []).slice(); g[0] = c; if (g[1] && g[1].length === 1) g[1] = [c]; return g; });
+      const room = cnt(retitleDate_(src[4], a[1]), tc), title = cnt(retitleDate_(src[5], a[1]), tc);
+      dayMix[bareTitle_(title).replace(/\s+/g, '')] = '텍스트리뷰 ' + c;
+      if (v.some(function (x) { return String(x[0]) === id; })) { out.push(id + ' 이미 있음'); return; }
+      ps.appendRow([id, src[1], a[0], a[1], room, title, c, JSON.stringify(cc), '대기', src[9]]);
+      out.push('(일정 추가) ' + bareTitle_(title));
+    });
+    const sid = String(anchor['시트ID'] || '');
+    let rv = null; try { rv = JSON.parse(props.getProperty('RV_' + sid) || 'null'); } catch (e) {}
+    if (rv) {
+      rv.dayMix = Object.assign({}, rv.dayMix || {}, dayMix);
+      rv.expect = { 포토: 5, 텍스트: 5, 별점: 0 };
+      props.setProperty('RV_' + sid, JSON.stringify(rv));
+      out.push('리뷰: 남은 날 텍스트리뷰 (' + Object.keys(dayMix).join(', ') + ')');
+    } else out.push('⚠ 리뷰 정보(RV_) 없음');
+    props.setProperty('PDB10', ('✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + out.join(', ')).slice(0, 1000));
+  } catch (e) { props.setProperty('PDB10', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 function salad30_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SALAD30') || '');
