@@ -1161,6 +1161,28 @@ function storeDupScan1_() {
 }
 // 결제금액 확인 (사용자 요청 10/20): 새 응답의 결제금액이 공지 가격(배송비 포함)과 다르면 보낼메시지 '내 할 일'에. 명단 시트에는 아무것도 안 씀
 //  공지 가격: 고른 옵션 글의 '(17,200원)', 없으면 진행목록 가격(하나거나 다 같을 때만). 2~5개 산 금액(가격 × 개수)은 맞는 걸로
+// 명단 글에 이미 '가격변동 N원'(여러 명이 같은 값으로 삼)이 있으면, 그 값으로 산 사람의 [결제금액 확인] 비고 줄은 뺌 (11/25 사용자: #11.25실/빈 피커드 카드지갑
+//  로켓 11,900원으로 3명 다 샀는데 먼저 낸 1명만 '공지 12,900원'과 비교돼 비고에 뜨고, 뒤 2명은 '다수가 낸 금액'과 비교돼 안 뜸 → 한 명만 뜨는 게 헷갈림)
+//  옵션이 여럿인 가격변동 줄(쉼표로 나뉨)은 어느 옵션인지 몰라 안 뺌. '공지 가격을 못 찾음' 줄도 그대로 둠
+// 명단전달 탭 비고(F칸, 200px) 줄 높이: 글 줄마다 15자에 한 줄로 셈, 최소 40 최대 160
+function msgvNoteH_(note) {
+  const t = String(note || '');
+  if (!t) return 40;
+  const k = t.split('\n').reduce(function (a, l) { return a + Math.max(1, Math.ceil(l.length / 15)); }, 0);
+  return Math.max(40, Math.min(160, k * 16 + 10));
+}
+function payNoteCovered_(line, listMsg) {
+  const m = String(line || '').match(/:\s*([\d,]+)\s*원\s*결제\s*\(공지\s*[\d,]+\s*원/);
+  if (!m) return false;
+  const paid = Number(m[1].replace(/,/g, '')) || 0;
+  if (!paid) return false;
+  return String(listMsg || '').split('\n').some(function (l) {
+    if (!/가격변동/.test(l) || /,/.test(l.replace(/(\d),(\d{3})/g, '$1$2'))) return false;
+    const after = l.indexOf('>') >= 0 ? l.slice(l.lastIndexOf('>') + 1) : l.slice(l.indexOf('가격변동') + 4);
+    const nums = (after.match(/\d[\d,]*/g) || []).map(function (v) { return Number(v.replace(/,/g, '')) || 0; });
+    return nums.length === 1 && nums[0] === paid;
+  });
+}
 function payCheck_(ss, add) {
   const sid = ss.getId(), runs = readRuns_(), mine = runs.filter(function (r) { return String(r['시트ID']) === sid && r['진행일'] instanceof Date; });
   if (!mine.length || mine.some(isExpect_)) return;   // 기대평은 결제가 없음
@@ -1852,8 +1874,8 @@ function diag_(p) {
     if (rr) SpreadsheetApp.openById(rr['시트ID']).getSheets().filter(function (t) { return !!t.getFormUrl(); }).forEach(function (t) {
       const h = headers_(t).map(hk_), lr = t.getLastRow(); if (lr < 2) return;
       const ci = function (re, not) { return h.findIndex(function (x) { return re.test(x) && !(not && not.test(x)); }); };
-      const cN = ci(MATCH.nick), cA = ci(/수령인|계정명/), cP = ci(/전화|연락처|휴대폰/), cO = ci(MATCH.opt, MATCH.nick);
-      t.getRange(2, 1, lr - 1, h.length).getValues().forEach(function (x) { if (!(x[0] instanceof Date)) return; out.resp.push([t.getName(), Utilities.formatDate(x[0], CONFIG.TIMEZONE, 'MM-dd HH:mm:ss'), cN >= 0 ? x[cN] : '', cA >= 0 ? x[cA] : '', cP >= 0 ? String(x[cP]).slice(-4) : '', cO >= 0 ? x[cO] : ''].join(' | ')); });
+      const cN = ci(MATCH.nick), cA = ci(/수령인|계정명/), cP = ci(/전화|연락처|휴대폰/), cO = ci(MATCH.opt, MATCH.nick), cM = ci(/결제\s*금액|결제\s*가격|구매\s*금액|결제한\s*금액/);   // 결제금액도 (11/25 결제금액 비고 확인)
+      t.getRange(2, 1, lr - 1, h.length).getValues().forEach(function (x) { if (!(x[0] instanceof Date)) return; out.resp.push([t.getName(), Utilities.formatDate(x[0], CONFIG.TIMEZONE, 'MM-dd HH:mm:ss'), cN >= 0 ? x[cN] : '', cA >= 0 ? x[cA] : '', cP >= 0 ? String(x[cP]).slice(-4) : '', cO >= 0 ? x[cO] : '', cM >= 0 ? x[cM] : ''].join(' | ')); });
     });
     // 결제금액 확인 기준 보기 (10/27): 배정 가격표와 응답 머리글
     if (rr) { out.respPm = optPriceMap_(readRuns_().filter(function (x) { return String(x['시트ID']) === String(rr['시트ID']); }).map(function (x) { return String(x['명단 제목']); }));
@@ -5708,7 +5730,7 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
       let lnote = '';
       if (grp.key === 'list') {
         const lc = msgvListCamp_(x[4]);
-        if (lc && payForList[lc]) lnote = payForList[lc].filter(function (v, i, a) { return a.indexOf(v) === i; }).join('\n');
+        if (lc && payForList[lc]) lnote = payForList[lc].filter(function (v, i, a) { return a.indexOf(v) === i && !payNoteCovered_(v, x[4]); }).join('\n');
         // 안 보낸 명단: 목표보다 폼이 많거나 같은 사람이 두 번 낸 폼이 있으면 비고 맨 위에 (11/18 사용자: 문풍지 2명인데 안민지가 두 번 써서 3명, 비고 없이 보내라고 뜸)
         if (lc && !isSent) { const lw = listWarn_(lc); if (lw) lnote = lw + (lnote ? '\n' + lnote : ''); }
       }
@@ -5772,7 +5794,7 @@ function msgViewModel_(rows, sentAt, reqOf, linkOf, chwanOf) {
         const lc = lx && String(lx[2]) === '명단 전달' ? msgvListCamp_(lx[4]) : '';
         const dispRoom = lc || String(rx[3] || '');
         let lnote = '';
-        if (lc && payForList[lc]) lnote = payForList[lc].filter(function (v, i, a) { return a.indexOf(v) === i; }).join('\n');
+        if (lc && payForList[lc]) lnote = payForList[lc].filter(function (v, i, a) { return a.indexOf(v) === i && !payNoteCovered_(v, lx[4]); }).join('\n');
         if (lc && !lSent) { const lw = listWarn_(lc); if (lw) lnote = lw + (lnote ? '\n' + lnote : ''); }
         return {
           type: 'msg', id: lx ? String(lx[0]) : '', sent: lSent,
@@ -5981,7 +6003,8 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
       }
     }
     const fr = sh.getRange(1, 6, n, 1);
-    fr.setValues(fv).setNotes(fn).setBackgrounds(fb).setFontColors(fc).setFontWeights(fw).setWrapStrategy(grp.pair ? SpreadsheetApp.WrapStrategy.CLIP : SpreadsheetApp.WrapStrategy.WRAP);
+    // 비고는 줄바꿈해서 칸 가운데(세로)에 다 보이게 (11/25 사용자: 비고 혼자 칸 아래에 몰려 있어 가독성이 나쁨 → F칸만 세로 정렬이 빠져 기본값 '아래'였음)
+    fr.setValues(fv).setNotes(fn).setBackgrounds(fb).setFontColors(fc).setFontWeights(fw).setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP).setVerticalAlignment('middle').setHorizontalAlignment('left');
     try { sh.getRange(1, 6).setHorizontalAlignment('center'); } catch (e) {}
   }
   if (grp.fee) {
@@ -6053,6 +6076,11 @@ function msgvWriteTab_(sh, gi, g, fresh, props) {
   if (grp.pair) {
     try { sh.getRange(1, 1, n, 10).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP); } catch (e) {}
     try { sh.setRowHeights(1, 1, 28); if (n > 1) sh.setRowHeights(2, n - 1, 40); } catch (e) {}
+    // 비고가 길면 그 줄만 비고 글이 다 보이게 높임 (F칸 200px ≈ 한 줄 15자)
+    if (grp.key === 'list') for (let i = 1; i < n; i++) {
+      const h = msgvNoteH_((lines[i] || {}).listNote);
+      if (h > 40) try { sh.setRowHeight(i + 1, h); } catch (e) {}
+    }
   } else {
     try { sh.setRowHeights(1, n, 22); } catch (e) {}
   }

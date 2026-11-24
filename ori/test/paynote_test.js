@@ -1,0 +1,22 @@
+// (11/25) 명단 글에 '가격변동 N원'이 있으면 그 값으로 산 사람의 [결제금액 확인] 비고 줄은 뺌 + 비고 칸 세로 가운데·줄바꿈  node paynote_test.js <Main.js>
+const H = require('./harness'); const vm = require('vm');
+const env = H.makeEnv({ main: process.argv[2] }); const G = k => vm.runInContext(k, env);
+const fails = [], ok = (c, m) => { if (!c) fails.push(m); };
+const cov = (line, msg) => { env.__a = line; env.__b = msg; return G('payNoteCovered_(__a, __b)'); };
+const msg1 = 'https://x\n\n#11.25실/빈 가짜상회 카드지갑\n홍길동\n김철수\n박영희\n*쿠팡 가격변동 11900원';
+ok(cov('홍길동: 11,900원 결제 (공지 12,900원, 더 싸게 삼)', msg1) === true, '첫날 가격변동 11900원 → 뺌');
+ok(cov('홍길동: 12,500원 결제 (공지 12,900원, 더 싸게 삼)', msg1) === false, '다른 값이면 그대로');
+ok(cov('홍길동: 11,900원 결제 (공지 12,900원, 더 싸게 삼)', 'https://x\n\n#방\n홍길동') === false, '가격변동 줄 없으면 그대로');
+ok(cov('홍길동: 9,200원 결제 (공지 9,100원, 더 비싸게 삼)', 'x\n*10.28 가격변동 9100 > 9200') === true, '날짜별 가격변동 9100 > 9200 → 9200 뺌');
+ok(cov('홍길동: 9,100원 결제 (공지 9,000원, 더 비싸게 삼)', 'x\n*10.28 가격변동 9100 > 9200') === false, '바뀌기 전 값은 그대로');
+ok(cov('홍길동: 9,800원 결제 (공지 9,000원, 더 비싸게 삼)', 'x\n*토스 가격변동 소과 9800원, 로얄중대과 11800원') === false, '옵션 여럿 줄은 안 뺌');
+ok(cov('홍길동: 11,900원 결제 (공지 가격을 못 찾음, 옵션 단일옵션) → 확인 필요', msg1) === false, '공지 못 찾음 줄은 그대로');
+ok(cov('홍길동: 23,800원 결제 (공지 12,900원, 더 비싸게 삼)', msg1) === false, '두 개 값은 그대로');
+ok(G('msgvNoteH_("")') === 40 && G('msgvNoteH_("짧음")') === 40, '짧은 비고는 40');
+ok(G('msgvNoteH_("홍길동: 11,900원 결제 (공지 12,900원, 더 싸게 삼)\\n김철수: 11,900원 결제 (공지 12,900원, 더 싸게 삼)")') > 40, '긴 비고는 높임');
+ok(G('msgvNoteH_(Array(30).fill("가나다라마바사아자차카타파하가나다").join("\\n"))') === 160, '최대 160');
+const src = require('fs').readFileSync(process.argv[2], 'utf8');
+ok((src.match(/!payNoteCovered_\(v, (x|lx)\[4\]\)/g) || []).length === 2, '비고 두 곳 다 거름');
+ok(/setWrapStrategy\(SpreadsheetApp\.WrapStrategy\.WRAP\)\.setVerticalAlignment\('middle'\)\.setHorizontalAlignment\('left'\)/.test(src), 'F칸 세로 가운데·줄바꿈');
+console.log(fails.length ? 'XX 결제금액 비고 시험 실패:\n- ' + fails.join('\n- ') : '✓ 결제금액 비고(가격변동 겹침 뺌·칸 정렬) 시험 통과');
+process.exit(fails.length ? 1 : 0);
