@@ -3495,7 +3495,12 @@ function checkFull() {
 function quickCheck_(ui) {
   const t0 = Date.now();
   let added = 0, sheets = 0;
-  const ok = locked_(function () {
+  // 15분 확인이 돌고 있으면 다음 단계 사이에서 비켜 달라고 하고 기다림 (11/24: '돌고 있어서 건너뛰었다'만 몇 번씩 떴음)
+  const props = PropertiesService.getScriptProperties();
+  try { props.setProperty('WANT_LOCK', String(Date.now())); } catch (e) {}
+  let ok = false;
+  try { ok = locked_(function () {
+    try { props.deleteProperty('WANT_LOCK'); } catch (e) {}
     const runs = readRuns_(), today = today_().getTime(), seen = {};
     runs.forEach(function (r) {
       const sid = String(r['시트ID'] || '');
@@ -3504,7 +3509,7 @@ function quickCheck_(ui) {
       try { added += syncList_(SpreadsheetApp.openById(sid)) || 0; } catch (e) {}
     });
     return true;
-  }, 15000);
+  }, 150000); } finally { try { props.deleteProperty('WANT_LOCK'); } catch (e) {} }
   cfDirty_(true);   // 메뉴로 누르셨으면 1분 뒤 확인은 단계를 건너뛰지 않고 전부
   try { soonCheck_(); } catch (e) {}
   if (!ok) { ui.alert('지금 15분 자동 확인이 돌고 있어서 이번엔 건너뛰었어요 (오류 아님).\n한눈에 탭 Q1의 ⏳가 ✔로 바뀌면 끝난 거예요.'); return; }
@@ -4037,6 +4042,8 @@ function checkFullInner_() {
     // 폼에는 응답이 있는데 명단 시트에 응답 탭이 없거나 비어 있으면 폼 응답을 다시 연결 (구글이 연결을 늦게 하거나 놓친 경우)
     try { const why = relinkIfMissing_(r, form); if (why) { errs[r['명단 제목']] = why; note_('✓ ' + bareTitle_(r['명단 제목']) + ': ' + why); } } catch (e) { errs[r['명단 제목']] = '응답 연결 확인 실패: ' + e.message; }
     const n = runCount_(runs, r, times[tk]);
+    // 새 응답이 들어왔으면 명단 시트(사장님 링크)에도 바로 (11/24: 폼 인원 단계가 길어 '명단 시트' 단계까지 못 가서 한 시간 동안 명단에 안 들어감). 바뀐 게 없으면 syncList_가 바로 끝남
+    if (n > (Number(r['인원']) || 0)) { try { subTime_('폼 인원: 명단 채우기', function () { syncList_(SpreadsheetApp.openById(r['시트ID'])); }); } catch (e) {} }
     if (Number(r['인원']) !== n) setRun_(r.row, '인원', n);
     try { const fb = fillBlankNicks_(r, w); if (fb) note_('✓ ' + bareTitle_(r['명단 제목']) + ' 카톡 닉네임 빈칸 채움: ' + fb); } catch (e) { note_('닉네임 빈칸 채우기 실패: ' + e.message); }
     // 블랙리스트 사람이 폼을 냈으면 한눈에 '확인 필요' 칸 + 메일 한 번

@@ -30,6 +30,6 @@ ok(!has('MSGV_S_m1') && has('MSGV_S_m2'), '이틀 지난 보냄 시각만');
 ok(G('propsSqueeze_()') === 0, '공간 여유 있으면 안 돎');
 const src = require('fs').readFileSync(process.argv[2], 'utf8');
 ok(/try \{ propsSqueeze_\(\); \}[^\n]*\n  const S = cfLoad_\(\);/.test(src), '15분 확인 맨 앞');
-ok((src.match(/try \{ props\.setProperty\('WANT_LOCK', String\(Date\.now\(\)\)\); \} catch \(e\) \{\}/g) || []).length === 2, '직접 하는 일은 공간이 차도');
+ok((src.match(/try \{ props\.setProperty\('WANT_LOCK', String\(Date\.now\(\)\)\); \} catch \(e\) \{\}/g) || []).length >= 2, '직접 하는 일은 공간이 차도');
 console.log(fails.length ? 'XX 속성 정리 시험 실패:\n- ' + fails.join('\n- ') : '✓ 속성 정리: 4일 지난 가이드 사본·끝난 시트 캐시만, 공간 차면 바로 시험 통과');
 process.exit(fails.length ? 1 : 0);
