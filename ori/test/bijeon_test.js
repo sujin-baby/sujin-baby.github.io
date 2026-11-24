@@ -53,5 +53,18 @@ ok(pl.join(',') === 'tcmlx6ic-2:생성됨,zzz-2:대기', '일정 ' + pl.join(','
   ok(G3('__FR').some(x => x === '# 탄탄상점 레깅스→# 실 탄탄상점 레깅스'), '명단 시트 이름도 ' + JSON.stringify(G3('__FR')));
   ok(/^✓/.test(env3.__props.get('TANSIL1')) && env3.__props.get('LISTREAL_T1') === '1', '기록 ' + env3.__props.get('TANSIL1'));
 }
+// (11/24) 메이든 더담다수면양말 캠페인 지우기 (0명)
+{
+  const e4 = H.makeEnv({ main: process.argv[2], props: { OUTBOX_SORTED: '1', OUTBOX_FMT2: '1' } }); const G4 = k => vm.runInContext(k, e4);
+  const L4 = G4('LIST_HEADER'), m4 = o => L4.map(h => o[h] !== undefined ? o[h] : '');
+  e4.__ss.sheets['진행목록'] = new H.Sheet('진행목록', [L4.slice(),
+    m4({ '진행일': new Date(2026, 10, 25), '명단 제목': '#11.25실 가짜 더담다수면양말2 (뽀짝오리)', '시트ID': 'M1', '진행 상태': '진행예정', '요청ID': 'nzb1vb9u-2', '인원': 0 }),
+    m4({ '진행일': new Date(2026, 10, 24), '명단 제목': '#11.24실 가짜 더담다수면양말1 (뽀짝오리)', '시트ID': 'M1', '진행 상태': '진행중', '요청ID': 'nzb1vb9u', '인원': 0 }),
+    m4({ '진행일': new Date(2026, 10, 24), '명단 제목': '#11.24 다른 양말 5 (뽀짝오리)', '시트ID': 'M2', '진행 상태': '진행중', '요청ID': 'zzz', '인원': 3 })]);
+  e4.__ss.sheets['일정'] = new H.Sheet('일정', [G4('PLAN_HEAD').slice(), ['nzb1vb9u-3', '가짜', 3, new Date(2026, 10, 26), '#11.26 x', 'x', 2, '[]', '대기', '{}'], ['zzz-2', '다른', 2, new Date(2026, 10, 26), '#11.26 y', 'y', 5, '[]', '대기', '{}']]);
+  let x4 = ''; try { G4('mdDel1_()'); } catch (x) { x4 = String(x.stack || x); }
+  const left = G4('readRuns_()').map(r => r['요청ID']), pl4 = e4.__ss.sheets['일정'].rows.slice(1).map(r => r[0]);
+  ok(!x4 && left.join() === 'zzz' && pl4.join() === 'zzz-2' && /^✓/.test(e4.__props.get('MDDEL1')), '더담다 지움 ' + x4 + JSON.stringify([left, pl4, e4.__props.get('MDDEL1')]));
+}
 console.log(fails.length ? 'XX 비전·탄탄 한 번 고치기 시험 실패:\n- ' + fails.join('\n- ') : '✓ 비전이공이공 한라봉 토스·탄탄상점 레깅스 지우기 시험 통과');
 process.exit(fails.length ? 1 : 0);
