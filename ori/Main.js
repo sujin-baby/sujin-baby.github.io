@@ -3774,6 +3774,8 @@ function checkFullInner_() {
     //  그 뒤 일(다음 일차 만들기, 방 공지, 폼 트리거, 보낼 날짜)이 몇 시간 동안 하나도 안 됨. 이제 급한 일 먼저, 월급시트는 끝에서 나눠서 이어 함
     // 단계를 잘게 나눠서 폼수정 탭 삭제 같은 직접 하는 일이 덜 기다리게 (10/26 '진행목록' 단계가 126초 걸려 삭제가 2분 늦음)
     try { fixGold1110Once_(); } catch (e) { note_('황금향외 11.10 정리 실패: ' + e); }
+    // 급한 한 번 고치기는 매번 단계에서 (11/25: '한 번 고치기' 단계가 폼 인원 179초 뒤라 계속 건너뛰어져 포두부 총건수가 5로 남음)
+    try { pdb10_(); } catch (e) {}
   });
   cfAlways_(S, '다음 일차', function () {
     try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
@@ -9834,6 +9836,7 @@ function pdb10_() {
       out.push('(일정 추가) ' + bareTitle_(title));
     });
     const sid = String(anchor['시트ID'] || '');
+    try { if (sid) { listSummary_(SpreadsheetApp.openById(sid), 10); out.push('명단 시트 총건수 10'); } } catch (e) { out.push('명단 시트 총건수 못 바꿈(' + (e && e.message || e) + ')'); }
     let rv = null; try { rv = JSON.parse(props.getProperty('RV_' + sid) || 'null'); } catch (e) {}
     if (rv) {
       rv.dayMix = Object.assign({}, rv.dayMix || {}, dayMix);

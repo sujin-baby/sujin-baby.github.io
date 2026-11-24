@@ -29,5 +29,7 @@ const res = G('reviewGuideMsg_(Object.assign({}, JSON.parse(__props.get("RV_S1")
 ok(/텍스트리뷰\(2명\) : 홍길동 김철수/.test(res.msg) && !/포토리뷰\(/.test(res.msg), '가이드 텍스트 ' + res.msg.slice(0, 120));
 // 두 번 돌려도 그대로
 G('pdb10_()'); ok(env.__ss.sheets['일정'].rows.length === 5, '두 번 안 넣음');
+const src = require('fs').readFileSync(process.argv[2], 'utf8');
+ok(/cfAlways_\(S, '진행목록'[\s\S]{0,3000}try \{ pdb10_\(\); \} catch \(e\) \{\}\n  \}\);/.test(src), '매번 단계(진행목록)에서 돎');
 console.log(fails.length ? 'XX 포두부 10건 시험 실패:\n- ' + fails.join('\n- ') : '✓ 포두부 10건(일정 추가·텍스트리뷰) 시험 통과');
 process.exit(fails.length ? 1 : 0);
