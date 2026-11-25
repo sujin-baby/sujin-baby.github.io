@@ -116,6 +116,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!S.miniSeen || typeof S.miniSeen !== 'object') S.miniSeen = {}; /* 문항별 모의고사 출제 기록 */
     /* 📝 오답 공식 암기장: 처음 한 번 기본 14개를 깔고, 지운 기록(del)은 계속 남겨 다시 뜨지 않게 한다 */
     if (!S.gbook || typeof S.gbook !== 'object') S.gbook = { items: [], del: {}, seeded: false };
+    /* 🔤 경찰 두문자 암기장 */
+    mnState();
     if (!Array.isArray(S.gbook.items)) S.gbook.items = [];
     if (!S.gbook.del || typeof S.gbook.del !== 'object') S.gbook.del = {};
     if (!S.gbook.seeded) {
@@ -3040,6 +3042,62 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     return out;
   }
 
+  /* ============================================================
+     ⭕ / 🔺 지문 판정 (수진 님 2026-11-25 "경찰학·범죄학·형사법은 지문 틀렸을 때
+     해석에 옳은 거 동그라미, 옳지 않은 거 세모 표시")
+     · ox  : 선지 4개가 각각 지문인 판단형 → 선지별 'O'(옳은 지문) / 'X'(옳지 않은 지문)
+     · oxs : 선지가 O/X 두 개뿐인 단문형 → 그 지문 자체의 참값
+     · oxc : '㉠(O) ㉡(X)' 조합형 → 정답 선지가 말하는 ㉠~㉧ 참값
+     · oxm : 개수·조합형에서 해설이 짚어 준 ㉠~㉧ 참값
+     판정값은 work-police-ox/audit.py 로 374문항 전수 대조해 data.js 에 심었다.
+     ============================================================ */
+  function judgeMark(v, cls) {
+    if (!v) return '';
+    return '<span class="fb-jmark ' + (v === 'O' ? 'o' : 'x') + (cls ? ' ' + cls : '') + '">' +
+      (v === 'O' ? '⭕' : '🔺') + '</span>';
+  }
+  function judgeHead(t) {
+    return '<div class="fb-judge-h">⭕ 옳은 지문 · 🔺 옳지 않은 지문<span>' + esc(t || '') + '</span></div>';
+  }
+  function judgeStr(s, n) {
+    s = String(s || '').replace(/\s+/g, ' ').trim();
+    return s.length > n ? s.slice(0, n - 1) + '…' : s;
+  }
+  function judgeHtml(q, wrong) {
+    if (!wrong || !q || String(q.s) === 'gtelp') return '';
+    var h = '', keys = ['①', '②', '③', '④'];
+    if (q.oxs) {
+      var lab = q.oxs === 'O' ? 'O · 옳은 지문' : 'X · 옳지 않은 지문';
+      h += '<div class="fb-judge">' + judgeHead('이 문제는 지문 하나를 판단하는 문제예요') +
+        '<div class="fb-jrows"><div class="fb-jrow ' + (q.oxs === 'O' ? 'o' : 'x') + ' ans">' +
+        '<b>' + judgeMark(q.oxs) + ' ' + esc(lab) + '</b>' +
+        '<span>' + esc(judgeStr(q.q, 96)) + '</span></div></div></div>';
+    }
+    if (q.ox && q.ox.length) {
+      var ai = Number(q.a) || 0, rows = '';
+      for (var i = 0; i < 4; i++) {
+        var v = q.ox[i];
+        if (!v) continue;
+        rows += '<div class="fb-jrow ' + (v === 'O' ? 'o' : 'x') + (i === ai ? ' ans' : '') + '">' +
+          '<b>' + judgeMark(v) + ' ' + keys[i] + (i === ai ? ' 정답' : '') + '</b>' +
+          '<span>' + esc(judgeStr(q.o && q.o[i], 88)) + '</span></div>';
+      }
+      h += '<div class="fb-judge">' + judgeHead('선지마다 이 지문이 옳은지 옳지 않은지') +
+        '<div class="fb-jrows">' + rows + '</div></div>';
+    }
+    var chips = null, label = '';
+    if (q.oxc && Object.keys(q.oxc).length) { chips = q.oxc; label = '정답 조합이 말하는 문장별 판정'; }
+    else if (q.oxm && Object.keys(q.oxm).length) { chips = q.oxm; label = '해설이 짚어 준 문장별 판정'; }
+    if (chips) {
+      h += '<div class="fb-judge">' + judgeHead(label) + '<div class="fb-jchips">' +
+        Object.keys(chips).map(function (k) {
+          return '<span class="fb-jchip ' + (chips[k] === 'O' ? 'o' : 'x') + '">' +
+            judgeMark(chips[k]) + ' ' + esc(k) + '</span>';
+        }).join('') + '</div></div>';
+    }
+    return h;
+  }
+
   function expHtml(q, it, wrong) {
     var raw = String(q.e || '').replace(/\r/g, '').trim();
     if (!raw) return '<span class="fb-empty">해설이 아직 없어요.</span>';
@@ -3085,6 +3143,17 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (it && it.order && it.order.indexOf) { var kk = it.order.indexOf(q.a); if (kk >= 0) ai = kk; }
     var letter = 'ABCD'.charAt(ai);
     if (hasAns) h += '<div class="fb-ansline"><span>정답 ' + letter + '</span><b>' + esc(ansTxt) + '</b></div>';
+    /* 틀렸을 때만: 선지별 ⭕/🔺 판정을 해설 맨 위에 (수진 님 "틀렸을 때 옳은 거 동그라미 옳지 않은 거 세모") */
+    h += judgeHtml(q, wrong);
+    /* 이 문제 주제의 두문자가 암기장에 있으면 해설과 같이 보여 준다 */
+    var mns = mnFor(q);
+    if (mns.length) {
+      h += '<div class="fb-mn"><span class="fb-mn-h">🔤 두문자</span>' +
+        mns.map(function (m) {
+          return '<div class="fb-mn-row"><b>' + esc(m.k) + '</b>' +
+            (m.m ? '<i>' + esc(m.m) + '</i>' : '') + '</div>';
+        }).join('') + '</div>';
+    }
     /* 🖍️ 틀린 문제만: 지문 단서를 같은 형광펜으로 패널 안에도 한 번 더 (위로 올려 보지 않아도 바로 보이게)
        · 연결어 문항은 ＋/－ 방향 뱃지까지 같이 — 앞뒤 부호가 엇갈리면 역접, 같으면 순접 */
     var sgs = sgList(q);
@@ -3139,7 +3208,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         return;
       }
       var s = bk.t;
-      var op = optLineHtml(s, T, '①②③④'.charAt(Number(q.a) || 0));
+      var op = optLineHtml(s, T, '①②③④'.charAt(Number(q.a) || 0), wrong ? q.ox : null);
       if (op) { h += op; return; }
       var tg = s.match(/^\[(정답|핵심|해설|포인트|주의|비교)\]\s*([\s\S]*)$/);
       if (tg && tg[2].trim()) { h += '<p class="fb-key"><span class="fb-tag">' + esc(tg[1]) + '</span>' + T(tg[2].trim()) + '</p>'; return; }
@@ -3170,7 +3239,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
 
   /* <div class="fb-op"> 선지 한 줄 카드 */
-  function optLineHtml(s, T, rightKey) {
+  function optLineHtml(s, T, rightKey, oxArr) {
     /* 기호 뒤에 공백·괄호가 와야 선지 카드로 본다. '㉠은 …'처럼 조사가 바로 붙은 문장은 일반 문단으로 */
     var mm = String(s).match(/^(?:([①-④])|([㉠-㉣])|([ㄱㄴㄷㄹ가나다라])\s*(\.))(?=[\s(\[])\s*(?:\(([OX])\))?\s*([\s\S]*)$/);
     if (!mm) return '';
@@ -3178,9 +3247,12 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var ox = mm[5] || '';
     var rest = (mm[6] || '').trim();
     if (!rest) return '';
+    /* ①②③④ 지문 판정이 있으면 해설 속 작은 O/X 대신 ⭕/🔺 로 (틀린 문제에서만 넘어온다) */
+    var oi = oxArr && /^[①-④]$/.test(k) ? '①②③④'.indexOf(k) : -1;
+    var jv = oi >= 0 ? oxArr[oi] : '';
     return '<div class="fb-op' + (rightKey && k === rightKey ? ' right' : '') + '">' +
       '<span class="fb-opk">' + esc(k) + '</span>' +
-      (ox ? '<span class="fb-ox ' + (ox === 'O' ? 'o' : 'x') + '">' + ox + '</span>' : '') +
+      (jv ? judgeMark(jv, 'big') : (ox ? '<span class="fb-ox ' + (ox === 'O' ? 'o' : 'x') + '">' + ox + '</span>' : '')) +
       '<span class="fb-ot">' + T(rest) + '</span></div>';
   }
 
@@ -4431,6 +4503,212 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     startSession('gp', { n: n, ids: ids, title: '지텔프 문법 · G-POINT 기출 ' + ids.length + '문제' });
   }
 
+  /* ============================================================
+     🔤 경찰 두문자 암기장 (2026-11-25 신설 · 수진 님 요청)
+     · 선생님마다 두문자가 달라서 임의로 만들거나 다른 선생님 것을 섞지 않는다.
+       출처가 확인된 것만 기본으로 깔고, 강의에서 다른 버전을 보면 수진 님이 바로 수정·추가·삭제.
+     · 확인된 출처: 신광은 카페 필기 사진(IMG_3319·IMG_3320) · 카페 형법 Q&A 답변
+     ============================================================ */
+  var MN_SEED = [
+    { id: 'mn-crim-1', s: 'crim', k: '중자특', t: '형의 필요적 감면',
+      m: '중지미수 · 자수 · 특례',
+      d: '중지미수는 형을 감경하거나 면제(§26). 자수는 예비·음모 단계 자수(내란·외환·폭발물 등 각칙), 특례는 위증·무고의 자백·자수(§153·§157). §52 자수·자복은 임의적 감면이라 여기 섞으면 항정.',
+      src: '신광은 카페 필기 사진 (IMG_3319)', hit: ['필요적 감면', '중지미수', '자수'] },
+    { id: 'mn-crim-2', s: 'crim', k: '지구', t: '보증인 지위 (부작위범·이분설)',
+      m: '지위 → 구성요건 / 의무 → 위법성',
+      d: '보증인 지위는 구성요건요소, 작위의무는 위법성요소로 나누는 이분설. 카페 필기에서는 그 표의 ‘이분설’ 옆에 지구로 적혀 있어요.',
+      src: '신광은 카페 필기 사진 (IMG_3319)', hit: ['보증인', '부작위'] },
+    { id: 'mn-crim-3', s: 'crim', k: '주객태상 · 인과 · 구체적위험 · 가감신분', t: '객관적 구성요건 요소',
+      m: '주체 · 객체 · 태양 · 상황 + 인과관계 + 구체적 위험 + 가감적 신분',
+      d: '객관적 구성요건요소를 한 판으로 훑는 두문자. 주객태상(주체·객체·태양·상황) 뒤에 인과관계, 구체적 위험, 가감적 신분을 붙여 외운다.',
+      src: '신광은 카페 필기 사진 (IMG_3320)', hit: ['객관적 구성요건'] },
+    { id: 'mn-crim-4', s: 'crim', k: '위무감 · 확자자', t: '위증·무고 자백·자수 특례',
+      m: '위증 · 무고 · 허위감정통역 → 확정 전 자수·자백',
+      d: '형법각론 §153(위증) · §154(허위감정통역) · §157(무고). 확정 전에 자수·자백하면 형을 필요적으로 감면하는 ‘특례’.',
+      src: '신광은 카페 형법 Q&A 답변 (2024.04.02) 인용', hit: ['위증', '무고'] }
+  ];
+  var MN_SUB = { crim: '형사법 · 신광은', pol: '경찰학 · 장정훈', cri: '범죄학 · 박상민' };
+  var MN = { f: 'all', edit: '', form: false };
+  function escA(s) { return esc(s).replace(/"/g, '&quot;'); }
+  function mnState() {
+    if (!S.mn || typeof S.mn !== 'object') S.mn = { done: {}, edit: {}, add: [], del: {} };
+    if (!S.mn.done) S.mn.done = {};
+    if (!S.mn.edit) S.mn.edit = {};
+    if (!S.mn.del) S.mn.del = {};
+    if (!Array.isArray(S.mn.add)) S.mn.add = [];
+    return S.mn;
+  }
+  function mnList() {
+    var st = mnState();
+    var out = [];
+    MN_SEED.forEach(function (b) {
+      if (st.del[b.id]) return;
+      var e = st.edit[b.id] || {};
+      out.push({
+        id: b.id, s: b.s, hit: b.hit, custom: false,
+        k: e.k != null ? e.k : b.k, t: e.t != null ? e.t : b.t,
+        m: e.m != null ? e.m : b.m, d: e.d != null ? e.d : b.d,
+        src: e.src || b.src
+      });
+    });
+    st.add.forEach(function (a) {
+      out.push({ id: a.id, s: a.s, hit: [], custom: true, at: a.at || 0,
+        k: a.k, t: a.t, m: a.m || '', d: a.d || '', src: a.src || '직접 추가' });
+    });
+    return out;
+  }
+  function mnFor(q) {
+    if (!q || String(q.s) === 'gtelp') return [];
+    var txt = String(q.q || '') + ' ' + String(q.e || '') + ' ' + String(q.hint || '');
+    return mnList().filter(function (it) {
+      if (it.s !== q.s) return false;
+      for (var i = 0; i < (it.hit || []).length; i++) if (txt.indexOf(it.hit[i]) >= 0) return true;
+      return it.k && txt.indexOf(String(it.k).replace(/\s/g, '')) >= 0;
+    }).slice(0, 2);
+  }
+  function mnCardHtml(it, done) {
+    if (MN.edit === it.id) {
+      return '<article class="mn-card editing">' +
+        '<div class="mn-formrow"><span>두문자</span><input id="mnK" value="' + escA(it.k) + '"></div>' +
+        '<div class="mn-formrow"><span>제목</span><input id="mnT" value="' + escA(it.t) + '"></div>' +
+        '<div class="mn-formrow"><span>풀이</span><input id="mnM" value="' + escA(it.m) + '"></div>' +
+        '<div class="mn-formrow"><span>설명</span><textarea id="mnD" rows="3">' + esc(it.d) + '</textarea></div>' +
+        '<div class="mn-formbtns"><button class="btn ghost" data-mncancel="1">취소</button>' +
+        '<button class="btn primary" data-mnsave="' + escA(it.id) + '">저장</button></div></article>';
+    }
+    return '<article class="mn-card' + (done ? ' done' : '') + '">' +
+      '<div class="mn-top"><span class="mn-sub">' + esc(MN_SUB[it.s] || '') + '</span>' +
+      (done ? '<span class="mn-ok">✓ 외웠어요</span>' : '') +
+      '<span class="mn-tools"><button data-mnedit="' + escA(it.id) + '" aria-label="수정">✏️</button>' +
+      '<button data-mndel="' + escA(it.id) + '" aria-label="삭제">🗑</button></span></div>' +
+      '<div class="mn-k">' + esc(it.k) + '</div>' +
+      (it.m ? '<div class="mn-m">' + esc(it.m) + '</div>' : '') +
+      (it.t ? '<div class="mn-t">' + esc(it.t) + '</div>' : '') +
+      (it.d ? '<p class="mn-d">' + esc(it.d) + '</p>' : '') +
+      '<div class="mn-foot"><span>' + esc(it.src) + '</span>' +
+      '<button class="mn-done' + (done ? ' on' : '') + '" data-mndone="' + escA(it.id) + '">' +
+      (done ? '✓ 외웠음' : '외웠음') + '</button></div></article>';
+  }
+  function mnAddFormHtml() {
+    var opt = ['crim', 'pol', 'cri'].map(function (k) {
+      return '<option value="' + k + '">' + esc(MN_SUB[k]) + '</option>';
+    }).join('');
+    return '<article class="mn-card editing mn-new">' +
+      '<div class="mn-formrow"><span>과목</span><select id="mnNewS">' + opt + '</select></div>' +
+      '<div class="mn-formrow"><span>두문자</span><input id="mnNewK" placeholder="예: 중자특"></div>' +
+      '<div class="mn-formrow"><span>제목</span><input id="mnNewT" placeholder="무엇을 외우는 두문자인지"></div>' +
+      '<div class="mn-formrow"><span>풀이</span><input id="mnNewM" placeholder="중지미수 · 자수 · 특례"></div>' +
+      '<div class="mn-formrow"><span>메모</span><input id="mnNewD" placeholder="강의에서 들은 주의점 (선택)"></div>' +
+      '<div class="mn-formbtns"><button class="btn ghost" data-mncancel="1">취소</button>' +
+      '<button class="btn primary" data-mnadd="1">추가</button></div></article>';
+  }
+  function mnHtml() {
+    var st = mnState(), all = mnList();
+    var cnt = { all: all.length, crim: 0, pol: 0, cri: 0 };
+    all.forEach(function (i) { cnt[i.s] = (cnt[i.s] || 0) + 1; });
+    var h = '<div class="mn-note">선생님마다 두문자가 달라서 <b>자료로 확인된 것만</b> 넣었어요. ' +
+      '강의에서 다른 버전을 보면 카드의 ✏️로 바로 고치고, 새로 배운 건 <b>＋ 추가</b>로 넣으면 이 폰에 저장돼요.</div>';
+    h += '<div class="mn-chips">' +
+      [['all', '전체', cnt.all], ['crim', '형사법', cnt.crim], ['pol', '경찰학', cnt.pol], ['cri', '범죄학', cnt.cri]]
+        .map(function (c) {
+          return '<button class="mn-chip' + (MN.f === c[0] ? ' on' : '') + '" data-mnf="' + c[0] + '">' +
+            c[1] + '<i>' + c[2] + '</i></button>';
+        }).join('') +
+      '<button class="mn-chip add" data-mnopen="1">＋ 추가</button></div>';
+    if (MN.form) h += mnAddFormHtml();
+    var items = all.filter(function (it) { return MN.f === 'all' || it.s === MN.f; });
+    items.sort(function (a, b) {
+      var da = st.done[a.id] ? 1 : 0, db = st.done[b.id] ? 1 : 0;
+      if (da !== db) return da - db;
+      return (b.at || 0) - (a.at || 0);
+    });
+    if (!items.length) {
+      var nm = MN_SUB[MN.f] || '';
+      h += '<div class="mn-empty"><b>' + esc(nm ? nm + ' 두문자는 아직 없어요' : '두문자가 아직 없어요') + '</b>' +
+        '<p>' + (MN.f === 'pol' || MN.f === 'cri'
+          ? '장정훈·박상민 두문자는 교재·카페 자료에서 확인된 것만 넣고 있어요. ' +
+            '강의 필기 사진을 보내 주시면 제가 확인해서 여기에 넣을게요. 지금 배운 두문자는 <b>＋ 추가</b>로 바로 저장해도 돼요.'
+          : '카드의 ＋ 추가로 지금 외우는 두문자를 넣어 두세요.') + '</p></div>';
+      return h;
+    }
+    h += items.map(function (it) { return mnCardHtml(it, !!st.done[it.id]); }).join('');
+    return h;
+  }
+  function mnSave(id, patch) {
+    var st = mnState();
+    var isSeed = MN_SEED.some(function (b) { return b.id === id; });
+    if (isSeed) {
+      st.edit[id] = st.edit[id] || {};
+      Object.keys(patch).forEach(function (k) { st.edit[id][k] = patch[k]; });
+    } else {
+      st.add.forEach(function (a) { if (a.id === id) Object.keys(patch).forEach(function (k) { a[k] = patch[k]; }); });
+    }
+    save();
+  }
+  function mnDelete(id) {
+    var st = mnState();
+    var isSeed = MN_SEED.some(function (b) { return b.id === id; });
+    if (isSeed) { st.del[id] = 1; delete st.done[id]; }
+    else st.add = st.add.filter(function (a) { return a.id !== id; });
+    save();
+  }
+  function bindMn(root) {
+    var w = root || document;
+    $$('.mn-chip[data-mnf]', w).forEach(function (b) {
+      b.onclick = function () { MN.f = b.getAttribute('data-mnf'); MN.edit = ''; MN.form = false; renderMn(); sfx('tap'); };
+    });
+    var open = $('.mn-chip[data-mnopen]', w);
+    if (open) open.onclick = function () { MN.form = !MN.form; MN.edit = ''; renderMn(); };
+    $$('[data-mnedit]', w).forEach(function (b) {
+      b.onclick = function () { MN.edit = b.getAttribute('data-mnedit'); MN.form = false; renderMn(); };
+    });
+    $$('[data-mndel]', w).forEach(function (b) {
+      b.onclick = function () {
+        var id = b.getAttribute('data-mndel');
+        if (!confirm('이 두문자를 암기장에서 지울까요?\n(직접 추가한 것은 완전히 지워져요)')) return;
+        mnDelete(id); MN.edit = ''; renderMn(); toast('지웠어요');
+      };
+    });
+    $$('[data-mndone]', w).forEach(function (b) {
+      b.onclick = function () {
+        var st = mnState(), id = b.getAttribute('data-mndone');
+        if (st.done[id]) delete st.done[id]; else st.done[id] = 1;
+        save(); renderMn(); sfx('ok');
+      };
+    });
+    $$('[data-mncancel]', w).forEach(function (b) {
+      b.onclick = function () { MN.edit = ''; MN.form = false; renderMn(); };
+    });
+    var sv = $('[data-mnsave]', w);
+    if (sv) sv.onclick = function () {
+      var id = sv.getAttribute('data-mnsave');
+      mnSave(id, {
+        k: ($('#mnK') || {}).value || '', t: ($('#mnT') || {}).value || '',
+        m: ($('#mnM') || {}).value || '', d: ($('#mnD') || {}).value || ''
+      });
+      MN.edit = ''; renderMn(); toast('고쳤어요');
+    };
+    var ad = $('[data-mnadd]', w);
+    if (ad) ad.onclick = function () {
+      var k = (($('#mnNewK') || {}).value || '').trim();
+      if (!k) { toast('두문자를 넣어 주세요'); return; }
+      var st = mnState();
+      st.add.push({
+        id: 'mu' + Date.now(), s: (($('#mnNewS') || {}).value || 'crim'),
+        k: k, t: (($('#mnNewT') || {}).value || '').trim(),
+        m: (($('#mnNewM') || {}).value || '').trim(), d: (($('#mnNewD') || {}).value || '').trim(),
+        src: '직접 추가', at: Date.now()
+      });
+      save(); MN.form = false; renderMn(); toast('두문자를 추가했어요');
+    };
+  }
+  function renderMn() {
+    var el = $('#segMn');
+    if (!el) return;
+    el.innerHTML = mnHtml();
+    bindMn(el);
+  }
+
   /* ---------- 📂 자료실 ---------- */
   var LIB_FOLDER = 'https://drive.google.com/drive/folders/1ZqFiCt3iMlGTnpZAA6pOQrAGL3-Ntatk';
   /* 고른 과목(형사법·경찰학·범죄학) 자료만 */
@@ -4493,7 +4771,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   function renderMemo() {
     syncMemoSegs();
     $$('#memoSeg .seg-b').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-seg') === MEMO.seg); });
-    ['Card', 'Gp', 'Law', 'Lib', 'Phys'].forEach(function (k) {
+    ['Card', 'Gp', 'Law', 'Lib', 'Phys', 'Mn'].forEach(function (k) {
       var el = $('#seg' + k);
       if (el) el.classList.toggle('hidden', MEMO.seg !== k.toLowerCase());
     });
@@ -4508,6 +4786,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       var w = $('#segLaw');
       if (!w._built) { w.innerHTML = lawHtml(); w._built = true; bindLawRows(w); }
     }
+    if (MEMO.seg === 'mn') renderMn();
     if (MEMO.seg === 'lib') {
       var l = $('#segLib');
       l.innerHTML = libHtml(); l._built = true;
@@ -4523,12 +4802,12 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var gp = S.subj === 'gtelp';
     $$('#memoSeg .seg-b').forEach(function (b) {
       var seg = b.getAttribute('data-seg');
-      /* G-POINT는 지텔프 전용, 조문은 경찰 과목 전용, 자료실은 둘 다 있다 */
-      var show = (seg === 'gp') ? gp : (seg === 'law') ? !gp : true;
+      /* G-POINT는 지텔프 전용, 조문·두문자표와 🔤 두문자 암기장은 경찰 과목 전용, 자료실은 둘 다 있다 */
+      var show = (seg === 'gp') ? gp : (seg === 'law' || seg === 'mn') ? !gp : true;
       b.classList.toggle('hidden', !show);
     });
     if (MEMO.seg === 'gp' && !gp) MEMO.seg = 'card';
-    if (MEMO.seg === 'law' && gp) MEMO.seg = 'card';
+    if ((MEMO.seg === 'law' || MEMO.seg === 'mn') && gp) MEMO.seg = 'card';
     var gb = $('#gpBtn'), lb = $('#libBtn');
     if (gb) gb.classList.toggle('hidden', !gp);
     if (lb) lb.classList.toggle('hidden', gp);
