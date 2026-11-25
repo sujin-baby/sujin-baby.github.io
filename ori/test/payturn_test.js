@@ -33,5 +33,6 @@ const fails = [], ok = (c, m) => { if (!c) fails.push(m); };
 const src = require('fs').readFileSync(process.argv[2], 'utf8');
 ok(/\{ n: '월급시트', need: 90, self: 1, run:/.test(src), '15분 확인 월급시트 단계 self·90초');
 ok(/payLate\) \{ props\.setProperty\('BG_pay'/.test(src), '15분 확인에서 이어 하면 BG_pay 적음');
+ok(/\{ n: '리뷰 확인', need: 90, self: 1, run:/.test(src), '리뷰 확인도 self·90초 (스스로 멈추고 이어 함)');
 console.log(fails.length ? 'XX 월급시트 차례 시험 실패:\n- ' + fails.join('\n- ') : '✓ 월급시트 차례(중간까지 한 단계 뒤로·예상 90초) 시험 통과');
 process.exit(fails.length ? 1 : 0);

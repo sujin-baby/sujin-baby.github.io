@@ -3979,7 +3979,8 @@ function checkFullInner_() {
       try { payChkRecheck1_(runs); } catch (e) { note_('결제금액 확인 다시 보기 실패: ' + e); }
     } },
     // 리뷰 체크 확인(취완·독촉·리뷰 보고)은 15분마다 (11/2 사용자 요청). 한눈에를 그리기 전에 해서 '리뷰 취합할 것'이 바로 보이게
-    { n: '리뷰 확인', need: 30, run: function () {
+    // 리뷰 확인은 스스로 시간을 봐서(150·250초) 멈추고 다음에 멈춘 의뢰부터 이어 함 → 예상 90초로 (11/25: 걸린 시간 200초를 기억해 '시간 모자람'으로 30분 넘게 못 돎)
+    { n: '리뷰 확인', need: 90, self: 1, run: function () {
       let rvCut = false;
       try { rvCut = subTime_('리뷰 확인', function () { return reviewDone_(readRuns_()); }); if (!rvCut) globalThis.__RV_DONE_RUN = 1; } catch (e) { if (e && e.yieldLock) throw e; note_('리뷰 완료 확인 실패: ' + e); }
       if (rvCut) { note_('✓ 리뷰 확인 나눠서 하는 중 (시간이 모자라 다음 확인에서 이어서. 오류 아님)'); throw { cfCut: 1 }; }
