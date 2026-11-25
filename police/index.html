@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=2026112507">
+<link rel="stylesheet" href="style.css?v=2026112508">
 </head>
 <body>
 
@@ -73,7 +73,7 @@
 
   <button class="book-entry" id="bookEntry" aria-label="내 오답 공식 암기장 열기">
     <span class="be-ico">📝</span>
-    <span class="be-body"><b>내 오답 공식 암기장</b><i>틀릴 때마다 자동으로 쌓여요 · 외운 건 직접 지워요</i></span>
+    <span class="be-body"><b>내 오답 공식 암기장</b><i>틀릴 때마다 자동으로 쌓여요</i></span>
     <span class="be-n" id="beN">0</span>
     <span class="be-go">›</span>
   </button>
@@ -220,11 +220,6 @@
       <span class="mode-body"><b>오답 집중 복습</b><i id="mWrongTxt">-</i></span>
       <span class="mode-go">›</span>
     </button>
-    <button class="mode-card speed-btn" id="mSpeed">
-      <span class="mode-ico">⏱️</span>
-      <span class="mode-body"><b>1분 스피드 타임어택</b><i id="mSpeedTxt">-</i></span>
-      <span class="mode-go">›</span>
-    </button>
     <button class="mode-card ox-btn" id="mOx">
       <span class="mode-ico">⭕</span>
       <span class="mode-body"><b>5분 1줄 OX 회독</b><i id="mOxTxt">기출 선지 한 문장씩 O/X</i></span>
@@ -362,10 +357,10 @@
   <div class="gb-head">
     <button id="gbClose" class="q-close" aria-label="닫기">✕</button>
     <div class="gb-th"><b>📝 내 오답 공식 암기장</b><span id="gbCount">0개</span></div>
+    <button class="gb-addbtn" id="gbAddOpen">＋ 공식</button>
   </div>
   <div class="gb-tools">
     <div class="gb-chips" id="gbChips"></div>
-    <button class="gb-addbtn" id="gbAddOpen">+ 공식 직접 추가</button>
   </div>
   <form class="gb-form hidden" id="gbForm" autocomplete="off">
     <label class="gb-fl"><span>공식</span><input id="gbF" type="text" maxlength="60" placeholder="예) without + ~ing" required></label>
@@ -433,6 +428,6 @@
 </div>
 
 <script src="data.js?v=2026112506"></script>
-<script src="app.js?v=2026112507"></script>
+<script src="app.js?v=2026112508"></script>
 </body>
 </html>

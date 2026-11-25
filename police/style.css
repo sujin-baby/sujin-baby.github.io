@@ -1714,9 +1714,9 @@ details.lib-group[open] .lib-chev{transform:rotate(180deg)}
   padding-top:var(--safe-t);animation:slideUp .2s ease}
 .gb-head{display:flex;align-items:center;gap:9px;padding:10px 12px 8px;border-bottom:1px solid var(--line)}
 .gb-th{display:flex;align-items:baseline;gap:7px;min-width:0;flex:1}
-.gb-th b{font-size:15px;font-weight:900;letter-spacing:-.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gb-th b{font-size:14.5px;font-weight:900;letter-spacing:-.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gb-th span{font-size:11.5px;font-weight:900;color:var(--c);white-space:nowrap}
-.gb-tools{padding:9px 12px 5px;display:flex;gap:7px;align-items:center}
+.gb-tools{padding:8px 12px 4px;display:flex;gap:7px;align-items:center}
 .gb-chips{display:flex;gap:5px;overflow-x:auto;flex:1;min-width:0;padding-bottom:2px;scrollbar-width:none}
 .gb-chips::-webkit-scrollbar{display:none}
 .gb-chip{flex:0 0 auto;padding:6px 10px;border-radius:99px;background:var(--card2);border:1px solid var(--line2);
@@ -1724,7 +1724,7 @@ details.lib-group[open] .lib-chev{transform:rotate(180deg)}
 .gb-chip i{font-style:normal;font-size:10px;font-weight:900;opacity:.75;margin-left:3px}
 .gb-chip.on{background:var(--c);border-color:transparent;color:#fff}
 .gb-chip.on i{opacity:.95}
-.gb-addbtn{flex:0 0 auto;padding:6px 9px;border-radius:10px;background:var(--card3);border:1px solid var(--line2);
+.gb-addbtn{flex:0 0 auto;padding:6px 10px;border-radius:10px;background:var(--card3);border:1px solid var(--line2);
   font-size:11px;font-weight:900;color:var(--ink);white-space:nowrap}
 .gb-addbtn.on{background:var(--c);border-color:transparent;color:#fff}
 

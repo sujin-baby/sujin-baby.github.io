@@ -1075,7 +1075,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var items = all.filter(function (it) { return GB.f === 'all' || it.t === GB.f; });
     if (!items.length) {
       list.innerHTML = '<div class="gb-empty"><b>' + (all.length ? '이 유형은 아직 비었어요' : '암기장이 비었어요') + '</b>' +
-        (all.length ? '다른 유형을 눌러 보거나 위의 + 공식 직접 추가로 한 줄 넣어 보세요.'
+        (all.length ? '다른 유형을 눌러 보거나 위의 ＋ 공식으로 한 줄 넣어 보세요.'
                     : '지텔프 문제를 틀리면 그 문항의 3초 컷 공식이 자동으로 쌓여요.') + '</div>';
       return;
     }
@@ -1195,7 +1195,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
           q = D.questions[j];
           if (q.s === 'gtelp' && q.c === 'gtp33' && q.u === ui && S.wrong[q.i]) w++;
         }
-        rows.push({ k: 'gtp33:' + ui, cid: 'gtp33', u: ui, s: 'gtelp', name: u.n, cap: '지텔프 문법', a: a, ok: ok, w: w });
+        rows.push({ k: 'gtp33:' + ui, cid: 'gtp33', u: ui, s: 'gtelp', name: u.n.replace(/^Unit\s*/, ''), cap: '지텔프 문법 · Unit 01~07', a: a, ok: ok, w: w });
       });
     }
     ['crim', 'pol', 'cri'].forEach(function (sid) {
@@ -1250,7 +1250,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     weakRows().forEach(function (r) { if (r.k === key) row = r; });
     if (!row) return;
     sfx('tap');
-    var nm = row.name.replace(/^Unit\s*\d+\s*/, '');
+    var nm = row.name.replace(/^(Unit\s*)?\d+\s*/, '');
     if (!row.a) { toast(nm + '은(는) 아직 푼 문제가 없어요 · 스테이지에서 그 단원을 체크하면 문제가 열려요'); return; }
     var pool = D.questions.filter(function (q) {
       if (q.s !== row.s) return false;
@@ -1959,8 +1959,6 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       b.classList.toggle('on', Number(b.getAttribute('data-len')) === S.qlen);
     });
     $('#mixAll').checked = !!S.mix;
-    var sp = $('#mSpeedTxt');
-    if (sp) sp.textContent = (S.speedBest || 0) ? '최고 ' + S.speedBest + '문제 · 60초' : '60초 동안 최대한 많이';
     var ox = $('#mOxTxt');
     if (ox) ox.textContent = (S.oxBest || 0) ? '최고 ' + S.oxBest + '문장 · 5분' : '기출 선지 한 문장씩 O/X';
     var mb = $('#mMiniTxt');
@@ -3579,8 +3577,6 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     b.onclick = function () { S.qlen = Number(b.getAttribute('data-len')); save(); renderReview(); sfx('tap'); };
   });
   $('#mixAll').onchange = function () { S.mix = this.checked; save(); renderReview(); };
-  var _mSpeed = $('#mSpeed');
-  if (_mSpeed) _mSpeed.onclick = function () { sfx('tap'); startSession('speed', {}); };
   var _mOx = $('#mOx');
   if (_mOx) _mOx.onclick = function () { sfx('tap'); startOx(); };
   /* 📝 오답 공식 암기장 · 📊 내 약점 한눈에 */
