@@ -3983,7 +3983,9 @@ function checkFullInner_() {
     { n: '리뷰 확인', need: 90, self: 1, run: function () {
       let rvCut = false;
       try { rvCut = subTime_('리뷰 확인', function () { return reviewDone_(readRuns_()); }); if (!rvCut) globalThis.__RV_DONE_RUN = 1; } catch (e) { if (e && e.yieldLock) throw e; note_('리뷰 완료 확인 실패: ' + e); }
-      if (rvCut) { note_('✓ 리뷰 확인 나눠서 하는 중 (시간이 모자라 다음 확인에서 이어서. 오류 아님)'); throw { cfCut: 1 }; }
+      const stat = globalThis.__RVSTAT ? ' — 의뢰 ' + globalThis.__RVSTAT : '';
+      if (rvCut) { note_('✓ 리뷰 확인 나눠서 하는 중 (시간이 모자라 다음 확인에서 이어서. 오류 아님)' + stat); throw { cfCut: 1 }; }
+      if (stat) note_('✓ 리뷰 확인 한 바퀴 다 봄' + stat);
     } },
     { n: '한눈에', need: 75, run: function () {
       globalThis.__DASH_CUT_OK = true;   // 늦었으면 다시 그리기는 다음 확인에서 (cfCut)
@@ -8681,6 +8683,7 @@ function reviewDone_(runs, only) {
     Object.keys(bySheet).forEach(function (sid) { if (bySheet[sid].some(function (r) { return nr[String(r['카톡방'] || bareTitle_(r['명단 제목']))]; })) props.deleteProperty('RVSEEN_' + sid); });
   } catch (e) {}
   let stuckN = 0, rvStop = false;
+  const rvStat = { fast: 0, slow: 0, why: {} };
   // 시간 넘으면 멈추고 다음 확인에서 멈춘 의뢰부터 (11/19 피클: 자정 뒤 리뷰 확인 259초 → 6분 제한에 걸릴 수 있음). RV_CUR = 멈춘 의뢰
   const rvCur = props.getProperty('RV_CUR') || '';
   // 리뷰 압축(사진 AI 포함)은 한 의뢰에 80초 넘게 걸리기도 해서(11/19 15:40 확인이 이 단계에서 6분 제한에 끊김), 150초가 지났으면 시작하지 않고 다음 확인에서 그 의뢰부터
@@ -8698,13 +8701,20 @@ function reviewDone_(runs, only) {
     //  진행목록 값(마감·인원·총건수·남은 일정)도 같으면 체크칸을 다시 읽을 필요가 없음. 다 끝난 의뢰는 리뷰이미지 폴더 압축만 계속 봄
     const seenK = 'RVSEEN_' + sid;
     let mod = 0, fname = '';
-    try { const f = DriveApp.getFileById(sid); mod = f.getLastUpdated().getTime(); fname = f.getName(); } catch (e) {}
+    subTime_('리뷰 확인: 수정 시각', function () { try { const f = DriveApp.getFileById(sid); mod = f.getLastUpdated().getTime(); fname = f.getName(); } catch (e) {} });
     const sig = ['rv3', mod, Utilities.formatDate(new Date(Date.now() - 5 * 3600000), CONFIG.TIMEZONE, 'yyyyMMdd'), pend[campKey_(mine[0]['캠페인'] || mine[0]['명단 제목'])] ? 1 : 0]
       .concat(mine.map(function (r) { return [r.row, r['마감 시각'] instanceof Date ? r['마감 시각'].getTime() : '', r['인원'], r['총건수']].join(','); })).join('|');
     // 업체 전달 막힘 이유를 아직 안 본 의뢰(인원은 다 모였는데 리뷰가 안 끝남)는 한 번 다시 봄 (11/18)
     //  늦은 의뢰만, 한 번에 3개까지 (처음 배포 때 명단 시트를 한꺼번에 열어 리뷰 확인이 길어지지 않게)
     const stuckNew = stuckN < 3 && !props.getProperty('RVRPT_' + sid) && props.getProperty('RVSTUCK_' + sid) == null && rvFull_(mine) && !rvSentAny_(mine) && rvStuckLate_(mine);
     if (stuckNew) { stuckN++; props.setProperty('RVSTUCK_' + sid, '-'); }
+    // 걸린 시간 셈 (11/25 '도돌이표': 리뷰 확인 1,348초 중 840초가 어디 쓰이는지 안 보였음) — 왜 다시 읽는지도
+    const seen0 = String(props.getProperty(seenK) || '');
+    if (!(mod && seen0 === sig && !stuckNew)) {
+      const a0 = seen0.split('|'), a1 = sig.split('|');
+      const why = !mod ? '시트 못 엶' : !seen0 ? '처음' : stuckNew ? '막힘 확인' : a0[1] !== a1[1] ? '시트 바뀜' : a0[2] !== a1[2] ? '날짜' : a0[3] !== a1[3] ? '일정' : '진행 값';
+      rvStat.slow++; rvStat.why[why] = (rvStat.why[why] || 0) + 1;
+    } else rvStat.fast++;
     if (mod && props.getProperty(seenK) === sig && !stuckNew) {
       if (!props.getProperty('RVRPT_' + sid)) return;
       if (rvSentAny_(mine)) { if (!props.getProperty('RVCHKCLEAN_' + sid)) { props.setProperty('RVCHKCLEAN_' + sid, '1'); try { rvCheckMsgSync_(rvBase_(fname), ''); } catch (e) {} } return; }   // 업체에 보낸 의뢰는 리뷰이미지 폴더를 다시 안 뒤짐, 남은 '리뷰 사진 확인' 할 일은 한 번 지움 (11/7 속도: 리뷰 압축 55초가 보낸 의뢰까지 15개를 매번 봐서)
@@ -8720,7 +8730,7 @@ function reviewDone_(runs, only) {
       return;
     }
     try {
-      const lss = SpreadsheetApp.openById(sid), name = lss.getName();
+      const lss = subTime_('리뷰 확인: 시트 열기', function () { return SpreadsheetApp.openById(sid); }), name = lss.getName();
       const folder = subTime_('정리: 리뷰 폴더', function () { return rvFolder_(mine, props, sid); });
       const sh = lss.getSheetByName(LIST_TAB);
       if (!sh || !props.getProperty('LISTV_' + sid) || sh.getLastRow() < 3) { if (mod) props.setProperty(seenK, sig); return; }
@@ -8880,6 +8890,7 @@ function reviewDone_(runs, only) {
       if (mod) props.setProperty(seenK, sig);
     } catch (e) { note_('리뷰 완료 확인 실패 ' + sid + ': ' + e.message); }
   });
+  globalThis.__RVSTAT = '빠른 길 ' + rvStat.fast + ' · 다시 읽음 ' + rvStat.slow + (rvStat.slow ? ' (' + Object.keys(rvStat.why).map(function (k) { return k + ' ' + rvStat.why[k]; }).join(', ') + ')' : '');
   if (rvStop) return true;
   if (rvCur && !only) props.deleteProperty('RV_CUR');
   if (init) props.setProperty('RVDONE_INIT', '1');
