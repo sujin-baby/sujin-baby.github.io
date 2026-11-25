@@ -5543,10 +5543,13 @@ function propsCleanup_(runs, force, all0) {
   const props = PropertiesService.getScriptProperties(), tk = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
   if (!force && props.getProperty('PROPCLEAN_15_DAY') === tk) return 0;
   try { props.deleteProperty('PROPCLEAN_DAY'); } catch (e) {}
-  const all = all0 || props.getProperties(), live = {}, last = {}, cut15 = Date.now() - 15 * 86400000;
+  const all = all0 || props.getProperties(), live = {}, last = {}, rvWin = {}, cut15 = Date.now() - 15 * 86400000, cut40 = today_().getTime() - 40 * 86400000;
   (runs || readRuns_()).forEach(function (r) {
     const sid = String(r['시트ID'] || ''); if (!sid) return;
     if (!(r['진행 상태'] === '종료' && r['진행일'] instanceof Date && r['진행일'].getTime() < cut15)) live[sid] = 1;
+    // 리뷰 확인(reviewDone_)이 보는 의뢰(진행일 40일 안, 종료여도)는 '이미 본 기록'을 남김 (11/25: 15일 지난 종료 의뢰 기록을 지우면 리뷰 확인이 매번 처음부터 다시 읽고
+    //  정리가 또 지워서 43개 의뢰를 확인마다 다시 읽음 → 리뷰 확인이 한 바퀴를 못 끝내 '도돌이표')
+    if (r['진행일'] instanceof Date && r['진행일'].getTime() >= cut40) rvWin[sid] = 1;
     if (r['진행일'] instanceof Date) last[sid] = Math.max(last[sid] || 0, r['진행일'].getTime());
   });
   // 리뷰 가이드 글 사본(RVTXT_/RVSIG_/RVPH_ RVMSGD_)은 마감 뒤 이틀까지만 다시 맞추므로 4일 지난 건 안 씀 (11/24: 15일 치가 쌓여 저장 공간이 차서 한눈에·명단·월급시트가 멈췄음)
@@ -5557,7 +5560,8 @@ function propsCleanup_(runs, force, all0) {
     // 한 번에 조금씩 (11/16: 한꺼번에 지우다 15분 확인이 6분 제한에 걸려 끊김 → 보고·나머지 단계가 안 돎). 남으면 다음 확인에서 이어서
     if (n >= capN || Date.now() - t0 > capT || late_(200)) { left++; return; }
     let del = false, m;
-    if ((m = k.match(/^(?:LISTK_|LISTH_|RVSEEN_|RVQMOD_|RVSTUCK_|RVSTUCKMSG_|RVPRODW_)([-\w]{25,})$/))) del = !live[m[1]];
+    if ((m = k.match(/^(?:RVSEEN_|RVQMOD_|RVSTUCK_|RVSTUCKMSG_)([-\w]{25,})$/))) del = !live[m[1]] && !rvWin[m[1]];
+    else if ((m = k.match(/^(?:LISTK_|LISTH_|RVPRODW_)([-\w]{25,})$/))) del = !live[m[1]];
     else if ((m = k.match(/^THUMB_([-\w]{25,})$/))) del = !live[m[1]] || (last[m[1]] || 0) < cut10;   // 썸네일은 보낼메시지 방 공지 옆에만 씀
     else if ((m = k.match(/^GRANT_[-\w]{25,}_([-\w]{25,})$/))) del = !live[m[1]];   // 끝난 명단 시트 IMPORTRANGE 허용 기록
     else if ((m = k.match(/^(?:(?:RVTXT_|RVSIG_|RVPH_)?RVMSGD_)[-\w]+_(\d{8})$/))) del = m[1] < old4;
