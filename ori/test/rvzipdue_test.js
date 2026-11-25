@@ -14,5 +14,6 @@ const src = require('fs').readFileSync(process.argv[2], 'utf8');
 ok(/if \(!rvZipDue_\(sid, props, zipAt, Date\.now\(\)\)\) return;/.test(src) && /zipAt\[sid\] = Date\.now\(\); saveZipAt\(\);/.test(src), '리뷰 확인 빠른 길에 연결');
 ok(G('rvGoneErr_("입력한 ID에 해당하는 항목이 없습니다. 이 항목을 수정하지 않았거나 액세스 권한이 없기 때문일 수 있습니다.")') === true && G('rvGoneErr_("Service error: Drive")') === false, '못 여는 명단 시트 오류 알아봄 (일시 오류는 아님)');
 ok(/if \(Date\.now\(\) - Number\(rvGone\[sid\] \|\| 0\) < 86400000\) return;/.test(src), '못 여는 시트는 하루 한 번만 다시 봄');
+ok((src.match(/rvGone\[sid\] = Date\.now\(\); saveGone\(\);/g) || []).length === 2, '파일은 있는데 시트로 못 여는 것도 하루 한 번만');
 console.log(fails.length ? 'XX 사진 폴더 다시 훑기 시험 실패:\n- ' + fails.join('\n- ') : '✓ 다 끝난 의뢰 사진 폴더 다시 훑기 한 시간에 한 번 시험 통과');
 process.exit(fails.length ? 1 : 0);

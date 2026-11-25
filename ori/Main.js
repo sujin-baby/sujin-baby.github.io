@@ -8933,7 +8933,13 @@ function reviewDone_(runs, only) {
       if (capF && props.getProperty(rk) && !rvSentAny_(mine) && heavyOk(sid)) subTime_('정리: 리뷰 압축', function () { rvZip_(capF, name, props, sid, mine); });
       // 끝까지 봤으면 기억 (위에서 return 한 건 다음에 다시 봄). 이 단계에서 명단 시트에 쓴 게 있으면 수정 시각이 바뀌어 다음에 한 번 더 봄
       if (mod) props.setProperty(seenK, sig);
-    } catch (e) { note_('리뷰 완료 확인 실패 ' + sid + ': ' + e.message); }
+    } catch (e) {
+      // 파일은 있는데 시트로 못 여는 것(휴지통·권한 없음)도 하루 한 번만 다시 봄 + 진행 이름으로 알림 (11/25: 1oV6j_… 매 확인 실패)
+      if (rvGoneErr_(e && e.message)) {
+        rvGone[sid] = Date.now(); saveGone();
+        note_('⚠ 명단 시트를 열 수 없어요(휴지통이거나 권한 없음): ' + mine.map(function (r) { return bareTitle_(r['명단 제목']); }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(', ') + ' → 진행목록 그 줄의 시트ID·링크를 확인해 주세요 (리뷰 확인은 하루 뒤 다시 봄)');
+      } else note_('리뷰 완료 확인 실패 ' + sid + ': ' + e.message);
+    }
   });
   globalThis.__RVSTAT = '빠른 길 ' + rvStat.fast + ' · 다시 읽음 ' + rvStat.slow + (rvStat.slow ? ' (' + Object.keys(rvStat.why).map(function (k) { return k + ' ' + rvStat.why[k]; }).join(', ') + ')' : '');
   if (rvStop) return true;
