@@ -2077,7 +2077,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'LPSPACE1', 'LPFILE1', 'RVZIP_AT', 'CF_FCHK', 'PAY_POSTDAY', 'RV_GONE', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'LPSPACE1', 'LPFILE1', 'RVZIP_AT', 'CF_FCHK', 'PAY_POSTDAY', 'RV_GONE', 'DASHW1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3820,6 +3820,7 @@ function checkFullInner_() {
     try { rvCnt1_(); } catch (e) {}
     try { lpSpace1_(); } catch (e) {}
     try { lpFile1_(); } catch (e) {}
+    try { dashW1_(); } catch (e) {}
   });
   cfAlways_(S, '다음 일차', function () {
     try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
@@ -7411,9 +7412,12 @@ function dupList_(r, runs) {
     t.getRange(2, 1, last - 1, h.length).getValues().forEach(function (v) { if (v[0] instanceof Date) rows.push({ t: v[0].getTime(), own: t.getSheetId() === own.getSheetId(), h: h, v: v }); });
   });
   rows.sort(function (a, b) { return a.t - b.t; });
-  const seen = {}, out = [];
+  // 중복 미리 체크 (11/26 사용자: 보통 잘못 써서 다시 내니까 처음 낸 것을 체크): 그날 안에서 겹치면 앞에 낸 것을 체크하고 맨 나중 것은 남김.
+  //  앞 날짜(이미 끝난 날)에 낸 사람과 겹치면 예전처럼 오늘 낸 것을 체크 (앞날 것은 이미 구매한 줄이라 지우면 안 됨)
+  const prior = {}, lastIn = {}, out = [], whyOf = [];
+  const addWhy = function (i, k) { const t = k.split('|')[0]; if (whyOf[i].indexOf(t) < 0) whyOf[i].push(t); };
   rows.forEach(function (x) {
-    const why = [], keys = [];
+    const keys = [];
     let name = '', phone = '', nick = '';
     x.h.forEach(function (h, c) {
       if (!nick && MATCH.nick.test(h)) nick = String(x.v[c]);
@@ -7422,13 +7426,20 @@ function dupList_(r, runs) {
       if (!MATCH.dup.test(h) || MATCH.account.test(h)) return;
       const val = String(x.v[c]).trim().toLowerCase().replace(/[\s-]/g, '');
       if (!val) return;
-      const key = (/주소/.test(h) && !/이메일/.test(h) ? '주소' : /전화|연락처|휴대폰|핸드폰/.test(h) ? '전화번호' : '계정') + '|' + val;
-      if (seen[key]) why.push(key.split('|')[0]); else keys.push(key);
+      keys.push((/주소/.test(h) && !/이메일/.test(h) ? '주소' : /전화|연락처|휴대폰|핸드폰/.test(h) ? '전화번호' : '계정') + '|' + val);
     });
-    keys.forEach(function (k) { seen[k] = 1; });
-    // 그날 응답 전부 (중복이면 why에 이유 → 화면에서 미리 체크)
-    if (x.t >= w.from && x.t < w.to) out.push({ t: x.t, label: Utilities.formatDate(new Date(x.t), CONFIG.TIMEZONE, 'M/d HH:mm') + '  ' + (nick ? nick + ' / ' : '') + name + '  ' + phone, why: why.join(', ') });
+    if (x.t < w.from) { keys.forEach(function (k) { prior[k] = 1; }); return; }
+    if (x.t >= w.to) return;   // 뒷날 응답은 이 진행 체크에 안 씀
+    const i = out.length;
+    out.push({ t: x.t, label: Utilities.formatDate(new Date(x.t), CONFIG.TIMEZONE, 'M/d HH:mm') + '  ' + (nick ? nick + ' / ' : '') + name + '  ' + phone, why: '' });
+    whyOf.push([]);
+    keys.forEach(function (k) {
+      if (prior[k]) addWhy(i, k);                       // 앞날 사람과 겹침 → 오늘 것 체크
+      else if (lastIn[k] != null) addWhy(lastIn[k], k); // 그날 안에서 겹침 → 앞에 낸 것 체크
+      lastIn[k] = i;
+    });
   });
+  out.forEach(function (o, i) { o.why = whyOf[i].join(', '); });
   return out;
 }
 
@@ -8421,7 +8432,7 @@ function ensureDupControl_(sh) {
   if (sh.getRange('F2').getValue() === '중복 고르기 →') return;
   sh.getRange('F2').setValue('중복 고르기 →').setFontWeight('bold').setHorizontalAlignment('right');
   sh.getRange('G2').insertCheckboxes().setBackground('#f8c9c4')
-    .setNote('체크하면 명단에서 빨간색(중복)인 응답을 A열에서 골라 줘요. 같은 것끼리 맨 처음 낸 것은 남겨요. 확인하고 E1 삭제 실행을 체크하면 지워져요.');
+    .setNote('체크하면 명단에서 빨간색(중복)인 응답을 A열에서 골라 줘요. 같은 것끼리 맨 나중에 낸 것은 남겨요(잘못 써서 다시 낸 경우가 많아서). 확인하고 E1 삭제 실행을 체크하면 지워져요.');
 }
 
 // 명단 탭에서 빨간색인 응답(주문번호, 이름, 아이디, 전화, 주소 중 하나라도 앞 응답과 같음)을 골라서 A열 체크
@@ -8434,13 +8445,16 @@ function dupRows_(sh) {
   const cols = [];
   head.forEach(function (h, c) { if (MATCH.dup.test(h) && !MATCH.account.test(h)) cols.push(c); });
   const norm = function (x) { return String(x).trim().toLowerCase(); };
-  const seen = cols.map(function () { return {}; });
-  return vals.map(function (v) {
-    if (!(v[0] instanceof Date)) return false;
+  // 같은 것끼리는 맨 나중에 낸 것만 남기고 앞에 낸 것을 체크 (11/26 사용자: 보통 잘못 써서 다시 내니까 처음 낸 것을 지움). 뒤에서부터 봄
+  const seen = cols.map(function () { return {}; }), out = vals.map(function () { return false; });
+  for (let i = vals.length - 1; i >= 0; i--) {
+    const v = vals[i];
+    if (!(v[0] instanceof Date)) continue;
     let dup = false;
     cols.forEach(function (c, k) { const x = norm(v[c]); if (!x) return; if (seen[k][x]) dup = true; seen[k][x] = true; });
-    return dup;
-  });
+    out[i] = dup;
+  }
+  return out;
 }
 
 function pickDups_(sh) {
@@ -8450,7 +8464,7 @@ function pickDups_(sh) {
   const n = marks.filter(Boolean).length;
   if (!n) return '중복이 없어요.';
   sh.getRange(4, 1, marks.length, 1).setValues(marks.map(function (m) { return [m]; }));
-  return '빨간색 중복 ' + n + '개 골랐어요 (같은 것끼리 맨 처음 낸 것은 남김). 확인하고 E1 삭제 실행을 체크하면 지워져요.';
+  return '빨간색 중복 ' + n + '개 골랐어요 (같은 것끼리 맨 나중에 낸 것은 남김). 확인하고 E1 삭제 실행을 체크하면 지워져요.';
 }
 
 // 진행 중인 폼마다 '제출하면 바로' 트리거 (월급시트, 인원이 바로 바뀌게). 끝난 폼 트리거는 지움.
@@ -8626,7 +8640,7 @@ function loadEditTab0_(sh, msg) {
         if (v && cnt[v] > 1) sh.getRange(4 + i, c + 2).setBackground('#f8c9c4').setFontColor('#8a1c12');
       });
     });
-    // 중복(같은 것끼리 처음 낸 것 빼고)은 미리 체크해 둠 → E1만 체크하면 지워짐
+    // 중복(같은 것끼리 맨 나중에 낸 것 빼고, 11/26 사용자)은 미리 체크해 둠 → E1만 체크하면 지워짐
     const marks = dupRows_(sh);
     const nd = marks.filter(Boolean).length;
     if (nd) {
@@ -10077,6 +10091,13 @@ function lpFile1_() {
     if (fo) { const d = DriveApp.getFolderById(fo); ren('폴더', function () { return d.getName(); }, function (n) { d.setName(n); }); }
     props.setProperty('LPFILE1', ('✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + out.join(', ')).slice(0, 800));
   } catch (e) { props.setProperty('LPFILE1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/26 한 번) 한눈에 칸 너비를 바로 (다음에 통째로 다시 그릴 때까지 안 기다리게)
+function dashW1_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('DASHW1')) return;
+  try { const sh = adminSs_().getSheetByName(DASH_TAB); if (sh) { dashWidths_(sh); sh.setColumnWidth(15, 150); } props.setProperty('DASHW1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm')); }
+  catch (e) { props.setProperty('DASHW1', '실패(' + (e && e.message || e) + ')'); }
 }
 function salad30_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SALAD30') || '');
@@ -13741,7 +13762,7 @@ function buildDashboard_(force) {
     sh.getRange(2, 1, runs.length, 1).setNumberFormat('M/d');
     sh.getRange(2, 4, runs.length, 4).setNumberFormat('0');   // 총건수, 그날 목표, 신청, 남은은 숫자로 (날짜로 보이지 않게)
     sh.getRange(2, 8, runs.length, 1).setNumberFormat('M/d HH:mm');
-    try { sh.setColumnWidth(15, 180); sh.setColumnWidth(16, 68); } catch (e) {}
+    try { sh.setColumnWidth(15, 150); sh.setColumnWidth(16, 68); } catch (e) {}
   }
   // 아래: 명단 내용 (중복, 금액, 옵션 확인 표시는 여기서만. 명단 시트는 업체도 봐서 깨끗하게 둠)
   const rules = [], takCutRows = {}, listBlocks = [];
@@ -13840,7 +13861,7 @@ function buildDashboard_(force) {
       .setBackground('#cfe2f3').setRanges([sh.getRange(r0, 1, n, Math.max(width2, 6))]).build());
   });
   // 상태·숫자 칸은 좁게 (아래 명단 덩어리 C·D·F·G 칸은 글자가 잘리면 칸을 늘려 보세요, 사용자 요청 10/21)
-  [[1, 95], [2, 240], [3, 80], [4, 70], [5, 220], [6, 55], [7, 55]].forEach(function (w) { sh.setColumnWidth(w[0], w[1]); });
+  dashWidths_(sh);
   if (runs.length) {
     // 남은이 0이 아니면 빨간 굵은 글씨
     rules.unshift(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER(G2),G2<>0)').setFontColor('#d00000').setBold(true).setRanges([sh.getRange(2, 7, runs.length, 1)]).build());
@@ -13899,6 +13920,10 @@ function buildDashboard_(force) {
   props.setProperty('DASH_TITLES', JSON.stringify(runs.map(function (r) { return bareTitle_(r['명단 제목']); })));
 }
 
+// 한눈에 칸 너비 (11/26 사용자: '그날 목표' 칸이 220이라 넓어서 옆 모집완료 체크칸(P)이 화면에 안 보임 → 위 표 칸을 좁힘)
+//  A 진행일 · B 방제 · C 상태 · D 총건수 · E 그날 목표 · F 신청 · G 남은 · H 마감 시각 · I 명단 · J 폼 · K 상품 · L 틀린 옵션. M 택배 옮김·N 확인 필요는 그대로
+const DASH_WIDTHS = [[1, 80], [2, 240], [3, 70], [4, 62], [5, 62], [6, 50], [7, 50], [8, 88], [9, 50], [10, 62], [11, 55], [12, 62]];
+function dashWidths_(sh) { DASH_WIDTHS.forEach(function (w) { try { sh.setColumnWidth(w[0], w[1]); } catch (e) {} }); }
 // 한눈에 위 표 '확인 필요'(N칸)만 고침: 방제(B칸)가 진행 순서와 다르면 -1(통째로 다시 그리기), 아니면 고친 줄 수 (11/25)
 function dashErrsOnly_(sh, runs, now, was) {
   if (!runs.length) return -1;

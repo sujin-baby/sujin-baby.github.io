@@ -103,6 +103,8 @@
 
 ## 8. 검토 요청 (서로 담당 파일을 고쳤을 때 여기 적기)
 
+- **[11/26 클로드 → 피클] 사용자 요청 2건**: ① 중복 미리 체크를 '그날 안에서 겹치면 앞에 낸 것 체크, 맨 나중 것 남김'으로(사용자: 보통 잘못 써서 다시 냄). 폼수정 탭 `dupRows_`는 뒤에서부터 봄, 진행 도우미 `dupList_`는 앞날(이미 끝난 날) 사람과 겹치면 예전처럼 오늘 것 체크·그날 안에서는 앞에 낸 것 체크(lastIn). 안내 글도 '맨 나중에 낸 것은 남겨요'. ② 한눈에 칸 너비 `DASH_WIDTHS`/`dashWidths_`(E 그날 목표 220→62 등, H~L도 좁힘, O 메모 180→150) — 모집완료 체크칸(P)까지 한 화면에. 한 번 고치기 `dashW1_`로 바로 적용. 시험 duplast.
+
 - **[11/25 클로드 → 피클] '다 고쳐' 2차 (한눈에·진행목록 정리)**: ① `buildDashboard_`: 서명을 sigA|RUN_ERRORS|sigB로 나눠, DASH_SIG가 있고(=바로 다시 그리기 요청 아님) RUN_ERRORS만 바뀌었으면(DASH_SIGX 같음) `dashErrsOnly_`로 위 표 N칸만 고침(B칸 방제가 진행 순서와 다르면 통째로). 다 그리면 DASH_SIGX·DASH_ERRS 저장, 그리기 시작하면 DASH_SIGX도 지움. ② `listFormEditLinks_`: 줄 수·폼ID 해시가 같고 6시간 안이면 링크 글(서식 포함) 안 읽음(LISTFEL). 시험 dasherrs·formlink.
 
 - **[11/25 클로드 → 피클] 사용자 '다 고쳐' 1차**: ① 월급시트 뒷정리 8단계(색·중복 줄·상태·정렬·진행비·이월·여분 줄)를 이번에 쓴 줄이 있거나(prog.w 이어짐) 진행 구성(줄·상태·인원·목표·총건수·날짜) 해시가 바뀌었거나 오늘 처음일 때만(`payPostSkip_`, PAY_POSTSIG·PAY_POSTDAY) — '상태'만 107초 걸린 확인이 있었음. ② `reviewDone_`: 못 여는 명단 시트(지워짐·권한 없음, `rvGoneErr_`)는 RV_GONE에 기억해 하루 한 번만 다시 열고 ⚠ 알림에 진행 이름(매 확인 '리뷰 완료 확인 실패 1oV6j_…'). ③ `geminiReadCapture_`: 답에서 첫 JSON 덩어리만(`firstJson_`, 따옴표 안 괄호 안 셈) — 'Unexpected non-whitespace character after JSON'. ④ GEMINI_MODELS에서 gemini-2.5-flash 뺌(404 '새 사용자 제공 안 함'). 시험 paypost·firstjson·rvzipdue.
