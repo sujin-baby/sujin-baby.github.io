@@ -1882,6 +1882,26 @@ function diag_(p) {
       try { out.respHead = headers_(rawInfo_(rr['시트ID'], rr['폼ID']).raw); } catch (e) {} }
   } catch (e) { out.respErr = String(e); }
   // &rvtree=글자: 진행 제목에 그 글자가 든 의뢰 폴더(리뷰이미지·압축 제외 폴더)와 '리뷰 사진 받는 곳'의 사진 목록 (이름·만든 시각·AI 결과). 읽기만 (11/8 사진이 어디 갔는지 찾기)
+  // &fold=폴더ID: 그 폴더가 어느 의뢰 리뷰이미지인지 + 안의 파일(만든 때) + 받는 곳·AI 대기 (11/25 사용자: 포토 폴더 사진이 하루 지나도 4장)
+  if (p.fold) try {
+    const fmt = function (d) { return Utilities.formatDate(d, CONFIG.TIMEZONE, 'MM-dd HH:mm'); }, fo = DriveApp.getFolderById(String(p.fold)), o = { name: fo.getName(), up: [], files: [] };
+    const ids = [fo.getId()];
+    let pa = fo.getParents();
+    for (let i = 0; i < 3 && pa.hasNext(); i++) { const x = pa.next(); o.up.push(x.getName()); ids.push(x.getId()); pa = x.getParents(); }
+    const walk = function (d, path, depth) {
+      const fi = d.getFiles(); let n = 0;
+      while (fi.hasNext() && n < 60) { const x = fi.next(); n++; o.files.push(path + ' | ' + x.getName() + ' | ' + fmt(x.getDateCreated())); }
+      if (depth < 2) { const di = d.getFolders(); while (di.hasNext()) { const c = di.next(); o.files.push(path + '/' + c.getName() + '/'); walk(c, path + '/' + c.getName(), depth + 1); } }
+    };
+    walk(fo, '', 0);
+    const pr = PropertiesService.getScriptProperties().getProperties();
+    o.sids = Object.keys(pr).filter(function (k) { return k.indexOf('RVIMG_') === 0 && ids.indexOf(String(pr[k])) >= 0; }).map(function (k) { return k.slice(6); });
+    o.runs = readRuns_().filter(function (r) { return o.sids.indexOf(String(r['시트ID'])) >= 0; }).map(function (r) { return bareTitle_(r['명단 제목']) + ' | 인원 ' + r['인원'] + ' | ' + r['진행 상태']; });
+    o.aiQ = String(pr.RVAI_Q || '').split(',').filter(Boolean).length; o.aiQmine = o.sids.some(function (sid) { return String(pr.RVAI_Q || '').split(',').indexOf(sid) >= 0; });
+    o.geminiWait = Number(pr.GEMINI_WAIT || 0) > Date.now() ? fmt(new Date(Number(pr.GEMINI_WAIT))) : '';
+    try { const ib = rvInbox_(), it = ib.getFiles(); let n = 0; const sample = []; while (it.hasNext() && n < 300) { const x = it.next(); n++; if (sample.length < 15) sample.push(x.getName() + ' | ' + fmt(x.getDateCreated())); } o.inbox = n; o.inboxSample = sample; } catch (e) { o.inbox = '오류 ' + e.message; }
+    out.fold = o;
+  } catch (e) { out.foldErr = String(e); }
   if (p.rvtree) try {
     const pr = PropertiesService.getScriptProperties(), seen = {}, fmt = function (d) { return Utilities.formatDate(d, CONFIG.TIMEZONE, 'MM-dd HH:mm'); };
     const walk = function (fo, depth, out, path) {
@@ -2052,7 +2072,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3788,6 +3808,7 @@ function checkFullInner_() {
     try { pdb10_(); } catch (e) {}
     try { pdb10b_(); } catch (e) {}
     try { tan41_(); } catch (e) {}
+    try { lpHash1_(); } catch (e) {}
   });
   cfAlways_(S, '다음 일차', function () {
     try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
@@ -9894,6 +9915,26 @@ function tan41_() {
     if (Number(r['총건수']) - before !== 41) { props.setProperty('TAN41', (st + ' 실패(총건수 ' + r['총건수'] + ' - 앞 날 ' + before + ' ≠ 41)').slice(-400)); return; }
     props.setProperty('TAN41', ('✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + changeDaily_(r, r['진행일'], 41)).slice(0, 800));
   } catch (e) { props.setProperty('TAN41', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/25 한 번, 사용자 "동대문청년 롱패딩후리스 맨 앞에 왜 # 없어? #택11.25동대문청년 롱패딩후리스2 이런 식으로 롱패딩후리스 띄어쓰기 빼고 맨 앞에 # 붙여 놔")
+//  # 없는 11.23·11.25 진행 방제만: '택11.2X동대문청년 롱패딩 후리스N' → '#택11.2X동대문청년 롱패딩후리스N'. 명단 시트·폼·폴더 이름은 안 바꿈(규칙, __NO_FILE_RENAME). 11.24(# 있음)는 그대로
+function lpHash1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('LPHASH1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
+  const out = [];
+  globalThis.__NO_FILE_RENAME = true;
+  try {
+    ['9ynp4el7', '9ynp4el7-3'].forEach(function (id) {
+      const r = readRuns_().filter(function (y) { return String(y['요청ID']) === id; })[0];
+      if (!r) { out.push(id + ' 없음'); return; }
+      const bare = bareTitle_(r['명단 제목']);
+      if (!/^택11\.2[35]동대문청년 롱패딩 ?후리스\d+$/.test(bare)) { out.push(bare + ' 그대로(모양 다름)'); return; }
+      const nt = '#' + bare.replace('롱패딩 후리스', '롱패딩후리스');
+      out.push(renameRun_(r, nt, '사용자 11/25: 앞에 # · 롱패딩후리스 붙여 씀') ? bare + ' → ' + nt : nt + ' 안 바뀜');
+    });
+    props.setProperty('LPHASH1', ('✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + out.join(', ')).slice(0, 800));
+  } catch (e) { props.setProperty('LPHASH1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+  finally { globalThis.__NO_FILE_RENAME = false; }
 }
 function salad30_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SALAD30') || '');

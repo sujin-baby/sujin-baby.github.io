@@ -23,6 +23,6 @@ ok(/^✓/.test(env.__props.get('TAN41')), '기록 ' + env.__props.get('TAN41'));
   ok(Number(r2['목표인원']) === 40 && /실패/.test(e2.__props.get('TAN41')), '앞 날 30·30이면 안 바꿈 ' + e2.__props.get('TAN41'));
 }
 const src = require('fs').readFileSync(process.argv[2], 'utf8');
-ok(/try \{ tan41_\(\); \} catch \(e\) \{\}\n  \}\);/.test(src), '매번 단계에서 돎');
+ok(/try \{ tan41_\(\); \} catch \(e\) \{\}\n/.test(src), '매번 단계에서 돎');
 console.log(fails.length ? 'XX 레깅스 41 시험 실패:\n- ' + fails.join('\n- ') : '✓ 레깅스 11.25 41 시험 통과');
 process.exit(fails.length ? 1 : 0);
