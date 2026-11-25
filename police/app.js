@@ -85,6 +85,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!S.dayGoal) S.dayGoal = 30;   /* 오늘 목표 문제 수 (기본 30) */
     if (!S.miniBest) S.miniBest = {}; /* 미니 모의고사 개인 최고 */
     if (!S.miniRuns) S.miniRuns = 0;
+    if (!S.miniSeen || typeof S.miniSeen !== 'object') S.miniSeen = {}; /* 문항별 모의고사 출제 기록 */
     /* 오늘 루틴 3단계 · 순공 타이머 기록 (날짜가 바뀌면 아래 renderRoutine에서 새로 시작) */
     if (!S.routine || typeof S.routine !== 'object') S.routine = { d: '', w: 0, p: 0, o: 0 };
     if (!S.focus || typeof S.focus !== 'object') S.focus = { d: '', s: 0, len: 25 };
@@ -2151,22 +2152,65 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     });
     return merged;
   }
-  function hlHtml(s, marks) {
-    var rs = hlRanges(s, marks);
-    if (!rs.length) return esc(s);
-    var h = '', pos = 0;
-    rs.forEach(function (r) {
-      h += esc(s.slice(pos, r[0])) + '<mark class="stem-hl">' + esc(s.slice(r[0], r[1])) + '</mark>';
-      pos = r[1];
+  /* ➕➖ 수진 님(11/25): "역접 순접 지문에 + - 표시해놔 틀려서해설볼때"
+     · data.js의 q.sg = [[단서 구절, '+'|'-'], …] — 앞절/뒤절 방향. 같은 부호끼리는 순접·인과,
+       부호가 엇갈리면 역접·대조·양보라는 뜻이라, 틀렸을 때 지문에서 방향이 한눈에 보인다
+     · 형광펜(q.hl)과 같은 조건(오답일 때만)으로, 형광펜 위에 작은 + / − 뱃지만 얹는다 */
+  function sgList(q) {
+    var out = [];
+    if (!q || !q.sg || !q.sg.length) return out;
+    q.sg.forEach(function (e) {
+      if (!e || !e.length) return;
+      var t = String(e[0] || '').trim(), s = String(e[1] || '').trim();
+      if (!t || (s !== '+' && s !== '-')) return;
+      out.push([t, s]);
     });
-    return h + esc(s.slice(pos));
+    return out;
   }
+  function sgRanges(s, sg) {
+    var low = String(s).toLowerCase(), out = [];
+    (sg || []).forEach(function (e) {
+      var t = String(e[0] || '').trim().toLowerCase();
+      if (!t) return;
+      var i = 0, k;
+      while ((k = low.indexOf(t, i)) >= 0) { out.push([k, k + t.length, e[1]]); i = k + t.length; }
+    });
+    return out;
+  }
+  /* 형광펜 구간 + 방향 구간을 한 번에 칠한다 (겹치면 방향 표시가 이긴다 — 뱃지가 붙을 자리가 분명해야 해서) */
+  function markedHtml(s, marks, sg) {
+    s = String(s == null ? '' : s);
+    var hl = hlRanges(s, marks || []), sr = sgRanges(s, sg || []);
+    if (!hl.length && !sr.length) return esc(s);
+    var n = s.length, kind = new Array(n), i;
+    for (var a = 0; a < hl.length; a++) for (i = hl[a][0]; i < hl[a][1]; i++) kind[i] = 'h';
+    for (var b = 0; b < sr.length; b++) for (i = sr[b][0]; i < sr[b][1]; i++) kind[i] = sr[b][2] === '+' ? 'p' : 'm';
+    var h = '', cur = null, start = 0;
+    for (i = 0; i <= n; i++) {
+      var k = i < n ? (kind[i] || '') : '\u0000';
+      if (k === cur) continue;
+      if (cur !== null) h += sgRun(s.slice(start, i), cur);
+      cur = k; start = i;
+    }
+    return h;
+  }
+  function sgRun(txt, k) {
+    if (!txt) return '';
+    if (k === 'p' || k === 'm') {
+      return '<mark class="stem-hl sg-' + k + '">' + esc(txt) +
+        '<i class="sg-b sg-' + k + '" aria-label="' + (k === 'p' ? '플러스 방향' : '마이너스 방향') + '">' +
+        (k === 'p' ? '+' : '−') + '</i></mark>';
+    }
+    if (k === 'h') return '<mark class="stem-hl">' + esc(txt) + '</mark>';
+    return esc(txt);
+  }
+  function hlHtml(s, marks, sg) { return markedHtml(s, marks, sg); }
   /* 형광펜이 들어간 문장만 뽑아 피드백 패널에서도 같은 표시로 보여 준다(지문까지 안 올라가도 보이게)
      · 문장이 너무 길면 형광펜 주변만 잘라서 넘침을 막는다 */
-  function clipAround(s, marks, max) {
+  function clipAround(s, marks, sg, max) {
     max = max || 190;
     if (s.length <= max) return s;
-    var r = hlRanges(s, marks)[0];
+    var r = hlRanges(s, marks)[0] || sgRanges(s, sg)[0];
     if (!r) return s.slice(0, max - 1) + '…';
     var start = Math.max(0, r[0] - 80), end = Math.min(s.length, start + max);
     start = Math.max(0, Math.min(start, end - max));
@@ -2174,21 +2218,24 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
   function clueSentences(q) {
     var s = String((q && q.q) || '');
-    if (!s || !q || !q.hl || !q.hl.length) return [];
+    if (!s || !q) return [];
+    var sg = sgList(q);
+    if (!(q.hl && q.hl.length) && !sg.length) return [];
     return s.replace(/([.!?])\s+/g, '$1\u0001').split('\u0001').map(function (x) { return x.trim(); }).filter(function (x) {
-      return x && hlRanges(x, q.hl).length;
-    }).map(function (x) { return clipAround(x, q.hl); });
+      return x && (hlRanges(x, q.hl || []).length || sgRanges(x, sg).length);
+    }).map(function (x) { return clipAround(x, q.hl || [], sg); });
   }
 
   function stemHtml(txt, q, hlOn) {
     var s = String(txt || '');
     var marks = hlOn && q && q.hl && q.hl.length ? q.hl : null;
-    var T = function (x) { return marks ? hlHtml(x, marks) : esc(x); };
+    var sgn = hlOn && q ? sgList(q) : [];
+    var T = function (x) { return (marks || sgn.length) ? markedHtml(x, marks, sgn) : esc(x); };
     var p = stemParts(s);
     if (!p) return '<h2 class="q-text" id="qStem">' + T(s) + '</h2>';
     var h = '';
     if (p.lead) h += '<h2 class="q-text">' + T(p.lead) + '</h2>';
-    h += '<div class="q-box"' + (marks ? ' id="qStem"' : '') + '>';
+    h += '<div class="q-box"' + ((marks || sgn.length) ? ' id="qStem"' : '') + '>';
     p.items.forEach(function (it) {
       h += '<div class="q-bi"><span class="q-bk">' + esc(it.m) + '</span>' +
         '<span class="q-bt">' + T(it.t) + '</span></div>';
@@ -2198,7 +2245,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
 
   /* 오답 직후: 이미 그려진 지문을 형광펜 버전으로 갈아 끼운다 */
   function markStemClue(q) {
-    if (!q || !q.hl || !q.hl.length) return;
+    if (!q || !((q.hl && q.hl.length) || sgList(q).length)) return;
     var st = document.getElementById('qStem');
     if (!st || !st.parentNode) return;
     var tmp = document.createElement('div');
@@ -2695,12 +2742,16 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var letter = 'ABCD'.charAt(ai);
     if (hasAns) h += '<div class="fb-ansline"><span>정답 ' + letter + '</span><b>' +
       esc(ansTxt.length <= 60 ? ansTxt : ansTxt.slice(0, 38) + '…') + '</b></div>';
-    /* 🖍️ 틀린 문제만: 지문 단서를 같은 형광펜으로 패널 안에도 한 번 더 (위로 올려 보지 않아도 바로 보이게) */
-    if (wrong && q.hl && q.hl.length) {
+    /* 🖍️ 틀린 문제만: 지문 단서를 같은 형광펜으로 패널 안에도 한 번 더 (위로 올려 보지 않아도 바로 보이게)
+       · 연결어 문항은 ＋/－ 방향 뱃지까지 같이 — 앞뒤 부호가 엇갈리면 역접, 같으면 순접 */
+    var sgs = sgList(q);
+    if (wrong && ((q.hl && q.hl.length) || sgs.length)) {
       var cws = clueSentences(q);
       if (cws.length) {
-        h += '<div class="fb-clue"><div class="fb-clue-h">🖍️ 지문 형광펜 단서<span>이 부분만 보면 답이 보여요</span></div>' +
-          cws.map(function (x) { return '<p class="fb-clue-p">' + hlHtml(x, q.hl) + '</p>'; }).join('') +
+        h += '<div class="fb-clue"><div class="fb-clue-h">🖍️ 지문 형광펜 단서' +
+          (sgs.length ? '<span>＋ − 가 엇갈리면 역접, 같으면 순접이에요</span>' : '<span>이 부분만 보면 답이 보여요</span>') +
+          '</div>' +
+          cws.map(function (x) { return '<p class="fb-clue-p">' + markedHtml(x, q.hl, sgs) + '</p>'; }).join('') +
           '</div>';
       }
     }
@@ -4524,15 +4575,50 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       .forEach(function (o, k) { if (k < left) out[o.i]++; });
     return out;
   }
+  /* 미니 모의고사 중복 출제 방지 (수진 님 11/25: "미니모의고사왜자꾸나왔던문제가나와")
+     · S.miniSeen[q.i] = { n: 모의고사 출제 횟수, t: 마지막 출제 시각 } → save()에 함께 저장된다
+     · 우선순위 : ① 모의고사 미출제 + 아직 안 풀 문제 → ② 모의고사 미출제(일반 풀이에서 이미 푼 문제)
+                  → ③ 한 바퀴 다 돌았으면 출제 횟수 적은 순·오래 전에 나온 순 (같은 순위끼리는 랜덤) */
+  function miniSeen(q) { return (S.miniSeen || {})[q.i] || null; }
+  function miniRank(pool, n) {
+    var fresh = [], freshSeen = [], old = [];
+    (pool || []).forEach(function (q) {
+      if (miniSeen(q)) old.push(q);
+      else if (S.qok[q.i] || S.wrong[q.i]) freshSeen.push(q);   /* 일반 풀이에서는 본 문제 */
+      else fresh.push(q);
+    });
+    var out = qs(fresh, n);
+    if (out.length < n) out = out.concat(qs(freshSeen, n - out.length));
+    if (out.length < n) {
+      old = shuffle(old);                                       /* 같은 조건끼리 순서를 먼저 섞고 → 안정 정렬 */
+      old.sort(function (x, y) {
+        var sx = miniSeen(x) || { n: 0, t: 0 }, sy = miniSeen(y) || { n: 0, t: 0 };
+        return (sx.n - sy.n) || ((sx.t || 0) - (sy.t || 0));
+      });
+      out = out.concat(old.slice(0, n - out.length));
+    }
+    return out;
+  }
+  /* 출제 시점에 기록 — 시작만 하고 중간에 나가도 다음 모의고사에서 겹치지 않는다 */
+  function miniMarkSeen(list) {
+    if (!S.miniSeen) S.miniSeen = {};
+    var now = Date.now();
+    (list || []).forEach(function (q) {
+      if (!q) return;
+      var s = S.miniSeen[q.i] || (S.miniSeen[q.i] = { n: 0, t: 0 });
+      s.n++; s.t = now;
+    });
+    save();
+  }
   function gtPick(n) {
     var pool = D.questions.filter(function (q) { return q.s === 'gtelp' && q.gp; });
     var byU = {};
     pool.forEach(function (q) { (byU[q.u] = byU[q.u] || []).push(q); });
     var picked = [];
-    gtMix(n).forEach(function (k, u) { if (k > 0) picked = picked.concat(qs(byU[u] || [], k)); });
+    gtMix(n).forEach(function (k, u) { if (k > 0) picked = picked.concat(miniRank(byU[u] || [], k)); });
     /* 단원 보유 문항이 모자라면 다른 단원의 미선택 문항에서 보충해 개수를 정확히 맞춘다 */
     if (picked.length < n) {
-      picked = picked.concat(qs(pool.filter(function (q) { return picked.indexOf(q) < 0; }), n - picked.length));
+      picked = picked.concat(miniRank(pool.filter(function (q) { return picked.indexOf(q) < 0; }), n - picked.length));
     }
     /* 실제 시험처럼 단원(Unit 01→07) 순서로 내고, 단원 안에서는 섞는다 */
     return picked.slice(0, n).sort(function (a, b) { return a.u - b.u; });
@@ -4557,7 +4643,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         '<span class="mo-top"><b>' + esc(c.name) + '</b><i>' + esc(c.sub) + '</i></span>' +
         '<span class="mo-go">' + (best ? '최고 ' + best + '/' + c.n + ' ›' : '시작 ›') + '</span></button>';
     });
-    h += '</div><p class="note-mini">경찰 10·20문제는 배운 진도에서 먼저 내고, 모자라면 기출 전체에서 채워요. <b>2026년 2차 100문항</b>은 실제 시험 순서(형사법 → 경찰학 → 범죄학) 그대로 나가요.</p>';
+    h += '</div><p class="note-mini">경찰 10·20문제는 배운 진도에서 먼저 내고, 모자라면 기출 전체에서 채워요. <b>2026년 2차 100문항</b>은 실제 시험 순서(형사법 → 경찰학 → 범죄학) 그대로 나가요.<br>같은 문제가 또 나오지 않게 <b>모의고사에 아직 안 나온 문제부터</b> 내고, 한 바퀴 다 돌면 오래 전에 나온 것부터 다시 내요.</p>';
     $('#sheetIn').innerHTML = h;
     $('#sheet').classList.remove('hidden');
     $$('#sheetIn [data-mini]').forEach(function (b) {
@@ -4617,10 +4703,10 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       var is4 = function (q) { return (q.o || []).length === 4; };
       var ins = D.questions.filter(function (q) { return q.s !== 'gtelp' && !q.gp && is4(q) && inScope(q); });
       var all = D.questions.filter(function (q) { return q.s !== 'gtelp' && !q.gp && is4(q) && !(COURSE[q.c] && COURSE[q.c].exam); });
-      if (ins.length >= cfg.n) { picked = qs(ins, cfg.n); note = '배운 진도'; }
+      if (ins.length >= cfg.n) { picked = miniRank(ins, cfg.n); note = '배운 진도'; }
       else {
-        picked = shuffle(ins.slice());
-        picked = picked.concat(qs(all.filter(function (q) { return picked.indexOf(q) < 0; }), cfg.n - picked.length));
+        picked = miniRank(ins, ins.length);
+        picked = picked.concat(miniRank(all.filter(function (q) { return picked.indexOf(q) < 0; }), cfg.n - picked.length));
         note = '배운 진도 + 기출';
       }
     }
@@ -4640,6 +4726,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       i: 0, note: note, over: false, confirm: false, sec: sec,
       startedAt: Date.now(), end: Date.now() + sec * 1000, timer: null, result: null
     };
+    /* 기출 100문항(ex100)은 실제 시험 순서 고정이라 중복 판정에서 빼고, 미니 모의고사만 출제 기록 */
+    if (cfg.kind !== 'exam') miniMarkSeen(picked);
     clearInterval(MINI.timer);
     MINI.timer = setInterval(miniTick, 250);
     miniTick();

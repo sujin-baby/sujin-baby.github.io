@@ -1344,6 +1344,14 @@ body.boss .quiz::before{content:"";position:absolute;inset:0;pointer-events:none
 mark.hl-trap,mark.hl-must,mark.hl-num,mark.hl-soft,mark.hl-guilt{background:none;color:inherit;
   border-radius:3px;padding:0 2px;font-weight:900}
 mark.stem-hl{background:linear-gradient(180deg,rgba(255,214,64,.10) 6%,rgba(255,214,64,.36) 6%,rgba(255,214,64,.36) 92%,rgba(255,214,64,.10) 92%);color:#fff7d2;border-bottom:2px solid #ffd24a;border-radius:3px;padding:0 2px;font-weight:800;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+/* ➕➖ 연결어 문항 · 오답일 때만: 앞절/뒤절 단서 끝에 붙는 방향 뱃지 (+ 파랑 · − 빨강) */
+.sg-b{display:inline-block;min-width:11px;height:13px;line-height:13px;padding:0 3px;margin:0 0 0 3px;border-radius:999px;
+  font-style:normal;font-size:9px;font-weight:900;letter-spacing:0;text-align:center;color:#fff;vertical-align:1.5px;
+  -webkit-box-decoration-break:clone;box-decoration-break:clone}
+.sg-b.sg-p{background:#2563eb;box-shadow:0 0 0 1px rgba(96,165,250,.65)}
+.sg-b.sg-m{background:#e11d48;box-shadow:0 0 0 1px rgba(251,113,133,.65)}
+mark.stem-hl.sg-p{background:linear-gradient(180deg,rgba(96,165,250,.12) 6%,rgba(96,165,250,.30) 6%,rgba(96,165,250,.30) 92%,rgba(96,165,250,.12) 92%);color:#e6efff;border-bottom-color:#60a5fa}
+mark.stem-hl.sg-m{background:linear-gradient(180deg,rgba(251,113,133,.12) 6%,rgba(251,113,133,.28) 6%,rgba(251,113,133,.28) 92%,rgba(251,113,133,.12) 92%);color:#ffe7ea;border-bottom-color:#fb7185}
 /* 🖍️ 피드백 패널 안의 단서 카드 · 풀이 칸 안의 '3초 컷' 박스 */
 .fb-clue{margin:0 0 11px;padding:9px 11px 10px;border-radius:12px;background:rgba(255,214,64,.07);border:1px solid rgba(255,214,64,.30)}
 .fb-clue-h{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;font-size:11px;font-weight:900;letter-spacing:.2px;color:#ffd24a;margin-bottom:5px}
