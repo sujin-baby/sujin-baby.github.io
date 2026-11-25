@@ -2693,7 +2693,99 @@ console.log('\n[Test 53] 3개 이상 화살표 일차 인원 파싱 (30 -> 30 ->
   console.log('✓ Test 53: 30 -> 30 ->40 → [30, 30, 40], 10→20→30 → [10, 20, 30]');
 }
 
-console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (44개 샘플 전원 일치)');
+// 54. 11/25 슬랙 제보(수진 님): # 실 포두부 — 포토 2명만 포토리뷰, 나머지는 텍스트리뷰 + 총건수는 '3번) 리뷰10개'
+console.log('\n[Test 54] 포토 인원만 적힌 의뢰서 — 포토 2명·나머지 텍스트, 포토 줄이 총건수를 덮지 않음');
+{
+  const req54 = `#입금대행 실배 9600
+
+포토2분
+1번) 건강에좋은음식 몸에좋은 영양소 국내생산 HACCP 신선 단백질
+글루텐프리 다이어트에 좋은음식 고단백 두부과자
+2번) 하단 이미지 첨부
+3번) 리뷰10개
+4번) 1건~2건
+5번) https://naver.me/GHLF5veG
+6번) 옵션없음
+7번) 포토제공5명
+HACCP 국내생산
+NonGMO 비닐패키지 로하스인증
+다양한종류 (판두부 4mm면 8mm면) 당일배송
+8번) 리뷰가이드: HACCP 국내생산 NonGMO 비닐패키지
+9번) 이창익`;
+  const h54 = P.parseAll(req54);
+  P.setHead(h54);   // fill()이 하는 일 — 실배송이라 포토리뷰
+  const g54 = h54.guides[0];
+  if (String(g54.total) !== '10') throw new Error('Test 54 총건수는 3번 리뷰10개 → 10: ' + g54.total);
+  const m54 = P.reviewMix(g54);
+  if (m54.length !== 2 || m54[0].n !== 2 || !/포토/.test(m54[0].label) || m54[1].n !== 8) throw new Error('Test 54 리뷰 구성은 포토 2 + 텍스트 8 (맨 위 포토2분 우선): ' + JSON.stringify(m54));
+  const rv54 = P.rvDefaults(g54);
+  if (rv54.p !== 2 || rv54.t !== 8 || rv54.w !== 0) throw new Error('Test 54 rvDefaults 포토 2·텍스트 8: ' + JSON.stringify(rv54));
+  if (P.rvIssues().length) throw new Error('Test 54 개수 합(10)이 총건수(10)와 같아 경고가 없어야 함: ' + JSON.stringify(P.rvIssues()));
+
+  // 7번 포토제공5명만 있고 총건수 칸이 빈 의뢰서: 포토 인원 5가 총건수로 잡히지 않는다
+  const req54b = `#입금대행 택대 12900
+1. 검색 키워드 : 카라비너 카드지갑
+5. 상품주소(URL) : https://www.coupang.com/vp/products/1234567890
+6. 구매옵션 : 블랙
+7. 포토제공5명
+8. 리뷰 가이드 : 자율`;
+  const g54b = P.parseAll(req54b).guides[0];
+  if (String(g54b.total) !== '') throw new Error('Test 54b 포토 줄만 있으면 총건수는 빈칸: ' + g54b.total);
+
+  // 라벨과 값이 붙어 있고 콜론이 없어도('7. 포토제공5명, 텍스트5명') 포토 칸을 읽는다
+  const req54c = req54b.replace('7. 포토제공5명', '3. 총 구매 건수 : 10건\n7. 포토제공5명, 텍스트5명');
+  const g54c = P.parseAll(req54c).guides[0];
+  const m54c = P.reviewMix(g54c);
+  if (String(g54c.total) !== '10') throw new Error('Test 54c 총건수 10: ' + g54c.total);
+  if (m54c.length !== 2 || m54c[0].n !== 5 || m54c[1].n !== 5) throw new Error('Test 54c 포토제공5명·텍스트5명 → 5/5: ' + JSON.stringify(m54c));
+
+  // '포토5장이상'(사진 장수 조건)은 포토 인원이 아니다
+  const req54d = `#입금대행 실배 7200 포토5장이상 정성리뷰
+1. 검색 키워드 : 비니 모자
+3. 총 구매 건수 : 4건
+5. 상품주소(URL) : https://www.coupang.com/vp/products/999
+6. 구매옵션 : 단일
+7. 포토제공 (몇명) /포토없음 선택: 포토 없음
+8. 리뷰 가이드 : 자율`;
+  const g54d = P.parseAll(req54d).guides[0];
+  const m54d = P.reviewMix(g54d);
+  if (m54d.length) throw new Error('Test 54d 포토5장이상은 포토 인원이 아님(리뷰 구성 비어야): ' + JSON.stringify(m54d));
+  console.log('✓ Test 54: 포토2분 → 포토 2 + 텍스트 8 · 포토 줄은 총건수 아님 · 5/5 · 포토5장이상 제외');
+}
+
+// 55. 11/25 피커드 카드지갑: 복수 링크의 상품 페이지 가격이 가격 칸과 다르면 토스트만이 아니라 화면 경고로 남는다
+console.log('\n[Test 55] 링크마다 가격이 다를 때 화면에 남는 경고 + 사용자가 칸을 고치면 경고가 걷힘');
+{
+  const req55 = `#입금대행 실3 빈2 12900
+1. 검색 키워드 : 카라비너 카드지갑
+3. 총 구매 건수 : 5건
+4. 일 진행 건수 : 2건
+5. 상품주소(URL) : https://www.coupang.com/vp/products/1234
+6. 구매옵션 : 블랙
+7. 포토제공 없음
+8. 리뷰 가이드 : 자율`;
+  getElem('req').value = req55;
+  const h55 = P.parseAll(req55);
+  P.setGuides(h55.guides);
+  P.setHead(h55);
+  getElem('keyword').value = h55.guides[0].keyword;
+  getElem('url').value = 'https://www.coupang.com/vp/products/1234';
+  getElem('price').value = '';
+  const got = { price: 12900, ship: 0, pname: '카라비너 카드지갑', seller: '피커드', pno: '1234 - 5678', option: '블랙', rocket: true, sellerHint: '' };
+  P.fillCoupang(Object.assign({}, got));
+  if (String(getElem('price').value) !== '12900') throw new Error('Test 55 첫 링크 가격이 들어가야: ' + getElem('price').value);
+  P.fillCoupang(Object.assign({}, got, { price: 11900 }));
+  if (String(getElem('price').value) !== '12900') throw new Error('Test 55 다른 링크 가격으로 칸을 덮어쓰지 않음: ' + getElem('price').value);
+  const warn55 = String(getElem('o-warn').textContent || '');
+  if (!/가격 칸 12,900원 ≠ 상품 페이지 11,900원/.test(warn55)) throw new Error('Test 55 화면 경고가 남아야 함: ' + warn55);
+  // 사용자가 가격 칸을 상품 페이지 가격으로 고치면 경고가 걷힌다
+  getElem('price').value = '11900';
+  P.render();
+  if (/가격 칸 12,900원/.test(String(getElem('o-warn').textContent || ''))) throw new Error('Test 55 칸을 고쳤는데 경고가 남음: ' + getElem('o-warn').textContent);
+  console.log('✓ Test 55: 12,900 칸 유지 + 화면 경고 · 11,900으로 고치면 경고 걷힘');
+}
+
+console.log('✓ 모든 가이드 생성기 파서 단위 시험 통과 (46개 샘플 전원 일치)');
 process.exit(0);
 
 
