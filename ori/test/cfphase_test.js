@@ -13,6 +13,7 @@ const stubs = ['removeOldUpdateTrigger_', 'normalizeRuns_', 'fixGold1110Once_', 
   'rvLooseCheck_', 'rvAiQueue_', 'rvInboxSort_', 'ensureInboxTrigger_', 'ensureUsageTab_', 'refreshAssignFormulasOnce_', 'updatePay_', 'bgOverdue_', 'refreshEditTab_',
   'soonCheck_', 'ensureEditTab_', 'geminiKey_', 'bgRun_'].concat(onceFns);
 env.__STUBS = stubs;
+G('CF_FCHK_EVERY = 0');   // (11/25) 새 응답 없는 진행 30분 건너뛰기는 fcheck_test.js에서 따로. 여기선 단계 순서만
 G(`globalThis.__NOW = Date.now(); Date.now = function () { return globalThis.__NOW; };
 globalThis.__CALLS = []; globalThis.__COST = {}; globalThis.__SEEN = [];
 __STUBS.forEach(function (n) { globalThis[n] = function () { __CALLS.push(n); __NOW += (__COST[n] == null ? 1 : __COST[n]) * 1000; if (n === 'ensureSubmitTriggers_') __SEEN.push('|'); return n === 'geminiKey_' ? '' : 0; }; });

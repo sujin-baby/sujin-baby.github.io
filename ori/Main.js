@@ -2072,7 +2072,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'LPSPACE1', 'LPFILE1', 'RVZIP_AT', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'LPSPACE1', 'LPFILE1', 'RVZIP_AT', 'CF_FCHK', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3688,6 +3688,9 @@ function cfSig_(rr) {
   return cfHash_(JSON.stringify([Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd'), live.map(function (r) { return [r['명단 제목'], String(r['진행일']), r['시트ID'], r['폼ID'], r['진행 상태'], String(r['마감 시각'] || ''), String(r['목표인원'] || '')]; })])).slice(0, 16);
 }
 // 폼 응답이 들어옴(all 아님) → 폼 인원·명단 시트·한눈에 다시 / 직접 하신 일(all) → 전부 다시
+// 15분 확인 '폼 인원': 이 진행을 이번엔 건너뛰어도 되나 — 지난번 다 센 뒤 30분 안, 진행 값 같음, 그 뒤 이 폼에 새 응답·직접 하신 일 없음 (11/25)
+let CF_FCHK_EVERY = 30 * 60000;   // let: 시험에서 0으로 (단계 순서 시험)
+function fcheckSkip_(last, sig, sub, dirtyAll, now) { return !!(last && last.t && last.s === sig && now - last.t < CF_FCHK_EVERY && sub < last.t && dirtyAll < last.t); }
 function cfDirty_(all) { try { PropertiesService.getScriptProperties().setProperty(all ? 'CF_DIRTY_ALL' : 'CF_DIRTY', String(Date.now())); } catch (e) {} }
 function cfLoad_() { let s = {}; try { s = JSON.parse(PropertiesService.getScriptProperties().getProperty('CF_PH') || '{}') || {}; } catch (e) {} return s; }
 function cfSave_(S) { try { PropertiesService.getScriptProperties().setProperty('CF_PH', JSON.stringify(S)); } catch (e) {} }
@@ -3917,8 +3920,15 @@ function checkFullInner_() {
       try { ensureSubmitTriggers_(runs); } catch (e) { note_('응답 트리거 실패: ' + e); }
       // 시간이 모자라 중간에 멈추면 다음엔 멈춘 진행부터 (뒤쪽 진행이 계속 안 세지는 일 없게)
       const order = cfRotate_(runs, function (r) { return String(r['명단 제목']); }, st.cur);
-      const seen = [];
+      const seen = [], carry = [];
       let cut = '';
+      // 새 응답이 없던 폼의 진행은 30분에 한 번만 다시 셈 (11/25 사용자 '도돌이표': 진행 24개 폼을 매번 다 열어 170~184초).
+      //  응답이 들어오면 폼 제출 트리거(onRunSubmit_)가 그 자리에서 인원·마감을 하고 FSUB_<폼ID>를 남김 → 그 폼 진행은 다음 확인에서 꼭 다시 셈.
+      //  진행 값(목표·인원·마감·상태·날짜)이 바뀌었거나, 날짜가 바뀌었거나, 직접 하신 일(CF_DIRTY_ALL)이 있으면 다시 셈
+      let fchk = {}; try { fchk = JSON.parse(props.getProperty('CF_FCHK') || '{}') || {}; } catch (e) {}
+      const dirtyAll = Number(props.getProperty('CF_DIRTY_ALL') || 0), dayK = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
+      const fsig = function (r) { return [dayK, r['폼ID'], r['시트ID'], r['목표인원'], r['인원'], r['마감 시각'] instanceof Date ? r['마감 시각'].getTime() : '', r['진행 상태'], r['진행일'] instanceof Date ? r['진행일'].getTime() : ''].join('|'); };
+      let skipN = 0;
       order.forEach(function (r) {
         if (cut) return;
         yieldIfWanted_();   // 폼수정 탭 같은 직접 하는 일이 기다리면 진행 하나 끝날 때마다 바로 넘김 (10/26 '폼 인원' 한 단계가 100초 넘어 붙여넣기가 실패)
@@ -3926,14 +3936,27 @@ function checkFullInner_() {
         // 어제 이전에 끝난 진행은 15분마다 안 봄 (폼을 열 때마다 느리고 구글 쪽 시간 초과가 남. 인원은 매일 9시 현황 업데이트가 다시 셈)
         //  단일 진행 또는 마지막 일차 진행은 windowOf_.to가 Infinity라 runOver_가 false이므로 마감 시각 또는 구매 마감(pastEnd_)도 함께 확인 (10/29 최적화)
         if (r['진행일'] instanceof Date && r['진행일'] < today_() && (r['마감 시각'] || runOver_(runs, r) || pastEnd_(r))) return;
+        const fk = String(r['명단 제목']), last = fchk[fk] || {};
+        if (fcheckSkip_(last, fsig(r), Number(props.getProperty('FSUB_' + r['폼ID']) || 0), dirtyAll, Date.now())) { if (r['시트ID']) listed[r['시트ID']] = 1; carry.push(fk); skipN++; return; }
         if (cfOver_()) { cut = String(r['명단 제목']); return; }
         seen.push(String(r['명단 제목']));
+        const t0r = Date.now(), dirty0 = String(props.getProperty('CF_DIRTY') || ''), sig0 = fsig(r);
         // 진행 하나에서 오류가 나도 다른 진행은 계속 (오류는 한눈에 탭 '확인 필요' 칸에 보임)
-        try { subTime_('폼 인원: 진행 확인', function () { checkRun_(r); }); } catch (e) { if (e && e.yieldLock) throw e; errs[r['명단 제목']] = String(e.message || e).slice(0, 120); note_('진행 확인 실패 ' + r['명단 제목'] + ': ' + e); }
+        let okRun = true;
+        try { subTime_('폼 인원: 진행 확인', function () { checkRun_(r); }); } catch (e) { if (e && e.yieldLock) throw e; okRun = false; errs[r['명단 제목']] = String(e.message || e).slice(0, 120); note_('진행 확인 실패 ' + r['명단 제목'] + ': ' + e); }
+        // 다 셌고 그사이 '다시 확인' 표시(CF_DIRTY: 명단이 덜 차서 1분 뒤 다시, 폼 제출 등)가 안 생겼을 때만 '본 때'로 기억
+        if (okRun && String(props.getProperty('CF_DIRTY') || '') === dirty0) fchk[fk] = { s: sig0, t: t0r }; else delete fchk[fk];
       });
+      Object.keys(fchk).forEach(function (k) { if (!runs.some(function (x) { return String(x['명단 제목']) === k; })) delete fchk[k]; });
+      try { props.setProperty('CF_FCHK', JSON.stringify(fchk)); } catch (e) {}
+      if (skipN) note_('✓ 폼 인원: 새 응답 없는 진행 ' + skipN + '개는 30분마다만 셈');
       // 확인 필요 칸: 이번에 본 진행만 바꿈 (중간에 멈췄으면 못 본 진행의 지난 표시는 그대로)
       let prevErr = {}, prevListed = {};
       if (cut) { try { prevErr = JSON.parse(props.getProperty('RUN_ERRORS') || '{}'); } catch (e) {} try { prevListed = JSON.parse(props.getProperty('CF_LISTED') || '{}'); } catch (e) {} }
+      else if (carry.length) {   // 건너뛴 진행의 '확인 필요' 표시는 지난번 것 그대로
+        let pe = {}; try { pe = JSON.parse(props.getProperty('RUN_ERRORS') || '{}'); } catch (e) {}
+        carry.forEach(function (t) { if (pe[t]) prevErr[t] = pe[t]; });
+      }
       seen.forEach(function (t) { delete prevErr[t]; });
       props.setProperty('RUN_ERRORS', JSON.stringify(Object.assign(prevErr, errs)));
       props.setProperty('CF_LISTED', JSON.stringify(Object.assign(prevListed, listed)));
@@ -5567,6 +5590,7 @@ function propsCleanup_(runs, force, all0) {
     else if ((m = k.match(/^GRANT_[-\w]{25,}_([-\w]{25,})$/))) del = !live[m[1]];   // 끝난 명단 시트 IMPORTRANGE 허용 기록
     else if ((m = k.match(/^(?:(?:RVTXT_|RVSIG_|RVPH_)?RVMSGD_)[-\w]+_(\d{8})$/))) del = m[1] < old4;
     else if (/^MSGV_S_/.test(k)) del = Number(all[k]) < s2;
+    else if (/^FSUB_/.test(k)) del = Number(all[k]) < s2;   // 폼 새 응답 표시 (11/25): 이틀 지난 건 안 씀
     if (del) { try { props.deleteProperty(k); n++; } catch (e) {} }
   });
   if (!left) props.setProperty('PROPCLEAN_15_DAY', tk);
@@ -8479,6 +8503,7 @@ function ensureSubmitTriggers_(runs) {
 function onRunSubmit_(e) {
   // 폼 응답은 바로 명단에 (10/23 정리): 15분 확인이 돌고 있으면 그 확인이 다음 단계에서 멈추고 잠금을 넘김(1분 뒤 이어서). 최대 60초 기다림
   cfDirty_();   // 다음 15분 확인(1분 뒤 포함)은 폼 인원·명단 시트·한눈에를 방금 했어도 다시
+  try { PropertiesService.getScriptProperties().setProperty('FSUB_' + e.source.getId(), String(Date.now())); } catch (x) {}   // 이 폼에 새 응답 → 15분 확인 '폼 인원'이 이 폼 진행은 꼭 다시 셈 (11/25)
   let ran = false;
   const props0 = PropertiesService.getScriptProperties();
   props0.setProperty('WANT_LOCK', String(Date.now()));
