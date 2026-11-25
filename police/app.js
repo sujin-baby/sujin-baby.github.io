@@ -3063,6 +3063,15 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     s = String(s || '').replace(/\s+/g, ' ').trim();
     return s.length > n ? s.slice(0, n - 1) + '…' : s;
   }
+  /* 선지 4개가 정말 ‘지문’인지 확인 — 이름·연결·개수처럼 고르는 문항은 ⭕/🔺 를 붙이지 않는다
+     (그런 문항의 오답 선지는 ’틀린 설명’이 아니라 ’답이 아닌 보기’라서 세모가 오해를 부른다) */
+  var OX_SENT = /(다[.\s]?$|니다[.\s]?$|한다|된다|이다|음[.\s]?$|함[.\s]?$|있다|없다|않는다|아니다|것이다)/;
+  function oxStmt(q) {
+    if (!q || !q.ox || !q.ox.length) return null;
+    var o = q.o || [], n = 0;
+    for (var i = 0; i < o.length; i++) if (OX_SENT.test(String(o[i]))) n++;
+    return n >= 3 ? q.ox : null;
+  }
   function judgeHtml(q, wrong) {
     if (!wrong || !q || String(q.s) === 'gtelp') return '';
     var h = '', keys = ['①', '②', '③', '④'];
@@ -3074,16 +3083,19 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         '<span>' + esc(judgeStr(q.q, 96)) + '</span></div></div></div>';
     }
     if (q.ox && q.ox.length) {
-      var ai = Number(q.a) || 0, rows = '';
-      for (var i = 0; i < 4; i++) {
-        var v = q.ox[i];
+      var ai = Number(q.a) || 0, rows = '', oo = oxStmt(q);
+      /* 선지가 이름·연결 같은 ‘고르기’ 문항이면 지문 판정을 붙이지 않는다 */
+      for (var i = 0; oo && i < 4; i++) {
+        var v = oo[i];
         if (!v) continue;
         rows += '<div class="fb-jrow ' + (v === 'O' ? 'o' : 'x') + (i === ai ? ' ans' : '') + '">' +
           '<b>' + judgeMark(v) + ' ' + keys[i] + (i === ai ? ' 정답' : '') + '</b>' +
           '<span>' + esc(judgeStr(q.o && q.o[i], 88)) + '</span></div>';
       }
-      h += '<div class="fb-judge">' + judgeHead('선지마다 이 지문이 옳은지 옳지 않은지') +
-        '<div class="fb-jrows">' + rows + '</div></div>';
+      if (rows) {
+        h += '<div class="fb-judge">' + judgeHead('선지마다 이 지문이 옳은지 옳지 않은지') +
+          '<div class="fb-jrows">' + rows + '</div></div>';
+      }
     }
     var chips = null, label = '';
     if (q.oxc && Object.keys(q.oxc).length) { chips = q.oxc; label = '정답 조합이 말하는 문장별 판정'; }
@@ -3208,7 +3220,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         return;
       }
       var s = bk.t;
-      var op = optLineHtml(s, T, '①②③④'.charAt(Number(q.a) || 0), wrong ? q.ox : null);
+      var op = optLineHtml(s, T, '①②③④'.charAt(Number(q.a) || 0), wrong ? oxStmt(q) : null);
       if (op) { h += op; return; }
       var tg = s.match(/^\[(정답|핵심|해설|포인트|주의|비교)\]\s*([\s\S]*)$/);
       if (tg && tg[2].trim()) { h += '<p class="fb-key"><span class="fb-tag">' + esc(tg[1]) + '</span>' + T(tg[2].trim()) + '</p>'; return; }
