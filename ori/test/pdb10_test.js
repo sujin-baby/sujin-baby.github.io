@@ -29,7 +29,20 @@ const res = G('reviewGuideMsg_(Object.assign({}, JSON.parse(__props.get("RV_S1")
 ok(/텍스트리뷰\(2명\) : 홍길동 김철수/.test(res.msg) && !/포토리뷰\(/.test(res.msg), '가이드 텍스트 ' + res.msg.slice(0, 120));
 // 두 번 돌려도 그대로
 G('pdb10_()'); ok(env.__ss.sheets['일정'].rows.length === 5, '두 번 안 넣음');
+
+// pdb10b_: 일정 설정 total 5로 만들어진 11.26 진행·남은 대기 줄 → 10
+{
+  const LH2 = G('LIST_HEADER');
+  env.__ss.sheets['진행목록'].rows.push(LH2.map(h => ({ '진행일': D(11, 26), '명단 제목': '#11.26 실 포두부 2 (뽀짝오리)', '카톡방': '#11.26 실 포두부 2', '시트ID': 'S1', '진행 상태': '진행예정', '요청ID': 'ngm0mcci-4', '목표인원': 2, '인원': 0, '총건수': 5, '캠페인': '실 포두부' })[h] ?? ''));
+  env.__ss.sheets['일정'].rows.forEach((r, i) => { if (i) r[9] = '{"total":5,"slot":"x"}'; });
+  let e3 = ''; try { G('pdb10b_()'); } catch (x) { e3 = String(x.stack || x); }
+  ok(!e3, '오류b ' + e3);
+  ok(G('readRuns_()').every(x => Number(x['총건수']) === 10), '11.26 진행도 총건수 10 ' + G('readRuns_()').map(x => x['총건수']));
+  ok(env.__ss.sheets['일정'].rows.slice(1).every(r => JSON.parse(r[9]).total === 10 && JSON.parse(r[9]).slot === 'x'), '일정 설정 total 10');
+  ok(/^✓/.test(env.__props.get('PDB10B')), '기록b ' + env.__props.get('PDB10B'));
+}
+ok(/^✓ 월급시트 나눠서/.test(G('payErrText_({ payLate: "3/10" })')) && /오류 아님/.test(G('payErrText_({ cfCut: 1 })')) && G('payErrText_(new Error("x"))') === '월급시트 갱신 실패: x' && !/object Object/.test(G('payErrText_({ a: 1 })')), '월급시트 [object Object] 안 뜸');
 const src = require('fs').readFileSync(process.argv[2], 'utf8');
-ok(/cfAlways_\(S, '진행목록'[\s\S]{0,3000}try \{ pdb10_\(\); \} catch \(e\) \{\}\n  \}\);/.test(src), '매번 단계(진행목록)에서 돎');
+ok(/cfAlways_\(S, '진행목록'[\s\S]{0,3000}try \{ pdb10_\(\); \} catch \(e\) \{\}\n    try \{ pdb10b_\(\); \} catch \(e\) \{\}\n  \}\);/.test(src), '매번 단계(진행목록)에서 돎');
 console.log(fails.length ? 'XX 포두부 10건 시험 실패:\n- ' + fails.join('\n- ') : '✓ 포두부 10건(일정 추가·텍스트리뷰) 시험 통과');
 process.exit(fails.length ? 1 : 0);

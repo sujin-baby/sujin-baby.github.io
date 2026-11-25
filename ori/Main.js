@@ -2052,7 +2052,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3475,7 +3475,13 @@ function dailyCheckInner_() {
   });
   try { ensureEditTab_(); } catch (e) {}
   try { ensureCheckTrigger_(); } catch (e) { note_('자동 확인 트리거 실패: ' + e); }
-  try { updatePay_(); } catch (e) { note_('월급시트 갱신 실패: ' + e); }
+  // 월급시트는 시간이 모자라면 나눠서 함 (payLate 등은 오류 아님). 예전엔 이걸 '월급시트 갱신 실패: [object Object]'로 띄움 (11/25 사용자 '이건 또 뭐야')
+  try { updatePay_(); } catch (e) { note_(payErrText_(e)); }
+}
+function payErrText_(e) {
+  if (e && e.payLate) return '✓ 월급시트 나눠서 하는 중 (' + e.payLate + ', 다음 확인에서 이어서. 오류 아님)';
+  if (e && (e.yieldLock || e.cfCut || e.bgLate || e.quiet)) return '✓ 월급시트는 다음 확인에서 이어서 (오류 아님)';
+  return '월급시트 갱신 실패: ' + (e && e.message ? e.message : typeof e === 'object' ? JSON.stringify(e) : String(e));
 }
 
 function countResponses_(sheetId) {
@@ -3776,6 +3782,7 @@ function checkFullInner_() {
     try { fixGold1110Once_(); } catch (e) { note_('황금향외 11.10 정리 실패: ' + e); }
     // 급한 한 번 고치기는 매번 단계에서 (11/25: '한 번 고치기' 단계가 폼 인원 179초 뒤라 계속 건너뛰어져 포두부 총건수가 5로 남음)
     try { pdb10_(); } catch (e) {}
+    try { pdb10b_(); } catch (e) {}
   });
   cfAlways_(S, '다음 일차', function () {
     try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
@@ -4006,7 +4013,7 @@ function checkFullInner_() {
       if (!(Date.now() - Number(props.getProperty('PAY_AT') || 0) > 30 * 60000 || props.getProperty('PAY_SIG') !== paySig || props.getProperty('PAY_PENDING'))) return;
       props.setProperty('PAY_PENDING', '1');   // 끝나야 지움
       try { updatePay_(true); props.setProperty('PAY_SIG', paySig); props.setProperty('PAY_AT', String(Date.now())); props.deleteProperty('PAY_PENDING'); }
-      catch (e) { if (e && e.yieldLock) throw e; if (e && e.payLate) note_('✓ 월급시트 나눠서 하는 중 (' + e.payLate + ', 다음 확인에서 이어서. 오류 아님)'); else note_('월급시트 갱신 실패: ' + e); }
+      catch (e) { if (e && e.yieldLock) throw e; if (e && e.payLate) note_('✓ 월급시트 나눠서 하는 중 (' + e.payLate + ', 다음 확인에서 이어서. 오류 아님)'); else note_(payErrText_(e)); }
     } }
   ]);
   // 미뤄도 되는 일(정리·한눈에 명단 다시 불러오기·포토전달 탭·월급시트 이어하기)은 5분 실행(bgLane_)이 '가장 오래 밀린 것부터' 함 (11/18). 거기서도 3배 넘게 밀렸으면 여기서
@@ -9846,6 +9853,26 @@ function pdb10_() {
     } else out.push('⚠ 리뷰 정보(RV_) 없음');
     props.setProperty('PDB10', ('✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + out.join(', ')).slice(0, 1000));
   } catch (e) { props.setProperty('PDB10', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/25 한 번 더) pdb10_ 뒤 11.26 진행이 일정 줄 설정(cfg.total 5)으로 총건수 5로 만들어짐 → 포두부 진행 전부 총건수 10, 남은 일정 대기 줄 설정 total 10, 명단 시트 1행 10
+function pdb10b_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('PDB10B') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
+  try {
+    const out = [];
+    const runs = readRuns_().filter(function (y) { return /^ngm0mcci(-\d+)?$/.test(String(y['요청ID'])) && /포두부/.test(bareTitle_(y['명단 제목'])); });
+    runs.forEach(function (y) { if (Number(y['총건수']) !== 10) { setRun_(y.row, '총건수', 10); out.push(bareTitle_(y['명단 제목']) + ' 총건수 10'); } });
+    const ps = planSheet_(), pl = ps.getLastRow();
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x, i) {
+      if (!/^ngm0mcci-\d+$/.test(String(x[0]))) return;
+      let cfg = null; try { cfg = JSON.parse(x[9] || '{}'); } catch (e) {}
+      if (!cfg || Number(cfg.total) === 10) return;
+      cfg.total = 10; ps.getRange(i + 2, 10).setValue(JSON.stringify(cfg)); out.push('(일정) ' + x[0] + ' 총건수 10');
+    });
+    const sid = runs.length ? String(runs[0]['시트ID'] || '') : '';
+    try { if (sid) { listSummary_(SpreadsheetApp.openById(sid), 10); out.push('명단 시트 총건수 10'); } } catch (e) { out.push('명단 시트 못 바꿈(' + (e && e.message || e) + ')'); }
+    props.setProperty('PDB10B', ('✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + (out.join(', ') || '바꿀 것 없음')).slice(0, 800));
+  } catch (e) { props.setProperty('PDB10B', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 function salad30_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SALAD30') || '');
