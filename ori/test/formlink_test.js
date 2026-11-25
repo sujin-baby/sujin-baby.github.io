@@ -9,6 +9,14 @@ RP.getRichTextValues = function () { return this.getValues().map(r => r.map(v =>
 RP.setRichTextValues = function (v) { written = v; return this; };
 G("SpreadsheetApp.newRichTextValue = function () { const o = { t: '', u: '' }; o.setText = function (t) { o.t = t; return o; }; o.setLinkUrl = function (u) { o.u = u; return o; }; o.build = function () { return { t: o.t, u: o.u }; }; return o; }");
 env.__sh = sh; G('listFormEditLinks_(__sh)');
-const ok = JSON.stringify(written) === JSON.stringify([[{ t: "https://forms.gle/abc", u: "https://docs.google.com/forms/d/FID1/edit" }]]);
+const ok1 = JSON.stringify(written) === JSON.stringify([[{ t: "https://forms.gle/abc", u: "https://docs.google.com/forms/d/FID1/edit" }]]);
+// (11/25) 줄 수·폼ID가 같으면 6시간 안엔 다시 안 읽음
+let reads = 0; RP.getRichTextValues = function () { reads++; return this.getValues().map(r => r.map(v => v ? rtv(String(v)) : null)); };
+G('listFormEditLinks_(__sh)');
+const ok2 = reads === 0;
+sh.rows.push(mk({ '폼 링크': 'https://forms.gle/new', '폼ID': 'FID2' })); G('listFormEditLinks_(__sh)');
+const ok3 = reads === 1;
+const ok = ok1 && ok2 && ok3;
+if (!ok2 || !ok3) console.log('다시 읽기 ' + reads);
 console.log(ok ? "✓ 진행목록 폼 수정 링크 시험 통과" : "XX 진행목록 폼 수정 링크 시험 실패 " + JSON.stringify(written));
 process.exit(ok ? 0 : 1);

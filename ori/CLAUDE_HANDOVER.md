@@ -103,6 +103,8 @@
 
 ## 8. 검토 요청 (서로 담당 파일을 고쳤을 때 여기 적기)
 
+- **[11/25 클로드 → 피클] '다 고쳐' 2차 (한눈에·진행목록 정리)**: ① `buildDashboard_`: 서명을 sigA|RUN_ERRORS|sigB로 나눠, DASH_SIG가 있고(=바로 다시 그리기 요청 아님) RUN_ERRORS만 바뀌었으면(DASH_SIGX 같음) `dashErrsOnly_`로 위 표 N칸만 고침(B칸 방제가 진행 순서와 다르면 통째로). 다 그리면 DASH_SIGX·DASH_ERRS 저장, 그리기 시작하면 DASH_SIGX도 지움. ② `listFormEditLinks_`: 줄 수·폼ID 해시가 같고 6시간 안이면 링크 글(서식 포함) 안 읽음(LISTFEL). 시험 dasherrs·formlink.
+
 - **[11/25 클로드 → 피클] 사용자 '다 고쳐' 1차**: ① 월급시트 뒷정리 8단계(색·중복 줄·상태·정렬·진행비·이월·여분 줄)를 이번에 쓴 줄이 있거나(prog.w 이어짐) 진행 구성(줄·상태·인원·목표·총건수·날짜) 해시가 바뀌었거나 오늘 처음일 때만(`payPostSkip_`, PAY_POSTSIG·PAY_POSTDAY) — '상태'만 107초 걸린 확인이 있었음. ② `reviewDone_`: 못 여는 명단 시트(지워짐·권한 없음, `rvGoneErr_`)는 RV_GONE에 기억해 하루 한 번만 다시 열고 ⚠ 알림에 진행 이름(매 확인 '리뷰 완료 확인 실패 1oV6j_…'). ③ `geminiReadCapture_`: 답에서 첫 JSON 덩어리만(`firstJson_`, 따옴표 안 괄호 안 셈) — 'Unexpected non-whitespace character after JSON'. ④ GEMINI_MODELS에서 gemini-2.5-flash 뺌(404 '새 사용자 제공 안 함'). 시험 paypost·firstjson·rvzipdue.
 
 - **[11/25 클로드 → 피클] 15분 확인 '폼 인원': 새 응답 없는 진행은 30분에 한 번만 다시 셈**: 진행 24개 폼을 매번 열어(getResponses·응답 탭·합본 비교) 170~184초. 인원·마감은 폼 제출 트리거(`onRunSubmit_`)가 그 자리에서 하므로, 15분 확인은 안전망. `onRunSubmit_`이 `FSUB_<폼ID>`를 남기고, `CF_FCHK`(진행별 {진행 값 서명, 다 센 때})로 `fcheckSkip_`: 30분 안·진행 값 같음·그 뒤 그 폼 새 응답 없음·CF_DIRTY_ALL 없음이면 건너뜀(건너뛴 진행도 CF_LISTED에 넣고 '확인 필요' 표시는 지난 것 유지). 세는 중 CF_DIRTY가 바뀌면(명단 덜 참 등) 기억 안 함. FSUB_는 이틀 지나면 속성 정리. cfphase 시험은 `CF_FCHK_EVERY = 0`으로 단계 순서만, 건너뛰기는 fcheck 시험. 같이: 동대문청년 명단 시트·폼·폴더 이름 '#택 동대문청년 롱패딩후리스'(`lpFile1_`, 사용자 예외).

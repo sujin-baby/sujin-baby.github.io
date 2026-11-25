@@ -1520,7 +1520,11 @@ function formatList_(sh) {
 function listFormEditLinks_(sh) {
   const last = sh.getLastRow();
   if (last < 2) return;
-  const cL = lc_('폼 링크'), cI = lc_('폼ID'), rg = sh.getRange(2, cL, last - 1, 1), rt = rg.getRichTextValues(), ids = sh.getRange(2, cI, last - 1, 1).getValues();
+  const cL = lc_('폼 링크'), cI = lc_('폼ID'), ids = sh.getRange(2, cI, last - 1, 1).getValues();
+  // 줄 수·폼ID가 지난번과 같고 6시간 안이면 안 봄 (11/25 '다 고쳐': 링크 글자(서식 포함)를 줄마다 매번 읽어 '진행목록 정리: 서식'이 20~41초)
+  const pr = PropertiesService.getScriptProperties(), fsig = last + ':' + cfHash_(ids.map(function (x) { return String(x[0]); }).join(',')), prev = String(pr.getProperty('LISTFEL') || '').split('|');
+  if (prev[0] === fsig && Date.now() - Number(prev[1] || 0) < 6 * 3600000) return;
+  const rg = sh.getRange(2, cL, last - 1, 1), rt = rg.getRichTextValues();
   let n = 0;
   const out = rt.map(function (row, i) {
     const x = row[0], t = x ? x.getText() : '', id = String(ids[i][0] || '').trim(), want = id ? 'https://docs.google.com/forms/d/' + id + '/edit' : '';
@@ -1530,6 +1534,7 @@ function listFormEditLinks_(sh) {
     return [SpreadsheetApp.newRichTextValue().setText(t).setLinkUrl(want).build()];
   });
   if (n) rg.setRichTextValues(out);
+  pr.setProperty('LISTFEL', fsig + '|' + Date.now());
 }
 
 /* ---------------- 메뉴 ---------------- */
@@ -13494,7 +13499,18 @@ function buildDashboard_(force) {
     if (goal) x.n = Math.max(goal + 3, x.count + 2);
   });
   const rvItems = rvItems_(allRuns, props);
-  const sig = JSON.stringify(rvItems) + '|' + DASH_VER + '|' + show.join(',') + '|' + runs.map(dashStatus_).join(',') + '|' + props.getProperty('RUN_ERRORS') + '|' + order.map(function (id) { return id + ':' + sheets[id].n; }).join(',') + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태'] + ':' + r['진행일'] + ':' + r['택배 옮김']; }).join('|');
+  const sigA = JSON.stringify(rvItems) + '|' + DASH_VER + '|' + show.join(',') + '|' + runs.map(dashStatus_).join(','), errsRaw = String(props.getProperty('RUN_ERRORS'));
+  const sigB = order.map(function (id) { return id + ':' + sheets[id].n; }).join(',') + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태'] + ':' + r['진행일'] + ':' + r['택배 옮김']; }).join('|');
+  const sig = sigA + '|' + errsRaw + '|' + sigB, sigX = sigA + '|#|' + sigB;
+  // '확인 필요' 칸(N)만 바뀌었으면 통째로 다시 그리지 않고 그 칸만 고침 (11/25 사용자 '다 고쳐': 다시 그리기 한 번에 150~250초인데 확인 필요 글만 바뀐 때가 많음)
+  //  DASH_SIG를 지워 '바로 다시 그리게' 한 곳(새 진행·택배 옮김 등)은 여기 안 탐. 위 표 방제 칸(B)이 진행 순서와 같을 때만
+  { let sh0 = null; try { sh0 = ss.getSheetByName(DASH_TAB); } catch (e) {}
+    const old0 = props.getProperty('DASH_SIG');
+    if (!force && sh0 && old0 && old0 !== sig && props.getProperty('DASH_SIGX') === sigX) {
+      let now = {}, was = {}; try { now = JSON.parse(errsRaw) || {}; } catch (e) {} try { was = JSON.parse(props.getProperty('DASH_ERRS') || '{}') || {}; } catch (e) {}
+      let n = -1; try { n = dashErrsOnly_(sh0, runs, now, was); } catch (e) { n = -1; }
+      if (n >= 0) { props.setProperty('DASH_SIG', sig); props.setProperty('DASH_ERRS', errsRaw); if (n) note_('✓ 한눈에 확인 필요 칸만 ' + n + '줄 고침 (다시 그리기 안 함)'); return; }
+    } }
   let sh = ss.getSheetByName(DASH_TAB);
   // 한눈에 탭 O열 메모 & P열 모집완료 체크 보존: 방제별로 읽어 스크립트 속성에 영구 보관 (15분 재실행 시에도 절대 날아가지 않게)
   let savedMemos = {}, savedRecruit = {};
@@ -13550,7 +13566,7 @@ function buildDashboard_(force) {
   // 다시 그리기는 130~230초 걸려서, 15분 확인이 이미 170초를 넘겼으면 이번엔 안 그리고 다음 확인에서 (11/19 22:35: 262초에 시작해 6분 제한에 끊김)
   if (globalThis.__DASH_CUT_OK && late_(170)) throw { cfCut: 1 };
   // 지우기 전에 서명을 지워 둠: 쓰다가 멈추면 다음 확인이 꼭 다시 만들게
-  props.deleteProperty('DASH_SIG');
+  props.deleteProperty('DASH_SIG'); props.deleteProperty('DASH_SIGX');
   order.forEach(function (k) { Object.assign(sheets[k], sheetInfo(sheets[k].sid)); });
   order.forEach(function (id) { grantImport_(ss.getId(), sheets[id].sid); });
   if (!sh) sh = ss.insertSheet(DASH_TAB, 0);
@@ -13873,10 +13889,25 @@ function buildDashboard_(force) {
   }
   props.setProperty('DASH_LISTS', JSON.stringify(listBlocks));
   props.setProperty('DASH_TAKCUT', JSON.stringify(takCutRows));   // 한눈에 마감 시각 칸 줄 → 방제 (고치면 onAdminEdit에서 저장)
-  props.setProperty('DASH_SIG', sig);
+  props.setProperty('DASH_SIG', sig); props.setProperty('DASH_SIGX', sigX); props.setProperty('DASH_ERRS', errsRaw);
   props.setProperty('DASH_TITLES', JSON.stringify(runs.map(function (r) { return bareTitle_(r['명단 제목']); })));
 }
 
+// 한눈에 위 표 '확인 필요'(N칸)만 고침: 방제(B칸)가 진행 순서와 다르면 -1(통째로 다시 그리기), 아니면 고친 줄 수 (11/25)
+function dashErrsOnly_(sh, runs, now, was) {
+  if (!runs.length) return -1;
+  const v = sh.getRange(2, 2, runs.length, 1).getValues();
+  for (let i = 0; i < runs.length; i++) if (String(v[i][0]).trim() !== String(runs[i]['명단 제목']).replace(/\s*\([^)]*\)\s*$/, '').trim()) return -1;
+  let n = 0;
+  runs.forEach(function (r, i) {
+    const t = r['명단 제목'], a = String(was[t] || ''), b = String(now[t] || '');
+    if (a === b) return;
+    const c = sh.getRange(i + 2, 14);
+    if (b) c.setValue('⚠ ' + b).setFontColor('#b91c1c'); else c.clearContent();
+    n++;
+  });
+  return n;
+}
 /* ---------------- 11) 최신 버전 바로 받기 ---------------- */
 // 코드는 로더가 10분마다 새로 받아 옴. 바로 받고 싶을 때 메뉴에서 이걸 누르면 캐시를 지움
 
