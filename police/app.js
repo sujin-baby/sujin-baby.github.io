@@ -2205,17 +2205,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     return esc(txt);
   }
   function hlHtml(s, marks, sg) { return markedHtml(s, marks, sg); }
-  /* 형광펜이 들어간 문장만 뽑아 피드백 패널에서도 같은 표시로 보여 준다(지문까지 안 올라가도 보이게)
-     · 문장이 너무 길면 형광펜 주변만 잘라서 넘침을 막는다 */
-  function clipAround(s, marks, sg, max) {
-    max = max || 190;
-    if (s.length <= max) return s;
-    var r = hlRanges(s, marks)[0] || sgRanges(s, sg)[0];
-    if (!r) return s.slice(0, max - 1) + '…';
-    var start = Math.max(0, r[0] - 80), end = Math.min(s.length, start + max);
-    start = Math.max(0, Math.min(start, end - max));
-    return (start > 0 ? '… ' : '') + s.slice(start, end).trim() + (end < s.length ? ' …' : '');
-  }
+  /* 형광펜이 들어간 문장은 자르지 않고 통째로 보여 준다 (수진 님 11/25: "틀린문장 뒤에 … 안나오고 전체보이게") */
   function clueSentences(q) {
     var s = String((q && q.q) || '');
     if (!s || !q) return [];
@@ -2223,7 +2213,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!(q.hl && q.hl.length) && !sg.length) return [];
     return s.replace(/([.!?])\s+/g, '$1\u0001').split('\u0001').map(function (x) { return x.trim(); }).filter(function (x) {
       return x && (hlRanges(x, q.hl || []).length || sgRanges(x, sg).length);
-    }).map(function (x) { return clipAround(x, q.hl || [], sg); });
+    });
   }
 
   function stemHtml(txt, q, hlOn) {
@@ -2740,8 +2730,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var ai = Number(q.a) || 0;
     if (it && it.order && it.order.indexOf) { var kk = it.order.indexOf(q.a); if (kk >= 0) ai = kk; }
     var letter = 'ABCD'.charAt(ai);
-    if (hasAns) h += '<div class="fb-ansline"><span>정답 ' + letter + '</span><b>' +
-      esc(ansTxt.length <= 60 ? ansTxt : ansTxt.slice(0, 38) + '…') + '</b></div>';
+    if (hasAns) h += '<div class="fb-ansline"><span>정답 ' + letter + '</span><b>' + esc(ansTxt) + '</b></div>';
     /* 🖍️ 틀린 문제만: 지문 단서를 같은 형광펜으로 패널 안에도 한 번 더 (위로 올려 보지 않아도 바로 보이게)
        · 연결어 문항은 ＋/－ 방향 뱃지까지 같이 — 앞뒤 부호가 엇갈리면 역접, 같으면 순접 */
     var sgs = sgList(q);
@@ -4901,10 +4890,10 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       var pickTxt = x.pick == null ? '표시 없음' : String(q.o[x.pick]);
       list += '<details class="mi-item ' + (right ? 'ok' : 'no') + '"' + (right ? '' : ' open') + '>' +
         '<summary><span class="mi-no">' + (idx + 1) + '</span>' +
-        '<span class="mi-st">' + esc(cutTxt(q.q, 64)) + '</span>' +
+        '<span class="mi-st">' + esc(q.q) + '</span>' +
         '<span class="mi-res">' + (x.pick == null ? '–' : right ? 'O' : 'X') + '</span></summary>' +
         '<div class="mi-body">' +
-        '<div class="mi-row"><span>내 답</span><b class="' + (right ? 'ok' : 'no') + '">' + esc(cutTxt(pickTxt, 90)) + '</b></div>' +
+        '<div class="mi-row"><span>내 답</span><b class="' + (right ? 'ok' : 'no') + '">' + esc(pickTxt) + '</b></div>' +
         (right ? '' : '<div class="mi-stem">' + stemHtml(q.q, q, true) + '</div>') +
         expHtml(q, x, !right) +
         '<div class="mi-src">📌 ' + esc(q.src || qLabel(q)) + '</div>' +
