@@ -1677,4 +1677,6 @@
 
 **시험**: `guide_parser_test.js` **Test 54**(포토2분 → 2+8 · 포토 줄은 총건수 아님 · 5/5 · 포토5장이상 제외), **Test 55**(12,900 칸 유지 + 화면 경고, 칸을 고치면 걷힘), `naverprod_test.js` **8-6**(판매가 칸 우선 · 와우할인가 우선 · 이름 없으면 그대로). `bash ori/test/run_ci.sh` 전원 통과.
 
+**커밋·배포**: `ac42873`(ori-dev) · `743f29e`(main, GitHub Pages 배포) · deploy 워크플로가 실서비스 브랜치를 `ac42873`으로 넘김. 라이브 https://sujin-baby.github.io/guide/ 에서 `생성기 v214`·`EXT_VER 1.8.13` 확인, 라이브 페이지 파서로 포두부 의뢰서를 다시 돌려 포토 2 + 텍스트 8 확인.
+
 **버전·패키지**: 생성기 **v214**, 확장 **1.8.13**(`manifest.json`·`EXT_VER`·`product-locator.zip` 재포장 — `python3 ori/tools/pack_ext.py`). **수진 님 PC 확장은 1.8.13으로 다시 깔아야** 가격 우선순위가 적용됩니다(`chrome://extensions` ↻ → 생성기 새로고침).
