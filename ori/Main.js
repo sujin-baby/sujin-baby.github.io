@@ -2072,7 +2072,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3809,6 +3809,7 @@ function checkFullInner_() {
     try { pdb10b_(); } catch (e) {}
     try { tan41_(); } catch (e) {}
     try { lpHash1_(); } catch (e) {}
+    try { rvCnt1_(); } catch (e) {}
   });
   cfAlways_(S, '다음 일차', function () {
     try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
@@ -9936,6 +9937,19 @@ function lpHash1_() {
   } catch (e) { props.setProperty('LPHASH1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
   finally { globalThis.__NO_FILE_RENAME = false; }
 }
+// (11/25 한 번) #택 실버반석 전기면도기 리뷰이미지 '포토 (4개)' → 실제 장수로 (포토 폴더에 직접 넣은 사진이 안 세어짐)
+function rvCnt1_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('RVCNT1')) return;
+  const sid = '12ZIcDgwA3IQm2m-bRqqAwEHi-spZkjmetx2F-Ubgyrk', imgId = props.getProperty('RVIMG_' + sid);
+  try {
+    if (!imgId) { props.setProperty('RVCNT1', '실패(리뷰이미지 없음)'); return; }
+    const img = DriveApp.getFolderById(imgId);
+    rvCountDirs_(img, rvCartOf_(sid));
+    const names = []; const it = img.getFolders(); while (it.hasNext()) names.push(it.next().getName());
+    props.setProperty('RVCNT1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + names.join(', '));
+  } catch (e) { props.setProperty('RVCNT1', '실패(' + (e && e.message || e) + ')'); }
+}
 function salad30_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SALAD30') || '');
   if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
@@ -10959,6 +10973,9 @@ function rvLooseCheck_(runs) {
       const it = DriveApp.getFolderById(imgId).getFiles();
       let n = 0, newest = 0;
       while (it.hasNext()) { const x = it.next(); if (!/^image\//.test(x.getMimeType())) continue; n++; newest = Math.max(newest, x.getDateCreated().getTime(), x.getLastUpdated().getTime()); }
+      // 포토·텍스트·별점 폴더에 직접 넣은 사진도 폴더 이름 개수를 한 시간 안에 실제 장수로 (11/25 사용자: 실버반석 전기면도기 포토 8장인데 하루 지나도 '포토 (4개)'.
+      //  다시 세는 건 30분 정리(rvZip_)에서만 했는데 정리가 3시간 넘게 밀려 있었음)
+      try { rvCountDirs_(DriveApp.getFolderById(imgId), rvCartOf_(sid)); } catch (e) {}
       if (n && now - newest >= 10 * 60000) { q.push(sid); added++; }
       else if (n) delete at[sid];   // 아직 올리는 중 → 다음 확인에서 다시 봄
     } catch (e) {}
