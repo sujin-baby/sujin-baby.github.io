@@ -764,6 +764,38 @@ function runRun(opt) {
   ok(/이미지 주소\|건너뜀/.test(gen), '생성기 runBatch: "이미지 주소·건너뜀" 상태를 받으면 4분 기다리지 않고 다음 상품으로');
   ok(/!isImgUrl\(u\.url\)/.test(gen), '생성기 [열기] 단추(updateProductLink)도 사진 주소는 상품으로 안 만듦');
 
+  /* ---------- 8-6) 쿠팡 상품 페이지 가격: 와우할인가·로켓배송가·최종할인가 먼저 (1.8.13, 11/25 피커드 카드지갑) ----------
+     예전엔 querySelector(선택자 목록)이 문서 순서상 첫 요소를 돌려줘서, 위쪽 다른 판매자·일반 판매가가 먼저 잡혔다 */
+  const coupangPage = (els, bodyTxt) => {
+    const document = {
+      title: '카라비너 카드지갑',
+      querySelector: sel => (els[sel] != null ? { textContent: els[sel], innerText: els[sel] } : null),
+      querySelectorAll: () => [],
+      documentElement: { innerHTML: '<script>{"itemId":"12345678","vendorItemId":"9999"}</script>' },
+      body: { innerText: bodyTxt },
+      createElement: () => ({ style: {}, appendChild() {}, setAttribute() {}, remove() {} })
+    };
+    const location = { href: 'https://www.coupang.com/vp/products/1234567890?itemId=12345678&vendorItemId=9999', hostname: 'www.coupang.com', pathname: '/vp/products/1234567890', search: '?itemId=12345678&vendorItemId=9999' };
+    const ctx = { window: {}, document, location, navigator: { userAgent: 'Mozilla/5.0 (Macintosh)' }, setTimeout, clearTimeout, console, URL, URLSearchParams, Node: { DOCUMENT_POSITION_FOLLOWING: 4 } };
+    vm.createContext(ctx);
+    vm.runInContext(pg, ctx);
+    return ctx;
+  };
+  const coupangPriceOf = ctx => { try { return vm.runInContext('window.__PL.readProduct()', ctx).price; } catch (e) { return 'err:' + e.message; } };
+  {
+    const BODY = ['카라비너 카드지갑', '판매처 : 다른상점', '쿠팡상품번호: 1234567890 - 12345678', '로켓배송', '배송비 3,000원'].join('\n');
+    // ① 판매가 칸(.total-price)이 있으면 다른 판매자 금액([class*=final-price])이 같이 있어도 판매가 칸을 씀
+    const p1 = coupangPriceOf(coupangPage({ '.prod-sale-price .total-price strong': '11,900원', '[class*="final-price"] [class*="amount"]': '12,900원' }, BODY));
+    ok(p1 === 11900, '쿠팡 가격: 판매가 칸(11,900)을 먼저 (다른 판매자 12,900 아님) — ' + p1);
+    // ② 화면에 '와우할인가 11,900원'이 있으면 그 가격 우선 (일반 판매가 12,900만 읽혔을 때)
+    const p2 = coupangPriceOf(coupangPage({ '[class*="finalPrice"]': '12,900원' }, BODY + '\n와우할인가 11,900원'));
+    ok(p2 === 11900, '쿠팡 가격: 와우할인가 11,900 우선 — ' + p2);
+    // ③ 이름 붙은 가격이 없으면 예전처럼 잡힌 가격 그대로 (억지로 바꾸지 않음)
+    const p3 = coupangPriceOf(coupangPage({ '[class*="finalPrice"]': '12,900원' }, BODY));
+    ok(p3 === 12900, '쿠팡 가격: 와우/최종 이름이 없으면 잡힌 가격 그대로 — ' + p3);
+    ok(!/\.prod-sale-price \.total-price strong, \.total-price strong, \[class\*="final-price"\]/.test(pg), 'page.js: 문서 순서를 따르는 예전 한-줄 선택자를 안 씀 (1.8.13)');
+  }
+
   /* ---------- 9) 버전·배포물 한 세트 (확장) — 버전 숫자를 시험에 박지 않고 manifest를 기준으로 본다 ---------- */
   ok(/^\d+\.\d+\.\d+$/.test(man.version), 'manifest 버전 (' + man.version + ')');
   const ev = (gen.match(/const EXT_VER = "([\d.]+)"/) || [])[1];

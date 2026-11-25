@@ -203,9 +203,24 @@
       let opt = readOption();
       if (!opt) { const oe = document.querySelector('.prod-option__selected .value, .prod-option__selected-container .value'); if (oe) opt = oe.textContent.replace(/\s+/g, " ").trim().slice(0, 60); }
       let price = 0;
-      const pe = document.querySelector('.prod-sale-price .total-price strong, .total-price strong, [class*="final-price"] [class*="amount"], .price-amount.final-price-amount, [class*="finalPrice"]');
-      if (pe) price = num(pe.textContent);
+      /* 가격: 와우할인가·로켓배송가·최종할인가를 먼저 (11/25 피커드 카드지갑)
+         querySelector(선택자 목록)은 문서 순서상 첫 요소를 돌려줘서, 위쪽 다른 판매자 가격(.final-price 등)이 있으면 그게 먼저 잡혔다 */
+      const PRICE_SEL = [
+        '.prod-sale-price .total-price strong',
+        '.prod-sale-price--final-price .total-price strong',
+        '[class*="wow"] [class*="price"] strong', '[class*="wow"] [class*="total"] strong',
+        '[class*="rocket"] [class*="price"] strong',
+        '.prod-coupon-price .total-price strong',
+        '[class*="final-price"] [class*="amount"]',
+        '.price-amount.final-price-amount',
+        '[class*="finalPrice"]',
+        '.total-price strong'
+      ];
+      for (const sel of PRICE_SEL) { const el = document.querySelector(sel); const v = el ? num(el.textContent) : 0; if (v >= 100) { price = v; break; } }
       if (!price) price = priceAfter(txt, name);
+      /* 화면에 '와우할인가 11,900원'·'최종할인가'처럼 이름이 붙은 가격이 있으면 그걸 우선 (일반 판매가가 위에 있어도) */
+      { const wm = txt.replace(/\s+/g, " ").match(/(?:와우\s*할인가|최종\s*할인가|와우\s*가격|로켓\s*(?:배송가|프라이스))[^0-9]{0,20}(\d{1,3}(?:,\d{3})+|\d{4,})\s*원/);
+        if (wm) { const v = num(wm[1]); if (v >= 100) price = v; } }
       let optPrices = readOptPrices(txt, name, price);
       /* 옵션 목록이 닫힌 드롭다운이면 화면 글(innerText)에 안 나와서, 숨은 목록 칸의 글자(textContent)로도 읽음 (10/26 텀블러 '120ml × 검정 × 1개' 20줄) */
       if (!optPrices.length) optPrices = readOptItems(price);
