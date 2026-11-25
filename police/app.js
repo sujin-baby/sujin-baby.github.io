@@ -53,6 +53,34 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     { id: 'lec', t: '강의 2개 체크하기', need: 2 }
   ];
 
+  /* ============================================================
+     📝 내 오답 공식 암기장 — 기본 14개
+     수진 님이 메모장에 적어 두신 정리본(오타·띄어쓰기 교정, 시험장 팁 보강).
+     t: 유형(ing 동명사 · to to부정사 · tense 시제·조동사 · link 연결어·기타)
+     ============================================================ */
+  var GB_BASE = [
+    { id: 'b01', t: 'ing', f: 'without + ~ing', m: '~하지 않고', tip: '전치사 뒤는 무조건 동명사(~ing)' },
+    { id: 'b02', t: 'ing', f: 'imagine + ~ing', m: '~하는 것을 상상하다' },
+    { id: 'b03', t: 'ing', f: 'postpone + ~ing', m: '~하는 것을 연기하다' },
+    { id: 'b04', t: 'ing', f: 'advise + ~ing', m: '~하는 것을 권하다', tip: '뒤에 목적어(A)가 없으면 바로 ~ing' },
+    { id: 'b05', t: 'ing', f: 'be busy + ~ing', m: '~하느라 바쁘다' },
+    { id: 'b06', t: 'ing', f: 'depict + ~ing', m: '~를 묘사하다' },
+    { id: 'b07', t: 'to', f: 'be likely + to부정사', m: '~할 가능성이 크다' },
+    { id: 'b08', t: 'to', f: 'want + to부정사', m: '~하기를 원하다' },
+    { id: 'b09', t: 'to', f: 'motivate A to B', m: 'A가 B하도록 동기를 부여하다' },
+    { id: 'b10', t: 'to', f: 'remind A to B', m: 'A에게 B를 상기시키다' },
+    { id: 'b11', t: 'tense', f: 'at the moment / until', m: '과거 시점 단서 → 과거완료(had p.p.)', tip: 'until 뒤에 과거 시점(then·과거동사)이 오면 had been ~ing' },
+    { id: 'b12', t: 'tense', f: 'should vs must', m: '보기에 둘 다 같이 있으면 둘 다 오답 확률이 높아요', tip: '권고·당위는 should, 강한 의무는 must — 소거법으로 지우기' },
+    { id: 'b13', t: 'link', f: '빈칸 뒤 콤마(,)', m: '접속부사 자리', tip: 'Nevertheless(그럼에도) · As a result(결과적으로) · However(하지만)' },
+    { id: 'b14', t: 'link', f: '빈칸 뒤 명사 vs 주어+동사', m: '명사만 → 전치사(Despite) / S+V → 접속사(Although·Even though)', tip: 'Despite 뒤에 S+V가 오면 무조건 탈락! Supposing that = If' }
+  ];
+  var GB_TYPES = [
+    { k: 'ing', n: '~ing', card: '동명사 ~ing' },
+    { k: 'to', n: 'to부정사', card: 'to부정사' },
+    { k: 'tense', n: '시제·조동사', card: '시제·조동사' },
+    { k: 'link', n: '연결어', card: '연결어·기타' }
+  ];
+
   /* ---------- state ---------- */
   var S = {
     xp: 0, streak: { n: 0, last: '', best: 0 }, checked: {}, wrong: {},
@@ -86,6 +114,20 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!S.miniBest) S.miniBest = {}; /* 미니 모의고사 개인 최고 */
     if (!S.miniRuns) S.miniRuns = 0;
     if (!S.miniSeen || typeof S.miniSeen !== 'object') S.miniSeen = {}; /* 문항별 모의고사 출제 기록 */
+    /* 📝 오답 공식 암기장: 처음 한 번 기본 14개를 깔고, 지운 기록(del)은 계속 남겨 다시 뜨지 않게 한다 */
+    if (!S.gbook || typeof S.gbook !== 'object') S.gbook = { items: [], del: {}, seeded: false };
+    if (!Array.isArray(S.gbook.items)) S.gbook.items = [];
+    if (!S.gbook.del || typeof S.gbook.del !== 'object') S.gbook.del = {};
+    if (!S.gbook.seeded) {
+      S.gbook.seeded = true;
+      GB_BASE.forEach(function (b, i) {
+        if (S.gbook.del[b.id]) return;
+        var has = false;
+        for (var k = 0; k < S.gbook.items.length; k++) if (S.gbook.items[k].id === b.id) has = true;
+        if (has) return;
+        S.gbook.items.push({ id: b.id, src: 'base', t: b.t, f: b.f, m: b.m, tip: b.tip || '', at: 1000 - i });
+      });
+    }
     /* 오늘 루틴 3단계 · 순공 타이머 기록 (날짜가 바뀌면 아래 renderRoutine에서 새로 시작) */
     if (!S.routine || typeof S.routine !== 'object') S.routine = { d: '', w: 0, p: 0, o: 0 };
     if (!S.focus || typeof S.focus !== 'object') S.focus = { d: '', s: 0, len: 25 };
@@ -913,6 +955,316 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     });
   }
 
+  /* ============================================================
+     📝 내 오답 공식 암기장 · 📊 내 약점 한눈에 (2026-11-25 신설)
+     · 암기장: 기본 14개 + 틀릴 때마다 문항의 💡 3초 컷 공식이 맨 위로
+     · 맞혀도 자동으로 지우지 않는다(수동 ✓ 외웠음만) — 지운 문항을 또 틀리면 복원
+     · 약점: 지텔프 7단원 + 경찰 3과목 정답률 막대, 하위 2곳에 🔥 집중 보완
+     ============================================================ */
+  var GB = { f: 'all', formT: 'ing', undo: null, undoT: 0, notiN: 0, notiT: 0 };
+  function gbClip(s, n) {
+    s = String(s || '').replace(/\s+/g, ' ').trim();
+    return s.length > n ? s.slice(0, n - 1) + '…' : s;
+  }
+  function gbTypeMeta(k) {
+    for (var i = 0; i < GB_TYPES.length; i++) if (GB_TYPES[i].k === k) return GB_TYPES[i];
+    return GB_TYPES[3];
+  }
+  function gbTypeOfGp(gp) {
+    gp = Number(gp) || 0;
+    if (gp === 11 || gp === 12 || gp === 13 || gp === 20) return 'ing';
+    if (gp >= 14 && gp <= 19) return 'to';
+    if ((gp >= 21 && gp <= 26) || gp === 32 || gp === 33) return 'link';
+    return 'tense';   /* 가정법 1~2 · should 생략 3 · 시제 4~10 · 조동사 27~31 */
+  }
+  function gbCut(q) {
+    var m = String((q && q.e) || '').match(/💡\s*3초\s*컷\s*[:：]\s*([^\n]+)/);
+    return m ? m[1].trim() : '';
+  }
+  /* 문항 해설의 '💡 3초 컷: 단서 — 규칙 = 정답'을 카드 한 장으로 추출 */
+  function gbFromQ(q) {
+    var cut = gbCut(q), body = cut, ans = '';
+    if (cut) {
+      var eq = cut.split(/\s*=\s*/);
+      if (eq.length > 1) { ans = eq.pop(); body = eq.join(' = '); }
+    }
+    var row = q.gp ? gpRowOf(q.gp) : null;
+    var f = row ? (row.r[1] + ' → ' + row.r[2])
+                : gbClip(String(body).split(/\s*(?:→|—)\s*/)[0] || q.hint || unitName(q.c, q.u) || '핵심 공식', 44);
+    var m = body ? gbClip(body, 110) : (q.hint ? gbClip(q.hint, 110) : '');
+    return { t: gbTypeOfGp(q.gp), f: gbClip(f, 78), m: m, tip: ans ? ('정답 ' + gbClip(ans, 42)) : '' };
+  }
+  /* 틀릴 때마다 호출 — 같은 문항은 중복 추가 없이 횟수만 올리고 맨 위로 */
+  function gbookAdd(q) {
+    if (!q || q.s !== 'gtelp' || !S.gbook) return '';
+    var id = 'q-' + q.i, it = null, i;
+    var back = !!S.gbook.del[id];       /* 예전에 직접 지운 문항이면 다시 깨운다 */
+    if (back) delete S.gbook.del[id];
+    for (i = 0; i < S.gbook.items.length; i++) if (S.gbook.items[i].id === id) { it = S.gbook.items[i]; break; }
+    if (it) {
+      it.n = (it.n || 1) + 1;
+      it.at = Date.now();
+      it.new = true;
+      return 'upd';
+    }
+    var c = gbFromQ(q);
+    c.id = id; c.src = 'q'; c.qid = q.i; c.gp = q.gp || 0;
+    c.n = 1; c.at = Date.now(); c.new = true; c.d = todayStr();
+    S.gbook.items.push(c);
+    return back ? 'back' : 'new';
+  }
+  function gbNotify() {
+    GB.notiN++;
+    syncBookBadges();
+    clearTimeout(GB.notiT);
+    GB.notiT = setTimeout(function () {
+      var n = GB.notiN; GB.notiN = 0;
+      toast('📝 오답 공식 ' + n + '개를 암기장에 담았어요');
+    }, 1000);
+  }
+  function gbCounts() {
+    var c = { all: 0 };
+    GB_TYPES.forEach(function (t) { c[t.k] = 0; });
+    ((S.gbook && S.gbook.items) || []).forEach(function (it) { c.all++; c[it.t] = (c[it.t] || 0) + 1; });
+    return c;
+  }
+  function gbSorted() {
+    return ((S.gbook && S.gbook.items) || []).slice().sort(function (a, b) { return (b.at || 0) - (a.at || 0); });
+  }
+  function gbDate(d) { return String(d || '').slice(5).replace('-', '/'); }
+  function gbFootHtml(it) {
+    var bits = [];
+    if (it.src === 'q') {
+      if (it.gp) bits.push('<b>G-POINT ' + it.gp + '</b>');
+      if (it.qid) bits.push(esc(it.qid));
+      bits.push('틀린 ' + (it.n || 1) + '번');
+      if (it.d) bits.push(gbDate(it.d));
+    } else if (it.src === 'custom') {
+      bits.push('직접 추가');
+      if (it.d) bits.push(gbDate(it.d));
+    } else bits.push('기본 공식');
+    return bits.join(' · ');
+  }
+  function gbCardHtml(it) {
+    var tm = gbTypeMeta(it.t);
+    return '<article class="gb-card t-' + tm.k + '">' +
+      '<div class="gbc-top"><span class="gb-tag t-' + tm.k + '">' + esc(tm.card) + '</span>' +
+      (it.new ? '<span class="gb-new">NEW</span>' : '') +
+      '<button class="gb-del" data-del="' + esc(it.id) + '" aria-label="외운 공식 지우기">✓ 외웠음</button></div>' +
+      '<b class="gb-f">' + esc(it.f) + '</b>' +
+      (it.m ? '<p class="gb-m">' + esc(it.m) + '</p>' : '') +
+      (it.tip ? '<p class="gb-tip">💡 ' + esc(it.tip) + '</p>' : '') +
+      '<div class="gbc-foot">' + gbFootHtml(it) + '</div></article>';
+  }
+  function renderGbook() {
+    var list = $('#gbList');
+    if (!list || !S.gbook) return;
+    var cnt = gbCounts();
+    if ($('#gbCount')) $('#gbCount').textContent = cnt.all + '개';
+    if ($('#gbChips')) {
+      var chips = [{ k: 'all', n: '전체' }].concat(GB_TYPES);
+      $('#gbChips').innerHTML = chips.map(function (c) {
+        return '<button class="gb-chip' + (GB.f === c.k ? ' on' : '') + '" data-f="' + c.k + '">' +
+          esc(c.n) + '<i>' + (cnt[c.k] || 0) + '</i></button>';
+      }).join('');
+      $$('#gbChips [data-f]').forEach(function (b) {
+        b.onclick = function () { GB.f = b.getAttribute('data-f'); renderGbook(); sfx('tap'); };
+      });
+    }
+    var all = gbSorted();
+    var items = all.filter(function (it) { return GB.f === 'all' || it.t === GB.f; });
+    if (!items.length) {
+      list.innerHTML = '<div class="gb-empty"><b>' + (all.length ? '이 유형은 아직 비었어요' : '암기장이 비었어요') + '</b>' +
+        (all.length ? '다른 유형을 눌러 보거나 위의 + 공식 직접 추가로 한 줄 넣어 보세요.'
+                    : '지텔프 문제를 틀리면 그 문항의 3초 컷 공식이 자동으로 쌓여요.') + '</div>';
+      return;
+    }
+    list.innerHTML = items.map(gbCardHtml).join('');
+    $$('#gbList [data-del]').forEach(function (b) {
+      b.onclick = function (ev) { if (ev) ev.stopPropagation(); gbDelete(b.getAttribute('data-del')); };
+    });
+  }
+  function syncBookBadges() {
+    var n = (S.gbook && S.gbook.items) ? S.gbook.items.length : 0;
+    var a = $('#beN'); if (a) a.textContent = n;
+    var b = $('#stBookN'); if (b) b.textContent = n;
+  }
+  function gbUndoHide() { var u = $('#gbUndo'); if (u) u.classList.add('hidden'); }
+  function gbDelete(id) {
+    if (!S.gbook) return;
+    var idx = -1, i;
+    for (i = 0; i < S.gbook.items.length; i++) if (S.gbook.items[i].id === id) { idx = i; break; }
+    if (idx < 0) return;
+    var it = S.gbook.items.splice(idx, 1)[0];
+    S.gbook.del[id] = { at: Date.now(), it: it };
+    GB.undo = id;
+    save(); renderGbook(); syncBookBadges(); sfx('tap');
+    var u = $('#gbUndo'), msg = $('#gbUndoMsg');
+    if (u) {
+      if (msg) msg.textContent = '“' + gbClip(it.f, 22) + '” 지웠어요';
+      u.classList.remove('hidden');
+      clearTimeout(GB.undoT);
+      GB.undoT = setTimeout(gbUndoHide, 6000);
+    }
+    toast('외운 공식 1개를 지웠어요');
+  }
+  function gbUndo() {
+    if (!GB.undo || !S.gbook) return;
+    var rec = S.gbook.del[GB.undo];
+    if (!rec) { GB.undo = null; gbUndoHide(); return; }
+    S.gbook.items.push(rec.it);
+    delete S.gbook.del[GB.undo];
+    GB.undo = null; gbUndoHide();
+    save(); renderGbook(); syncBookBadges(); sfx('tap');
+    toast('되살렸어요');
+  }
+  function gbRenderTypes() {
+    var box = $('#gbTypes');
+    if (!box) return;
+    box.innerHTML = GB_TYPES.map(function (t) {
+      return '<button type="button" class="gb-tp' + (GB.formT === t.k ? ' on' : '') + '" data-t="' + t.k + '">' + esc(t.n) + '</button>';
+    }).join('');
+    $$('#gbTypes [data-t]').forEach(function (b) {
+      b.onclick = function () { GB.formT = b.getAttribute('data-t'); gbRenderTypes(); sfx('tap'); };
+    });
+  }
+  function gbToggleForm(force) {
+    var f = $('#gbForm');
+    if (!f) return;
+    var on = force != null ? !!force : f.classList.contains('hidden');
+    f.classList.toggle('hidden', !on);
+    var a = $('#gbAddOpen'); if (a) a.classList.toggle('on', on);
+    if (on) {
+      gbRenderTypes();
+      setTimeout(function () { var i = $('#gbF'); if (i) { try { i.focus(); } catch (e) {} } }, 60);
+    }
+  }
+  function gbSaveForm() {
+    var fEl = $('#gbF'), mEl = $('#gbM'), f, m;
+    f = fEl ? String(fEl.value || '').trim() : '';
+    m = mEl ? String(mEl.value || '').trim() : '';
+    if (!f) { toast('공식을 한 줄 적어 주세요'); if (fEl) fEl.focus(); return; }
+    S.gbook.items.push({
+      id: 'u' + Date.now(), src: 'custom', t: GB.formT, f: gbClip(f, 60), m: gbClip(m, 120),
+      tip: '', at: Date.now(), new: true, d: todayStr()
+    });
+    if (fEl) fEl.value = '';
+    if (mEl) mEl.value = '';
+    GB.f = 'all';
+    gbToggleForm(false);
+    save(); renderGbook(); syncBookBadges(); sfx('ok');
+    toast('암기장에 추가했어요');
+  }
+  function openGbook() {
+    var el = $('#gbook');
+    if (!el) return;
+    el.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    gbToggleForm(false);
+    GB.undo = null; gbUndoHide();
+    renderGbook();
+    var sc = $('#gbList'); if (sc) sc.scrollTop = 0;
+    sfx('tap');
+  }
+  function closeGbook() {
+    var el = $('#gbook');
+    if (!el) return;
+    el.classList.add('hidden');
+    document.body.style.overflow = '';
+    var ch = false;
+    (S.gbook.items || []).forEach(function (it) { if (it.new) { delete it.new; ch = true; } });
+    if (ch) save();
+    syncBookBadges();
+    sfx('tap');
+  }
+
+  /* ---------- 📊 내 약점 한눈에 ---------- */
+  function subOfCourse(c) { return (c && c.subj && c.subj.id) || (c && c.sub) || ''; }
+  function weakRows() {
+    var rows = [], i, k, p, j, q, cc, a, ok, w;
+    var gt = COURSE['gtp33'];
+    if (gt) {
+      gt.units.forEach(function (u, ui) {
+        a = 0; ok = 0; w = 0;
+        for (k in S.unit) {
+          p = String(k).split(':');
+          if (p[0] !== 'gtp33' || Number(p[1]) !== ui) continue;
+          a += S.unit[k].a || 0; ok += S.unit[k].ok || 0;
+        }
+        for (j = 0; j < D.questions.length; j++) {
+          q = D.questions[j];
+          if (q.s === 'gtelp' && q.c === 'gtp33' && q.u === ui && S.wrong[q.i]) w++;
+        }
+        rows.push({ k: 'gtp33:' + ui, cid: 'gtp33', u: ui, s: 'gtelp', name: u.n, cap: '지텔프 문법', a: a, ok: ok, w: w });
+      });
+    }
+    ['crim', 'pol', 'cri'].forEach(function (sid) {
+      var sj = SUBJ[sid];
+      if (!sj) return;
+      var aa = 0, oo = 0, ww = 0;
+      for (var kk in S.unit) {
+        cc = COURSE[String(kk).split(':')[0]];
+        if (!cc || subOfCourse(cc) !== sid) continue;
+        aa += S.unit[kk].a || 0; oo += S.unit[kk].ok || 0;
+      }
+      for (var jj = 0; jj < D.questions.length; jj++) {
+        q = D.questions[jj];
+        if (q.s === sid && S.wrong[q.i]) ww++;
+      }
+      rows.push({ k: sid, cid: null, u: null, s: sid, name: sj.name, cap: sid === 'crim' ? '경찰 3과목' : '', a: aa, ok: oo, w: ww });
+    });
+    return rows;
+  }
+  function renderInsight() {
+    var box = $('#icRows');
+    if (!box) return;
+    var rows = weakRows();
+    var ranked = rows.filter(function (r) { return r.a >= 3; })
+      .sort(function (x, y) { return (x.ok / x.a) - (y.ok / y.a); });
+    var top = {};
+    ranked.slice(0, 2).forEach(function (r) { top[r.k] = 1; });
+    var h = '', cap = '', any = false;
+    rows.forEach(function (r) {
+      if (r.cap && r.cap !== cap) { cap = r.cap; h += '<div class="ic-cap">' + esc(cap) + '</div>'; }
+      if (r.a) any = true;
+      var pct = r.a ? Math.round(r.ok / r.a * 100) : 0;
+      var lv = pct < 70 ? 'red' : pct < 85 ? 'yel' : 'grn';
+      var hot = !!top[r.k];
+      h += '<button class="ic-row' + (hot ? ' hot' : '') + (r.a ? '' : ' na') + '" data-k="' + esc(r.k) + '">' +
+        '<span class="ic-n">' + esc(r.name) + '</span>' +
+        '<span class="ic-track"><i class="' + (r.a ? lv : '') + '" style="width:' + (r.a ? Math.max(4, pct) : 0) + '%"></i></span>' +
+        (r.a ? '<b class="ic-p ' + lv + '">' + pct + '%</b><em class="ic-w">오답 ' + r.w + '</em>'
+             : '<b class="ic-p na">미풀이</b>') +
+        (hot ? '<span class="ic-fire">🔥 집중</span>' : '') +
+        '</button>';
+    });
+    box.innerHTML = h;
+    var note = $('#icNote');
+    if (note) note.textContent = any ? '정답률 낮은 순 · 🔥 = 집중 보완 2곳' : '문제를 풀면 단원별 정답률이 쌓여요';
+    $$('#icRows [data-k]').forEach(function (b) {
+      b.onclick = function () { icTap(b.getAttribute('data-k')); };
+    });
+  }
+  function icTap(key) {
+    var row = null;
+    weakRows().forEach(function (r) { if (r.k === key) row = r; });
+    if (!row) return;
+    sfx('tap');
+    var nm = row.name.replace(/^Unit\s*\d+\s*/, '');
+    if (!row.a) { toast(nm + '은(는) 아직 푼 문제가 없어요 · 스테이지에서 그 단원을 체크하면 문제가 열려요'); return; }
+    var pool = D.questions.filter(function (q) {
+      if (q.s !== row.s) return false;
+      if (row.cid) return q.c === row.cid && q.u === row.u;
+      return true;
+    });
+    var ws = pool.filter(function (q) { return !!S.wrong[q.i]; });
+    if (ws.length) {
+      startSession('ids', { ids: ws.map(function (q) { return q.i; }), n: Math.min(ws.length, 20), noScope: true, title: '🔥 ' + nm + ' 오답 ' + ws.length + '문제' });
+    } else {
+      startSession('ids', { ids: pool.map(function (q) { return q.i; }), n: 15, noScope: true, title: '🔥 ' + nm + ' 집중 복습' });
+    }
+  }
+
   /* ---------- header / tabs ---------- */
   function hexA(hex, a) {
     var c = String(hex).replace('#', '');
@@ -1279,6 +1631,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       note = '오늘은 아직 체크한 ' + (gp ? '포인트' : '강의') + '가 없어 ' + lt.date.slice(5).replace('-', '/') + '에 체크한 ' + fmtNums(lt.nums, c) + '(으)로 복습합니다.';
     }
     $('#heroNote').textContent = note;
+    syncBookBadges();
     $('#ctaAll').onclick = function () { startSession('all'); };
     $('#ctaWrong').onclick = function () { startSession('wrong'); };
     var _tc = $('#ctaCards');
@@ -1768,6 +2121,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var nW = D.questions.filter(function (q) { return S.wrong[q.i]; }).length;
     $('#stWrongGo').classList.toggle('hidden', !nW);
     $('#stWrongGo').textContent = '🩹 오답 ' + nW + '문제 바로 복습';
+    syncBookBadges();
   }
 
   /* ---------- quiz ---------- */
@@ -2313,6 +2667,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var o = { c: (w.c || 0) + 1, d: todayStr() };
     if (w.mark) o.mark = true;
     S.wrong[q.i] = o;
+    /* 🩹 지텔프 문항을 틀리면 그 문항의 💡 3초 컷 공식이 암기장 맨 위에 쌓인다 (미니 모의고사도 같은 길) */
+    if (q.s === 'gtelp' && gbookAdd(q)) gbNotify();
     return o;
   }
   function clearWrongOnRight(q) {
@@ -3165,6 +3521,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     applyTheme(); renderHud(); renderSubtabs(); renderDday(); renderQuest(); renderMascot();
     renderChallenges(); renderPass(); renderDash(); renderWeek(); renderStage(); renderReview(); renderStats();
     renderTodayPlan(); renderShield(); rebuildMemo(); renderRoutine(); focusDraw();
+    renderInsight(); syncBookBadges();
     if (!$('#view-memo').classList.contains('hidden')) renderMemo();
   }
 
@@ -3226,6 +3583,26 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   if (_mSpeed) _mSpeed.onclick = function () { sfx('tap'); startSession('speed', {}); };
   var _mOx = $('#mOx');
   if (_mOx) _mOx.onclick = function () { sfx('tap'); startOx(); };
+  /* 📝 오답 공식 암기장 · 📊 내 약점 한눈에 */
+  var _bookEntry = $('#bookEntry');
+  if (_bookEntry) _bookEntry.onclick = function () { openGbook(); };
+  var _stBookEntry = $('#stBookEntry');
+  if (_stBookEntry) _stBookEntry.onclick = function () { openGbook(); };
+  var _gbClose = $('#gbClose');
+  if (_gbClose) _gbClose.onclick = function () { closeGbook(); };
+  var _gbAddOpen = $('#gbAddOpen');
+  if (_gbAddOpen) _gbAddOpen.onclick = function () { sfx('tap'); gbToggleForm(); };
+  var _gbCancel = $('#gbCancel');
+  if (_gbCancel) _gbCancel.onclick = function () { sfx('tap'); gbToggleForm(false); };
+  var _gbFormEl = $('#gbForm');
+  if (_gbFormEl) _gbFormEl.onsubmit = function (e) { e.preventDefault(); gbSaveForm(); };
+  var _gbUndoBtn = $('#gbUndoBtn');
+  if (_gbUndoBtn) _gbUndoBtn.onclick = function () { gbUndo(); };
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    var g = $('#gbook');
+    if (g && !g.classList.contains('hidden')) closeGbook();
+  });
   /* 오늘 루틴 타이머 */
   FOCUS.left = focusSecs();
   $$('.rt-len').forEach(function (b) {
@@ -3269,7 +3646,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       muted: S.muted, subj: S.subj, course: {}, qlen: 10, mix: false, days: {},
       dday: DTARGET, ddayNote: '예상일', unit: {}, node: {}, qok: {}, gpSeeded: true, goal: { xp: 50, q: 10 },
       planLog: {}, planSubj: 'done', xpSpent: 0, shields: {}, cards: {}, gpLast: {}, bossWins: 0,
-      dayGoal: S.dayGoal || 30, oxBest: 0, oxRuns: 0,
+      dayGoal: S.dayGoal || 30, oxBest: 0, oxRuns: 0, gbook: S.gbook,
       routine: { d: todayStr(), w: 0, p: 0, o: 0 }, focus: { d: todayStr(), s: 0, len: 25 }
     };
     FOCUS.left = 25 * 60; FOCUS.running = false;
@@ -4871,6 +5248,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     MINI.result = { ok: ok, tot: tot, acc: acc, elapsed: elapsed, timeUp: timeUp, bonus: bonus, earned: earned + bonus, prevBest: prevBest, wrongIds: wrongIds };
     renderMiniResult();
     renderHud(); renderReview(); renderStats(); renderQuest(); renderMascot(); renderChallenges(); renderPass(); renderDash();
+    renderInsight();
     checkPromotion();
     sfx(acc >= 80 ? 'done' : 'tap');
     if (acc >= 80) confetti(60);

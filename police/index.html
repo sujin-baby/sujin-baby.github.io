@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=2026112506">
+<link rel="stylesheet" href="style.css?v=2026112507">
 </head>
 <body>
 
@@ -62,6 +62,21 @@
       <i class="tp-go">›</i>
     </button>
   </section>
+
+  <section class="insight" id="insightCard" aria-label="내 약점 한눈에 보기">
+    <div class="ic-head">
+      <b>📊 내 약점 한눈에</b>
+      <span id="icNote">정답률 낮은 순 · 🔥 2곳은 집중 보완</span>
+    </div>
+    <div class="ic-rows" id="icRows"></div>
+  </section>
+
+  <button class="book-entry" id="bookEntry" aria-label="내 오답 공식 암기장 열기">
+    <span class="be-ico">📝</span>
+    <span class="be-body"><b>내 오답 공식 암기장</b><i>틀릴 때마다 자동으로 쌓여요 · 외운 건 직접 지워요</i></span>
+    <span class="be-n" id="beN">0</span>
+    <span class="be-go">›</span>
+  </button>
 
   <section class="hero" id="hero">
     <div class="mascot-row">
@@ -292,6 +307,12 @@
   <div id="stWeak" class="weak-list"></div>
   <button class="btn ghost wide" id="stWeakGo">🧩 약점 단원만 집중 복습</button>
   <h2 class="sec-title">오답노트</h2>
+  <button class="book-entry wide" id="stBookEntry" aria-label="내 오답 공식 암기장 열기">
+    <span class="be-ico">📝</span>
+    <span class="be-body"><b>내 오답 공식 암기장</b><i>틀린 문제의 3초 컷 공식을 모아 봐요</i></span>
+    <span class="be-n" id="stBookN">0</span>
+    <span class="be-go">›</span>
+  </button>
   <button class="btn ghost wide" id="stWrongGo">🩹 오답 바로 복습</button>
   <div id="stWrong" class="wrong-list"></div>
   <h2 class="sec-title">설정</h2>
@@ -335,6 +356,28 @@
     </div>
   </div>
   <div id="comboBanner" class="combo-banner hidden">2연속 정답!</div>
+</div>
+
+<div id="gbook" class="gbook hidden">
+  <div class="gb-head">
+    <button id="gbClose" class="q-close" aria-label="닫기">✕</button>
+    <div class="gb-th"><b>📝 내 오답 공식 암기장</b><span id="gbCount">0개</span></div>
+  </div>
+  <div class="gb-tools">
+    <div class="gb-chips" id="gbChips"></div>
+    <button class="gb-addbtn" id="gbAddOpen">+ 공식 직접 추가</button>
+  </div>
+  <form class="gb-form hidden" id="gbForm" autocomplete="off">
+    <label class="gb-fl"><span>공식</span><input id="gbF" type="text" maxlength="60" placeholder="예) without + ~ing" required></label>
+    <label class="gb-fl"><span>뜻·시험장 팁</span><input id="gbM" type="text" maxlength="120" placeholder="예) ~하지 않고 · 전치사 뒤는 동명사"></label>
+    <div class="gb-types" id="gbTypes"></div>
+    <div class="gb-fact">
+      <button type="button" class="gb-cancel" id="gbCancel">취소</button>
+      <button type="submit" class="gb-save">암기장에 추가</button>
+    </div>
+  </form>
+  <div class="gb-scroll" id="gbList"></div>
+  <div class="gb-undo hidden" id="gbUndo"><span id="gbUndoMsg">지웠어요</span><button id="gbUndoBtn">되돌리기</button></div>
 </div>
 
 <div id="search" class="search hidden">
@@ -390,6 +433,6 @@
 </div>
 
 <script src="data.js?v=2026112506"></script>
-<script src="app.js?v=2026112506"></script>
+<script src="app.js?v=2026112507"></script>
 </body>
 </html>
