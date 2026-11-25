@@ -2072,7 +2072,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'LPSPACE1', 'LPFILE1', 'RVZIP_AT', 'CF_FCHK', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'LPSPACE1', 'LPFILE1', 'RVZIP_AT', 'CF_FCHK', 'PAY_POSTDAY', 'RV_GONE', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -8718,6 +8718,8 @@ function reviewDone_(runs, only) {
   const rvCur = props.getProperty('RV_CUR') || '';
   // 리뷰 압축(사진 AI 포함)은 한 의뢰에 80초 넘게 걸리기도 해서(11/19 15:40 확인이 이 단계에서 6분 제한에 끊김), 150초가 지났으면 시작하지 않고 다음 확인에서 그 의뢰부터
   let zipAt = {}; try { zipAt = JSON.parse(props.getProperty('RVZIP_AT') || '{}') || {}; } catch (e) {}
+  let rvGone = {}; try { rvGone = JSON.parse(props.getProperty('RV_GONE') || '{}') || {}; } catch (e) {}
+  const saveGone = function () { try { Object.keys(rvGone).forEach(function (k) { if (!bySheet[k]) delete rvGone[k]; }); props.setProperty('RV_GONE', JSON.stringify(rvGone)); } catch (e) {} };
   const saveZipAt = function () { try { Object.keys(zipAt).forEach(function (k) { if (!bySheet[k]) delete zipAt[k]; }); props.setProperty('RVZIP_AT', JSON.stringify(zipAt)); } catch (e) {} };
   const heavyOk = function (sid) { if (globalThis.__ORI_T0 && late_(RV_HEAVY_SEC)) { rvStop = true; props.setProperty('RV_CUR', sid); return false; } return true; };
   cfRotate_(Object.keys(bySheet), function (k) { return k; }, rvCur).forEach(function (sid) {
@@ -8731,7 +8733,15 @@ function reviewDone_(runs, only) {
     //  진행목록 값(마감·인원·총건수·남은 일정)도 같으면 체크칸을 다시 읽을 필요가 없음. 다 끝난 의뢰는 리뷰이미지 폴더 압축만 계속 봄
     const seenK = 'RVSEEN_' + sid;
     let mod = 0, fname = '';
-    subTime_('리뷰 확인: 수정 시각', function () { try { const f = DriveApp.getFileById(sid); mod = f.getLastUpdated().getTime(); fname = f.getName(); } catch (e) {} });
+    let modErr = '';
+    // 못 여는 명단 시트(지워졌거나 권한 없음)는 하루에 한 번만 다시 열어 봄 + 하루 한 번 알림 (11/25: 매 확인 '리뷰 완료 확인 실패 1oV6j_…'가 뜨고 그때마다 다시 읽음)
+    if (Date.now() - Number(rvGone[sid] || 0) < 86400000) return;
+    subTime_('리뷰 확인: 수정 시각', function () { try { const f = DriveApp.getFileById(sid); mod = f.getLastUpdated().getTime(); fname = f.getName(); } catch (e) { modErr = String(e && e.message || e); } });
+    if (!mod && rvGoneErr_(modErr)) {
+      rvGone[sid] = Date.now(); saveGone();
+      note_('⚠ 명단 시트를 열 수 없어요(지워졌거나 권한 없음): ' + mine.map(function (r) { return bareTitle_(r['명단 제목']); }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(', ') + ' → 진행목록 그 줄의 시트ID·링크를 확인해 주세요 (리뷰 확인은 하루 뒤 다시 봄)');
+      return;
+    }
     const sig = ['rv3', mod, Utilities.formatDate(new Date(Date.now() - 5 * 3600000), CONFIG.TIMEZONE, 'yyyyMMdd'), pend[campKey_(mine[0]['캠페인'] || mine[0]['명단 제목'])] ? 1 : 0]
       .concat(mine.map(function (r) { return [r.row, r['마감 시각'] instanceof Date ? r['마감 시각'].getTime() : '', r['인원'], r['총건수']].join(','); })).join('|');
     // 업체 전달 막힘 이유를 아직 안 본 의뢰(인원은 다 모였는데 리뷰가 안 끝남)는 한 번 다시 봄 (11/18)
@@ -8929,6 +8939,8 @@ function reviewDone_(runs, only) {
 const RV_STOP_SEC = 250, RV_HEAVY_SEC = 150;
 // 다 끝난(업체에 아직 안 보낸) 의뢰 사진 폴더를 다시 훑을 때인가: 받는 곳에서 사진이 들어왔거나(RVZIPSOON_), 지난번 훑은 지 한 시간 지났을 때 (11/25)
 const RV_ZIP_EVERY = 60 * 60000;
+// 명단 시트가 지워졌거나 권한이 없어서 못 여는 오류인가 (구글 한국어·영어 문구)
+function rvGoneErr_(m) { return /항목이 없습니다|액세스 권한이 없|not found|No item with the given ID|do not have permission/i.test(String(m || '')); }
 function rvZipDue_(sid, props, at, now) { return !!props.getProperty('RVZIPSOON_' + sid) || now - Number((at || {})[sid] || 0) >= RV_ZIP_EVERY; }
 // 의뢰 폴더 안 '리뷰이미지' 폴더 (없으면 만듦)
 function rvFolder_(mine, props, sid) {
@@ -9407,7 +9419,7 @@ function rvCheckFile_(f, base, sid, mine, cnt, nFiles, warn) {
 //  키: 메뉴 '리뷰 사진 AI 키 넣기' → 스크립트 속성 GEMINI_KEY (저장소·점검 링크에 안 나옴). 키가 없으면 예전처럼 안 나누고 압축
 const RV_SKIP_RE = /압축\s*제외/;
 const RV_AI_DIR = { purchase: '구매인증 (압축 제외)', other: '기타 (압축 제외)', dup: '같은 사진 (압축 제외)', fail: 'AI가 못 읽음 (압축 제외)' };
-const GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash'];
+const GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite', 'gemini-flash-latest'];   // (11/25) gemini-2.5-flash는 '새 사용자에게 더 이상 제공 안 함' 404라 뺌
 const GEMINI_PROMPT = [
   '이 이미지는 한국 쇼핑몰(쿠팡·네이버·올리브영 등) 체험단 참여자가 카카오톡 방에 올린 휴대폰 캡처예요.',
   'JSON 하나로만 답하세요: {"kind": "review" | "purchase" | "other", "stars": 0~5 정수, "text": true/false, "photo": true/false, "product": "화면에 보이는 상품 이름 그대로 (없으면 빈 글자)", "site": "쇼핑몰 이름 (쿠팡, 네이버, 예스24, 알라딘, 교보문고, 올리브영 등. 모르면 빈 글자)"}',
@@ -9474,13 +9486,26 @@ function geminiAsk_(parts, json) {
   }
   throw new Error('Gemini 답 없음: ' + last);
 }
+// AI 답 글에서 첫 JSON 한 덩어리만 꺼내 읽음 (11/25: 답 뒤에 글·두 번째 덩어리가 붙어 'Unexpected non-whitespace character after JSON'으로 사진을 못 나눔).
+//  따옴표 안의 { } 는 세지 않음. 못 읽으면 null
+function firstJson_(t) {
+  const s = String(t || '').replace(/```(json)?/g, '');
+  for (let st = s.indexOf('{'); st >= 0; st = s.indexOf('{', st + 1)) {
+    let d = 0, inS = false, esc = false;
+    for (let i = st; i < s.length; i++) {
+      const c = s[i];
+      if (inS) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inS = false; continue; }
+      if (c === '"') inS = true; else if (c === '{') d++; else if (c === '}') { d--; if (d === 0) { try { return JSON.parse(s.slice(st, i + 1)); } catch (e) { break; } } }
+    }
+  }
+  return null;
+}
 // 캡처 한 장 → { kind, stars, text, photo }
 function geminiReadCapture_(blob) {
   const mime = String(blob.getContentType() || 'image/jpeg');
   const t = geminiAsk_([{ text: GEMINI_PROMPT }, { inline_data: { mime_type: mime, data: Utilities.base64Encode(blob.getBytes()) } }], true);
-  const m = String(t).replace(/```(json)?/g, '').match(/\{[\s\S]*\}/);
-  if (!m) throw new Error('Gemini 답을 못 읽음: ' + String(t).slice(0, 80));
-  const o = JSON.parse(m[0]);
+  const o = firstJson_(t);
+  if (!o) throw new Error('Gemini 답을 못 읽음: ' + String(t).slice(0, 80));
   return { kind: /review|purchase|other/.test(o.kind) ? o.kind : 'other', stars: Math.max(0, Math.min(5, Number(o.stars) || 0)), text: o.text === true, photo: o.photo === true, product: String(o.product || '').slice(0, 120), site: String(o.site || '').slice(0, 20) };
 }
 // (11/16 한 번, 사용자: 김상사 케이블타이 오늘부터 택대시트에 넣어야 하니까 바꿔놔) 11.16부터 진행·일정 계획을 택배대행으로:
@@ -12637,6 +12662,7 @@ function updatePay_(resumable) {
   let rowSig = {}; try { rowSig = JSON.parse(props.getProperty('PAY_ROWSIG') || '{}'); } catch (e) {}
   //  (10/31) 6시간 → 하루: 76줄을 다시 쓰는 데 209초 걸려 6시간마다 확인이 5분을 넘김. 값이 바뀐 줄은 지금처럼 바로 씀.
   //  손으로 지운 줄·바꾼 수량은 하루 안에 되살리고, 새벽 자가 점검이 '월급시트 줄 없음·수량 다름'을 따로 알려 줌
+  let wrote = !!(prog && prog.w);   // 이번(나눠 한 것 포함)에 줄을 새로 썼나 → 뒷정리 할지
   const fresh = function (rid, sig) { const o = rowSig[rid]; return o && o.s === sig && Date.now() - o.t < 24 * 3600000; };
   const saveSig = function () { try { const keep = {}; runs.forEach(function (r) { const k = payRid_(r); if (rowSig[k]) keep[k] = rowSig[k]; }); props.setProperty('PAY_ROWSIG', JSON.stringify(keep)); } catch (e) {} };
   const stop = function (what) { props.setProperty('PAY_PROG', JSON.stringify(prog)); saveSig(); throw { payLate: what }; };
@@ -12673,9 +12699,18 @@ function updatePay_(resumable) {
     if (tooLate()) stop('줄 ' + runs.filter(function (x) { return prog.done.indexOf(payRid_(x)) >= 0; }).length + '/' + runs.length);
     yieldPay();
     const sp = subTime_('월급시트: 줄 계산', function () { return payRowSpec_(r, all); });
-    if (!fresh(rid, sp.sig)) { subTime_('월급시트: 줄 쓰기', function () { writePayRow_(r, sp.name, sp.total, sp.prev, sp.shared, sp.ex, all); }); rowSig[rid] = { s: sp.sig, t: Date.now() }; }
+    if (!fresh(rid, sp.sig)) { subTime_('월급시트: 줄 쓰기', function () { writePayRow_(r, sp.name, sp.total, sp.prev, sp.shared, sp.ex, all); }); rowSig[rid] = { s: sp.sig, t: Date.now() }; wrote = true; if (prog) prog.w = 1; }
     if (prog) prog.done.push(rid);
   });
+  // 뒷정리 8단계(색·중복 줄·상태·정렬·진행비·이월·여분 줄)는 이번에 줄을 하나라도 새로 썼거나, 진행 구성(줄·상태·인원·목표·총건수)이 바뀌었거나,
+  //  오늘 아직 안 했을 때만 (11/25 사용자 '다 고쳐': 바뀐 게 없어도 매번 다 해서 '상태'만 107초 → 15분 확인이 6분 제한 가까이)
+  const postSig = cfHash_(JSON.stringify(runs.map(function (r) { return [payRid_(r), r['진행 상태'], r['인원'], r['목표인원'], r['총건수'], r['진행일'] instanceof Date ? r['진행일'].getTime() : '']; })));
+  const postDay = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
+  if (payPostSkip_(wrote, prog ? prog.post : 0, props.getProperty('PAY_POSTSIG') || '', postSig, props.getProperty('PAY_POSTDAY') || '', postDay)) {
+    saveSig();
+    if (resumable) props.deleteProperty('PAY_PROG');
+    return;
+  }
   // 줄 다음 정리들도 하나씩 (시간이 모자라면 다음 확인에서 그 단계부터)
   const post = [
     function () { payTabsNow_().forEach(payColors_); },
@@ -12694,9 +12729,12 @@ function updatePay_(resumable) {
     try { subTime_('월급시트: ' + postName[i], post[i]); } catch (e) { note_('월급시트 ' + postName[i] + ' 실패: ' + e); }
     if (prog) prog.post = i + 1;
   }
+  props.setProperty('PAY_POSTSIG', postSig); props.setProperty('PAY_POSTDAY', postDay);
   saveSig();
   if (resumable) props.deleteProperty('PAY_PROG');
 }
+// 월급시트 뒷정리를 건너뛰어도 되나: 이번에 쓴 줄 없음 + 뒷정리 중간이 아님 + 진행 구성 같음 + 오늘 이미 함 (11/25)
+function payPostSkip_(wrote, postI, oldSig, sig, oldDay, day) { return !wrote && !(postI > 0) && oldSig === sig && oldDay === day; }
 // 진행비 = 1건(1명)당 500원, 리뷰비 없음 (사용자 요청 10/18). 이번 달·다음 달 탭만 (지난달 이전은 그대로)
 //  날짜 칸의 진행비는 그날그날 정산: =$G5*BG5(완료보고 × 수량) → =BG5*500 (완료보고와 상관없이 그날 수량 × 500원)
 //  날짜 칸 리뷰비는 비우고, 리뷰비 열은 한 번 숨김. 위쪽 '리뷰비 총액', '금일 리뷰비' 글자와 값도 지우고 '진행비 총액' 값 열은 보이게
