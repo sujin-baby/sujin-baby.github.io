@@ -2131,18 +2131,80 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     return raw || ('정답: ' + (q && q.o && q.o[q.a] ? q.o[q.a] : ''));
   }
 
-  function stemHtml(txt) {
+  /* 🖍️ 수진 님(11/25): 문제를 틀렸을 때 지문에서 '이 부분이 단서'인 곳에 형광펜을 칠해 달라
+     · data.js의 q.hl = 그 문항의 단서 구절(영어 원문 그대로) → 대소문자 무시하고 찾아 <mark>로 감싼다
+     · 맞혔을 때는 절대 칠하지 않는다(스포일러) — 오답·채점 결과의 틀린 문항에서만 */
+  function hlRanges(s, marks) {
+    var low = String(s).toLowerCase(), out = [];
+    (marks || []).forEach(function (mk) {
+      var t = String(mk || '').trim().toLowerCase();
+      if (!t) return;
+      var i = 0, k;
+      while ((k = low.indexOf(t, i)) >= 0) { out.push([k, k + t.length]); i = k + t.length; }
+    });
+    out.sort(function (a, b) { return a[0] - b[0] || b[1] - a[1]; });
+    var merged = [];
+    out.forEach(function (r) {
+      var last = merged[merged.length - 1];
+      if (last && r[0] <= last[1]) { if (r[1] > last[1]) last[1] = r[1]; }
+      else merged.push([r[0], r[1]]);
+    });
+    return merged;
+  }
+  function hlHtml(s, marks) {
+    var rs = hlRanges(s, marks);
+    if (!rs.length) return esc(s);
+    var h = '', pos = 0;
+    rs.forEach(function (r) {
+      h += esc(s.slice(pos, r[0])) + '<mark class="stem-hl">' + esc(s.slice(r[0], r[1])) + '</mark>';
+      pos = r[1];
+    });
+    return h + esc(s.slice(pos));
+  }
+  /* 형광펜이 들어간 문장만 뽑아 피드백 패널에서도 같은 표시로 보여 준다(지문까지 안 올라가도 보이게)
+     · 문장이 너무 길면 형광펜 주변만 잘라서 넘침을 막는다 */
+  function clipAround(s, marks, max) {
+    max = max || 190;
+    if (s.length <= max) return s;
+    var r = hlRanges(s, marks)[0];
+    if (!r) return s.slice(0, max - 1) + '…';
+    var start = Math.max(0, r[0] - 80), end = Math.min(s.length, start + max);
+    start = Math.max(0, Math.min(start, end - max));
+    return (start > 0 ? '… ' : '') + s.slice(start, end).trim() + (end < s.length ? ' …' : '');
+  }
+  function clueSentences(q) {
+    var s = String((q && q.q) || '');
+    if (!s || !q || !q.hl || !q.hl.length) return [];
+    return s.replace(/([.!?])\s+/g, '$1\u0001').split('\u0001').map(function (x) { return x.trim(); }).filter(function (x) {
+      return x && hlRanges(x, q.hl).length;
+    }).map(function (x) { return clipAround(x, q.hl); });
+  }
+
+  function stemHtml(txt, q, hlOn) {
     var s = String(txt || '');
+    var marks = hlOn && q && q.hl && q.hl.length ? q.hl : null;
+    var T = function (x) { return marks ? hlHtml(x, marks) : esc(x); };
     var p = stemParts(s);
-    if (!p) return '<h2 class="q-text">' + esc(s) + '</h2>';
+    if (!p) return '<h2 class="q-text" id="qStem">' + T(s) + '</h2>';
     var h = '';
-    if (p.lead) h += '<h2 class="q-text">' + esc(p.lead) + '</h2>';
-    h += '<div class="q-box">';
+    if (p.lead) h += '<h2 class="q-text">' + T(p.lead) + '</h2>';
+    h += '<div class="q-box"' + (marks ? ' id="qStem"' : '') + '>';
     p.items.forEach(function (it) {
       h += '<div class="q-bi"><span class="q-bk">' + esc(it.m) + '</span>' +
-        '<span class="q-bt">' + esc(it.t) + '</span></div>';
+        '<span class="q-bt">' + T(it.t) + '</span></div>';
     });
     return h + '</div>';
+  }
+
+  /* 오답 직후: 이미 그려진 지문을 형광펜 버전으로 갈아 끼운다 */
+  function markStemClue(q) {
+    if (!q || !q.hl || !q.hl.length) return;
+    var st = document.getElementById('qStem');
+    if (!st || !st.parentNode) return;
+    var tmp = document.createElement('div');
+    tmp.innerHTML = stemHtml(q.q, q, true);
+    var neu = tmp.querySelector('#qStem');
+    if (neu) st.parentNode.replaceChild(neu, st);
   }
 
   function renderQ() {
@@ -2471,6 +2533,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       addWrong(q);
       if (QS.wrongIds.indexOf(q.i) < 0) QS.wrongIds.push(q.i);
       setCombo(0, 0);
+      markStemClue(q);                 /* 🖍️ 틀렸으니 지문 단서에 형광펜 */
       document.body.classList.remove('fever');
       sfx('no');
       if (!QS.speed) { var qb = $('#quiz'); qb.classList.add('shake'); setTimeout(function () { qb.classList.remove('shake'); }, 320); }
@@ -2498,7 +2561,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     el.querySelector('.fb-head').innerHTML = '<img class="fb-mascot" src="assets/' + (ok ? 'mascot-win.png' : 'mascot-happy.png') + '?v=' + MV + '" alt="">' +
       '<span>' + (ok ? '정답이에요!' + (bonus ? ' 콤보 보너스 🎉' : ' 🎉') : '아쉬워요 😢') + '</span>' +
       '<span class="fb-xp">+' + gain + ' P</span>';
-    el.querySelector('.fb-text').innerHTML = expHtml(q, QS && QS.items[QS.i]);
+    el.querySelector('.fb-text').innerHTML = expHtml(q, QS && QS.items[QS.i], !ok);
     var b = $('#fbNext');
     b.textContent = QS.i + 1 >= QS.items.length ? '결과 보기 →' : '다음 문제 →';
     syncFbMark(q);
@@ -2573,7 +2636,20 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       '</div>';
   }
 
-  function expHtml(q, it) {
+  /* '풀이' 카드 안에서 '💡 3초 컷: …' 부분은 같은 카드 안의 강조 박스로 보여 준다
+     (수진 님 11/25: 전체 해석 없이 단서만으로 고르는 공식은 해석이 아니라 풀이 칸에) */
+  function secBodyHtml(txt, T) {
+    var s = String(txt || '');
+    var out = '';
+    s.split(/(?=💡)/).forEach(function (p) {
+      p = p.trim();
+      if (!p) return;
+      out += '<p class="' + (p.charAt(0) === '💡' ? 'fb-cut' : 'fb-sec-b') + '">' + T(p) + '</p>';
+    });
+    return out;
+  }
+
+  function expHtml(q, it, wrong) {
     var raw = String(q.e || '').replace(/\r/g, '').trim();
     if (!raw) return '<span class="fb-empty">해설이 아직 없어요.</span>';
     var chip = '';
@@ -2619,6 +2695,15 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var letter = 'ABCD'.charAt(ai);
     if (hasAns) h += '<div class="fb-ansline"><span>정답 ' + letter + '</span><b>' +
       esc(ansTxt.length <= 60 ? ansTxt : ansTxt.slice(0, 38) + '…') + '</b></div>';
+    /* 🖍️ 틀린 문제만: 지문 단서를 같은 형광펜으로 패널 안에도 한 번 더 (위로 올려 보지 않아도 바로 보이게) */
+    if (wrong && q.hl && q.hl.length) {
+      var cws = clueSentences(q);
+      if (cws.length) {
+        h += '<div class="fb-clue"><div class="fb-clue-h">🖍️ 지문 형광펜 단서<span>이 부분만 보면 답이 보여요</span></div>' +
+          cws.map(function (x) { return '<p class="fb-clue-p">' + hlHtml(x, q.hl) + '</p>'; }).join('') +
+          '</div>';
+      }
+    }
     /* "정답 O." 같은 중복 문장을 빼고 남은 첫 문장을 핵심 박스로 */
     var body = sents.filter(function (s) {
       return !(hasAns && /^정답\s*[OX0-9①-④][.)]?$/.test(s.trim()));
@@ -2652,7 +2737,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         var kb = bk.k === '원문' ? origTextFix(bk.b, omap, ohit) : bk.b;
         var kli = bk.k === '원문' ? bk.li.map(function (x) { return origTextFix(x, omap, ohit); }) : bk.li;
         h += '<div class="fb-sec ' + cls + '"><div class="fb-sec-k">' + esc(bk.k === '원문' ? (ohit.on ? '켈리 답지 원문 · 현재 보기 기준' : '켈리 답지 원문') : bk.k) + '</div>' +
-          (kb ? '<p class="fb-sec-b">' + T(kb) + '</p>' : '') +
+          (kb ? secBodyHtml(kb, T) : '') +
           (kli.length ? '<ul class="fb-sec-ul">' + kli.map(function (x) { return '<li>' + T(x) + '</li>'; }).join('') + '</ul>' : '') +
           '</div>';
         /* 연결어 문항은 해석 카드 바로 밑에 꿀팁 (원문 카드보다 위) */
@@ -4732,7 +4817,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         '<span class="mi-res">' + (x.pick == null ? '–' : right ? 'O' : 'X') + '</span></summary>' +
         '<div class="mi-body">' +
         '<div class="mi-row"><span>내 답</span><b class="' + (right ? 'ok' : 'no') + '">' + esc(cutTxt(pickTxt, 90)) + '</b></div>' +
-        expHtml(q) +
+        (right ? '' : '<div class="mi-stem">' + stemHtml(q.q, q, true) + '</div>') +
+        expHtml(q, x, !right) +
         '<div class="mi-src">📌 ' + esc(q.src || qLabel(q)) + '</div>' +
         '</div></details>';
     });
@@ -4756,8 +4842,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     $('#qBody').innerHTML = h;
     $('#qBody').scrollTop = 0;
     $('#qFb').classList.add('hidden');
-    var wrongNow = r.wrongIds.slice(), cfgNow = MINI.cfg;
-    var rw = $('#mRetryWrong');
+    var wrongNow = r.wrongIds.slice(), cfgNow = MINI.cfg;    var rw = $('#mRetryWrong');
     if (rw) rw.onclick = function () { closeMini(); startSession('ids', { ids: wrongNow, n: wrongNow.length, noScope: true, title: '미니 모의고사 오답 ' + wrongNow.length + '문항' }); };
     var ag = $('#mAgain');
     if (ag) ag.onclick = function () { closeMini(); startMini(cfgNow); };

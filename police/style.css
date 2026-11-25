@@ -1343,6 +1343,18 @@ body.boss .quiz::before{content:"";position:absolute;inset:0;pointer-events:none
 .fb-legend{font-size:10.5px;font-weight:700;color:var(--ink3);margin:-2px 0 10px;line-height:1.7}
 mark.hl-trap,mark.hl-must,mark.hl-num,mark.hl-soft,mark.hl-guilt{background:none;color:inherit;
   border-radius:3px;padding:0 2px;font-weight:900}
+mark.stem-hl{background:linear-gradient(180deg,rgba(255,214,64,.10) 6%,rgba(255,214,64,.36) 6%,rgba(255,214,64,.36) 92%,rgba(255,214,64,.10) 92%);color:#fff7d2;border-bottom:2px solid #ffd24a;border-radius:3px;padding:0 2px;font-weight:800;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+/* 🖍️ 피드백 패널 안의 단서 카드 · 풀이 칸 안의 '3초 컷' 박스 */
+.fb-clue{margin:0 0 11px;padding:9px 11px 10px;border-radius:12px;background:rgba(255,214,64,.07);border:1px solid rgba(255,214,64,.30)}
+.fb-clue-h{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;font-size:11px;font-weight:900;letter-spacing:.2px;color:#ffd24a;margin-bottom:5px}
+.fb-clue-h span{font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:0}
+.fb-clue-p{margin:0 0 4px;font-size:14px;line-height:1.68;color:var(--ink);word-break:keep-all;overflow-wrap:anywhere}
+.fb-clue-p:last-child{margin-bottom:0}
+.fb-cut{margin:7px 0 0;padding:7px 10px;border-radius:9px;background:rgba(255,214,64,.10);border:1px dashed rgba(255,214,64,.45);font-size:13.5px;line-height:1.62;color:#ffe9a8;font-weight:700;word-break:keep-all;overflow-wrap:anywhere}
+.mi-stem{margin:0 0 8px;padding:8px 10px;border-radius:10px;background:var(--card2);border:1px solid var(--line2)}
+.mi-stem .q-text{font-size:14px;line-height:1.62;margin:0}
+.mi-stem .q-box{margin:0;border:0;background:none;padding:0}
+
 mark.hl-trap{background:rgba(248,113,113,.18);color:#ffb9b9;border-bottom:2px solid rgba(248,113,113,.75)}
 mark.hl-must{background:rgba(248,113,113,.22);color:#ffc2c2;border-bottom:2px solid #f87171}
 mark.hl-num{background:rgba(255,194,75,.16);color:#ffd68a;border-bottom:2px solid rgba(255,194,75,.7)}
