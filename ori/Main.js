@@ -3699,7 +3699,7 @@ function cfDo_(S, name, fn, sig) {
   try { fn(st); }
   catch (e) {
     st.s = 0;
-    if (e && e.cfCut) { st.t = cfLearn_(st.t, (Date.now() - t0) / 1000); cfSave_(S); return false; }
+    if (e && e.cfCut) { st.t = cfLearn_(st.t, (Date.now() - t0) / 1000); st.a = t0; cfSave_(S); return false; }   // st.a: 중간까지 한 때 (다음엔 다른 밀린 단계 먼저, 11/25)
     cfSave_(S); throw e;
   }
   st.s = 0; st.d = t0; st.t = cfLearn_(st.t, (Date.now() - t0) / 1000);
@@ -3736,7 +3736,10 @@ function cfRun_(S, list) {
     const A = od(a), B = od(b);
     if (A !== B) return A ? -1 : 1;
     if (A && a.st.d && b.st.d && urgent(a) !== urgent(b)) return urgent(a) ? -1 : 1;   // 한 번도 안 돈 처음엔 정해진 순서대로
-    if (A && (a.st.d || 0) !== (b.st.d || 0)) return (a.st.d || 0) - (b.st.d || 0);
+    // 밀린 단계끼리는 마지막으로 손댄 때(다 한 때·중간까지 한 때 중 늦은 것) 순서 (11/25: '리뷰 확인'이 매번 중간까지만 해서 계속 '가장 오래 밀림'으로 맨 앞 →
+    //  월급시트가 11/24 19:28부터 한 번도 차례를 못 받음. 중간까지 한 단계는 이어서 하므로 다음 확인에선 다른 밀린 단계 먼저)
+    const touched = function (x) { return Math.max(x.st.d || 0, x.st.a || 0); };
+    if (A && touched(a) !== touched(b)) return touched(a) - touched(b);
     return a.i - b.i;
   });
   let ranAny = false;
@@ -4008,14 +4011,16 @@ function checkFullInner_() {
       bgOrder_(p, Date.now()).forEach(function (x) { if (bgFits_(x.t, p)) bgRun_(x.t, p); });
     } },
     // 월급시트는 진행이 바뀌었을 때(인원·방제·날짜·상태·가격) 또는 30분마다. 나눠서 함 (못 한 건 PAY_PENDING → 다음 확인·5분 실행이 이어서)
-    { n: '월급시트', need: 60, run: function () {
+    // 월급시트는 스스로 시간을 봐서(late_ 280초) 멈추고 다음에 이어 함 → 예상 시간은 90초로 (11/25: 걸린 시간 254초를 기억해 매번 '시간 모자람'으로 못 함)
+    { n: '월급시트', need: 90, self: 1, run: function () {
       if (!CONFIG.PAY_SHEET_ID) return;
       const rr = readRuns_(), live = rr.filter(function (r) { return r['진행 상태'] !== '종료'; });
       const paySig = cfHash_(JSON.stringify([cfRunSig_(rr), live.map(function (r) { return [r['인원'], r['목표인원'], r['가격'], r['총건수'], r['업체'], r['구매시간']]; })]));
       if (!(Date.now() - Number(props.getProperty('PAY_AT') || 0) > 30 * 60000 || props.getProperty('PAY_SIG') !== paySig || props.getProperty('PAY_PENDING'))) return;
       props.setProperty('PAY_PENDING', '1');   // 끝나야 지움
-      try { updatePay_(true); props.setProperty('PAY_SIG', paySig); props.setProperty('PAY_AT', String(Date.now())); props.deleteProperty('PAY_PENDING'); }
-      catch (e) { if (e && e.yieldLock) throw e; if (e && e.payLate) note_('✓ 월급시트 나눠서 하는 중 (' + e.payLate + ', 다음 확인에서 이어서. 오류 아님)'); else note_(payErrText_(e)); }
+      // 여기서 이어 했으면(다 했거나 나눠서 하는 중) '월급시트 이어서 N분째 밀림'도 지금부터 셈 (BG_pay)
+      try { updatePay_(true); props.setProperty('PAY_SIG', paySig); props.setProperty('PAY_AT', String(Date.now())); props.deleteProperty('PAY_PENDING'); props.setProperty('BG_pay', String(Date.now())); }
+      catch (e) { if (e && e.yieldLock) throw e; if (e && e.payLate) { props.setProperty('BG_pay', String(Date.now())); note_('✓ 월급시트 나눠서 하는 중 (' + e.payLate + ', 다음 확인에서 이어서. 오류 아님)'); } else note_(payErrText_(e)); }
     } }
   ]);
   // 미뤄도 되는 일(정리·한눈에 명단 다시 불러오기·포토전달 탭·월급시트 이어하기)은 5분 실행(bgLane_)이 '가장 오래 밀린 것부터' 함 (11/18). 거기서도 3배 넘게 밀렸으면 여기서
@@ -4656,7 +4661,7 @@ const BG_TASKS = [
   { k: 'dashstale', every: 5, max: 280, label: '한눈에 명단 다시 불러오기', run: function () { dashListStale_(); } },
   { k: 'phototab', every: 15, max: 250, label: '📷포토전달 탭', run: function () { photoTabBuild_(readRuns_()); } },
   { k: 'slow', every: 30, max: 200, self: 1, need: 40, label: '정리(취완·리뷰 독촉·리뷰 보고·폼수정 탭 등)', last: function (p) { return Number(p.getProperty('SLOW_AT') || 0); }, run: function () { slowTasks_(readRuns_(), {}); } },
-  { k: 'pay', every: 10, max: 150, label: '월급시트 이어서', due: function (p) { return !!p.getProperty('PAY_PENDING') && !!CONFIG.PAY_SHEET_ID; }, run: function () { const p = PropertiesService.getScriptProperties(); try { updatePay_(true); p.deleteProperty('PAY_PENDING'); } catch (e) { if (e && e.payLate) note_('✓ 월급시트 나눠서 하는 중 (' + e.payLate + ', 다음에 이어서. 오류 아님)'); else throw e; } } },
+  { k: 'pay', every: 10, max: 150, self: 1, need: 90, label: '월급시트 이어서', due: function (p) { return !!p.getProperty('PAY_PENDING') && !!CONFIG.PAY_SHEET_ID; }, run: function () { const p = PropertiesService.getScriptProperties(); try { updatePay_(true); p.deleteProperty('PAY_PENDING'); } catch (e) { if (e && e.payLate) note_('✓ 월급시트 나눠서 하는 중 (' + e.payLate + ', 다음에 이어서. 오류 아님)'); else throw e; } } },
   { k: 'props', every: 120, max: 250, label: '속성 정리', run: function () { propsCleanup_(); } }
 ];
 // 5분 실행(미뤄도 되는 일) 중에 15분 확인이 잠금을 기다리면 단계 사이에서 멈춤 (멈춘 일은 끝난 걸로 안 적음)
