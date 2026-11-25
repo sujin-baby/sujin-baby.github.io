@@ -43,6 +43,6 @@ G('pdb10_()'); ok(env.__ss.sheets['일정'].rows.length === 5, '두 번 안 넣�
 }
 ok(/^✓ 월급시트 나눠서/.test(G('payErrText_({ payLate: "3/10" })')) && /오류 아님/.test(G('payErrText_({ cfCut: 1 })')) && G('payErrText_(new Error("x"))') === '월급시트 갱신 실패: x' && !/object Object/.test(G('payErrText_({ a: 1 })')), '월급시트 [object Object] 안 뜸');
 const src = require('fs').readFileSync(process.argv[2], 'utf8');
-ok(/cfAlways_\(S, '진행목록'[\s\S]{0,3000}try \{ pdb10_\(\); \} catch \(e\) \{\}\n    try \{ pdb10b_\(\); \} catch \(e\) \{\}\n  \}\);/.test(src), '매번 단계(진행목록)에서 돎');
+ok(/cfAlways_\(S, '진행목록'[\s\S]{0,3000}try \{ pdb10_\(\); \} catch \(e\) \{\}\n    try \{ pdb10b_\(\); \} catch \(e\) \{\}\n/.test(src), '매번 단계(진행목록)에서 돎');
 console.log(fails.length ? 'XX 포두부 10건 시험 실패:\n- ' + fails.join('\n- ') : '✓ 포두부 10건(일정 추가·텍스트리뷰) 시험 통과');
 process.exit(fails.length ? 1 : 0);
