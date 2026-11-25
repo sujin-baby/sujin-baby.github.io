@@ -17,5 +17,15 @@ ok(t('9ynp4el7-2') === '#택11.24 동대문청년 롱패딩 후리스 4', '11.24
 ok(G('__FILES') === 0 && G('globalThis.__NO_FILE_RENAME') === false, '명단 시트·폼 이름은 안 바꿈');
 ok(/^✓/.test(env.__props.get('LPHASH1')), '기록 ' + env.__props.get('LPHASH1'));
 ok(Number(G('readRuns_()').filter(x => x['요청ID'] === '9ynp4el7-3')[0]['목표인원']) === 2, '목표 2 그대로');
+
+// lpSpace1_: 11.24도 같은 모양
+{
+  let e2 = ''; try { G('lpSpace1_()'); } catch (x) { e2 = String(x.stack || x); }
+  ok(!e2, '오류2 ' + e2);
+  ok(t('9ynp4el7-2') === '#택11.24동대문청년 롱패딩후리스4', '11.24 같은 모양 ' + t('9ynp4el7-2'));
+  ok(Number(G('readRuns_()').filter(x => x['요청ID'] === '9ynp4el7-2')[0]['목표인원']) === 4, '11.24 목표 4 그대로');
+  ok(G('__FILES') === 0, '11.24도 파일 이름 안 바꿈');
+  ok(/^✓/.test(env.__props.get('LPSPACE1')), '기록 ' + env.__props.get('LPSPACE1'));
+}
 console.log(fails.length ? 'XX 롱패딩 # 시험 실패:\n- ' + fails.join('\n- ') : '✓ 롱패딩후리스 방제 # 붙임 시험 통과');
 process.exit(fails.length ? 1 : 0);
