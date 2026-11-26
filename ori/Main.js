@@ -1816,6 +1816,16 @@ function diag_(p) {
       out.payAudit.push(sh.getName() + ' 줄 ' + n + '개 봄');
     });
   } catch (e) { out.payAuditErr = String(e); }
+  // &listtab=요청ID: 그 의뢰 명단 시트 '명단' 탭 맨 아래 줄·메모, 넣은 응답 기록(LISTK_)에 응답 시각이 있는지 (읽기만, 11/27 늦은 응답 확인)
+  if (p.listtab) try {
+    const r0 = readRuns_().filter(function (x) { return String(x['요청ID']) === String(p.listtab); })[0];
+    const lss = SpreadsheetApp.openById(String(r0['시트ID'])), sh = lss.getSheetByName(LIST_TAB), pr = PropertiesService.getScriptProperties();
+    const lr = sh.getLastRow(), lc = Math.min(sh.getLastColumn(), 16), from = Math.max(2, lr - 4);
+    const k = String(pr.getProperty('LISTK_' + r0['시트ID']) || '').split(',');
+    out.listtab = { lastRow: lr, head: sh.getRange(2, 1, 1, lc).getDisplayValues()[0], rows: sh.getRange(from, 1, lr - from + 1, lc).getDisplayValues().map(function (v) { return v.map(function (c) { return String(c).replace(/01[0-9][- ]?[0-9]{3,4}[- ]?[0-9]{4}/g, '<폰>').slice(0, 40); }).join(' | '); }),
+      notes: sh.getRange(from, 1, lr - from + 1, lc).getNotes().map(function (v) { return v.filter(Boolean).join(' / ').slice(0, 200); }), listK: k.length, listKlast: k.slice(-3), sig: String(pr.getProperty('LISTSIG_' + r0['시트ID']) || '').slice(0, 200), listv: pr.getProperty('LISTV_' + r0['시트ID']),
+      tabs: lss.getSheets().map(function (t) { return t.getName() + (t.getFormUrl() ? '(폼)' : '') + ':' + t.getLastRow(); }) };
+  } catch (e) { out.listtabErr = String(e); }
   if (p.pay) try {
     out.payRows = [];
     // &paym=10: 그 달 탭 (읽기만)
