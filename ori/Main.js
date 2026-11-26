@@ -2106,7 +2106,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'LPSPACE1', 'LPFILE1', 'RVZIP_AT', 'CF_FCHK', 'PAY_POSTDAY', 'RV_GONE', 'DASHW1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'LPSPACE1', 'LPFILE1', 'RVZIP_AT', 'CF_FCHK', 'PAY_POSTDAY', 'RV_GONE', 'DASHW1', 'PAYDELBJ1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3850,6 +3850,7 @@ function checkFullInner_() {
     try { lpSpace1_(); } catch (e) {}
     try { lpFile1_(); } catch (e) {}
     try { dashW1_(); } catch (e) {}
+    try { payDelBj1_(); } catch (e) {}
   });
   cfAlways_(S, '다음 일차', function () {
     try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
@@ -10127,6 +10128,29 @@ function dashW1_() {
   if (props.getProperty('DASHW1')) return;
   try { const sh = adminSs_().getSheetByName(DASH_TAB); if (sh) { dashWidths_(sh); sh.setColumnWidth(15, 150); } props.setProperty('DASHW1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm')); }
   catch (e) { props.setProperty('DASHW1', '실패(' + (e && e.message || e) + ')'); }
+}
+// (11/26 한 번, 사용자 "지우고 싹다 검토해") 월급시트 11월 탭의 비전이공이공 황금향 옛 줄 2개 지움 — 11/23 한라봉으로 이름을 바꿀 때 안 바뀌고 남은 줄.
+//  진행목록에 없는 이름이고(한라봉 줄이 따로 있음), 이름이 정확히 같은 줄이 하나씩일 때만. 아래 줄부터 지움 (11.23 진행비 2,500원 두 번 잡힌 것)
+function payDelBj1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('PAYDELBJ1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
+  try {
+    const sh = payTab_(11, true), L = sh ? payLayout_(sh) : null;
+    if (!L) { props.setProperty('PAYDELBJ1', (st + ' 실패(11월 탭 없음)').slice(-400)); return; }
+    const want = ['#11.23비전이공이공 황금향 토스5', '#11.24 비전이공이공 황금향 5'];
+    const runNames = readRuns_().map(function (r) { return payNameOf_(r).replace(/\s+/g, ''); });
+    if (want.some(function (w) { return runNames.indexOf(w.replace(/\s+/g, '')) >= 0; })) { props.setProperty('PAYDELBJ1', (st + ' 실패(진행목록에 같은 이름 있음)').slice(-400)); return; }
+    const last = sh.getLastRow(), names = sh.getRange(L.head + 1, L.name, last - L.head, 1).getValues().map(function (x) { return String(x[0]).trim(); });
+    const rows = [];
+    for (let k = 0; k < want.length; k++) {
+      const hit = []; names.forEach(function (nm, i) { if (nm === want[k]) hit.push(L.head + 1 + i); });
+      if (hit.length !== 1) { props.setProperty('PAYDELBJ1', (st + ' 실패(' + want[k] + ' ' + hit.length + '줄)').slice(-400)); return; }
+      rows.push(hit[0]);
+    }
+    rows.sort(function (a, b) { return b - a; }).forEach(function (r) { sh.deleteRow(r); });
+    props.setProperty('PAYDELBJ1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 11월 탭 ' + rows.sort(function (a, b) { return a - b; }).join('·') + '행 지움: ' + want.join(', '));
+    note_('✓ 월급시트 중복 옛 줄 지움 (사용자 11/26): ' + want.join(', '));
+  } catch (e) { props.setProperty('PAYDELBJ1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
 }
 function salad30_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SALAD30') || '');
