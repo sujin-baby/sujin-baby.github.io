@@ -21,5 +21,11 @@ const plans = env.__ss.sheets['일정'].rows.slice(1).filter(x => x[8] === '대�
 const sum = 5 + 5 + plans.reduce((a, x) => a + Number(x[6]), 0);
 ok(sum === 40 && plans.every(x => Number(x[6]) === 5) && plans.length === 6, '남은 40건 하루 5건 (진행 2 + 일정 ' + plans.length + ') 합 ' + sum);
 ok(/^✓/.test(env.__props.get('ZRN5')), '기록 ' + env.__props.get('ZRN5'));
+// 빈박스 날은 텍스트리뷰 (dayMix)
+env.__props.set('RV_Z1', JSON.stringify({ kind: 'mix', mix: '포토리뷰 10, 텍스트리뷰 40' }));
+G('zrnTxt1_()');
+const rv = JSON.parse(env.__props.get('RV_Z1'));
+const dmk = Object.keys(rv.dayMix || {});
+ok(dmk.length === 8 && dmk.every(k => rv.dayMix[k] === '텍스트리뷰 5') && !dmk.some(k => /안마기10$/.test(k)), '2일차부터 8일 텍스트리뷰 5 ' + JSON.stringify(rv.dayMix));
 console.log(fails.length ? 'XX 제르넬 하루 5건 시험 실패:\n- ' + fails.join('\n- ') : '✓ 제르넬 안마기 2일차부터 하루 5건 시험 통과');
 process.exit(fails.length ? 1 : 0);
