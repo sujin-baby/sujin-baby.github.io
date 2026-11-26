@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=2026112511">
+<link rel="stylesheet" href="style.css?v=2026112601">
 </head>
 <body>
 
@@ -61,6 +61,27 @@
       <b class="tp-v" id="todayPlanTxt">계산 중…</b>
       <i class="tp-go">›</i>
     </button>
+  </section>
+
+  <section class="gtd hidden" id="gtDash" aria-label="지텔프 D-3 43점 안전빵 대시보드">
+    <div class="gtd-top">
+      <div class="gtd-tt">
+        <b>🎯 지텔프 <span id="gtdDday">D-3</span> · 43점 안전빵</b>
+        <i id="gtdSub">청취·독해 한 줄 찍기 + 문법 몰빵</i>
+      </div>
+      <span class="gtd-badge" id="gtdBadge">—</span>
+    </div>
+    <div class="gtd-mid" id="gtdMid"></div>
+    <div class="gtd-strip" id="gtdStrip"></div>
+    <div class="gtd-cap" id="gtdCap"></div>
+    <div class="gtd-tbl" id="gtdTable"></div>
+    <div class="gtd-acts">
+      <button class="gtd-btn wide" id="gtdWeak15"><span class="gtd-bi">🔥</span><b>약점 집중 15문제</b><i id="gtdWeakSub">지금 시작 ›</i></button>
+      <button class="gtd-btn" id="gtdMini26"><span class="gtd-bi">⏱️</span><b>실전 26문항</b><i>20분 · 실제 비율</i></button>
+      <button class="gtd-btn" id="gtdCheat"><span class="gtd-bi">⚡</span><b>3초 컷 치트시트</b><i>시험장 1페이지</i></button>
+    </div>
+    <button class="gtd-book" id="gtdBook">📝 내 오답 공식 암기장<span class="n" id="gtdBookN">0</span><span class="go">›</span></button>
+    <p class="gtd-tip">💡 청취·독해는 전 문항 <b>같은 번호 한 줄</b>로 통일, 문법 26문항에 <b>20분</b> 풀투자</p>
   </section>
 
   <section class="insight" id="insightCard" aria-label="내 약점 한눈에 보기">
@@ -408,6 +429,20 @@
   <div class="quiz-body" id="bBody"></div>
 </div>
 
+<div id="gtcs" class="gtcs hidden" role="dialog" aria-modal="true" aria-label="지텔프 3초 컷 치트시트">
+  <div class="gtcs-in">
+    <div class="gtcs-head">
+      <b>⚡ 시험장 3초 컷 치트시트</b>
+      <button id="gtcsClose" class="q-close" aria-label="닫기">✕</button>
+    </div>
+    <div class="gtcs-scroll" id="gtcsBody"></div>
+    <div class="gtcs-foot">
+      <button class="btn primary wide" id="gtcsBook">📝 내 오답 공식 암기장 열기</button>
+      <button class="btn ghost wide" id="gtcsOk">닫기</button>
+    </div>
+  </div>
+</div>
+
 <div id="sheet" class="sheet hidden">
   <div class="sheet-bg" data-close="1"></div>
   <div class="sheet-in" id="sheetIn"></div>
@@ -429,7 +464,7 @@
   <div class="ox-body" id="oxBody"></div>
 </div>
 
-<script src="data.js?v=2026112511"></script>
-<script src="app.js?v=2026112511"></script>
+<script src="data.js?v=2026112601"></script>
+<script src="app.js?v=2026112601"></script>
 </body>
 </html>

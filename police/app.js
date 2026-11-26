@@ -114,6 +114,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!S.miniBest) S.miniBest = {}; /* 미니 모의고사 개인 최고 */
     if (!S.miniRuns) S.miniRuns = 0;
     if (!S.miniSeen || typeof S.miniSeen !== 'object') S.miniSeen = {}; /* 문항별 모의고사 출제 기록 */
+    if (!Array.isArray(S.miniHistory)) S.miniHistory = []; /* 최근 모의고사 결과 (지텔프 D-3 대시보드 연동) */
     /* 📝 오답 공식 암기장: 처음 한 번 기본 14개를 깔고, 지운 기록(del)은 계속 남겨 다시 뜨지 않게 한다 */
     if (!S.gbook || typeof S.gbook !== 'object') S.gbook = { items: [], del: {}, seeded: false };
     /* 🔤 경찰 두문자 암기장 */
@@ -885,7 +886,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
      2026-11-21 켈리 지텔프 최신 교재(Unit 01~07) 사진 원문 기준으로 전면 재작성.
      · Unit 01 가정법 1~2 · Unit 02 should 생략 3 · Unit 03 시제 4~10
      · Unit 04 준동사 11~20 · Unit 05 관계사 21~26 · Unit 06 조동사 27~31 · Unit 07 연결어 32~33
-     · 3번 '주요명제결충'은 교재 원문 표기라 고치지 않는다(수진 님 확인 11/19) */
+     · 3번은 11/26 수진 님 지시로 짧은 공식(imperative·essential·suggest 등 that절)으로 바꿨다 */
   var GP_TABLE = [
     { g: '가정법 1~2', tip: '오답 POINT: if+주어+had+명사·if+주어+could/did는 가정법 과거, if+주어+현재시제는 가정법 문제가 아니에요. 동사 뒤 if가 "~인지 아닌지"면 가정법이 아니고, 두 시제가 섞이면 혼합가정법이에요.',
       rows: [
@@ -893,7 +894,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       ['2', 'If 주어 had pp (= Had 주어 pp)', '주어 would / could / might + have pp']
     ] },
     { g: 'should 생략 3', tip: 'that 절 동사 자리가 빈칸이면 (should) 생략형 — 동사원형(또는 be동사원형)이 정답이에요.', rows: [
-      ['3', "'주요명제결충'과 관련된 동사·명사·형용사", 'that 절에 동사원형']
+      ['3', 'imperative·essential·suggest 등 that절', '주어 + 동사원형']
     ] },
     { g: '시제 4~10', tip: '단서 단어 뜻: now·right now·at the moment·as of this moment = 지금 이 순간 / then = 그때 / up until then = 그때까지 / by then·by the time = 그때쯤·~할 때까지 / until = ~까지 / for + 기간 = ~동안 / since = ~부터(과거 출발점) / ago = ~전에\n오답 POINT: for가 나왔다고 무조건 완료진행이 아니라 for+시간일 때만 정답, since 뒤에 과거시점이 오면 현재완료진행도 가능해요.\n7번 until은 뒤에 현재(미래 얘기) / 8번 until은 뒤에 과거 시점(then=그때 등)이 와요 — 둘 다 until이지만 뒤에 오는 시제로 갈려요.\n켈리쌤 진팁: ing만 정답인 문제가 꼭 나오고, 진행형 6종이 한 문제씩 출제돼요.',
       rows: [
@@ -983,37 +984,106 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var m = String((q && q.e) || '').match(/💡\s*3초\s*컷\s*[:：]\s*([^\n]+)/);
     return m ? m[1].trim() : '';
   }
-  /* 문항 해설의 '💡 3초 컷: 단서 — 규칙 = 정답'을 카드 한 장으로 추출 */
+  /* 문항 해설의 '💡 3초 컷: 단서 — 규칙 = 정답'을 카드 한 장으로 추출
+     · 공식(f)은 G-POINT 표의 짧은 공식 하나로 통일하고, 카드 본문(m)은 그 문제의 실제 단서(문장 표현)만 남긴다
+     · 그래서 같은 공식이 문제마다 다르게 쌓이지 않는다(2026-11-26 수진 님 지시) */
   function gbFromQ(q) {
-    var cut = gbCut(q), body = cut, ans = '';
+    var cut = gbCut(q), body = cut, ans = '', cue = '';
     if (cut) {
       var eq = cut.split(/\s*=\s*/);
       if (eq.length > 1) { ans = eq.pop(); body = eq.join(' = '); }
+      var dash = body.split(/\s*[—–]\s*/);
+      if (dash.length > 1) cue = dash[0].trim();       /* 빈칸을 정하게 만든 실제 문장 표현 */
     }
     var row = q.gp ? gpRowOf(q.gp) : null;
     var f = row ? (row.r[1] + ' → ' + row.r[2])
                 : gbClip(String(body).split(/\s*(?:→|—)\s*/)[0] || q.hint || unitName(q.c, q.u) || '핵심 공식', 44);
-    var m = body ? gbClip(body, 110) : (q.hint ? gbClip(q.hint, 110) : '');
+    var m = row ? (cue ? cue + ' 뒤' : '') : (body ? gbClip(body, 110) : (q.hint ? gbClip(q.hint, 110) : ''));
     return { t: gbTypeOfGp(q.gp), f: gbClip(f, 78), m: m, tip: ans ? ('정답 ' + gbClip(ans, 42)) : '' };
   }
-  /* 틀릴 때마다 호출 — 같은 문항은 중복 추가 없이 횟수만 올리고 맨 위로 */
+  /* 같은 공식 판별 키 — G-POINT 표에서 온 공식끼리 공백·기호만 달라도 한 장으로 본다 */
+  function gbKey(f) {
+    return String(f || '').replace(/\s+/g, '').replace(/[·・.,:→\-–—]/g, '').toLowerCase();
+  }
+  /* 틀릴 때마다 호출 — 같은 공식은 새 카드로 쌓지 않고 한 장에 합친다
+     · 같은 문항은 횟수만 올리고 맨 위로
+     · 다른 문항이라도 공식(f)이 같으면 그 카드에 문제만 이어 붙인다(중복 카드 방지) */
   function gbookAdd(q) {
     if (!q || q.s !== 'gtelp' || !S.gbook) return '';
     var id = 'q-' + q.i, it = null, i;
     var back = !!S.gbook.del[id];       /* 예전에 직접 지운 문항이면 다시 깨운다 */
     if (back) delete S.gbook.del[id];
     for (i = 0; i < S.gbook.items.length; i++) if (S.gbook.items[i].id === id) { it = S.gbook.items[i]; break; }
+    var c = gbFromQ(q), key = gbKey(c.f);
+    if (!it) {
+      /* 공식이 같은 카드가 이미 있으면 그 카드에 합친다 */
+      for (i = 0; i < S.gbook.items.length; i++) {
+        if (gbKey(S.gbook.items[i].f) === key) { it = S.gbook.items[i]; break; }
+      }
+    }
     if (it) {
       it.n = (it.n || 1) + 1;
       it.at = Date.now();
       it.new = true;
+      var qids = (it.qids || (it.qid ? [it.qid] : [])).slice();
+      if (qids.indexOf(q.i) < 0) qids.push(q.i);
+      it.qids = qids;
+      if (qids.length > 1) {
+        it.multi = true;
+        if (it.tip && it.tip.indexOf('정답 ') === 0) it.tip = '';
+      }
       return 'upd';
     }
-    var c = gbFromQ(q);
-    c.id = id; c.src = 'q'; c.qid = q.i; c.gp = q.gp || 0;
+    c.id = id; c.src = 'q'; c.qid = q.i; c.qids = [q.i]; c.gp = q.gp || 0;
     c.n = 1; c.at = Date.now(); c.new = true; c.d = todayStr();
     S.gbook.items.push(c);
     return back ? 'back' : 'new';
+  }
+  /* 기존에 저장된 암기장 정리 — 같은 공식 카드가 여러 장이면 한 장으로 합친다(앱 켤 때 1회) */
+  function gbMigrate() {
+    if (!S.gbook || S.gbook.v === 2) return false;
+    var items = Array.isArray(S.gbook.items) ? S.gbook.items : [], keep = {}, out = [], changed = false;
+    var qCache = {};
+    var qOf = function (id) {
+      if (!id) return null;
+      if (!(id in qCache)) qCache[id] = D.questions.filter(function (q) { return q.i === id; })[0] || null;
+      return qCache[id];
+    };
+    items.forEach(function (it) {
+      if (!it) return;
+      /* 예전 텍스트로 저장된 문제 유도 카드는 지금 공식표 기준으로 다시 쓴다 */
+      if (it.src === 'q' && it.qid) {
+        var q = qOf(it.qid);
+        if (q) {
+          var fresh = gbFromQ(q);
+          if (fresh.f && fresh.f !== it.f) { it.f = fresh.f; changed = true; }
+          if (q.gp) { it.m = fresh.m || ''; it.t = fresh.t; }
+        }
+      }
+      var k = gbKey(it.f);
+      var qids = (it.qids || (it.qid ? [it.qid] : [])).filter(Boolean);
+      if (qids.length > 1) it.qids = qids.filter(function (x, i2) { return qids.indexOf(x) === i2; });
+      if (!k) { out.push(it); return; }
+      var t = keep[k];
+      if (!t) { keep[k] = it; out.push(it); return; }
+      /* 합치기: 횟수는 더하고, 최신 기록·문제 목록은 살린다 */
+      t.n = (t.n || 1) + (it.n || 1);
+      if ((it.at || 0) > (t.at || 0)) { t.at = it.at; t.new = true; }
+      var all = ((t.qids || (t.qid ? [t.qid] : [])).concat(qids)).filter(Boolean);
+      t.qids = all.filter(function (x, i3) { return all.indexOf(x) === i3; });
+      if (!t.m && it.m) t.m = it.m;
+      changed = true;
+    });
+    /* 여러 문제가 한 카드에 모였으면 "정답 X"는 한 문제 얘기라 지운다 */
+    out.forEach(function (it) {
+      if (it.src === 'q' && (it.qids || []).length > 1) {
+        if (it.tip && it.tip.indexOf('정답 ') === 0) { it.tip = ''; changed = true; }
+        it.multi = true;
+      }
+    });
+    if (changed) S.gbook.items = out;
+    S.gbook.v = 2;
+    return changed;
   }
   function gbNotify() {
     GB.notiN++;
@@ -1038,7 +1108,9 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var bits = [];
     if (it.src === 'q') {
       if (it.gp) bits.push('<b>G-POINT ' + it.gp + '</b>');
-      if (it.qid) bits.push(esc(it.qid));
+      var qids = it.qids || (it.qid ? [it.qid] : []);
+      if (qids.length > 1) bits.push('관련 문제 ' + qids.length + '개');
+      else if (it.qid) bits.push(esc(it.qid));
       bits.push('틀린 ' + (it.n || 1) + '번');
       if (it.d) bits.push(gbDate(it.d));
     } else if (it.src === 'custom') {
@@ -1235,14 +1307,14 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       h += '<button class="ic-row' + (hot ? ' hot' : '') + (r.a ? '' : ' na') + '" data-k="' + esc(r.k) + '">' +
         '<span class="ic-n">' + esc(r.name) + '</span>' +
         '<span class="ic-track"><i class="' + (r.a ? lv : '') + '" style="width:' + (r.a ? Math.max(4, pct) : 0) + '%"></i></span>' +
-        (r.a ? '<b class="ic-p ' + lv + '">' + pct + '%</b><em class="ic-w">오답 ' + r.w + '</em>'
+        (r.a ? '<b class="ic-p ' + lv + '">' + pct + '%</b><span class="ic-fr">(' + r.ok + '/' + r.a + ')</span><em class="ic-w">현재오답 ' + r.w + '</em>'
              : '<b class="ic-p na">미풀이</b>') +
         (hot ? '<span class="ic-fire">🔥 집중</span>' : '') +
         '</button>';
     });
     box.innerHTML = h;
     var note = $('#icNote');
-    if (note) note.textContent = any ? '정답률 낮은 순 · 🔥 = 집중 보완 2곳' : '문제를 풀면 단원별 정답률이 쌓여요';
+    if (note) note.textContent = any ? '정답률 낮은 순 · 괄호 = 맞힌/푼 개수 · 🔥 = 집중 보완 2곳' : '문제를 풀면 단원별 정답률이 쌓여요';
     $$('#icRows [data-k]').forEach(function (b) {
       b.onclick = function () { icTap(b.getAttribute('data-k')); };
     });
@@ -1265,6 +1337,240 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     } else {
       startSession('ids', { ids: pool.map(function (q) { return q.i; }), n: 15, noScope: true, title: '🔥 ' + nm + ' 집중 복습' });
     }
+  }
+
+  /* ============================================================
+     🎯 지텔프 D-3 · 43점 안전빵 대시보드 (2026-11-26 신설)
+     · 순경 합격선 = 3영역 합 129점(평균 43점). 문법 26문항은 100점 환산(1개≈3.85점)
+     · 청취·독해는 한 줄 찍기(25+25=50)를 깔고 문법 몫으로 합격선을 넘긴다
+     · 안전빵 = 문법 23개(88점), 24개(92점)면 찍기가 37점으로 떨어져도 43.0점
+     ============================================================ */
+  var GTN = 26, GTSAFE = 23, GTMIN = 21;
+  function gtScore26(n) { return Math.round(n / GTN * 100); }
+  function gtTotal(n, pick) { return Math.round((gtScore26(n) + pick) / 3 * 10) / 10; }
+  /* 누적 문법 정답률 → 26문항 환산 */
+  function gtPress() {
+    var a = 0, ok = 0, w = 0;
+    for (var k in S.unit) {
+      var p = String(k).split(':');
+      if (p[0] !== 'gtp33') continue;
+      a += S.unit[k].a || 0; ok += S.unit[k].ok || 0;
+    }
+    D.questions.forEach(function (q) { if (q.s === 'gtelp' && S.wrong[q.i]) w++; });
+    return { a: a, ok: ok, acc: a ? Math.round(ok / a * 100) : 0, est: a ? Math.round(ok / a * GTN) : 0, w: w };
+  }
+  function gtRecentMini() {
+    var h = (S.miniHistory || []).filter(function (x) { return x && (x.id === 'gt26' || x.id === 'gt10'); });
+    return h.length ? h[h.length - 1] : null;
+  }
+  function gtBestMini() {
+    var b = S.miniBest || {};
+    if (b.gt26) return { ok: b.gt26, tot: 26 };
+    if (b.gt10) return { ok: b.gt10, tot: 10 };
+    return null;
+  }
+  function gtWeakTargets() {
+    return weakRows().filter(function (r) { return r.s === 'gtelp' && r.a >= 1; })
+      .sort(function (x, y) { return (x.ok / x.a) - (y.ok / y.a); }).slice(0, 2);
+  }
+  function gtUnitShort(r) { return String(r.name || '').replace(/^(Unit\s*)?\d+\s*/, ''); }
+  /* 미니 모의고사 채점 → 43점 안전빵 판정 (청취·독해 찍기 40~50점 가정) */
+  function gtPassHtml(ok, tot) {
+    var ok26 = tot === GTN ? ok : Math.round(ok / tot * GTN);
+    var sc = gtScore26(ok26);
+    var lo = (sc + 40) / 3, hi = (sc + 50) / 3, worst = (sc + 37) / 3;
+    var gap = Math.max(0, GTSAFE - ok26);
+    var lv = ok26 >= GTSAFE ? '' : ok26 >= GTMIN ? ' warn' : ' bad';
+    var badge = ok26 >= 24 ? '✅ 43점 안전빵 합격'
+      : ok26 === 23 ? '🟢 안전빵 23개 (찍기 41점+)'
+        : '🟡 아슬아슬 · 23개까지 +' + gap + '개';
+    if (ok26 < GTMIN) badge = '🔴 보완 필요 · 23개까지 +' + gap + '개';
+    var note = ok26 >= 24 ? '찍기가 37점까지 떨어져도 ' + worst.toFixed(1) + '점 — 어떤 운이어도 합격선 위예요.'
+      : ok26 === 23 ? '찍기 41점 이상이면 합격선(43점). 운이 나쁘면 ' + worst.toFixed(1) + '점이라 24개를 노려요.'
+        : ok26 === 22 ? '한 개만 더 맞히면 안전빵(23개)이에요.'
+          : '틀린 문항은 아래 해설 펼쳐서 ⚡ 3초 컷 공식만 다시 읽어요.';
+    var strip = '';
+    for (var i = 0; i < GTN; i++) strip += '<span class="' + (i < ok26 ? 'on' : i < GTSAFE ? 'need' : '') + '"></span>';
+    return '<div class="gtpass' + lv + '">' +
+      '<div class="gtp-h"><b>문법 ' + ok26 + '/' + GTN + '개 (' + sc + '점)</b><span class="gtp-badge">' + badge + '</span></div>' +
+      '<p class="gtp-line">청취·독해 한 줄 찍기(40~50점) 시 예상 총점 <b>' + lo.toFixed(1) + '~' + hi.toFixed(1) + '점</b>' +
+      (tot === GTN ? '' : ' · 26문항 환산') + '</p>' +
+      '<div class="gtp-strip">' + strip + '</div>' +
+      '<p class="gtp-note">🟩 맞힌 칸 · 🟨 안전빵(23개)까지 ' + gap + '칸 — ' + note + '</p>' +
+      '</div>';
+  }
+  function renderGtDash() {
+    var box = $('#gtDash');
+    if (!box) return;
+    var on = S.subj === 'gtelp';
+    box.classList.toggle('hidden', !on);
+    if (!on) return;
+    var g = gtPress(), rec = gtRecentMini(), best = gtBestMini();
+    if ($('#gtdDday')) $('#gtdDday').textContent = ddayLabel(GTELP);
+    /* 기준이 되는 숫자: 최근 모의고사가 있으면 그것, 없으면 누적 문법 정답률 환산 */
+    var base = rec ? (rec.tot === GTN ? rec.ok : Math.round(rec.ok / rec.tot * GTN)) : g.est;
+    var gap = Math.max(0, GTSAFE - base);
+    var lv = base >= GTSAFE ? '' : base >= GTMIN ? ' warn' : ' bad';
+    var bd = $('#gtdBadge');
+    if (bd) {
+      bd.className = 'gtd-badge' + lv;
+      bd.textContent = gap ? '안전빵까지 +' + gap + '개' : '✅ 안전빵 23개';
+    }
+    var mid = $('#gtdMid');
+    if (mid) {
+      var lvA = g.est >= GTSAFE ? 'ok' : g.est >= GTMIN ? 'warn' : 'bad';
+      var lvR = base >= GTSAFE ? 'ok' : base >= GTMIN ? 'warn' : 'bad';
+      mid.innerHTML =
+        '<div class="gtd-cell"><b class="' + lvA + '">' + g.est + '/' + GTN + '</b><i>문법 환산' + (g.a ? ' · 누적 ' + g.acc + '%' : '') + '</i></div>' +
+        '<div class="gtd-cell"><b class="' + lvR + '">' + (gap ? '+' + gap : '✓') + '</b><i>안전빵 23개까지</i></div>' +
+        '<div class="gtd-cell"><b>' + (rec ? rec.ok + '/' + rec.tot : '—') + '</b><i>' + (best ? '최근 모의 · 최고 ' + best.ok + '/' + best.tot : '모의 기록 없음') + '</i></div>';
+    }
+    var strip = $('#gtdStrip');
+    if (strip) {
+      var sh = '';
+      for (var i = 0; i < GTN; i++) sh += '<span class="' + (i < base ? 'on' : i < GTSAFE ? 'need' : '') + '"></span>';
+      strip.innerHTML = sh;
+    }
+    var cap = $('#gtdCap');
+    if (cap) {
+      cap.innerHTML = '맞힌 칸 <b>' + base + '</b>/26 · 찍기 50점이면 총점 <b>' + gtTotal(base, 50).toFixed(1) + '점</b>' +
+        (gap ? ' · 안전빵까지 <b>' + gap + '칸</b>' : ' · <b>안전빵 도달</b>');
+    }
+    var tbl = $('#gtdTable');
+    if (tbl) {
+      tbl.innerHTML =
+        '<div class="gtd-tr"><span class="k">합격선</span><span class="v">총점 <b>43점</b>+ · 청취·문법·독해 합 129점+</span></div>' +
+        '<div class="gtd-tr"><span class="k">찍기 50점</span><span class="v">문법 <b>21개</b>(81점) → 43.7점</span></div>' +
+        '<div class="gtd-tr"><span class="k">찍기 37점</span><span class="v">문법 <b>24개</b>(92점) → 43.0점 · 23개(88점)는 찍기 41점+</span></div>' +
+        '<div class="gtd-tr hi"><span class="k">안전빵</span><span class="v">문법 <b>23개</b>(88점) · 24개면 찍기 운 나빠도 넘어요</span></div>';
+    }
+    var ws = gtWeakTargets();
+    var sub = $('#gtdWeakSub');
+    if (sub) sub.textContent = ws.length ? ws.map(gtUnitShort).join('·') + ' 15문제 ›' : '아직 기록 없음 · 바로 풀기 ›';
+    var bn = $('#gtdBookN');
+    if (bn) bn.textContent = ((S.gbook && S.gbook.items) || []).length;
+  }
+  /* ① 약점 집중 15문제 — 정답률 낮은 하위 2단원의 현재 오답 → 한 번도 못 맞힌 문제 순 */
+  function gtWeak15() {
+    var targets = gtWeakTargets();
+    if (!targets.length) {
+      /* 기록이 없을 때: 배운 순서(Unit 01~)대로 첫 15문제로 기록을 만든다 */
+      var first = D.questions.filter(function (q) { return q.s === 'gtelp'; }).slice(0, 15).map(function (q) { return q.i; });
+      if (first.length) {
+        toast('아직 지텔프 기록이 없어요 · 첫 15문제로 약점부터 잡아요');
+        startSession('ids', { ids: first, n: first.length, noScope: true, title: '🎯 지텔프 첫 15문제' });
+        return;
+      }
+      startSession('all', {});
+      return;
+    }
+    var ids = [], seen = {};
+    var add = function (q) { if (q && !seen[q.i]) { seen[q.i] = 1; ids.push(q.i); } };
+    var inT = function (q) {
+      return targets.some(function (r) { return q.c === r.cid && q.u === r.u; });
+    };
+    /* 1순위: 그 두 단원에서 지금 틀려 있는 문제 */
+    D.questions.forEach(function (q) { if (q.s === 'gtelp' && S.wrong[q.i] && inT(q)) add(q); });
+    /* 2순위: 한 번도 맞힌 적 없는(미숙지) 문제 */
+    targets.forEach(function (r) {
+      D.questions.forEach(function (q) {
+        if (q.s === 'gtelp' && q.c === r.cid && q.u === r.u && !(S.qok[q.i] > 0)) add(q);
+      });
+    });
+    /* 3순위: 모자라면 두 단원 문제로 채워 15문항 */
+    targets.forEach(function (r) {
+      D.questions.forEach(function (q) { if (q.s === 'gtelp' && q.c === r.cid && q.u === r.u) add(q); });
+    });
+    if (ids.length > 15) ids = ids.slice(0, 15);
+    if (!ids.length) { toast('그 단원 문제가 아직 없어요'); return; }
+    var nm = targets.map(gtUnitShort).join('·');
+    startSession('ids', { ids: ids, n: ids.length, noScope: true, title: '🔥 약점 ' + nm + ' ' + ids.length + '문제' });
+  }
+  /* ③ 시험장 3초 컷 치트시트 */
+  var GT_CHEAT = [
+    { t: '01 가정법', gp: 'G-POINT 1~2', rows: [
+      ['If + 주어 + 과거동사', 'would / could / might + 동사원형'],
+      ['If + 주어 + had pp (= Had 주어 pp)', 'would / could / might + have pp']
+    ], cue: '빈칸 앞이 if + 과거동사면 주절은 would + 원형, if + had pp면 would have pp',
+      trap: 'if절·주절 시제가 섞이면 혼합가정법 / 동사 뒤 if는 "~인지"라 가정법이 아니에요' },
+    { t: '02 should 생략', gp: 'G-POINT 3', rows: [
+      ['that절 동사 자리가 빈칸', '주어 + 동사원형 (should 생략)']
+    ], cue: 'suggest·demand·require·essential·imperative·It is necessary 등 뒤 that절이면 주어 + 동사원형',
+      trap: 'that절 주어가 3인칭 단수여도 -s를 붙이지 않아요' },
+    { t: '03 시제', gp: 'G-POINT 4~10', rows: [
+      ['while·when + 과거', 'was / were ~ing'],
+      ['now · right now · at the moment', 'am / are / is ~ing'],
+      ['tomorrow · next · by the time', 'will be ~ing'],
+      ['until 뒤가 현재(미래 얘기)', 'will be ~ing'],
+      ['yesterday · ago · last · until 뒤 과거', 'had been ~ing'],
+      ['now + for(~동안) · since(~부터)', 'has / have been ~ing'],
+      ['tomorrow + for · since', 'will have been ~ing']
+    ], cue: '단서 단어를 먼저 찾아요 — now=지금 / then=그때 / by then=그때쯤 / for+기간=~동안 / since=~부터',
+      trap: 'until은 뒤 시제로 갈려요 — 뒤가 현재(미래 얘기)면 will be ~ing, 뒤가 과거시점이면 had been ~ing' },
+    { t: '04 준동사', gp: 'G-POINT 11~20', rows: [
+      ['전치사 뒤 · 주어 자리', '~ing (동명사)'],
+      ['동사 뒤 목적어 (enjoy·avoid·finish·mind·keep)', '~ing'],
+      ['동사 뒤 목적어 (decide·want·hope·plan·agree·refuse)', 'to 부정사'],
+      ['부사(~하기 위하여) · 형용사(~할) 자리', 'to 부정사'],
+      ['가주어 it + 진주어', 'to 부정사'],
+      ['be pp + 빈칸 (be allowed/required/expected)', 'to 부정사']
+    ], cue: '빈칸 바로 앞이 전치사면 ~ing, 동사 뒤면 그 동사의 짝(to / ~ing)을 외워서 고르기',
+      trap: 'allow·advise·encourage·recommend·require는 「목적어 + to부정사」 (be caught 뒤는 ~ing)' },
+    { t: '05 관계사', gp: 'G-POINT 21~26', rows: [
+      ['사람 + 뒤에 주어 없음', 'who / that'],
+      ['사람 + 뒤에 목적어 없음', 'whom / who / that'],
+      ['사물 + 뒤에 주어나 목적어 없음', 'which / that'],
+      ['뒤에 소유의 관계(그의·그것의)', 'whose'],
+      ['뒷문장이 완전 + 선행사가 장소·때', 'where / when']
+    ], cue: '빈칸 앞 명사가 사람인지 사물인지, 뒤에 주어·목적어가 빠졌는지 두 가지만 봐요',
+      trap: ', 뒤에 빈칸이 있으면 that은 답에서 소거' },
+    { t: '06 조동사', gp: 'G-POINT 27~31', rows: [
+      ['능력·가능성·허락', 'can / could'],
+      ['충고·권유·당위(~하는 게 좋다)', 'should'],
+      ['무조건 해야 하는 의무', 'must'],
+      ['미래의 확실한 일·의지·본능·습성', 'will / would'],
+      ['약한 추측(~일지도)', 'may / might']
+    ], cue: '해석으로 갈라요 — 권고·당위면 should, 강제면 must, 추측이면 may/might',
+      trap: 'shall은 답이 아닐 가능성이 높아요 (권고 자리에 shall을 고르면 오답)' },
+    { t: '07 연결어', gp: 'G-POINT 32~33', rows: [
+      ['접속부사(however·therefore·moreover) 뒤', ', S + V (없어도 문법 오류 없음)'],
+      ['접속사(because·although·while) 뒤', 'S + V (없으면 문법 오류)']
+    ], cue: '빈칸 뒤에 ,가 있고 완전한 절이 오면 접속부사, 절이 그대로 이어지면 접속사',
+      trap: '접속부사는 빠져도 문법 오류가 없고, 접속사는 S+V가 없으면 오류 — 이 차이로 갈라요' }
+  ];
+  function gtCheatHtml() {
+    var h = '<div class="gtc-top">' +
+      '<b>🎯 ' + ddayLabel(GTELP) + ' · 43점 안전빵 한 줄 요령</b>' +
+      '<p>① 청취 26문항 — <b>모두 같은 번호</b> 하나로 (평균 25점)</p>' +
+      '<p>② 독해·어휘 28문항 — <b>역시 같은 번호</b> 하나로 (평균 25점)</p>' +
+      '<p>③ 문법 26문항에 <b>20분</b> 몰아주기 — <b>21개면 합격, 23개면 안전빵</b></p>' +
+      '<p class="t">문법 1개 ≈ 3.8점 · 26문항이 100점 환산 · 합격선은 3영역 합 129점</p>' +
+      '</div>';
+    GT_CHEAT.forEach(function (u) {
+      h += '<section class="gtc"><div class="gtc-h"><b>' + esc(u.t) + '</b><i>' + esc(u.gp) + '</i></div>';
+      u.rows.forEach(function (r) {
+        h += '<div class="gtc-r"><span class="c">' + esc(r[0]) + '</span><span class="a">' + esc(r[1]) + '</span></div>';
+      });
+      h += '<p class="gtc-cue">⚡ 3초 컷: ' + esc(u.cue) + '</p>' +
+        '<p class="gtc-trap">❗ ' + esc(u.trap) + '</p></section>';
+    });
+    h += '<p class="gtc-end">여기까지 읽었으면 문법은 준비 끝이에요. 틀린 문제의 공식만 따로 보려면 아래 <b>📝 내 오답 공식 암기장</b>을 누르세요.</p>';
+    return h;
+  }
+  function openGtCheat() {
+    var el = $('#gtcs');
+    if (!el) return;
+    $('#gtcsBody').innerHTML = gtCheatHtml();
+    el.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    $('#gtcsBody').scrollTop = 0;
+    sfx('tap');
+  }
+  function closeGtCheat() {
+    var el = $('#gtcs');
+    if (!el || el.classList.contains('hidden')) return;
+    el.classList.add('hidden');
+    if ($('#gbook').classList.contains('hidden') && $('#quiz').classList.contains('hidden')) document.body.style.overflow = '';
   }
 
   /* ---------- header / tabs ---------- */
@@ -1601,7 +1907,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   function renderStage() {
     var s = SUBJ[S.subj], c = curCourse();
     if (!c) return;
-    if (lastCourse !== c.id) { lastCourse = c.id; $('#path')._scrolled = false; }
+    if (lastCourse !== c.id) { if (lastCourse && subOfCourse(c) !== 'gtelp') $('#path')._scrolled = false; lastCourse = c.id; }
     var gp = isGP(c);
     $('#heroSub').textContent = s.subLabel || (s.name + ' · ' + s.teacher + ' 교수');
     $('#heroName').textContent = c.name;
@@ -3603,7 +3909,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     applyTheme(); renderHud(); renderSubtabs(); renderDday(); renderQuest(); renderMascot();
     renderChallenges(); renderPass(); renderDash(); renderWeek(); renderStage(); renderReview(); renderStats();
     renderTodayPlan(); renderShield(); rebuildMemo(); renderRoutine(); focusDraw();
-    renderInsight(); syncBookBadges();
+    renderInsight(); renderGtDash(); syncBookBadges();
     if (!$('#view-memo').classList.contains('hidden')) renderMemo();
   }
 
@@ -3664,6 +3970,25 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   var _mOx = $('#mOx');
   if (_mOx) _mOx.onclick = function () { sfx('tap'); startOx(); };
   /* 📝 오답 공식 암기장 · 📊 내 약점 한눈에 */
+  /* 🎯 지텔프 D-3 안전빵 대시보드 */
+  var _gtdWeak = $('#gtdWeak15');
+  if (_gtdWeak) _gtdWeak.onclick = function () { gtWeak15(); };
+  var _gtdMini = $('#gtdMini26');
+  if (_gtdMini) _gtdMini.onclick = function () {
+    sfx('tap');
+    var cfg = miniCfgs().filter(function (x) { return x.id === 'gt26'; })[0];
+    if (cfg) startMini(cfg);
+  };
+  var _gtdCheat = $('#gtdCheat');
+  if (_gtdCheat) _gtdCheat.onclick = function () { openGtCheat(); };
+  var _gtdBook = $('#gtdBook');
+  if (_gtdBook) _gtdBook.onclick = function () { openGbook(); };
+  var _gtcsClose = $('#gtcsClose');
+  if (_gtcsClose) _gtcsClose.onclick = function () { closeGtCheat(); };
+  var _gtcsOk = $('#gtcsOk');
+  if (_gtcsOk) _gtcsOk.onclick = function () { closeGtCheat(); };
+  var _gtcsBook = $('#gtcsBook');
+  if (_gtcsBook) _gtcsBook.onclick = function () { closeGtCheat(); openGbook(); };
   var _bookEntry = $('#bookEntry');
   if (_bookEntry) _bookEntry.onclick = function () { openGbook(); };
   var _stBookEntry = $('#stBookEntry');
@@ -5530,6 +5855,12 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var mk = MINI.cfg.id;
     var prevBest = S.miniBest[mk] || 0;
     if (ok > prevBest) S.miniBest[mk] = ok;
+    /* 최근 결과 10건 — 지텔프 대시보드의 '최근 모의고사'에 연결 */
+    if (MINI.cfg.kind === 'gt') {
+      if (!Array.isArray(S.miniHistory)) S.miniHistory = [];
+      S.miniHistory.push({ id: mk, ok: ok, tot: tot, at: Date.now() });
+      if (S.miniHistory.length > 10) S.miniHistory = S.miniHistory.slice(-10);
+    }
     touchStreak();
     save();
     MINI.result = { ok: ok, tot: tot, acc: acc, elapsed: elapsed, timeUp: timeUp, bonus: bonus, earned: earned + bonus, prevBest: prevBest, wrongIds: wrongIds };
@@ -5569,6 +5900,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       '<h2>' + ok + ' / ' + tot + ' 정답</h2>' +
       '<p>' + esc(MINI.cfg.name) + ' · ' + fmtDur(r.elapsed) + ' 사용' + (r.timeUp ? ' (시간 종료)' : '') + '</p>' +
       '<div class="mini-score"><b>' + r.acc + '%</b><span>정답률 · 1문항 평균 ' + avg + '초</span></div>' +
+      (MINI.cfg.kind === 'gt' ? gtPassHtml(ok, tot) : '') +
       '<div class="rows">' +
       '<div class="row"><span>소요 시간</span><i>' + fmtDur(r.elapsed) + ' / ' + fmtDur(MINI.sec) + '</i></div>' +
       '<div class="row"><span>틀린 문항</span><i>' + r.wrongIds.length + '개 (오답노트 저장)</i></div>' +
@@ -5798,6 +6130,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
 
   /* ---------- boot ---------- */
+  /* 오답 공식 암기장 정리 — G-POINT 표가 준비된 뒤에 한 번(같은 공식 카드 병합) */
+  try { if (gbMigrate()) save(); } catch (e) {}
   $('#path')._scrolled = true;   // 첫 화면에서 D-Day·히어로가 가려지지 않게 자동 스크롤 생략
   renderAll();
   if (D.questions.length === 0) toast('문제 데이터를 불러오지 못했어요');
