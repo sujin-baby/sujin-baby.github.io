@@ -69,7 +69,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     { id: 'b08', t: 'to', f: 'want + to부정사', m: '~하기를 원하다' },
     { id: 'b09', t: 'to', f: 'motivate A to B', m: 'A가 B하도록 동기를 부여하다' },
     { id: 'b10', t: 'to', f: 'remind A to B', m: 'A에게 B를 상기시키다' },
-    { id: 'b11', t: 'tense', f: 'at the moment / until', m: '과거 시점 단서 → 과거완료(had p.p.)', tip: 'until 뒤에 과거 시점(then·과거동사)이 오면 had been ~ing' },
+    { id: 'b11', t: 'tense', f: 'at the moment / until / up until then', m: '과거 시점 단서 → 과거완료(had p.p.)', tip: 'until·up until then 뒤에 과거 시점(then·과거동사)이 오면 had been ~ing (up until then = 그때까지)' },
     { id: 'b12', t: 'tense', f: 'should vs must', m: '보기에 둘 다 같이 있으면 둘 다 오답 확률이 높아요', tip: '권고·당위는 should, 강한 의무는 must — 소거법으로 지우기' },
     { id: 'b13', t: 'link', f: '빈칸 뒤 콤마(,)', m: '접속부사 자리', tip: 'Nevertheless(그럼에도) · As a result(결과적으로) · However(하지만)' },
     { id: 'b14', t: 'link', f: '빈칸 뒤 명사 vs 주어+동사', m: '명사만 → 전치사(Despite) / S+V → 접속사(Although·Even though)', tip: 'Despite 뒤에 S+V가 오면 무조건 탈락! Supposing that = If' }
@@ -902,7 +902,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       ['5', 'when(=~했을 때) 과거 + 주절 빈칸', 'was / were ~ing'],
       ['6', '현재 힌트 [now=지금, right now=바로 지금, at the moment=지금 이 순간]', 'am / are / is ~ing'],
       ['7', '미래 힌트 [tomorrow=내일, next~=다음~, by=~까지] · before·after·when·until·by the time + 현재동사', 'will be ~ing (주절)'],
-      ['8', '과거 힌트 [yesterday=어제, ago=~전에, last~=지난~] + (before·until + 과거동사/과거시점) + for·since', 'had been ~ing'],
+      ['8', '과거 힌트 [yesterday=어제, ago=~전에, last~=지난~, up until then=그때까지] + (before·until + 과거동사/과거시점) + for·since', 'had been ~ing'],
       ['9', '현재 힌트 [now, right now, at the moment] + for=~동안, since=~부터', 'has / have been ~ing'],
       ['10', '미래 힌트 [tomorrow, next~, by, by the time=~할 때쯤] + for=~동안, since=~부터', 'will have been ~ing']
     ] },
@@ -1502,7 +1502,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       ['now · right now · at the moment', 'am / are / is ~ing'],
       ['tomorrow · next · by', 'will be ~ing'],
       ['before·after·when·until·by the time + 현재동사', 'will be ~ing'],
-      ['yesterday · ago · last', 'had been ~ing'],
+      ['yesterday · ago · last · up until then(그때까지)', 'had been ~ing'],
       ['before·until + 과거동사/과거시점', 'had been ~ing'],
       ['now · right now · at the moment + for(~동안) · since(~부터)', 'has / have been ~ing'],
       ['tomorrow + for · since', 'will have been ~ing']
@@ -5599,8 +5599,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (picked.length < n) {
       picked = picked.concat(miniRank(pool.filter(function (q) { return picked.indexOf(q) < 0; }), n - picked.length));
     }
-    /* 실제 시험처럼 단원(Unit 01→07) 순서로 내고, 단원 안에서는 섞는다 */
-    return picked.slice(0, n).sort(function (a, b) { return a.u - b.u; });
+    /* 단원 비율은 지키되, 늘 가정법→should 생략→시제 순으로만 나오지 않게 전체를 한 번 더 섞는다 */
+    return shuffle(picked.slice(0, n));
   }
   function miniCfgs() {
     return [
@@ -5622,7 +5622,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
         '<span class="mo-top"><b>' + esc(c.name) + '</b><i>' + esc(c.sub) + '</i></span>' +
         '<span class="mo-go">' + (best ? '최고 ' + best + '/' + c.n + ' ›' : '시작 ›') + '</span></button>';
     });
-    h += '</div><p class="note-mini">경찰 10·20문제는 배운 진도에서 먼저 내고, 모자라면 기출 전체에서 채워요. <b>2026년 2차 100문항</b>은 실제 시험 순서(형사법 → 경찰학 → 범죄학) 그대로 나가요.<br>같은 문제가 또 나오지 않게 <b>모의고사에 아직 안 나온 문제부터</b> 내고, 한 바퀴 다 돌면 오래 전에 나온 것부터 다시 내요.</p>';
+    h += '</div><p class="note-mini">지텔프 10·26문제는 실제 단원 비율(가정법·should 생략·시제·준동사·관계사·조동사·연결어)대로 뽑고 <b>순서는 매번 섞여요</b>. 경찰 10·20문제는 배운 진도에서 먼저 내고, 모자라면 기출 전체에서 채워요. <b>2026년 2차 100문항</b>은 실제 시험 순서(형사법 → 경찰학 → 범죄학) 그대로 나가요.<br>같은 문제가 또 나오지 않게 <b>모의고사에 아직 안 나온 문제부터</b> 내고, 한 바퀴 다 돌면 오래 전에 나온 것부터 다시 내요.</p>';
     $('#sheetIn').innerHTML = h;
     $('#sheet').classList.remove('hidden');
     $$('#sheetIn [data-mini]').forEach(function (b) {
@@ -5673,7 +5673,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var picked = [], note = '';
     if (cfg.kind === 'gt') {
       picked = gtPick(cfg.n);
-      note = '실전 단원 비율 ' + gtMix(cfg.n).join('·');
+      note = '실전 단원 비율 ' + gtMix(cfg.n).join('·') + ' · 순서 랜덤';
     } else if (cfg.kind === 'exam') {
       picked = examBank(null).slice(0, cfg.n);
       note = '2026년 2차 기출';
