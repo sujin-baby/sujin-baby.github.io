@@ -1920,8 +1920,8 @@ details.lib-group[open] .lib-chev{transform:rotate(180deg)}
 .gtc-h i{font-style:normal;font-size:9px;font-weight:900;color:var(--c-dark);background:var(--c-soft);border-radius:6px;padding:1px 6px}
 .gtc-r{display:flex;gap:7px;font-size:10.8px;line-height:1.5;padding:4px 0;border-top:1px dashed var(--line)}
 .gtc-r:first-of-type{border-top:0;padding-top:1px}
-.gtc-r .c{flex:1 1 53%;min-width:0;color:var(--ink2);font-weight:700;letter-spacing:-.2px}
-.gtc-r .a{flex:1 1 47%;min-width:0;color:#8ee8c4;font-weight:900;letter-spacing:-.2px}
+.gtc-r .c{flex:1 1 53%;min-width:0;color:var(--ink2);font-weight:700;letter-spacing:-.2px;word-break:keep-all;overflow-wrap:anywhere}
+.gtc-r .a{flex:1 1 47%;min-width:0;color:#8ee8c4;font-weight:900;letter-spacing:-.2px;word-break:keep-all;overflow-wrap:anywhere}
 .gtc-cue{margin:8px 0 0;padding:7px 9px;border-radius:10px;background:rgba(255,194,75,.09);
   font-size:10.8px;font-weight:800;color:var(--gold);line-height:1.55;letter-spacing:-.2px}
 .gtc-trap{margin:5px 0 0;font-size:10.3px;font-weight:700;color:#f7a3a3;line-height:1.55;letter-spacing:-.2px}
