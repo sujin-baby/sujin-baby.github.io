@@ -413,7 +413,10 @@ function renameRun_(r, title, why) {
     if (mo[ok] && !mo[title]) { mo[title] = mo[ok]; delete mo[ok]; pm.setProperty('DASH_MEMOS', JSON.stringify(mo)); }
   } catch (e) {}
   // 월급시트 캠페인명도 바로 같이 (안 하면 새 이름 줄이 하나 더 생겨 같은 진행이 두 줄이 됨, 10/21 써니마켓)
-  try { payRename_(bareTitle_(oldTitle), title); } catch (e) { note_('월급시트 이름 바꾸기 실패: ' + e); }
+  // 사용자가 요청해서 바꾸는 방제(why에 '사용자')는 상품 이름이 달라져도 월급시트 줄 이름을 같이 바꿈 (11/26: 비전이공이공 황금향→한라봉 때 안 바뀌어
+  //  옛 황금향 줄이 남고 한라봉 줄이 새로 생겨 11.23 진행비 2,500원이 두 번 잡혔음). 그 밖(한눈에 값 등)은 예전처럼 다른 상품이면 안 바꿈
+  { const any0 = globalThis.__PAY_RENAME_ANY; if (/사용자/.test(String(why || ''))) globalThis.__PAY_RENAME_ANY = true;
+    try { payRename_(bareTitle_(oldTitle), title); } catch (e) { note_('월급시트 이름 바꾸기 실패: ' + e); } finally { globalThis.__PAY_RENAME_ANY = any0; } }
   // 배정 탭의 명단 제목도 새 이름으로
   try {
     const as = assignSheet_(), al = as.getLastRow();
@@ -1787,6 +1790,32 @@ function diag_(p) {
     out.dashRows = fm.map(function (row, i) { return (r0 + i) + ': ' + row.map(function (f, j) { return colLetter_(j + 1) + '=' + String(dv[i][j]).slice(0, 30) + (f ? ' {' + f.slice(0, 600) + '}' : ''); }).join(' | '); });
   } catch (e) { out.dashErr = String(e); }
   // &pay=글자: 월급시트에서 캠페인명에 그 글자가 든 줄 (읽기만, 같은 진행이 두 줄인지 보기)
+  // &payaudit=1: 월급시트(이번 달·다음 달) 줄을 진행목록과 한 줄씩 대조 (읽기만, 11/26 '싹다 검토'): 이름 맞음 / 같은 시트·날짜인데 이름 다름 / 진행 없음, 같은 시트·날짜 두 줄
+  if (p.payaudit) try {
+    const runs0 = readRuns_(), byName = {}, bySd = {};
+    runs0.forEach(function (r) { byName[payNameOf_(r).replace(/\s+/g, '')] = r; if (r['시트ID']) (bySd[r['시트ID'] + '|' + dateTok_(r['명단 제목'])] = bySd[r['시트ID'] + '|' + dateTok_(r['명단 제목'])] || []).push(r); });
+    out.payAudit = [];
+    payTabsNow_().forEach(function (sh) {
+      const L = payLayout_(sh); if (!L) return;
+      const last = sh.getLastRow(); if (last <= L.head) return;
+      const n = last - L.head, lc = Math.min(sh.getLastColumn(), 20), hd = sh.getRange(L.head, 1, 1, lc).getDisplayValues()[0];
+      const dv = sh.getRange(L.head + 1, 1, n, lc).getDisplayValues();
+      const cQ = hd.indexOf('수량'), cS = hd.indexOf('진행비'), cSt = hd.indexOf('상태');
+      const linkOf = function (rt) { try { if (rt.getLinkUrl()) return rt.getLinkUrl(); const rr = rt.getRuns(); for (let i = 0; i < rr.length; i++) if (rr[i].getLinkUrl()) return rr[i].getLinkUrl(); } catch (e) {} return ''; };
+      const sids = L.qty ? sh.getRange(L.head + 1, L.qty, n, 1).getRichTextValues().map(function (x) { const u = x[0] ? linkOf(x[0]) : ''; return (u.match(/\/d\/([-\w]{25,})/) || [])[1] || ''; }) : [];
+      const seen = {};
+      dv.forEach(function (v, i) {
+        const nm = String(v[L.name - 1]).trim(); if (!nm || !dateTok_(nm)) return;
+        const sid = sids[i] || '', k = sid + '|' + dateTok_(nm), run = byName[nm.replace(/\s+/g, '')];
+        const sameSd = sid ? (bySd[k] || []) : [];
+        const st = run ? '맞음' : sameSd.length ? '이름 다름(진행: ' + sameSd.map(function (r) { return payNameOf_(r); }).join(', ') + ')' : '진행 없음';
+        const dup = seen[k] != null && sid ? '같은 시트·날짜 ' + seen[k] + '행과 두 줄' : '';
+        if (sid && seen[k] == null) seen[k] = L.head + 1 + i;
+        if (st !== '맞음' || dup) out.payAudit.push(sh.getName() + '!' + (L.head + 1 + i) + ' | ' + nm + ' | ' + st + (dup ? ' | ' + dup : '') + ' | 수량 ' + (cQ >= 0 ? v[cQ] : '?') + ' | 진행비 ' + (cS >= 0 ? v[cS] : '?') + ' | ' + (cSt >= 0 ? v[cSt] : '') + ' | 시트 ' + (sid ? sid.slice(0, 8) : '없음'));
+      });
+      out.payAudit.push(sh.getName() + ' 줄 ' + n + '개 봄');
+    });
+  } catch (e) { out.payAuditErr = String(e); }
   if (p.pay) try {
     out.payRows = [];
     // &paym=10: 그 달 탭 (읽기만)
