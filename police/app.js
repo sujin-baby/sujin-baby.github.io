@@ -1041,7 +1041,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   }
   /* 기존에 저장된 암기장 정리 — 같은 공식 카드가 여러 장이면 한 장으로 합친다(앱 켤 때 1회) */
   function gbMigrate() {
-    if (!S.gbook || S.gbook.v === 2) return false;
+    if (!S.gbook || S.gbook.v === 3) return false;
     var items = Array.isArray(S.gbook.items) ? S.gbook.items : [], keep = {}, out = [], changed = false;
     var qCache = {};
     var qOf = function (id) {
@@ -1082,7 +1082,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       }
     });
     if (changed) S.gbook.items = out;
-    S.gbook.v = 2;
+    S.gbook.v = 3;
     return changed;
   }
   function gbNotify() {
