@@ -2106,7 +2106,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'LPSPACE1', 'LPFILE1', 'RVZIP_AT', 'CF_FCHK', 'PAY_POSTDAY', 'RV_GONE', 'DASHW1', 'PAYDELBJ1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'LPSPACE1', 'LPFILE1', 'RVZIP_AT', 'CF_FCHK', 'PAY_POSTDAY', 'RV_GONE', 'DASHW1', 'PAYDELBJ1', 'IBULPW1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3851,6 +3851,7 @@ function checkFullInner_() {
     try { lpFile1_(); } catch (e) {}
     try { dashW1_(); } catch (e) {}
     try { payDelBj1_(); } catch (e) {}
+    try { ibulPw1_(); } catch (e) {}
   });
   cfAlways_(S, '다음 일차', function () {
     try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
@@ -4453,6 +4454,8 @@ function ensureListMsgs_(runs) {
 //  ⭐️리뷰내용 가이드⭐️ / 포토+한줄리뷰(1명) : 이름 / 별점(6명) : 이름 … / ⭐️⭐️⭐️⭐️⭐️(의뢰서 리뷰내용 가이드) !!!!!⭐️⭐️⭐️⭐️⭐️
 //  리뷰 종류·개수와 가이드는 생성기가 넘긴 RV_<명단시트ID>(의뢰서 전체). 그날 몫은 남은 개수 비율대로. 이름은 배정 탭(공지 이름) 순서, 없으면 폼 카톡 닉네임
 //  가이드나 리뷰 종류가 의뢰서에 없으면 메시지에 표시 + '사장님께 물어보기' 할 일도 넣음. 포토대기(업체 사진)·구확건 의뢰는 리뷰 배정 페이지로
+// 리뷰 가이드 제목 바로 밑에 ⭐️포토대기⭐️ (한 번만)
+function guideWithPw_(msg) { const m = String(msg || ''); return /⭐️포토대기⭐️/.test(m) ? m : m.replace(/^([^\n]*리뷰내용 가이드[^\n]*\n)/, '$1⭐️포토대기⭐️\n'); }
 function reviewGuideMsg_(rv, ppl, counts, k) {
   // 의뢰서 가이드 칸 정리 (10/23): '별점 13개 사진 7개 텍스트 10개'처럼 리뷰 개수가 가이드 칸에 들어갔으면 개수로 옮기고,
   //  '없음', '대표님을 믿습니다'처럼 가이드가 아닌 말은 뺌 (가이드 없음 = 사장님께 물어보지 않음)
@@ -4648,7 +4651,10 @@ function ensureReviewGuideMsgs_(runs) {
         note_('✓ 리뷰 가이드 메시지를 수령인 이름으로 바꿈: ' + room);
         return;
       }
-      if (res.photoWait) { queueMsg_(room, '⭐️포토대기⭐️', '방 공지'); if (res.pwMsg) queueMsg_(room, res.pwMsg, '포토 가이드'); }   // 그날 몫이 업체 사진 대기면 (10/21 실링팬 하루 포토·하루 텍스트)
+      // 포토대기 + 텍스트 등이 섞인 날: 따로 '⭐️포토대기⭐️' 공지를 만들지 않고 가이드 제목 바로 밑에 넣음 (11/26 사용자: 따로 안 보냄, 이불형제 두 줄).
+      //  제목 줄은 그대로 둬야 리뷰 개수 세기(rvGuideCounts_)가 읽음. 그날 전부 포토대기면 예전처럼 ⭐️포토대기⭐️만 먼저 (가이드는 사진 뒤)
+      if (res.photoWait && !res.pwMsg && res.msg && !photoAll) res.msg = guideWithPw_(res.msg);
+      else if (res.photoWait) { queueMsg_(room, '⭐️포토대기⭐️', '방 공지'); if (res.pwMsg) queueMsg_(room, res.pwMsg, '포토 가이드'); }   // 그날 몫이 업체 사진 대기면 (10/21 실링팬 하루 포토·하루 텍스트)
       if (photoAll) { queueMsg_(room, '⭐️포토대기⭐️', '방 공지'); if (res.msg) queueMsg_(room, res.msg, '포토 가이드'); }
       else if (res.msg) queueMsg_(room, res.msg, '방 공지');
       if (res.ask.length) queueMsg_('사장님', '[' + room + '] 의뢰서에 ' + res.ask.join(', ') + '이(가) 없어요. 사장님께 물어보고 리뷰 가이드 공지를 고쳐서 보내기', '할 일');
@@ -10151,6 +10157,25 @@ function payDelBj1_() {
     props.setProperty('PAYDELBJ1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 11월 탭 ' + rows.sort(function (a, b) { return a - b; }).join('·') + '행 지움: ' + want.join(', '));
     note_('✓ 월급시트 중복 옛 줄 지움 (사용자 11/26): ' + want.join(', '));
   } catch (e) { props.setProperty('PAYDELBJ1', (st + ' 실패(' + (e && e.message || e) + ')').slice(-400)); }
+}
+// (11/26 한 번, 사용자 "따로 안 보냄") 안 보낸 #택11.26 이불형제 차렵이불 2: 가이드 제목 밑에 ⭐️포토대기⭐️ 넣고, 따로 만든 '⭐️포토대기⭐️' 공지 줄은 지움 (둘 다 대기일 때만)
+function ibulPw1_() {
+  const props = PropertiesService.getScriptProperties();
+  if (/^✓/.test(String(props.getProperty('IBULPW1') || ''))) return;
+  try {
+    const room = '#택11.26 이불형제 차렵이불 2', out = [];
+    withObWrite_(function () {
+      const ob = outboxSheet_(), ol = ob.getLastRow(); if (ol < 2) return;
+      const v = ob.getRange(2, 1, ol - 1, 6).getValues();
+      const g = [], pw = [];
+      v.forEach(function (x, i) { if (String(x[3]) !== room || x[2] !== '방 공지' || !msgvPending_(x[5])) return; if (/리뷰내용 가이드/.test(String(x[4]).slice(0, 20))) g.push(i); else if (String(x[4]).trim() === '⭐️포토대기⭐️') pw.push(i); });
+      if (g.length !== 1 || pw.length !== 1) { out.push('그대로(가이드 ' + g.length + '·포토대기 ' + pw.length + ')'); return; }
+      const nm = guideWithPw_(v[g[0]][4]);
+      if (nm !== String(v[g[0]][4])) { obSetInner_(ob, v[g[0]][0], 5, nm); out.push('가이드에 포토대기 넣음'); }
+      ob.deleteRow(pw[0] + 2); out.push('따로 만든 포토대기 줄 지움');
+    });
+    props.setProperty('IBULPW1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + out.join(', '));
+  } catch (e) { props.setProperty('IBULPW1', '실패(' + (e && e.message || e) + ')'); }
 }
 function salad30_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SALAD30') || '');
