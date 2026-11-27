@@ -26,7 +26,7 @@
 
 ## 2. 구조
 
-- **관리 시트(Google Sheets) + Apps Script**: `ori/Code.gs`(로더)가 GitHub의 `ori/Main.js`를 받아서 실행 (캐시 10분).
+- **관리 시트(Google Sheets) + Apps Script**: `ori/Code.gs`(로더)가 GitHub의 `ori/Main.js`를 받아서 실행 (11/28부터: 받은 코드는 캐시에 6시간, GitHub에는 60초에 한 번만 `If-None-Match`로 확인 → 바뀌면 60초 안에 반영. 캐시는 80KB 바이트 조각).
   - 받아 오는 곳 = Settings의 `UPDATE_BASE` = 이 브랜치 `claude/tasting-group-notice-automation-1x1kur`의 `ori/`.
   - ⚠ **(10/30부터) 이 브랜치에 직접 push 금지.** 작업은 **`ori-dev` 브랜치에 push** → GitHub Actions `deploy.yml`이 시험(`ori/test/run_ci.sh`)을 돌리고 **다 통과해야** 이 실서비스 브랜치로 앞으로 감기(fast-forward) → 10~20분 뒤 시트 반영.
   - 시작할 때: `git fetch origin && git checkout ori-dev && git pull origin ori-dev`. 실서비스 브랜치에 ori-dev에 없는 커밋이 있으면 deploy가 실패함 → `git pull origin claude/tasting-group-notice-automation-1x1kur` 후 다시 push.
@@ -102,6 +102,14 @@
 9-1. ✅ **리뷰 사진 AI 분류** (10/31 사용자 요청, Claude): PC 카톡 서랍에서 방 사진을 통째로 '리뷰이미지'에 저장하면 `rvAiSort_`가 Gemini(무료 키, 스크립트 속성 `GEMINI_KEY`. 넣는 곳 = 사용법 탭 5행 B칸 '🔑 리뷰 사진 AI 키'에 붙여넣기 → `onAdminEdit`→`geminiCellEdit_`가 저장·시험하고 칸엔 결과만. 로더 메뉴는 Code.gs라 못 바꿈(`setGeminiKey`는 남겨 둠))로 한 장씩 읽어 `포토`/`텍스트`/`별점` 폴더, 구매 인증·기타·같은 사진(MD5)·못 읽음은 `… (압축 제외)` 폴더로 옮김(지우지 않음). 사진 설명에 `AI {json}` 기록. 한 번에 60초, 429면 90초 쉼(`GEMINI_WAIT`), 남은 의뢰는 `RVAI_Q`로 15분 확인에서 이어 함. 다 나누면 `rvZip_`가 폴더 수로 압축 + 의뢰서·리뷰 가이드 배정 비교 + 별 5개 아닌 리뷰 알림. 올리기 할 일에 방 체크리스트(☐ 방 + 오픈채팅 링크). 모델은 `GEMINI_MODELS` 차례로(404면 다음), 되는 걸 `GEMINI_MODEL`에 기억. 시험 `rvai_test.js`. **받는 곳**(10/31): PC 카톡은 저장 위치를 못 골라서 카톡 저장 폴더 = 드라이브 루트 아래 `리뷰 사진 받는 곳`(`RVINBOX_ID`). `rvInboxSort_`(15분 확인)가 Gemini 답의 `product`로 압축 기다리는 의뢰(RVRPT_ 있고 RVZIPURL_ 없음)를 낱말 겹침으로 찾아 그 의뢰 리뷰이미지/종류 폴더로 옮김. 의뢰 하나뿐이면 그 의뢰. 못 찾으면 `어느 의뢰인지 모름` + 할 일(하루 한 번). 시험 `rvinbox_test.js`. 5분마다 받는 곳 확인: `onAdminEdit` 시계 트리거(로더에 있는 이름, 이벤트에 range 없고 triggerUid 있으면 `rvInboxTick_`), 트리거 19개 넘으면 안 만듦. 의뢰 폴더는 `2026년 10월` 월 폴더(`monthFolder_`, 진행 시작일), 옛 폴더는 `moveCampFoldersOnce_`(MONTHDIR_V1), 폴더 훑기는 `campFolders_`. **키는 저장소·점검 링크에 절대 넣지 않음**(diag는 *** 가림). 무료 키는 구글이 입력을 학습에 쓸 수 있음(구매 인증 캡처에 이름·주소) — 사용자에게 안내함.
 
 ## 8. 검토 요청 (서로 담당 파일을 고쳤을 때 여기 적기)
+
+- **[11/28 피클] 진행 도우미 켤 때 30초 · 할 일 '전체' 뺌 · 공지 썸네일 옆 본문 (사용자)**:
+  ① **켤 때 느린 진짜 원인 = 로더(Code.gs)**: `Main.js`를 캐시에 나눠 담을 때 **글자 9만 자**씩 잘랐는데 한글은 글자당 3바이트라 한 칸이 11만 바이트 → Apps Script 캐시 한 칸 한도(100KB)를 넘어 **저장이 통째로 실패**. 그래서 **한 번 열 때마다** 1.2MB를 GitHub에서 다시 받고 + 드라이브 백업 1.2MB를 쓰고 + 1.2MB를 eval 했음(11/18에 Main.js가 1MB를 넘어서 생김, 11/22에 서버 쪽만 고쳐서 안 잡혔음). 또 캐시 TTL이 60초라 한 시간에 한 번 열어도 매번 새로 받았음.
+     고침(`ori/Code.gs`): **바이트 80KB 기준**으로 나눠 담기 + 담은 뒤 길이(`ori_src_len`) 확인, 받아 둔 코드는 6시간 유지하고 GitHub에는 **60초에 한 번 `If-None-Match`로만** 물어봄(304면 1.2MB 안 받음) → 코드 고침은 예전처럼 60초 안에 반영. 드라이브 백업은 **바뀌었을 때만** 씀. 켜는 데 걸린 시간을 캐시 `ORI_LOAD`에 남기고 diag 응답에 `load`({how, ms, fetch, drive})로 보임. `updateNow()`도 조각·etag·확인시각을 같이 지움. 시험 `loader`(옛 9만 자 방식이면 실패).
+     ⚠ **Code.gs는 자동 배포가 안 됨** — 관리 시트 Apps Script 편집기에서 `Code.gs` 전체를 이 파일로 바꿔 붙여넣고 저장 → 배포 관리에서 기존 배포 **새 버전**으로 바꿔야 웹 앱에 적용됩니다(주소 그대로). `deploy.yml`은 `Main.js`만 넘깁니다.
+  ② **할 일 알약에서 '전체' 뺌**(사용자: 빼도 될 듯): `todoBars()`에서 `add('','전체')` 삭제, 처음엔 **첫 탭(방공지)**으로 열림. `todoPaint`의 '· N / 전체 M개' 표시는 그대로.
+  ③ **공지 카드 썸네일 옆에 본문**(사용자: 오른쪽 여백이 많아 스크롤이 길다): `roomBits()`가 썸네일(96px, `object-fit: cover`, '길게 눌러 저장')과 `<pre>`를 `.obrow`(flex, gap 10, align-start)에 나란히 넣음 — 진행 도우미·보낼 메시지함 둘 다. 카드마다 썸네일+안내가 차지하던 세로(약 150px)가 사라짐. 시험 `toolsui`(가짜 DOM으로 알약·.obrow 확인).
+  ④ 글꼴 CSS(`fonts.googleapis.com`)를 `media="print" onload`로 바꿔 첫 화면을 막지 않게.
 
 - **[11/27 클로드] 리뷰 보고 글 늦게 뜸 · 끝난 '업체 전달 못 함' 할 일 (사용자: 11.11 도레미파머스마켓 사과 리뷰 다 썼는데 취합탭에 안 올라옴)**: 리뷰이미지에 바로 올린 사진을 AI가 나누는 동안(17:26~17:46) `rvZip_`가 '아직 올리는 중(10분 안)'·'AI 남음'으로 돌아갔는데, 15분 확인 빠른 길이 그때도 RVZIP_AT을 적어 한 시간 다시 보기 제한에 걸림 → 보고 글이 18:34에야 생김(지금 📦리뷰취합 11/11 줄에 있음). 고침: `rvZip_`가 'wait/same/empty/done'을 돌려주고, 10분 안이면 RVZIPSOON_(처음 한 번만, 3시간 뒤 지워짐)을 남김. `rvAiSort_`가 사진을 옮기면 RVZIPSOON_(받는 곳에서 옮길 때와 같이). `rvZipSoon_`·빠른 길은 'same/empty/done'이면 표시 지움. 또 다 확인됐거나 업체에 보낸 의뢰의 '[업체 전달 못 함]' 할 일은 `rvStuckTodoDone_`이 보냄으로(지우지 않음, 같은 캠페인·날짜 머리만). 전에 생긴 것은 `stuckDone1_`이 그 명단 시트만 한 번 다시 읽게(RVSEEN_ 지움, 아직 막힌 의뢰는 그대로). 시험 zipsoon2.
 

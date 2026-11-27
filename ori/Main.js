@@ -2132,6 +2132,8 @@ function diag_(p) {
       } } catch (e) {}
   } catch (e) { out.propsErr = String(e); }
   try { out.reports = JSON.parse(CacheService.getScriptCache().get('REPORT_LOG') || '[]'); } catch (e) { out.reportsErr = String(e); }
+  // 로더가 코드를 어디서 갖고 왔는지·켜는 데 걸린 시간 (11/28 '아직도 30초' 확인용, Code.gs가 남김)
+  try { out.load = JSON.parse(CacheService.getScriptCache().get('ORI_LOAD') || 'null'); } catch (e) { out.loadErr = String(e); }
   try { out.obTrace = JSON.parse(CacheService.getScriptCache().get('OB_TRACE') || '[]'); } catch (e) {}
   // 한눈에 O열 메모 점검 (11/16 메모 지워짐): 저장된 메모 전부 + 지금 한눈에 B·O
   if (p.memos) try { out.memos = JSON.parse(PropertiesService.getScriptProperties().getProperty('DASH_MEMOS') || '{}'); const d = adminSs_().getSheetByName(DASH_TAB); out.memoRows = d.getRange(2, 2, Math.min(d.getLastRow() - 1, 120), 14).getValues().map(function (v, i) { return (i + 2) + ' ' + v[0] + ' | ' + v[13]; }).filter(function (x) { return !/^\d+ \| $/.test(x); }); } catch (e) { out.memosErr = String(e); }
@@ -7528,7 +7530,7 @@ function dupList_(r, runs) {
 
 // String.raw: 안의 \n, \. 같은 글자가 그대로 페이지 코드에 들어가게 (그냥 템플릿이면 줄바꿈으로 바뀌어 페이지 코드가 깨짐)
 const TOOLS_HTML = String.raw`
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;900&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;900&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" media="print" onload="this.media='all'">
 <style>
   :root {
     --pink: #ff8fc0;
@@ -7644,6 +7646,12 @@ const TOOLS_HTML = String.raw`
     color: var(--ink); background: var(--tint); border: 1.5px solid var(--pink-line);
     border-radius: 10px; padding: 10px;
   }
+  /* 11/28 사용자: 공지 카드 썸네일 오른쪽 빈 자리에 본문이 오게 (한 장씩 세로로 길던 것 → 카드 높이 줄여 스크롤 짧게) */
+  .ob .obrow { display: flex; gap: 10px; align-items: flex-start; margin-top: 8px; }
+  .ob .obrow .th { flex: 0 0 96px; width: 96px; }
+  .ob .obrow .th img { display: block; width: 96px; height: 96px; object-fit: cover; border-radius: 10px; border: 1.5px solid var(--pink-line); background: #fff; }
+  .ob .obrow .th .cap { margin-top: 4px; font-size: 10.5px; line-height: 1.3; font-weight: 700; color: var(--ink-soft); text-align: center; }
+  .ob .obrow pre { flex: 1 1 auto; min-width: 0; margin: 0; }
   .two { display: flex; gap: 8px; }
   .tg { margin: 14px 0 2px; padding: 6px 10px; border-radius: 10px; background: var(--pink-bg); font-weight: 900; color: var(--ink); display: flex; justify-content: space-between; align-items: center; }
   .tg a { font-size: 12.5px; font-weight: 700; color: var(--ink); }
@@ -7885,7 +7893,17 @@ function go(d, label) {
 }
 function roomBits(x, K, EXEC, c, before, linkEl) {
   // 썸네일 (방 공지): 길게 눌러 저장 → 카톡에 사진으로
-  if (x.img) { var f = document.createElement('div'); f.style.cssText = 'margin:0 0 8px;font-size:12px;color:#676274'; var im = document.createElement('img'); im.src = x.img; im.style.cssText = 'display:block;max-width:140px;max-height:140px;border-radius:8px;border:1px solid #e1dee8;margin-bottom:2px'; f.appendChild(im); f.appendChild(document.createTextNode('사진 길게 눌러 저장 → 카톡에 첨부')); c.insertBefore(f, before); }
+  //  11/28 사용자: 사진 오른쪽이 비어 카드가 세로로 길어짐 → 사진 왼쪽·본문(pre) 오른쪽으로 나란히 (.obrow)
+  if (x.img) {
+    var row = document.createElement('div'); row.className = 'obrow';
+    var th = document.createElement('div'); th.className = 'th';
+    var im = document.createElement('img'); im.src = x.img; im.alt = '공지 사진'; im.loading = 'lazy';
+    th.appendChild(im);
+    var cap = document.createElement('div'); cap.className = 'cap'; cap.textContent = '길게 눌러 저장';
+    th.appendChild(cap); row.appendChild(th);
+    if (before && before.parentNode === c) { c.insertBefore(row, before); row.appendChild(before); }
+    else c.insertBefore(row, before || null);
+  }
   var setLink = function (u) { linkEl.href = u; linkEl.textContent = '이 방 열기'; linkEl.target = '_blank'; linkEl.rel = 'noopener'; };
   if (x.link) setLink(x.link);
   if (!x.room) return null;
@@ -7915,7 +7933,8 @@ function todoBars() {
   var grp = TODO.grp || [];
   if (!grp.length) { bar.style.display = 'none'; todoSub = ''; return; }
   bar.style.display = '';
-  if (!grp.some(function (g) { return String(g.i) === String(todoSub); })) todoSub = '';
+  // 11/28 사용자: '전체' 알약은 뺌 (탭마다 개수가 이미 보이고, 처음엔 첫 탭(방공지)으로 열림)
+  if (!grp.some(function (g) { return String(g.i) === String(todoSub); })) todoSub = String(grp[0].i);
   var cnt = {}; TODO.all.forEach(function (x) { cnt[x.g] = (cnt[x.g] || 0) + 1; });
   var add = function (i, label, n) {
     var b = document.createElement('button');
@@ -7926,7 +7945,6 @@ function todoBars() {
     b.onclick = function () { todoSub = String(i); todoBars(); todoPaint(); };
     bar.appendChild(b);
   };
-  add('', '전체', TODO.all.length);
   grp.forEach(function (g) { add(g.i, g.label || ('탭 ' + (g.i + 1)), cnt[g.i] || 0); });
 }
 function todoPaint() {
@@ -8142,6 +8160,12 @@ const OUTBOX_HTML = `
   .head{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:#676274;margin-bottom:6px}
   .room{font-weight:700;color:#5b2a86}
   pre{white-space:pre-wrap;word-break:break-all;margin:0 0 10px;font:inherit;font-size:14px;max-height:180px;overflow:auto;background:#f7f6fa;border-radius:8px;padding:10px}
+  /* 11/28 사용자: 썸네일 오른쪽 빈 자리에 본문이 오게 (세로로 길어 스크롤이 길던 것) */
+  .obrow{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}
+  .obrow .th{flex:0 0 96px;width:96px}
+  .obrow .th img{display:block;width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid #e1dee8}
+  .obrow .th .cap{margin-top:4px;font-size:10.5px;line-height:1.3;color:#676274;text-align:center}
+  .obrow pre{flex:1 1 auto;min-width:0;margin:0}
   .btns{display:flex;gap:8px}
   .btns a,.btns button{flex:1;text-align:center;padding:11px 6px;border-radius:8px;font:inherit;font-size:14px;font-weight:700;border:1px solid #5b2a86;text-decoration:none}
   .b1{background:#5b2a86;color:#fff}.b2{background:#fff;color:#5b2a86}
@@ -8154,7 +8178,17 @@ const OUTBOX_HTML = `
 var ITEMS = __ITEMS__, K = __K__, EXEC = __EXEC__;
 function roomBits(x, K, EXEC, c, before, linkEl) {
   // 썸네일 (방 공지): 길게 눌러 저장 → 카톡에 사진으로
-  if (x.img) { var f = document.createElement('div'); f.style.cssText = 'margin:0 0 8px;font-size:12px;color:#676274'; var im = document.createElement('img'); im.src = x.img; im.style.cssText = 'display:block;max-width:140px;max-height:140px;border-radius:8px;border:1px solid #e1dee8;margin-bottom:2px'; f.appendChild(im); f.appendChild(document.createTextNode('사진 길게 눌러 저장 → 카톡에 첨부')); c.insertBefore(f, before); }
+  //  11/28 사용자: 사진 오른쪽이 비어 카드가 세로로 길어짐 → 사진 왼쪽·본문(pre) 오른쪽으로 나란히 (.obrow)
+  if (x.img) {
+    var row = document.createElement('div'); row.className = 'obrow';
+    var th = document.createElement('div'); th.className = 'th';
+    var im = document.createElement('img'); im.src = x.img; im.alt = '공지 사진'; im.loading = 'lazy';
+    th.appendChild(im);
+    var cap = document.createElement('div'); cap.className = 'cap'; cap.textContent = '길게 눌러 저장';
+    th.appendChild(cap); row.appendChild(th);
+    if (before && before.parentNode === c) { c.insertBefore(row, before); row.appendChild(before); }
+    else c.insertBefore(row, before || null);
+  }
   var setLink = function (u) { linkEl.href = u; linkEl.textContent = '이 방 열기'; linkEl.target = '_blank'; linkEl.rel = 'noopener'; };
   if (x.link) setLink(x.link);
   if (!x.room) return null;
@@ -14249,7 +14283,12 @@ function removeOldUpdateTrigger_() {
 }
 
 function updateNow() {
-  try { CacheService.getScriptCache().removeAll(['ori_src_n', 'ori_src_0', 'ori_src_1']); } catch (e) {}
+  // 11/28: 조각 키는 0~15개(80KB씩)이고, 60초 확인 시각·etag도 같이 지워야 다음 실행에 바로 새 코드를 받음
+  try {
+    const c = CacheService.getScriptCache(), ks = ['ori_src_n', 'ori_src_len', 'ori_src_chk', 'ori_src_etag'];
+    for (let i = 0; i < 40; i++) ks.push('ori_src_' + i);
+    c.removeAll(ks);
+  } catch (e) {}
   SpreadsheetApp.getUi().alert('최신 버전을 받도록 했어요. 다음 실행부터 바로 새 버전으로 돌아가요.');
 }
 
