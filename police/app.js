@@ -341,9 +341,9 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     $('#ddayNum').textContent = ddayLabel(iso).replace(/^D-/, '');
     $('#ddayTitle').textContent = '2027년 2차 순경 필기';
     $('#ddaySub').textContent = iso + ' (' + weekday(iso) + ') · ' + (S.ddayNote || '예상일');
-    var g = daysTo(GTELP);
-    $('#gtChipTxt').textContent = '지텔프 ' + (g > 0 ? 'D-' + g : g === 0 ? 'D-DAY' : 'D+' + (-g));
     $('#ddayLeft').textContent = daysTo(iso) >= 0 ? daysTo(iso) + '일 남음' : Math.abs(daysTo(iso)) + '일 지남';
+    /* 지텔프 탭의 1줄 요약에 순경 D-day 를 같이 보여 준다 */
+    var gm = $('#gmDday'); if (gm) gm.textContent = ddayLabel(iso);
   }
   function openDdaySheet() {
     var iso = S.dday || DTARGET;
@@ -874,11 +874,17 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var t = info.today;
     var plan = info.map[t] || [];
     var groups = groupByCourse(plan);
-    if (!groups.length) { el.textContent = '오늘 몫을 다 했어요 🎉'; return; }
+    if (!groups.length) { el.textContent = '오늘 몫을 다 했어요'; syncGmPlan(); return; }
     el.textContent = groups.map(function (g) {
       var ns = g.nums;
       return g.ab + ' ' + ns[0] + (ns.length > 1 ? '-' + ns[ns.length - 1] : '');
     }).join(' · ');
+    syncGmPlan();
+  }
+  /* 지텔프 탭 1줄 요약의 오늘 계획 */
+  function syncGmPlan() {
+    var gm = $('#gmPlan'), s = $('#todayPlanTxt');
+    if (gm && s) gm.textContent = '오늘 ' + s.textContent + ' ›';
   }
 
 
@@ -1292,14 +1298,16 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   function renderInsight() {
     var box = $('#icRows');
     if (!box) return;
-    var rows = weakRows();
+    var gt = S.subj === 'gtelp';
+    /* 선택한 과목 탭 안에서만 보여 준다: 지텔프 탭 = 문법 Unit 01~07 / 경찰 탭 = 경찰 3과목 */
+    var rows = weakRows().filter(function (r) { return gt ? r.s === 'gtelp' : r.s !== 'gtelp'; });
+    var cap = gt ? '지텔프 문법 · Unit 01~07' : '경찰 3과목';
     var ranked = rows.filter(function (r) { return r.a >= 3; })
       .sort(function (x, y) { return (x.ok / x.a) - (y.ok / y.a); });
     var top = {};
     ranked.slice(0, 2).forEach(function (r) { top[r.k] = 1; });
-    var h = '', cap = '', any = false;
+    var h = '<div class="ic-cap">' + esc(cap) + '</div>', any = false;
     rows.forEach(function (r) {
-      if (r.cap && r.cap !== cap) { cap = r.cap; h += '<div class="ic-cap">' + esc(cap) + '</div>'; }
       if (r.a) any = true;
       var pct = r.a ? Math.round(r.ok / r.a * 100) : 0;
       var lv = pct < 70 ? 'red' : pct < 85 ? 'yel' : 'grn';
@@ -1307,14 +1315,14 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
       h += '<button class="ic-row' + (hot ? ' hot' : '') + (r.a ? '' : ' na') + '" data-k="' + esc(r.k) + '">' +
         '<span class="ic-n">' + esc(r.name) + '</span>' +
         '<span class="ic-track"><i class="' + (r.a ? lv : '') + '" style="width:' + (r.a ? Math.max(4, pct) : 0) + '%"></i></span>' +
-        (r.a ? '<b class="ic-p ' + lv + '">' + pct + '%</b><span class="ic-fr">(' + r.ok + '/' + r.a + ')</span><em class="ic-w">현재오답 ' + r.w + '</em>'
+        (r.a ? '<b class="ic-p ' + lv + '">' + pct + '%</b><span class="ic-fr">(' + r.ok + '/' + r.a + ')</span><em class="ic-w">오답 ' + r.w + '</em>'
              : '<b class="ic-p na">미풀이</b>') +
-        (hot ? '<span class="ic-fire">🔥 집중</span>' : '') +
+        (hot ? '<span class="ic-fire">집중</span>' : '') +
         '</button>';
     });
     box.innerHTML = h;
     var note = $('#icNote');
-    if (note) note.textContent = any ? '정답률 낮은 순 · 괄호 = 맞힌/푼 개수 · 🔥 = 집중 보완 2곳' : '문제를 풀면 단원별 정답률이 쌓여요';
+    if (note) note.textContent = any ? '정답률 낮은 순 · (맞힌/푼)' : '문제를 풀면 단원별 정답률이 쌓여요';
     $$('#icRows [data-k]').forEach(function (b) {
       b.onclick = function () { icTap(b.getAttribute('data-k')); };
     });
@@ -1404,6 +1412,9 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     if (!box) return;
     var on = S.subj === 'gtelp';
     box.classList.toggle('hidden', !on);
+    /* 지텔프 탭: 순경 D-266 큰 카드는 숨기고 1줄 요약만 / 경찰 3과목 탭: 순경 카드만 */
+    var dc = $('#ddayCard'); if (dc) dc.classList.toggle('hidden', on);
+    var mr = $('#gtMiniRow'); if (mr) mr.classList.toggle('hidden', !on);
     if (!on) return;
     var g = gtPress(), rec = gtRecentMini(), best = gtBestMini();
     if ($('#gtdDday')) $('#gtdDday').textContent = ddayLabel(GTELP);
@@ -1414,27 +1425,24 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var bd = $('#gtdBadge');
     if (bd) {
       bd.className = 'gtd-badge' + lv;
-      bd.textContent = gap ? '안전빵까지 +' + gap + '개' : '✅ 안전빵 23개';
+      bd.textContent = '총점 ' + gtTotal(base, 50).toFixed(1) + '점';
     }
-    var mid = $('#gtdMid');
-    if (mid) {
-      var lvA = g.est >= GTSAFE ? 'ok' : g.est >= GTMIN ? 'warn' : 'bad';
-      var lvR = base >= GTSAFE ? 'ok' : base >= GTMIN ? 'warn' : 'bad';
-      mid.innerHTML =
-        '<div class="gtd-cell"><b class="' + lvA + '">' + g.est + '/' + GTN + '</b><i>문법 환산' + (g.a ? ' · 누적 ' + g.acc + '%' : '') + '</i></div>' +
-        '<div class="gtd-cell"><b class="' + lvR + '">' + (gap ? '+' + gap : '✓') + '</b><i>안전빵 23개까지</i></div>' +
-        '<div class="gtd-cell"><b>' + (rec ? rec.ok + '/' + rec.tot : '—') + '</b><i>' + (best ? '최근 모의 · 최고 ' + best.ok + '/' + best.tot : '모의 기록 없음') + '</i></div>';
+    var sc = $('#gtdScore');
+    if (sc) sc.textContent = base + ' / ' + GTN;
+    var sn = $('#gtdScoreNote');
+    if (sn) sn.textContent = gap ? '안전빵 23개까지 ' + gap + '개' : '안전빵 23개 도달';
+    var fill = $('#gtdBarFill');
+    if (fill) {
+      fill.className = base >= GTSAFE ? 'ok' : base >= GTMIN ? '' : 'bad';
+      fill.style.width = Math.min(100, base / GTN * 100) + '%';
     }
-    var strip = $('#gtdStrip');
-    if (strip) {
-      var sh = '';
-      for (var i = 0; i < GTN; i++) sh += '<span class="' + (i < base ? 'on' : i < GTSAFE ? 'need' : '') + '"></span>';
-      strip.innerHTML = sh;
-    }
-    var cap = $('#gtdCap');
-    if (cap) {
-      cap.innerHTML = '맞힌 칸 <b>' + base + '</b>/26 · 찍기 50점이면 총점 <b>' + gtTotal(base, 50).toFixed(1) + '점</b>' +
-        (gap ? ' · 안전빵까지 <b>' + gap + '칸</b>' : ' · <b>안전빵 도달</b>');
+    var meta = $('#gtdMeta');
+    if (meta) {
+      var bits = [];
+      if (rec) bits.push('최근 모의 ' + rec.ok + '/' + rec.tot);
+      if (best) bits.push('최고 ' + best.ok + '/' + best.tot);
+      bits.push(g.a ? '누적 문법 ' + g.acc + '%' : '문법 기록 없음');
+      meta.textContent = bits.join(' · ');
     }
     var tbl = $('#gtdTable');
     if (tbl) {
@@ -1446,7 +1454,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     }
     var ws = gtWeakTargets();
     var sub = $('#gtdWeakSub');
-    if (sub) sub.textContent = ws.length ? ws.map(gtUnitShort).join('·') + ' 15문제 ›' : '아직 기록 없음 · 바로 풀기 ›';
+    if (sub) sub.textContent = ws.length ? ws.map(gtUnitShort).join(' · ') + ' 15문제 ›' : '아직 기록 없음 · 바로 풀기 ›';
     var bn = $('#gtdBookN');
     if (bn) bn.textContent = ((S.gbook && S.gbook.items) || []).length;
   }
@@ -1784,6 +1792,14 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var p = passGauge();
     $('#passBar').style.width = Math.min(100, p.acc) + '%';
     $('#passPct').textContent = p.ans ? p.acc + '%' : '-';
+    var gt = S.subj === 'gtelp';
+    var ttl = $('.pass-top b');
+    if (ttl) ttl.textContent = gt ? '합격 예측' : '누적 정답률';
+    if (!gt) {
+      $('#passTxt').textContent = p.ans < 10 ? '문제를 10개 이상 풀면 정답률이 안정됩니다' : '지금 정답률 ' + p.acc + '% · ' + p.band;
+      $('#passNeed').textContent = '목표: 정답률 60% 이상';
+      return;
+    }
     $('#passTxt').textContent = p.ans < 10 ? '문제를 10개 이상 풀면 예측이 정확해져요' : '문법 26문항 기준 ' + p.gt + '/26 · ' + p.band;
     $('#passNeed').textContent = p.ans ? (p.gt >= 22 ? '목표 22문항 달성!' : '목표 22문항까지 ' + (22 - p.gt) + '문항') : '목표: 문법 22/26';
   }
@@ -3937,7 +3953,8 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     startSession('ids', { ids: ids, title: '약점 단원 집중 복습' });
   };
   $('#ddayEdit').onclick = function () { sfx('tap'); openDdaySheet(); };
-  $('#gtChip').onclick = function () { toast('지텔프 Level 2 · 2026-11-29 (일) · ' + ddayLabel(GTELP)); };
+  var _gtChip = $('#gtChip');
+  if (_gtChip) _gtChip.onclick = function () { toast('지텔프 Level 2 · 2026-11-29 (일) · ' + ddayLabel(GTELP)); };
   $('#planChip').onclick = function () { openPlanSheet(); };
   var _tpRow = $('#todayPlanRow');
   if (_tpRow) _tpRow.onclick = function () { sfx('tap'); openPlanSheet(); };
@@ -3984,6 +4001,18 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
   if (_gtdCheat) _gtdCheat.onclick = function () { openGtCheat(); };
   var _gtdBook = $('#gtdBook');
   if (_gtdBook) _gtdBook.onclick = function () { openGbook(); };
+  /* 합격 기준 · 팁 보기 (기본 접힘) */
+  var _gtdFold = $('#gtdFold');
+  if (_gtdFold) _gtdFold.onclick = function () {
+    var more = $('#gtdMore');
+    var open = !!(more && more.classList.contains('hidden'));
+    if (more) more.classList.toggle('hidden', !open);
+    _gtdFold.setAttribute('aria-expanded', open ? 'true' : 'false');
+    sfx('tap');
+  };
+  /* 지텔프 탭의 순경 1줄 요약 → 학습 계획 */
+  var _gmRow = $('#gtMiniRow');
+  if (_gmRow) _gmRow.onclick = function () { sfx('tap'); openPlanSheet(); };
   var _gtcsClose = $('#gtcsClose');
   if (_gtcsClose) _gtcsClose.onclick = function () { closeGtCheat(); };
   var _gtcsOk = $('#gtcsOk');

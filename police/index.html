@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=2026112604">
+<link rel="stylesheet" href="style.css?v=2026112801">
 </head>
 <body>
 
@@ -33,15 +33,41 @@
 <main id="view-stage" class="view">
   <section class="goalbar" id="goalBar" aria-label="오늘의 학습 목표">
     <div class="gb-top">
-      <span class="gb-label">🎯 오늘 목표</span>
+      <span class="gb-label">오늘 목표</span>
       <b id="gbText">0 / 30문제</b>
       <span class="gb-pct" id="gbPct">0%</span>
       <button class="gb-set" id="gbSet" aria-label="목표 문제 수 바꾸기">30문제 ▾</button>
     </div>
     <div class="gb-track"><i id="gbFill"></i></div>
-    <div class="gb-done hidden" id="gbDone">✅ 오늘 목표 달성! 이 정도면 충분해요</div>
+    <div class="gb-done hidden" id="gbDone">오늘 목표 달성 · 이 정도면 충분해요</div>
   </section>
 
+  <!-- 지텔프 탭의 주인공: 지텔프 D-1 대시보드 (다른 과목 탭에서는 숨김) -->
+  <section class="gtd hidden" id="gtDash" aria-label="지텔프 시험 대시보드">
+    <div class="gtd-top">
+      <b class="gtd-t"><span id="gtdDday">D-1</span> 지텔프 · 문법 몰빵</b>
+      <span class="gtd-badge" id="gtdBadge">—</span>
+    </div>
+    <div class="gtd-score"><b id="gtdScore">0 / 26</b><i id="gtdScoreNote">안전빵 23개까지 4개</i></div>
+    <div class="gtd-bar"><i id="gtdBarFill"></i><em class="gtd-goal" aria-hidden="true"></em></div>
+    <p class="gtd-meta" id="gtdMeta"></p>
+    <button class="gtd-main" id="gtdWeak15">
+      <span class="gm-t"><b>약점 집중 15문제</b><i id="gtdWeakSub">지금 시작 ›</i></span>
+      <span class="gm-go">›</span>
+    </button>
+    <div class="gtd-pair">
+      <button class="gtd-mini" id="gtdMini26"><b>실전 26문항</b><i>20분 · 실제 비율</i></button>
+      <button class="gtd-mini" id="gtdCheat"><b>3초 컷 치트시트</b><i>시험장 1페이지</i></button>
+    </div>
+    <button class="gtd-row" id="gtdBook"><span>내 오답 공식 암기장</span><span class="n" id="gtdBookN">0</span><span class="go">›</span></button>
+    <button class="gtd-fold" id="gtdFold" aria-expanded="false" aria-controls="gtdMore"><span>합격 기준 · 팁 보기</span><i>▾</i></button>
+    <div class="gtd-more hidden" id="gtdMore">
+      <div class="gtd-tbl" id="gtdTable"></div>
+      <p class="gtd-tip">청취·독해는 전 문항 <b>같은 번호 한 줄</b>로 통일하고, 문법 26문항에 <b>20분</b>을 다 써요.</p>
+    </div>
+  </section>
+
+  <!-- 경찰 3과목 탭: 순경 필기 D-day 카드 -->
   <section class="dday slim" id="ddayCard">
     <div class="dday-main">
       <div class="dday-badge"><span>D-</span><b id="ddayNum">0</b></div>
@@ -52,51 +78,28 @@
       <button class="dday-edit" id="ddayEdit">변경</button>
     </div>
     <div class="dday-chips">
-      <button class="dday-chip" id="gtChip">📘 <b id="gtChipTxt">지텔프 D-14</b></button>
-      <button class="dday-chip" id="planChip">🗺️ 학습 계획</button>
-      <button class="dday-chip save" id="saveBadge" title="이 기기 브라우저에 자동 저장">💾 자동저장</button>
+      <button class="dday-chip" id="planChip">학습 계획</button>
+      <button class="dday-chip save" id="saveBadge" title="이 기기 브라우저에 자동 저장">자동저장</button>
     </div>
     <button class="today-plan" id="todayPlanRow">
-      <span class="tp-k">📅 오늘의 계획</span>
+      <span class="tp-k">오늘의 계획</span>
       <b class="tp-v" id="todayPlanTxt">계산 중…</b>
       <i class="tp-go">›</i>
     </button>
   </section>
 
-  <section class="gtd hidden" id="gtDash" aria-label="지텔프 D-3 43점 안전빵 대시보드">
-    <div class="gtd-top">
-      <div class="gtd-tt">
-        <b>🎯 지텔프 <span id="gtdDday">D-3</span> · 43점 안전빵</b>
-        <i id="gtdSub">청취·독해 한 줄 찍기 + 문법 몰빵</i>
-      </div>
-      <span class="gtd-badge" id="gtdBadge">—</span>
-    </div>
-    <div class="gtd-mid" id="gtdMid"></div>
-    <div class="gtd-strip" id="gtdStrip"></div>
-    <div class="gtd-cap" id="gtdCap"></div>
-    <div class="gtd-tbl" id="gtdTable"></div>
-    <div class="gtd-acts">
-      <button class="gtd-btn wide" id="gtdWeak15"><span class="gtd-bi">🔥</span><b>약점 집중 15문제</b><i id="gtdWeakSub">지금 시작 ›</i></button>
-      <button class="gtd-btn" id="gtdMini26"><span class="gtd-bi">⏱️</span><b>실전 26문항</b><i>20분 · 실제 비율</i></button>
-      <button class="gtd-btn" id="gtdCheat"><span class="gtd-bi">⚡</span><b>3초 컷 치트시트</b><i>시험장 1페이지</i></button>
-    </div>
-    <button class="gtd-book" id="gtdBook">📝 내 오답 공식 암기장<span class="n" id="gtdBookN">0</span><span class="go">›</span></button>
-    <p class="gtd-tip">💡 청취·독해는 전 문항 <b>같은 번호 한 줄</b>로 통일, 문법 26문항에 <b>20분</b> 풀투자</p>
-  </section>
-
   <section class="insight" id="insightCard" aria-label="내 약점 한눈에 보기">
     <div class="ic-head">
-      <b>📊 내 약점 한눈에</b>
-      <span id="icNote">정답률 낮은 순 · 🔥 2곳은 집중 보완</span>
+      <b>내 약점 한눈에</b>
+      <span id="icNote">정답률 낮은 순 · (맞힌/푼)</span>
     </div>
     <div class="ic-rows" id="icRows"></div>
   </section>
 
-  <button class="book-entry" id="bookEntry" aria-label="내 오답 공식 암기장 열기">
-    <span class="be-ico">📝</span>
-    <span class="be-body"><b>내 오답 공식 암기장</b><i>틀릴 때마다 자동으로 쌓여요</i></span>
-    <span class="be-n" id="beN">0</span>
-    <span class="be-go">›</span>
+  <!-- 지텔프 탭에서 순경 필기는 1줄 요약으로만 -->
+  <button class="gtmini hidden" id="gtMiniRow" aria-label="2027년 2차 순경 필기 D-day와 오늘의 계획">
+    <span class="gm-d">순경 <b id="gmDday">D-266</b></span>
+    <span class="gm-p" id="gmPlan">오늘의 계획 ›</span>
   </button>
 
   <section class="hero" id="hero">
@@ -464,7 +467,7 @@
   <div class="ox-body" id="oxBody"></div>
 </div>
 
-<script src="data.js?v=2026112604"></script>
-<script src="app.js?v=2026112604"></script>
+<script src="data.js?v=2026112801"></script>
+<script src="app.js?v=2026112801"></script>
 </body>
 </html>
