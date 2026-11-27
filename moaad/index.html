@@ -1181,7 +1181,7 @@ function loadAdmin(){
 function renderStats(){
   var s = state.admin.stats;
   var items = [
-    ['모집중 캠페인', s.openCampaigns, '개', 'hot'],
+    ['모집중 캠페인', s.openCampaigns, '개', s.openCampaigns > 0 ? 'hot' : ''],
     ['남은 자리', s.totalRemain, '명', ''],
     ['검수 대기', s.pendingReviews, '건', ''],
     ['오늘 제출', s.todaySubmissions, '건', ''],
