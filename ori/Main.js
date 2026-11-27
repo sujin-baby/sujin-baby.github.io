@@ -2116,14 +2116,14 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'LPSPACE1', 'LPFILE1', 'RVZIP_AT', 'CF_FCHK', 'PAY_POSTDAY', 'RV_GONE', 'DASHW1', 'PAYDELBJ1', 'IBULPW1', 'ROISISYNC1', 'ZRN5', 'ZRNTXT1', 'SVBWK1', 'JINITXT1', 'GRNAI1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'LPSPACE1', 'LPFILE1', 'RVZIP_AT', 'CF_FCHK', 'PAY_POSTDAY', 'RV_GONE', 'DASHW1', 'PAYDELBJ1', 'IBULPW1', 'ROISISYNC1', 'ZRN5', 'ZRNTXT1', 'SVBWK1', 'JINITXT1', 'GRNAI1', 'GRNRV1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
     try { const ph = JSON.parse(pr.CF_PH || "{}") || {}; out.cfT = {}; Object.keys(ph).forEach(function (k) { out.cfT[k] = [ph[k].t, ph[k].d ? f(new Date(Number(ph[k].d)), "MM-dd HH:mm") : ""]; }); } catch (e) {}   // 15분 확인 단계별 걸린 시간·마지막으로 한 때 (11/25 월급시트 밀림 확인)
     // 속성 용량 (11/16 '데이터 용량 오류'): 전체 글자 수·개수, 앞부분(접두어)별 크기 상위 12
     try { const by = {}; let tot = 0; Object.keys(pr).forEach(function (k) { const n = k.length + String(pr[k]).length; tot += n; const pf = (k.match(/^[A-Z]+_?/) || [k])[0]; by[pf] = (by[pf] || 0) + n; });
-      out.propsSize = { total: tot, count: Object.keys(pr).length, top: Object.keys(by).sort(function (a, b) { return by[b] - by[a]; }).slice(0, 12).map(function (k) { return k + ' ' + by[k]; }) }; } catch (e) {}
+      out.propsSize = { total: tot, bytes: propsBytes_(pr), count: Object.keys(pr).length, top: Object.keys(by).sort(function (a, b) { return by[b] - by[a]; }).slice(0, 12).map(function (k) { return k + ' ' + by[k]; }) }; } catch (e) {}
   } catch (e) { out.propsErr = String(e); }
   try { out.reports = JSON.parse(CacheService.getScriptCache().get('REPORT_LOG') || '[]'); } catch (e) { out.reportsErr = String(e); }
   try { out.obTrace = JSON.parse(CacheService.getScriptCache().get('OB_TRACE') || '[]'); } catch (e) {}
@@ -3868,6 +3868,7 @@ function checkFullInner_() {
     try { svbWk1_(); } catch (e) {}
     try { jiniTxt1_(); } catch (e) {}
     try { grnAi1_(); } catch (e) {}
+    try { grnRv1_(); } catch (e) {}
   });
   cfAlways_(S, '다음 일차', function () {
     try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
@@ -5625,17 +5626,23 @@ function propsCleanup_(runs, force, all0) {
   const props = PropertiesService.getScriptProperties(), tk = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
   if (!force && props.getProperty('PROPCLEAN_15_DAY') === tk) return 0;
   try { props.deleteProperty('PROPCLEAN_DAY'); } catch (e) {}
-  const all = all0 || props.getProperties(), live = {}, last = {}, rvWin = {}, cut15 = Date.now() - 15 * 86400000, cut40 = today_().getTime() - 40 * 86400000;
+  const all = all0 || props.getProperties(), live = {}, last = {}, rvWin = {}, win60 = {}, keep60 = {}, cut15 = Date.now() - 15 * 86400000, cut40 = today_().getTime() - 40 * 86400000, cut60 = today_().getTime() - 60 * 86400000;
   (runs || readRuns_()).forEach(function (r) {
     const sid = String(r['시트ID'] || ''); if (!sid) return;
     if (!(r['진행 상태'] === '종료' && r['진행일'] instanceof Date && r['진행일'].getTime() < cut15)) live[sid] = 1;
     // 리뷰 확인(reviewDone_)이 보는 의뢰(진행일 40일 안, 종료여도)는 '이미 본 기록'을 남김 (11/25: 15일 지난 종료 의뢰 기록을 지우면 리뷰 확인이 매번 처음부터 다시 읽고
     //  정리가 또 지워서 43개 의뢰를 확인마다 다시 읽음 → 리뷰 확인이 한 바퀴를 못 끝내 '도돌이표')
     if (r['진행일'] instanceof Date && r['진행일'].getTime() >= cut40) rvWin[sid] = 1;
+    if (r['진행일'] instanceof Date && r['진행일'].getTime() >= cut60) {
+      win60[sid] = 1;
+      keep60[String(r['명단 제목']).replace(/\s+/g, '')] = 1;
+      keep60[String(r['카톡방'] || bareTitle_(r['명단 제목'])).replace(/\s+/g, '')] = 1;
+      keep60[bareTitle_(r['명단 제목']).replace(/\s+/g, '')] = 1;
+    }
     if (r['진행일'] instanceof Date) last[sid] = Math.max(last[sid] || 0, r['진행일'].getTime());
   });
   // 리뷰 가이드 글 사본(RVTXT_/RVSIG_/RVPH_ RVMSGD_)은 마감 뒤 이틀까지만 다시 맞추므로 4일 지난 건 안 씀 (11/24: 15일 치가 쌓여 저장 공간이 차서 한눈에·명단·월급시트가 멈췄음)
-  const old4 = Utilities.formatDate(new Date(Date.now() - 4 * 86400000), CONFIG.TIMEZONE, 'yyyyMMdd'), s2 = Date.now() - 2 * 86400000, cut10 = Date.now() - 10 * 86400000;
+  const old4 = Utilities.formatDate(new Date(Date.now() - 3 * 86400000), CONFIG.TIMEZONE, 'yyyyMMdd'), old3o = old4, s2 = Date.now() - 2 * 86400000, cut10 = Date.now() - 10 * 86400000;   // 가이드 사본 4일 → 3일 (11/27 저장 공간)
   let n = 0, left = 0;
   const t0 = Date.now(), capN = force ? 900 : 150, capT = force ? 45000 : 20000;
   Object.keys(all).forEach(function (k) {
@@ -5643,6 +5650,11 @@ function propsCleanup_(runs, force, all0) {
     if (n >= capN || Date.now() - t0 > capT || late_(200)) { left++; return; }
     let del = false, m;
     if ((m = k.match(/^(?:RVSEEN_|RVQMOD_|RVSTUCK_|RVSTUCKMSG_)([-\w]{25,})$/))) del = !live[m[1]] && !rvWin[m[1]];
+    // (11/27 저장 공간 초과: 한글은 3바이트라 글자 수 48만인데 실제로는 한도 넘음) 다시 안 쓰는 것만 더 지움:
+    //  폼 열기 표시(OPEN_폼ID_날짜)는 3일 지난 것, 취완·리뷰비 요청 중복 막기 표시는 진행일 60일 넘은 진행 것(리뷰 확인은 40일 안만 봄, 전체 취완 나누기는 60일 안)
+    else if ((m = k.match(/^OPEN_.+_(\d{8})$/))) del = m[1] < old3o;
+    else if ((m = k.match(/^(?:RVDAYREQ_INIT_|RVROOMDONE_INIT_)([-\w]{25,})$/))) del = !live[m[1]] && !win60[m[1]];
+    else if ((m = k.match(/^(?:RVDAYREQ_|RVROOMDONE_)(.+)$/))) del = !keep60[m[1]];
     else if ((m = k.match(/^(?:LISTK_|LISTH_|RVPRODW_)([-\w]{25,})$/))) del = !live[m[1]];
     else if ((m = k.match(/^THUMB_([-\w]{25,})$/))) del = !live[m[1]] || (last[m[1]] || 0) < cut10;   // 썸네일은 보낼메시지 방 공지 옆에만 씀
     else if ((m = k.match(/^GRANT_[-\w]{25,}_([-\w]{25,})$/))) del = !live[m[1]];   // 끝난 명단 시트 IMPORTRANGE 허용 기록
@@ -5658,9 +5670,14 @@ function propsCleanup_(runs, force, all0) {
 // 저장 공간(스크립트 속성)이 거의 차면 바로 정리 (15분 확인 맨 앞, 다른 단계가 쓰기 전에). 이름+값 글자 수 기준
 function propsSqueeze_() {
   const props = PropertiesService.getScriptProperties(), all = props.getProperties();
-  let size = 0; Object.keys(all).forEach(function (k) { size += k.length + String(all[k]).length; });
-  if (size < 430000) return 0;
+  if (propsBytes_(all) < 430000) return 0;   // 바이트로 셈 (11/27: 글자 수로 세서 한글 3바이트를 놓쳐 '저장용량 한도 초과'가 다시 남)
   return propsCleanup_(null, true, all);
+}
+// 스크립트 속성 실제 크기(UTF-8 바이트, 이름+값). 구글 한도 약 500KB
+function propsBytes_(all) {
+  let n = 0;
+  Object.keys(all).forEach(function (k) { const s = k + String(all[k]); n += s.length; for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); if (c > 0x7f) n += c > 0x7ff ? 2 : 1; } });
+  return n;
 }
 function msgvPending_(st) { return st === '대기' || st === '방 못 찾음'; }
 // 메시지마다 체크한 시각: 속성 MSGV_S_<번호> 하나씩 (11/8: 여러 개를 빨리 체크하면 한 덩어리(MSGV_SENTAT)를 서로 덮어써서 체크한 게 바로 사라졌음). 예전 덩어리도 같이 읽음
@@ -10308,6 +10325,26 @@ function grnAi1_() {
     props.setProperty('GRNAI1', ('✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' [전] ' + why + ' → 남은 ' + left + '장 → ' + names.join(', ')).slice(0, 1200));
   } catch (e) { props.setProperty('GRNAI1', '실패(' + (e && e.message || e) + ')'); }
 }
+// (11/27 한 번) # 실/빈 그린코코 겨울모자: 생성기가 '구확10건 리뷰 10건'을 구확만(kind confirm)으로 넣어 리뷰 사진 AI 나누기·보고가 아예 건너뛰어짐
+//  → 의뢰서대로 리뷰 10건(포토 5, 포토없음 5)으로 고치고 사진 나누기 대기열에 넣음. 모든 날 마감 뒤 이틀이 지나 새 리뷰 가이드는 안 나감
+function grnRv1_() {
+  const props = PropertiesService.getScriptProperties();
+  if (/^✓/.test(String(props.getProperty('GRNRV1') || ''))) return;
+  try {
+    const r = readRuns_().filter(function (y) { return /그린코코\s*겨울모자/.test(bareTitle_(y['명단 제목'])) && y['시트ID']; })[0];
+    if (!r) { props.setProperty('GRNRV1', '실패(진행 없음)'); return; }
+    const sid = String(r['시트ID']);
+    let rv = null; try { rv = JSON.parse(props.getProperty('RV_' + sid) || 'null'); } catch (e) {}
+    if (!rv) { props.setProperty('GRNRV1', '실패(리뷰 정보 없음)'); return; }
+    const was = rv.kind;
+    rv.kind = 'mix'; rv.mix = '포토리뷰 5, 텍스트리뷰 5';
+    props.setProperty('RV_' + sid, JSON.stringify(rv));
+    const q = String(props.getProperty('RVAI_Q') || '').split(',').filter(Boolean);
+    if (q.indexOf(sid) < 0) { q.push(sid); props.setProperty('RVAI_Q', q.join(',')); }
+    try { ensureAiQueueTrigger_(); } catch (e) {}
+    props.setProperty('GRNRV1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 리뷰 종류 ' + was + ' → 포토 5·텍스트 5, 사진 나누기 대기열에 넣음');
+  } catch (e) { props.setProperty('GRNRV1', '실패(' + (e && e.message || e) + ')'); }
+}
 function salad30_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SALAD30') || '');
   if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
@@ -13737,15 +13774,15 @@ function buildDashboard_(force) {
   const rvItems = rvItems_(allRuns, props);
   const sigA = JSON.stringify(rvItems) + '|' + DASH_VER + '|' + show.join(',') + '|' + runs.map(dashStatus_).join(','), errsRaw = String(props.getProperty('RUN_ERRORS'));
   const sigB = order.map(function (id) { return id + ':' + sheets[id].n; }).join(',') + '|' + runs.map(function (r) { return r['시트ID'] + ':' + r['목표인원'] + ':' + r['진행 상태'] + ':' + r['진행일'] + ':' + r['택배 옮김']; }).join('|');
-  const sig = sigA + '|' + errsRaw + '|' + sigB, sigX = sigA + '|#|' + sigB;
+  const sig = sigA + '|' + errsRaw + '|' + sigB, sigX = sigA + '|#|' + sigB, sigH = cfHash_(sig), sigXH = cfHash_(sigX);   // 저장은 해시만 (11/27 저장 공간)
   // '확인 필요' 칸(N)만 바뀌었으면 통째로 다시 그리지 않고 그 칸만 고침 (11/25 사용자 '다 고쳐': 다시 그리기 한 번에 150~250초인데 확인 필요 글만 바뀐 때가 많음)
   //  DASH_SIG를 지워 '바로 다시 그리게' 한 곳(새 진행·택배 옮김 등)은 여기 안 탐. 위 표 방제 칸(B)이 진행 순서와 같을 때만
   { let sh0 = null; try { sh0 = ss.getSheetByName(DASH_TAB); } catch (e) {}
     const old0 = props.getProperty('DASH_SIG');
-    if (!force && sh0 && old0 && old0 !== sig && props.getProperty('DASH_SIGX') === sigX) {
+    if (!force && sh0 && old0 && old0 !== sigH && props.getProperty('DASH_SIGX') === sigXH) {
       let now = {}, was = {}; try { now = JSON.parse(errsRaw) || {}; } catch (e) {} try { was = JSON.parse(props.getProperty('DASH_ERRS') || '{}') || {}; } catch (e) {}
       let n = -1; try { n = dashErrsOnly_(sh0, runs, now, was); } catch (e) { n = -1; }
-      if (n >= 0) { props.setProperty('DASH_SIG', sig); props.setProperty('DASH_ERRS', errsRaw); if (n) note_('✓ 한눈에 확인 필요 칸만 ' + n + '줄 고침 (다시 그리기 안 함)'); return; }
+      if (n >= 0) { props.setProperty('DASH_SIG', sigH); props.setProperty('DASH_ERRS', errsRaw); if (n) note_('✓ 한눈에 확인 필요 칸만 ' + n + '줄 고침 (다시 그리기 안 함)'); return; }
     } }
   let sh = ss.getSheetByName(DASH_TAB);
   // 한눈에 탭 O열 메모 & P열 모집완료 체크 보존: 방제별로 읽어 스크립트 속성에 영구 보관 (15분 재실행 시에도 절대 날아가지 않게)
@@ -13798,7 +13835,7 @@ function buildDashboard_(force) {
   // 남은·신청 칸이 날짜로 보이지 않게 숫자 서식은 매번 (다시 만들지 않을 때도)
   if (sh && runs.length) { try { sh.getRange(2, 4, runs.length, 4).setNumberFormat('0'); } catch (e) {} }
   // 서명이 같아도 위 표가 비어 있으면(지난번에 지우고 쓰다가 멈춤) 다시 만듦
-  if (!force && sh && props.getProperty('DASH_SIG') === sig && (!runs.length || String(sh.getRange(2, 2).getValue()).trim() !== '')) return;
+  if (!force && sh && props.getProperty('DASH_SIG') === sigH && (!runs.length || String(sh.getRange(2, 2).getValue()).trim() !== '')) return;
   // 다시 그리기는 130~230초 걸려서, 15분 확인이 이미 170초를 넘겼으면 이번엔 안 그리고 다음 확인에서 (11/19 22:35: 262초에 시작해 6분 제한에 끊김)
   if (globalThis.__DASH_CUT_OK && late_(170)) throw { cfCut: 1 };
   // 지우기 전에 서명을 지워 둠: 쓰다가 멈추면 다음 확인이 꼭 다시 만들게
@@ -14125,7 +14162,7 @@ function buildDashboard_(force) {
   }
   props.setProperty('DASH_LISTS', JSON.stringify(listBlocks));
   props.setProperty('DASH_TAKCUT', JSON.stringify(takCutRows));   // 한눈에 마감 시각 칸 줄 → 방제 (고치면 onAdminEdit에서 저장)
-  props.setProperty('DASH_SIG', sig); props.setProperty('DASH_SIGX', sigX); props.setProperty('DASH_ERRS', errsRaw);
+  props.setProperty('DASH_SIG', sigH); props.setProperty('DASH_SIGX', sigXH); props.setProperty('DASH_ERRS', errsRaw);
   props.setProperty('DASH_TITLES', JSON.stringify(runs.map(function (r) { return bareTitle_(r['명단 제목']); })));
 }
 
