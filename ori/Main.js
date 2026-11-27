@@ -2154,6 +2154,20 @@ function diag_(p) {
     } catch (e) { r.fetchErr = String(e && e.message || e).slice(0, 160); }
     out.cacheTest = r;
   } catch (e) { out.cacheTestErr = String(e); }
+  // &loadtime=1 (11/28 '진행 도우미 30초'): 서버 쪽 시간 나눠 재기 — 캐시에서 코드 꺼내기, 1.2MB 코드 해석(new Function: 실행 안 함), 진행 도우미 첫 화면 자료(info full)
+  if (p.loadtime) try {
+    const c = CacheService.getScriptCache(), r = {}, n = Number(c.get('ori_src_n') || 0), keys = [];
+    for (let i = 0; i < n; i++) keys.push('ori_src_' + i);
+    let t = Date.now(); const parts = n ? c.getAll(keys) : {}; let src = keys.map(function (k) { return parts[k] || ''; }).join(''); r.cacheGetMs = Date.now() - t; r.srcKB = Math.round(src.length / 1000);
+    t = Date.now(); try { new Function(src); r.parseOk = true; } catch (e) { r.parseErr = String(e).slice(0, 100); } r.parseMs = Date.now() - t; src = '';
+    const before = JSON.parse(JSON.stringify(globalThis.__ORI_SUB || {}));
+    t = Date.now(); const o = toolAction_({ act: 'info', full: true }); r.infoMs = Date.now() - t; r.infoKB = Math.round(JSON.stringify(o || {}).length / 1000);
+    t = Date.now(); const pg = toolsPage_(o, 'web'); r.pageMs = Date.now() - t; try { r.pageKB = Math.round(pg.getContent().length / 1000); } catch (e) {}
+    const after = globalThis.__ORI_SUB || {}, sub = {};
+    Object.keys(after).forEach(function (k) { const a = after[k], b = before[k] || { n: 0, ms: 0 }; if (a.ms - b.ms >= 200) sub[k] = Math.round((a.ms - b.ms) / 100) / 10 + '초(' + (a.n - b.n) + ')'; });
+    r.sub = sub;
+    out.loadTime = r;
+  } catch (e) { out.loadTimeErr = String(e && e.stack || e).slice(0, 300); }
   try { out.obTrace = JSON.parse(CacheService.getScriptCache().get('OB_TRACE') || '[]'); } catch (e) {}
   // 한눈에 O열 메모 점검 (11/16 메모 지워짐): 저장된 메모 전부 + 지금 한눈에 B·O
   if (p.memos) try { out.memos = JSON.parse(PropertiesService.getScriptProperties().getProperty('DASH_MEMOS') || '{}'); const d = adminSs_().getSheetByName(DASH_TAB); out.memoRows = d.getRange(2, 2, Math.min(d.getLastRow() - 1, 120), 14).getValues().map(function (v, i) { return (i + 2) + ' ' + v[0] + ' | ' + v[13]; }).filter(function (x) { return !/^\d+ \| $/.test(x); }); } catch (e) { out.memosErr = String(e); }
