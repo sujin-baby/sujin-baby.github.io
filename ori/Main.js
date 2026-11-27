@@ -2116,7 +2116,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'LPSPACE1', 'LPFILE1', 'RVZIP_AT', 'CF_FCHK', 'PAY_POSTDAY', 'RV_GONE', 'DASHW1', 'PAYDELBJ1', 'IBULPW1', 'ROISISYNC1', 'ZRN5', 'ZRNTXT1', 'SVBWK1', 'JINITXT1', 'GRNAI1', 'GRNRV1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'LPSPACE1', 'LPFILE1', 'RVZIP_AT', 'CF_FCHK', 'PAY_POSTDAY', 'RV_GONE', 'DASHW1', 'PAYDELBJ1', 'IBULPW1', 'ROISISYNC1', 'ZRN5', 'ZRNTXT1', 'SVBWK1', 'JINITXT1', 'GRNAI1', 'GRNRV1', 'STUCKDONE1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3875,6 +3875,7 @@ function checkFullInner_() {
     try { jiniTxt1_(); } catch (e) {}
     try { grnAi1_(); } catch (e) {}
     try { grnRv1_(); } catch (e) {}
+    try { stuckDone1_(); } catch (e) {}
   });
   cfAlways_(S, '다음 일차', function () {
     try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
@@ -4873,14 +4874,15 @@ function rvZipSoon_() {
     if (!all['RVRPT_' + sid]) return;   // 아직 리뷰가 다 안 끝남 → 다 끝나면 reviewDone_가 보고 글
     let rk = ''; try { rk = (JSON.parse(all['RV_' + sid] || '{}') || {}).kind || ''; } catch (e) {}
     if (rk === 'confirm') { props.deleteProperty(k); return; }
-    let fname = ''; try { fname = DriveApp.getFileById(sid).getName(); } catch (e) {}
+    let fname = '', zs = ''; try { fname = DriveApp.getFileById(sid).getName(); } catch (e) {}
     try {
       const f = rvFolder_(mine, props, sid);
       if (!f) { props.deleteProperty(k); return; }
-      rvZip_(f, fname, props, sid, mine);
+      zs = rvZip_(f, fname, props, sid, mine);
     } catch (e) { if (e && e.yieldLock) throw e; props.deleteProperty(k); note_('리뷰 보고 글(5분) 실패 ' + fname + ': ' + (e && e.message || e) + ' → 30분 정리에서 다시'); return; }
     const z = props.getProperty('RVZIP_' + sid) || '';
     if (z && z !== String(all['RVZIP_' + sid] || '')) { props.deleteProperty(k); n++; }
+    else if (zs === 'same' || zs === 'empty') props.deleteProperty(k);   // 보고 글이 이미 지금 사진과 같음(15분 확인이 먼저 만듦) → 표시 지움
   });
   return n;
 }
@@ -8864,7 +8866,7 @@ function reviewDone_(runs, only) {
       try {
         let rk0 = ''; try { rk0 = (JSON.parse(props.getProperty('RV_' + sid) || '{}') || {}).kind || ''; } catch (e) {}
         const f0 = rk0 === 'confirm' ? null : subTime_('정리: 리뷰 폴더', function () { return rvFolder_(mine, props, sid); });
-        if (f0) { if (!heavyOk(sid)) return; subTime_('정리: 리뷰 압축', function () { rvZip_(f0, fname, props, sid, mine); }); }
+        if (f0) { if (!heavyOk(sid)) return; const zs = subTime_('정리: 리뷰 압축', function () { return rvZip_(f0, fname, props, sid, mine); }); if (zs && zs !== 'wait') props.deleteProperty('RVZIPSOON_' + sid); }
         zipAt[sid] = Date.now(); saveZipAt();
       } catch (e) { note_('리뷰 완료 확인 실패 ' + sid + ': ' + e.message); }
       return;
@@ -9014,7 +9016,16 @@ function reviewDone_(runs, only) {
             props.setProperty('RVSTUCKMSG_' + sid, '1');
             queueMsg_('내 할 일', '[업체 전달 못 함] ' + rvStuckText_(mine, o) + '\n→ 그분 리뷰를 확인하고 명단 시트 체크칸에 체크하면 업체 전달(📦리뷰취합)에 떠요', '할 일');
           }
-        } else if (props.getProperty(sk) != null) props.deleteProperty(sk);
+        } else {
+          if (props.getProperty(sk) != null) props.deleteProperty(sk);
+          // 다 확인됐거나 업체에 보냈으면 '[업체 전달 못 함]' 할 일은 끝난 것 → 보냄으로 (회색, 이틀 뒤 사라짐). 지우지는 않음
+          //  (11/27 사용자: 도레미파머스마켓 사과 리뷰 다 됐는데 '리뷰 확인 안 된 4명' 할 일이 그대로 남음)
+          if ((allDone || rvSentAny_(mine)) && props.getProperty('RVSTUCKMSG_' + sid)) {
+            const nd = rvStuckTodoDone_(mine);
+            props.deleteProperty('RVSTUCKMSG_' + sid);
+            if (nd) note_('✓ 업체 전달 못 함 할 일 끝냄(다 확인됨): ' + name + ' ' + nd + '건');
+          }
+        }
       } catch (e) { note_('업체 전달 막힘 확인 실패 ' + sid + ': ' + e.message); }
       if (allDone && !props.getProperty(rk)) {
         props.setProperty(rk, '1');
@@ -9130,6 +9141,15 @@ function rvImgCount_(img) {
   return by;
 }
 // '과일쏙 못난이사과외 (11.4~11.9) — 리뷰 확인 안 된 2명: 홍길동(11.5) 김철수(11.5) · 리뷰 취합 안 한 날: 11.5 · 리뷰이미지 사진 30장(포토 8·텍스트 22) / 40명'
+// 이 의뢰의 안 끝낸 '[업체 전달 못 함]' 할 일을 보냄으로 (머리 '[업체 전달 못 함] 캠페인 (날짜) — '가 같은 것만). 바꾼 개수
+function rvStuckTodoDone_(mine) {
+  const head = '[업체 전달 못 함] ' + rvStuckText_(mine, {}).split(' — ')[0] + ' — ';
+  const ob = outboxSheet_(), ol = ob.getLastRow();
+  if (ol < 2) return 0;
+  const ids = ob.getRange(2, 1, ol - 1, 6).getValues().filter(function (v) { return v[2] === '할 일' && v[5] === '대기' && String(v[4]).indexOf(head) === 0; }).map(function (v) { return String(v[0]); });
+  ids.forEach(function (id) { markMsgSide_(id, '보냄'); });
+  return ids.length;
+}
 function rvStuckText_(mine, o) {
   const f = function (r) { return (r['진행일'].getMonth() + 1) + '.' + r['진행일'].getDate(); };
   const ds = (mine || []).filter(function (r) { return r['진행일'] instanceof Date; });
@@ -9412,7 +9432,7 @@ function rvZip_(f, name, props, sid, mine) {
   const aiLeft = sentAny ? 0 : rvAiSort_(f, sid, props);
   // 사장님께 리뷰이미지 폴더 링크로 보냄 (사용자 허락 10/31: 링크 있으면 보기). 그 의뢰 리뷰이미지 폴더만 열림 (다른 업체 폴더는 안 보임)
   try { f.img.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
-  if (aiLeft > 0) return;
+  if (aiLeft > 0) return 'wait';
   // 포토·텍스트·별점 폴더 이름 개수를 늘 실제 장수로 (11/5 피클 인계: AI가 나눌 때만 고쳐서, 손으로 넣은 사진은 '포토 (4개)'인데 15장)
   if (!sentAny) { try { rvCountDirs_(f.img, rvCartOf_(sid)); } catch (e) {} }
   const byType = { 포토: [], 텍스트: [], 별점: [] }, loose = [], seen = {}, skipped = {};
@@ -9426,11 +9446,13 @@ function rvZip_(f, name, props, sid, mine) {
   const ci = f.parent.getFolders();
   while (ci.hasNext()) { const x = ci.next(); if (RV_CAP_RE.test(String(x.getName()).trim())) walk(x, 0, ''); else if (RV_SKIP_RE.test(x.getName())) walk(x, 1, ''); }
   const typed = byType['포토'].concat(byType['텍스트'], byType['별점']), files = typed.concat(loose);
-  if (!files.length) return;
+  if (!files.length) return 'empty';
   const newest = files.reduce(function (m, x) { return Math.max(m, x.getLastUpdated().getTime(), x.getDateCreated().getTime()); }, 0);
   const sig = 'v4:' + RV_TYPES.map(function (t) { return byType[t].length; }).join(',') + ':' + loose.length + ':' + newest;   // v3 (11/8): 장바구니건·종류별 개수·할 일 하나만 → 한 번 다시
-  if (props.getProperty('RVZIP_' + sid) === sig) return;
-  if (Date.now() - newest < 10 * 60000) return;   // 아직 올리는 중일 수 있음 → 다음 확인에서
+  if (props.getProperty('RVZIP_' + sid) === sig) return 'same';
+  // 아직 올리는 중일 수 있음 → 다음 확인에서. 이때 '곧 다시 보기' 표시(RVZIPSOON_)를 남김: 안 남기면 한 시간에 한 번 다시 보기에 걸려 보고 글이 50분 늦게 뜸
+  //  (11/27 사용자: 11.11 도레미파머스마켓 사과 리뷰 다 됐는데 리뷰취합에 안 올라옴 → 17:46에 사진 정리 끝, 보고 글은 18:34). 표시는 처음 한 번만 (3시간 지나면 지워짐)
+  if (Date.now() - newest < 10 * 60000) { if (!props.getProperty('RVZIPSOON_' + sid)) props.setProperty('RVZIPSOON_' + sid, String(Date.now())); return 'wait'; }
   const base = rvBase_(name), zipName = base.replace(/\//g, '／').replace(/[\\:*?"<>|]/g, '') + '.zip', warn = [];   // 파일 이름에 못 쓰는 글자 (# 실/빈 → 실／빈)
   // 개수: 전부 종류 폴더에 나눴으면 폴더 사진 수, 아니면 리뷰 가이드 배정(못 찾으면 의뢰서)
   let cnt = null, from = '';
@@ -9498,6 +9520,7 @@ function rvZip_(f, name, props, sid, mine) {
   try { rvCheckFile_(f, base, sid, mine, cnt, files.length, warn); } catch (e) { note_('리뷰 확인표 실패: ' + e.message); }
   try { rvCheckMsgSync_(base, warn.length ? '[' + base + '] 리뷰 사진 확인 (사진 ' + files.length + '장 · ' + cntTxt + (cart > 1 ? ' · 장바구니 ' + cart + '개' : '') + ')\n' + warn.join('\n') : ''); } catch (e) { note_('리뷰 사진 확인 할 일 실패: ' + e.message); }
   note_('✓ 리뷰 보고: ' + base + ' (사진 ' + files.length + '장 · ' + cntTxt + (from ? ', ' + from + ' 기준' : '') + ')' + (warn.length ? ' ' + warn.join(' ') : ''));
+  return 'done';
 }
 
 // 리뷰 확인표 (11/2 사용자 요청: 의뢰서 리뷰 가이드·종류별 개수와 실제 사진 수를 한 화면에서). 의뢰 폴더(리뷰이미지 위)에 '📋 리뷰 확인표.txt'
@@ -10357,6 +10380,26 @@ function grnRv1_() {
     props.setProperty('GRNRV1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 리뷰 종류 ' + was + ' → 포토 5·텍스트 5, 사진 나누기 대기열에 넣음');
   } catch (e) { props.setProperty('GRNRV1', '실패(' + (e && e.message || e) + ')'); }
 }
+// (11/27 한 번) 이미 다 확인됐거나 업체에 보낸 의뢰인데 '[업체 전달 못 함]' 할 일이 대기로 남은 것 (위 rvStuckTodoDone_ 전에 생긴 것)
+//  → 그 의뢰 명단 시트만 한 번 다시 읽게 함(RVSEEN_ 지움). 리뷰 확인이 다 됐는지는 리뷰 확인 단계가 다시 보고, 다 됐을 때만 보냄으로
+function stuckDone1_() {
+  const props = PropertiesService.getScriptProperties();
+  if (/^✓/.test(String(props.getProperty('STUCKDONE1') || ''))) return;
+  try {
+    const all = props.getProperties(), bySid = {};
+    readRuns_().forEach(function (r) { const sid = String(r['시트ID'] || ''); if (sid && r['진행일'] instanceof Date) (bySid[sid] = bySid[sid] || []).push(r); });
+    const ob = outboxSheet_(), ol = ob.getLastRow(), v = ol >= 2 ? ob.getRange(2, 1, ol - 1, 6).getValues() : [];
+    const todos = v.filter(function (x) { return x[2] === '할 일' && x[5] === '대기' && /^\[업체 전달 못 함\] /.test(String(x[4])); }).map(function (x) { return String(x[4]); });
+    const hit = [];
+    Object.keys(bySid).forEach(function (sid) {
+      if (!all['RVSTUCKMSG_' + sid] || all['RVSTUCK_' + sid] != null) return;   // 아직 막힌 의뢰(RVSTUCK_ 있음)는 할 일이 맞음 → 그대로
+      const mine = bySid[sid].sort(function (a, b) { return a['진행일'] - b['진행일']; }), h = '[업체 전달 못 함] ' + campOf_(mine[0]['명단 제목']) + ' (';
+      if (!todos.some(function (t) { return t.indexOf(h) === 0; })) return;
+      props.deleteProperty('RVSEEN_' + sid); hit.push(campOf_(mine[0]['명단 제목']));
+    });
+    props.setProperty('STUCKDONE1', ('✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 다시 읽게 함 ' + hit.length + ': ' + hit.join(', ')).slice(0, 600));
+  } catch (e) { props.setProperty('STUCKDONE1', '실패(' + (e && e.message || e) + ')'); }
+}
 function salad30_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SALAD30') || '');
   if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
@@ -11130,7 +11173,8 @@ function rvAiSort_(f, sid, props) {
   if (done) note_('✓ 리뷰 사진 AI 분류 ' + done + '장: ' + Object.keys(moved).map(function (k) { return k.replace(/\s*\(압축 제외\)/, '') + ' ' + moved[k]; }).join(', ') + (left.length - done > 0 ? ' (남은 ' + (left.length - done) + '장은 다음 확인에서)' : ''));
   setQ(left.length - done > 0);
   if (left.length - done > 0) { try { ensureAiQueueTrigger_(); } catch (e) {} }
-  if (done) { try { rvCountDirs_(f.img, rvCartOf_(sid)); } catch (e) {} }
+  // AI가 사진을 옮겼으면 보고 글도 곧 다시 (받는 곳에서 옮길 때와 같이, 11/27 도레미파: AI 분류 끝난 뒤 한 시간 기다림)
+  if (done) { try { rvCountDirs_(f.img, rvCartOf_(sid)); } catch (e) {} try { props.setProperty('RVZIPSOON_' + sid, String(Date.now())); } catch (e) {} }
   return left.length - done;
 }
 // 리뷰 사진 AI 분류 1분 연쇄 트리거 (남은 사진이 있으면 15분 대기 없이 1분 뒤 바로 실행, 11/6 패치)
