@@ -2134,6 +2134,26 @@ function diag_(p) {
   try { out.reports = JSON.parse(CacheService.getScriptCache().get('REPORT_LOG') || '[]'); } catch (e) { out.reportsErr = String(e); }
   // 로더가 코드를 어디서 갖고 왔는지·켜는 데 걸린 시간 (11/28 '아직도 30초' 확인용, Code.gs가 남김)
   try { out.load = JSON.parse(CacheService.getScriptCache().get('ORI_LOAD') || 'null'); } catch (e) { out.loadErr = String(e); }
+  // &cachetest=1 (11/28 피클 로더 교체 검토): 지금 로더 캐시가 비었는지, 캐시 한 칸 한도가 바이트인지 글자인지(임시 키 1분, 바로 지움),
+  //  GitHub이 If-None-Match에 304를 주는지. 시트는 안 건드림
+  if (p.cachetest) try {
+    const c = CacheService.getScriptCache(), r = {};
+    r.cur = { n: c.get('ori_src_n'), len: c.get('ori_src_len'), chk: c.get('ori_src_chk'), etag: c.get('ori_src_etag'), s0: (c.get('ori_src_0') || '').length };
+    const rep = function (ch, n) { return new Array(n + 1).join(ch); };
+    [['ko80KB', rep('가', 26666)], ['ko95KB', rep('가', 31666)], ['ko110KB', rep('가', 36666)], ['ascii99KB', rep('a', 99000)], ['ascii110KB', rep('a', 110000)], ['ko90Kchars', rep('가', 90000)]].forEach(function (t) {
+      const k = '__CT_' + t[0]; let ok = false, err = '';
+      try { c.put(k, t[1], 60); ok = (c.get(k) || '').length === t[1].length; } catch (e) { err = String(e && e.message || e).slice(0, 120); }
+      try { c.remove(k); } catch (e) {}
+      r[t[0]] = { chars: t[1].length, ok: ok, err: err };
+    });
+    try {
+      const u = CONFIG.UPDATE_BASE + 'Main.js', t1 = Date.now(), a = UrlFetchApp.fetch(u + '?t=' + Date.now(), { muteHttpExceptions: true });
+      const h = a.getHeaders() || {}, et = h.ETag || h.Etag || h.etag || '';
+      r.fetch = { code: a.getResponseCode(), ms: Date.now() - t1, bytes: a.getContent().length, etag: String(et).slice(0, 60) };
+      if (et) { const t2 = Date.now(), b = UrlFetchApp.fetch(u + '?t=' + Date.now(), { muteHttpExceptions: true, headers: { 'If-None-Match': et } }); r.cond = { code: b.getResponseCode(), ms: Date.now() - t2, bytes: b.getContent().length }; }
+    } catch (e) { r.fetchErr = String(e && e.message || e).slice(0, 160); }
+    out.cacheTest = r;
+  } catch (e) { out.cacheTestErr = String(e); }
   try { out.obTrace = JSON.parse(CacheService.getScriptCache().get('OB_TRACE') || '[]'); } catch (e) {}
   // 한눈에 O열 메모 점검 (11/16 메모 지워짐): 저장된 메모 전부 + 지금 한눈에 B·O
   if (p.memos) try { out.memos = JSON.parse(PropertiesService.getScriptProperties().getProperty('DASH_MEMOS') || '{}'); const d = adminSs_().getSheetByName(DASH_TAB); out.memoRows = d.getRange(2, 2, Math.min(d.getLastRow() - 1, 120), 14).getValues().map(function (v, i) { return (i + 2) + ' ' + v[0] + ' | ' + v[13]; }).filter(function (x) { return !/^\d+ \| $/.test(x); }); } catch (e) { out.memosErr = String(e); }
