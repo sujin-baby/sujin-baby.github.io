@@ -2123,7 +2123,13 @@ function diag_(p) {
     try { const ph = JSON.parse(pr.CF_PH || "{}") || {}; out.cfT = {}; Object.keys(ph).forEach(function (k) { out.cfT[k] = [ph[k].t, ph[k].d ? f(new Date(Number(ph[k].d)), "MM-dd HH:mm") : ""]; }); } catch (e) {}   // 15분 확인 단계별 걸린 시간·마지막으로 한 때 (11/25 월급시트 밀림 확인)
     // 속성 용량 (11/16 '데이터 용량 오류'): 전체 글자 수·개수, 앞부분(접두어)별 크기 상위 12
     try { const by = {}; let tot = 0; Object.keys(pr).forEach(function (k) { const n = k.length + String(pr[k]).length; tot += n; const pf = (k.match(/^[A-Z]+_?/) || [k])[0]; by[pf] = (by[pf] || 0) + n; });
-      out.propsSize = { total: tot, bytes: propsBytes_(pr), count: Object.keys(pr).length, top: Object.keys(by).sort(function (a, b) { return by[b] - by[a]; }).slice(0, 12).map(function (k) { return k + ' ' + by[k]; }) }; } catch (e) {}
+      out.propsSize = { total: tot, bytes: propsBytes_(pr), count: Object.keys(pr).length, top: Object.keys(by).sort(function (a, b) { return by[b] - by[a]; }).slice(0, 12).map(function (k) { return k + ' ' + by[k]; }) };
+      if (p.pbytes) {   // &pbytes=1: 바이트·개수로 접두어 상위 40, 가장 큰 속성 15개 (11/27 저장 공간)
+        const bb = {}, bc = {}, one = [];
+        Object.keys(pr).forEach(function (k) { const o = {}; o[k] = pr[k]; const n = propsBytes_(o), pf = (k.match(/^[A-Z0-9]+_(?:[A-Z]+_)?/) || [k.slice(0, 12)])[0]; bb[pf] = (bb[pf] || 0) + n; bc[pf] = (bc[pf] || 0) + 1; one.push([k.slice(0, 50), n]); });
+        out.propsSize.byBytes = Object.keys(bb).sort(function (a, b) { return bb[b] - bb[a]; }).slice(0, 40).map(function (k) { return k + ' ' + bb[k] + 'B/' + bc[k] + '개'; });
+        out.propsSize.biggest = one.sort(function (a, b) { return b[1] - a[1]; }).slice(0, 15).map(function (x) { return x[0] + ' ' + x[1] + 'B'; });
+      } } catch (e) {}
   } catch (e) { out.propsErr = String(e); }
   try { out.reports = JSON.parse(CacheService.getScriptCache().get('REPORT_LOG') || '[]'); } catch (e) { out.reportsErr = String(e); }
   try { out.obTrace = JSON.parse(CacheService.getScriptCache().get('OB_TRACE') || '[]'); } catch (e) {}
