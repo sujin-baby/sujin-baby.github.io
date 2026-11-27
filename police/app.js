@@ -1454,7 +1454,7 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     }
     var ws = gtWeakTargets();
     var sub = $('#gtdWeakSub');
-    if (sub) sub.textContent = ws.length ? ws.map(gtUnitShort).join(' · ') + ' 15문제 ›' : '아직 기록 없음 · 바로 풀기 ›';
+    if (sub) sub.textContent = ws.length ? ws.map(gtUnitShort).join(' · ') + ' 15문제' : '아직 기록 없음 · 바로 풀기';
     var bn = $('#gtdBookN');
     if (bn) bn.textContent = ((S.gbook && S.gbook.items) || []).length;
   }
@@ -3909,7 +3909,9 @@ window.addEventListener('unhandledrejection', function (e) { try { window.__poli
     var lt = $('#rtLights');
     if (lt) {
       var lh = '';
-      RT_SUBJ.forEach(function (s) {
+      /* 과목 탭과 무관한 과목의 등불이 섞이지 않게: 지텔프 탭 = 지텔프만 / 경찰 탭 = 경찰 3과목 */
+      var lights = RT_SUBJ.filter(function (s) { return S.subj === 'gtelp' ? s.id === 'gtelp' : s.id !== 'gtelp'; });
+      lights.forEach(function (s) {
         var acc = subjAcc(s.id), L = lightOf(acc);
         lh += '<span class="rt-lt ' + L.c + '" title="' + esc(s.n) + ' ' +
           (acc ? acc.a + '문제 · 정답률 ' + L.p : '기록 없음') + '">' +
