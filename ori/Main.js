@@ -2116,7 +2116,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'LPSPACE1', 'LPFILE1', 'RVZIP_AT', 'CF_FCHK', 'PAY_POSTDAY', 'RV_GONE', 'DASHW1', 'PAYDELBJ1', 'IBULPW1', 'ROISISYNC1', 'ZRN5', 'ZRNTXT1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'LPSPACE1', 'LPFILE1', 'RVZIP_AT', 'CF_FCHK', 'PAY_POSTDAY', 'RV_GONE', 'DASHW1', 'PAYDELBJ1', 'IBULPW1', 'ROISISYNC1', 'ZRN5', 'ZRNTXT1', 'SVBWK1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3865,6 +3865,7 @@ function checkFullInner_() {
     try { roisiSync1_(); } catch (e) {}
     try { zrn5_(); } catch (e) {}
     try { zrnTxt1_(); } catch (e) {}
+    try { svbWk1_(); } catch (e) {}
   });
   cfAlways_(S, '다음 일차', function () {
     try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
@@ -10234,6 +10235,37 @@ function zrnTxt1_() {
     rv.dayMix = dm; props.setProperty('RV_' + sid, JSON.stringify(rv));
     props.setProperty('ZRNTXT1', ('✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 텍스트리뷰로: ' + keys.join(', ')).slice(0, 800));
   } catch (e) { props.setProperty('ZRNTXT1', '실패(' + (e && e.message || e) + ')'); }
+}
+// (11/27 한 번, 사용자 "오늘 등록한 실 실버반석 전기면도기 주말에도 진행으로, 11.30 거 11.28부터 진행으로 땡겨 줘") xwkaln3z 총 5:
+//  1일차 11.30 → 11.28 (moveRunDate_: 방제·진행일·안 보낸 공지·보낼 날짜), 일정 대기 2일차 12.1 → 11.29, 3일차 12.2 → 11.30 + 주말 진행 표시(cfg.weekend). 명단 시트 이름은 그대로
+function svbWk1_() {
+  const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SVBWK1') || '');
+  if (/^✓/.test(st) || (st.match(/실패/g) || []).length >= 3) return;
+  const out = [];
+  try {
+    const r = readRuns_().filter(function (y) { return String(y['요청ID']) === 'xwkaln3z'; })[0];
+    if (!r) { props.setProperty('SVBWK1', (st + ' 실패(진행 없음)').slice(-400)); return; }
+    const d1 = new Date(2026, 10, 28);
+    const dayK = function (k) { const z = new Date(d1); z.setHours(12, 0, 0, 0); z.setDate(z.getDate() + k - 1); z.setHours(0, 0, 0, 0); return z; };
+    if (dayStart_(r['진행일']) !== d1.getTime()) {
+      if (Number(r['인원']) > 0) { props.setProperty('SVBWK1', (st + ' 실패(이미 응답 있음)').slice(-400)); return; }
+      globalThis.__NO_FILE_RENAME = true;
+      try { out.push('1일차 ' + moveRunDate_(r, d1)); } finally { globalThis.__NO_FILE_RENAME = false; }
+    } else out.push('1일차 이미 11.28');
+    const ps = planSheet_(), pl = ps.getLastRow();
+    if (pl >= 2) ps.getRange(2, 1, pl - 1, PLAN_HEAD.length).getValues().forEach(function (x, i) {
+      if (String(x[0]).indexOf('xwkaln3z-') !== 0 || x[8] !== '대기') return;
+      const k = Number(x[2]) || 0; if (k < 2) return;
+      let cfg = {}; try { cfg = JSON.parse(x[9] || '{}') || {}; } catch (e) {}
+      cfg.weekend = true;
+      const d = dayK(k);
+      ps.getRange(i + 2, 4, 1, 3).setValues([[d, retitleDate_(x[4], d), retitleDate_(x[5], d)]]);
+      ps.getRange(i + 2, 10).setValue(JSON.stringify(cfg));
+      out.push(k + '일차 ' + (d.getMonth() + 1) + '.' + d.getDate() + ' ' + bareTitle_(retitleDate_(x[5], d)));
+    });
+    props.deleteProperty('DASH_SIG');
+    props.setProperty('SVBWK1', ('✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + out.join(', ')).slice(0, 1000));
+  } catch (e) { props.setProperty('SVBWK1', (st + ' 실패(' + (e && e.message || e) + ') ' + out.join(', ')).slice(-400)); }
 }
 function salad30_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SALAD30') || '');
