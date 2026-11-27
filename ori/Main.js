@@ -2134,6 +2134,7 @@ function diag_(p) {
   try { out.reports = JSON.parse(CacheService.getScriptCache().get('REPORT_LOG') || '[]'); } catch (e) { out.reportsErr = String(e); }
   // 로더가 코드를 어디서 갖고 왔는지·켜는 데 걸린 시간 (11/28 '아직도 30초' 확인용, Code.gs가 남김)
   try { out.load = JSON.parse(CacheService.getScriptCache().get('ORI_LOAD') || 'null'); } catch (e) { out.loadErr = String(e); }
+  try { out.ptime = JSON.parse(CacheService.getScriptCache().get('PTIME_LOG') || '[]'); } catch (e) {}   // 진행 도우미 걸린 시간 (ptimeSave_)
   // &cachetest=1 (11/28 피클 로더 교체 검토): 지금 로더 캐시가 비었는지, 캐시 한 칸 한도가 바이트인지 글자인지(임시 키 1분, 바로 지움),
   //  GitHub이 If-None-Match에 304를 주는지. 시트는 안 건드림
   if (p.cachetest) try {
@@ -2191,8 +2192,10 @@ function doGet(e) {
   if (p.p === 'rank') return rankPage_(p);
   if (p.p === 'review') return reviewPage_(p);
   if (p.p === 'tools') {
-    return toolsPage_(toolsRequest_(p), 'web');
+    const ts0 = Date.now(), o = toolsRequest_(p);
+    return toolsPage_(o, 'web', { s: ts0, e: Date.now() });   // 서버 시작·끝 시각 → 화면이 다 그려진 뒤 p=ptime으로 걸린 시간을 알려 옴 (11/28 '휴대폰 링크 30초')
   }
+  if (p.p === 'ptime') { try { ptimeSave_(p); } catch (err) {} return ContentService.createTextOutput('ok'); }
   if (p.p === 'outbox') {
     const items = JSON.stringify(outboxItems_()).replace(/</g, '\\u003c');
     return HtmlService.createHtmlOutput(OUTBOX_HTML.replace('__ITEMS__', function () { return items; }).replace('__K__', JSON.stringify(CONFIG.KEY)).replace('__EXEC__', function () { return JSON.stringify(CONFIG.WEBAPP_URL || ''); }))
@@ -6829,13 +6832,26 @@ function showToolsSidebar_() {
 
 // 진행 도우미 페이지: 서버가 내용을 채워서 보냄 (페이지가 서버 응답을 기다리지 않게)
 const TOOLS_PV = '5';   // 진행 도우미 화면 버전. 화면 동작을 바꾸면 올림 → 예전에 열어 둔 화면은 저장을 막고 다시 열라고 알림
-function toolsPage_(o, mode) {
+function toolsPage_(o, mode, srv) {
   const j = function (x) { return JSON.stringify(x).replace(/</g, '\\u003c'); };
   const html = TOOLS_HTML.replace('__K__', function () { return j(CONFIG.KEY); }).replace('__INIT__', function () { return j(o || {}); }).replace('__PV__', function () { return j(TOOLS_PV); })
-    .replace('__MODE__', function () { return j(mode); }).replace('__EXEC__', function () { return j(CONFIG.WEBAPP_URL || ''); });
+    .replace('__MODE__', function () { return j(mode); }).replace('__EXEC__', function () { return j(CONFIG.WEBAPP_URL || ''); })
+    .replace('__SRV__', function () { return j(srv || null); });
   return HtmlService.createHtmlOutput(html).setTitle('진행 도우미').addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
+// 진행 도우미가 알려 온 걸린 시간 (11/28 '휴대폰 링크 30초' 원인 찾기). 캐시에 최근 20개 → diag ptime
+//  srv=서버(자료 만들기) · toPage=서버 끝→화면 시작(전송·구글 바깥 화면) · draw=화면 시작→다 그림 · load=사진까지 · tapToSrv=누른 때→서버 시작(구글·로더) · total=누른 때→다 뜸
+function ptimeSave_(p) {
+  const n = function (k) { const v = Number(p[k]); return isFinite(v) ? v : 0; }, s = n('s'), e = n('e'), o = n('o'), r = n('r'), l = n('l'), c = n('c');
+  if (!s || !e) return null;
+  const x = { at: Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm:ss'), srv: e - s, toPage: o ? o - e : null, draw: o && r ? r - o : null, load: o && l ? l - o : null,
+    tapToSrv: c ? s - c : null, total: c && (l || r) ? (l || r) - c : null, kb: n('kb') };
+  const cache = CacheService.getScriptCache();
+  let a = []; try { a = JSON.parse(cache.get('PTIME_LOG') || '[]') || []; } catch (err) {}
+  a.unshift(x); cache.put('PTIME_LOG', JSON.stringify(a.slice(0, 20)), 21600);
+  return x;
+}
 // 웹(휴대폰)에서 버튼을 누르면 이 주소로 다시 열림: ?p=tools&a=동작&t=진행&x=공지&n=인원&ts=시각들&nc=한 번만 표시
 function toolsRequest_(p) {
   const d = { k: CONFIG.KEY, act: String(p.a || 'info'), title: String(p.t || ''), text: String(p.x || ''), n: Number(p.n) || 0,
@@ -7861,7 +7877,7 @@ const TOOLS_HTML = String.raw`
   </div>
 </div>
 <script>
-var K = __K__, INIT = __INIT__, MODE = __MODE__, EXEC = __EXEC__, PV = __PV__, $ = function (i) { return document.getElementById(i); }, running = false, tick = null, NEXTMD = '', JUST = false;
+var K = __K__, INIT = __INIT__, MODE = __MODE__, EXEC = __EXEC__, PV = __PV__, SRV = __SRV__, $ = function (i) { return document.getElementById(i); }, running = false, tick = null, NEXTMD = '', JUST = false;
 try { $('rvlink').href = EXEC + '?p=review&k=' + encodeURIComponent(K); if (MODE !== 'web') $('rvlink').target = '_blank'; } catch (e) {}
 // 상단 4개 탭 (11/19): 탭을 바꾸면 그 카드만 보임. 카드 안 버튼·동작은 그대로
 var TABS = ['stat', 'todo', 'manage', 'review'];
@@ -7912,6 +7928,7 @@ function go(d, label) {
     var f = document.createElement('form'); f.method = 'get'; f.action = EXEC; f.target = '_top';
     var add = function (k, v) { var i = document.createElement('input'); i.type = 'hidden'; i.name = k; i.value = v; f.appendChild(i); };
     add('p', 'tools'); add('k', K); add('a', d.act); add('t', d.title || ''); add('nc', String(Date.now())); add('pv', PV);
+    try { localStorage.setItem('oriTap', String(Date.now())); } catch (e) {}   // 누른 시각 → 다음 화면에서 '누르고 다 뜰 때까지' 시간 (11/28)
     if (d.text) add('x', d.text); if (d.n) add('n', d.n); if (d.times) add('ts', d.times.join(',')); if (d.to) add('to', d.to);
     document.body.appendChild(f); f.submit(); return;
   }
@@ -8180,6 +8197,22 @@ $('b3').onclick = function () {
 $('b4').onclick = function () { twice($('b4'), '이 진행 배정(카톡 공지)을 전부 비워요', function () { go({ act: 'unassign' }, '배정 비우는 중…'); }); };
 $('b5').onclick = function () { twice($('b5'), '이 진행을 아예 지워요 (응답 0명일 때만)', function () { go({ act: 'remove' }, '진행 지우는 중…'); }); };
 show(INIT);
+// 걸린 시간 알려 주기 (11/28 '휴대폰 링크로 열면 30초'): 서버 시작·끝, 이 화면이 시작된 때, 다 그린 때, 사진까지 다 뜬 때, 버튼 누른 때 → p=ptime (점검 diag ptime에 보임)
+(function () {
+  try {
+    if (MODE !== 'web' || !SRV || !EXEC) return;
+    var r = Date.now(), o = 0, c = 0, sent = false;
+    try { o = Math.round(performance.timeOrigin || (performance.timing && performance.timing.navigationStart) || 0); } catch (e) {}
+    try { c = Number(localStorage.getItem('oriTap') || 0); localStorage.removeItem('oriTap'); } catch (e) {}
+    if (c && (r - c > 300000 || c > SRV.s + 60000)) c = 0;
+    var send = function () {
+      if (sent) return; sent = true;
+      try { new Image().src = EXEC + '?p=ptime&k=' + encodeURIComponent(K) + '&s=' + SRV.s + '&e=' + SRV.e + '&o=' + o + '&r=' + r + '&l=' + Date.now() + '&c=' + c + '&kb=' + Math.round(document.documentElement.innerHTML.length / 1000); } catch (e) {}
+    };
+    if (document.readyState === 'complete') setTimeout(send, 0); else window.addEventListener('load', send);
+    setTimeout(send, 20000);
+  } catch (e) {}
+})();
 </script>`;
 
 function outboxUrl_() { return (CONFIG.WEBAPP_URL || '') + '?p=outbox&k=' + CONFIG.KEY; }
