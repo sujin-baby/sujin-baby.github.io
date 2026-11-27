@@ -16,5 +16,6 @@ ok(G('rvGoneErr_("입력한 ID에 해당하는 항목이 없습니다. 이 항�
 ok(/if \(Date\.now\(\) - Number\(rvGone\[sid\] \|\| 0\) < 86400000\) return;/.test(src), '못 여는 시트는 하루 한 번만 다시 봄');
 ok((src.match(/rvGone\[sid\] = Date\.now\(\); saveGone\(\);/g) || []).length === 2, '파일은 있는데 시트로 못 여는 것도 하루 한 번만');
 ok(/subTime_\('리뷰 확인: 늦은 응답 명단', function \(\) \{ return syncList_\(lss\); \}\)/.test(src), '끝난 의뢰 늦은 응답도 명단 탭에 (리뷰 확인에서 시트가 바뀌었을 때)');
+ok(/return \[r\['요청ID'\] \|\| r\.row, r\['마감 시각'\]/.test(src), '리뷰 확인 서명은 줄 번호 대신 요청ID');
 console.log(fails.length ? 'XX 사진 폴더 다시 훑기 시험 실패:\n- ' + fails.join('\n- ') : '✓ 다 끝난 의뢰 사진 폴더 다시 훑기 한 시간에 한 번 시험 통과');
 process.exit(fails.length ? 1 : 0);

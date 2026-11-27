@@ -8843,7 +8843,7 @@ function reviewDone_(runs, only) {
       return;
     }
     const sig = ['rv3', mod, Utilities.formatDate(new Date(Date.now() - 5 * 3600000), CONFIG.TIMEZONE, 'yyyyMMdd'), pend[campKey_(mine[0]['캠페인'] || mine[0]['명단 제목'])] ? 1 : 0]
-      .concat(mine.map(function (r) { return [r.row, r['마감 시각'] instanceof Date ? r['마감 시각'].getTime() : '', r['인원'], r['총건수']].join(','); })).join('|');
+      .concat(mine.map(function (r) { return [r['요청ID'] || r.row, r['마감 시각'] instanceof Date ? r['마감 시각'].getTime() : '', r['인원'], r['총건수']].join(','); })).join('|');   // 줄 번호 대신 요청ID (11/27: 새 진행이 위에 생길 때마다 줄 번호가 밀려 의뢰 33개를 다시 읽음)
     // 업체 전달 막힘 이유를 아직 안 본 의뢰(인원은 다 모였는데 리뷰가 안 끝남)는 한 번 다시 봄 (11/18)
     //  늦은 의뢰만, 한 번에 3개까지 (처음 배포 때 명단 시트를 한꺼번에 열어 리뷰 확인이 길어지지 않게)
     const stuckNew = stuckN < 3 && !props.getProperty('RVRPT_' + sid) && props.getProperty('RVSTUCK_' + sid) == null && rvFull_(mine) && !rvSentAny_(mine) && rvStuckLate_(mine);
