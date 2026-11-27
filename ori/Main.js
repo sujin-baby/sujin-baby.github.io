@@ -2116,7 +2116,7 @@ function diag_(p) {
   try { out.triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction() + '|' + t.getEventType() + (t.getTriggerSourceId() ? '|' + String(t.getTriggerSourceId()).slice(0, 10) : ''); }); } catch (e) { out.triggersErr = String(e); }
   try {
     const pr = PropertiesService.getScriptProperties().getProperties(), keep = {};
-    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'LPSPACE1', 'LPFILE1', 'RVZIP_AT', 'CF_FCHK', 'PAY_POSTDAY', 'RV_GONE', 'DASHW1', 'PAYDELBJ1', 'IBULPW1', 'ROISISYNC1', 'ZRN5', 'ZRNTXT1', 'SVBWK1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
+    ['GRPERR', 'CARRYSEOL1', 'SEOLREN1', 'SINGREN1', 'YANGRPT1', 'SEOLTOSS1', 'SEOLCOU1', 'LUNCHRE1', 'LUNCHRE2', 'TOSSGAP1', 'SEOLDEL1', 'SDUPSCAN1', 'GEOCHIDEL1', 'RVPHOTOFIX1', 'RVPHOTOFIX2', 'CABLETAK1', 'CABLEREV1', 'CREATE_ERR', 'TAK_KEEP', 'TEMPLATE_FB', 'RVPHOTOFIX3', 'RVPHOTOFIX4', 'ALBREN1', 'PLANNAME1', 'SILSIL1', 'MUNGFIX1', 'CABLETAK2', 'MEMOREC1', 'EXP135', 'TALK70', 'NOTICECLR1', 'NOTICECLR2', 'NOTICECLR3', 'SEOLRESUME1', 'SEOLSLOT1', 'DOLGE20', 'TITLE_PEOPLE', 'DAEDI60', 'FOLDCLEAN1', 'EDITC1', 'CABLEFMT1', 'STUCKDEL1', 'BULKSENT1', 'KOZIREN1', 'KOZIWK1', 'KOZIWK2', 'ORVECFOLD1', 'NUMFOLD1', 'NUMFOLD1_LOG', 'NUMFOLD1_DONE', 'BINIPAY1', 'OBCLEAR2', 'SEOLKOL1', 'SEOLDUP1', 'STARFIX1', 'STARFIX1_LOG', 'BIJEONREN1', 'TANDEL1', 'SALAD30', 'TAN40', 'TANSIL1', 'LPDUP1', 'MDDEL1', 'PKD3', 'PDB10', 'PDB10B', 'TAN41', 'LPHASH1', 'RVCNT1', 'LPSPACE1', 'LPFILE1', 'RVZIP_AT', 'CF_FCHK', 'PAY_POSTDAY', 'RV_GONE', 'DASHW1', 'PAYDELBJ1', 'IBULPW1', 'ROISISYNC1', 'ZRN5', 'ZRNTXT1', 'SVBWK1', 'JINITXT1', 'GRNAI1', 'SLOW_I', 'DASH_NEW_TRIED', 'RV_CUR', 'CF_SKIP', 'CF_WANT', 'BG_dashstale', 'BG_phototab', 'BG_pay', 'BG_props', 'BG_T_pay', 'BG_T_dashstale', 'BG_T_phototab', 'BG_DUE0_pay', 'PAY_AT', 'UPACCT1', 'PAY_PENDING', 'PAY_PROG', 'PAY_SIG', 'SLOW_AT', 'WANT_LOCK', 'SOON_TRIG_AT', 'MID_TRIG_AT', 'LAST_REPORT', 'DASH_VER', 'MORNING_LAST', 'DASH_RV', 'RUN_ERRORS'].forEach(function (k) { if (pr[k] !== undefined) keep[k] = /_AT$|WANT_LOCK/.test(k) && Number(pr[k]) ? f(new Date(Number(pr[k])), 'MM-dd HH:mm:ss') : String(pr[k]).slice(0, 300); });
     keep.onceFlags = Object.keys(pr).filter(function (k) { return /_V\d+$|ONCE/.test(k); }).sort();
     keep.rvKeys = Object.keys(pr).filter(function (k) { return /^(RVDONE_|RVRPT_|RVSENT_|LISTV_|RVLATE)/.test(k); }).sort();
     out.props = keep;
@@ -3866,6 +3866,8 @@ function checkFullInner_() {
     try { zrn5_(); } catch (e) {}
     try { zrnTxt1_(); } catch (e) {}
     try { svbWk1_(); } catch (e) {}
+    try { jiniTxt1_(); } catch (e) {}
+    try { grnAi1_(); } catch (e) {}
   });
   cfAlways_(S, '다음 일차', function () {
     try { makeDueDays_(); } catch (e) { note_('다음 일차 만들기 실패: ' + e); }
@@ -10266,6 +10268,45 @@ function svbWk1_() {
     props.deleteProperty('DASH_SIG');
     props.setProperty('SVBWK1', ('✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' ' + out.join(', ')).slice(0, 1000));
   } catch (e) { props.setProperty('SVBWK1', (st + ' 실패(' + (e && e.message || e) + ') ' + out.join(', ')).slice(-400)); }
+}
+// (11/27 한 번, 사용자) '업)택 지니네농수산 돌게외' AI가 못 읽음 폴더 사진 → 리뷰이미지 텍스트 폴더로, 폴더 개수·리뷰 보고 글 다시
+function jiniTxt1_() {
+  const props = PropertiesService.getScriptProperties();
+  if (/^✓/.test(String(props.getProperty('JINITXT1') || ''))) return;
+  try {
+    const r = readRuns_().filter(function (y) { return /지니네농수산\s*돌게외/.test(bareTitle_(y['명단 제목'])) && y['시트ID']; })[0];
+    if (!r) { props.setProperty('JINITXT1', '실패(진행 없음)'); return; }
+    const sid = String(r['시트ID']), imgId = props.getProperty('RVIMG_' + sid);
+    if (!imgId) { props.setProperty('JINITXT1', '실패(리뷰이미지 없음)'); return; }
+    const img = DriveApp.getFolderById(imgId), pa = img.getParents(), parent = pa.hasNext() ? pa.next() : null, moved = [];
+    [parent, img].filter(Boolean).forEach(function (fo) {
+      const it = fo.getFoldersByName(RV_AI_DIR.fail);
+      while (it.hasNext()) { const f = it.next(), fi = f.getFiles(); while (fi.hasNext()) { const x = fi.next(); if (!/^image\//.test(x.getMimeType())) continue; x.moveTo(rvSubDir_(img, '텍스트')); try { x.setDescription('AI {"kind":"review","text":true,"photo":false,"by":"사용자 11/27 텍스트로"}'); } catch (e) {} moved.push(x.getName()); } }
+    });
+    try { rvCountDirs_(img, rvCartOf_(sid)); } catch (e) {}
+    if (moved.length) props.setProperty('RVZIPSOON_' + sid, String(Date.now()));   // 리뷰 보고 글 장수 다시 (5분 확인)
+    const names = []; const it2 = img.getFolders(); while (it2.hasNext()) names.push(it2.next().getName());
+    props.setProperty('JINITXT1', '✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' 텍스트로 ' + moved.length + '장 (' + moved.join(', ') + ') → ' + names.join(', '));
+  } catch (e) { props.setProperty('JINITXT1', '실패(' + (e && e.message || e) + ')'); }
+}
+// (11/27 한 번, 사용자 '그린코코 겨울모자 리뷰이미지 하루 넘게 분류 안 됨') 그 의뢰 사진을 바로 AI로 나눔 + 왜 안 나눴는지 남김(대기열·한 시간 확인 기록·실패 횟수)
+function grnAi1_() {
+  const props = PropertiesService.getScriptProperties();
+  if (/^✓/.test(String(props.getProperty('GRNAI1') || ''))) return;
+  try {
+    const r = readRuns_().filter(function (y) { return /그린코코\s*겨울모자/.test(bareTitle_(y['명단 제목'])) && y['시트ID']; })[0];
+    if (!r) { props.setProperty('GRNAI1', '실패(진행 없음)'); return; }
+    const sid = String(r['시트ID']), imgId = props.getProperty('RVIMG_' + sid);
+    const img = DriveApp.getFolderById(imgId), pa = img.getParents();
+    let at = {}; try { at = JSON.parse(props.getProperty('RVLOOSE_AT') || '{}') || {}; } catch (e) {}
+    const q = String(props.getProperty('RVAI_Q') || '').split(',');
+    const fi = img.getFiles(), errs = []; let n = 0;
+    while (fi.hasNext()) { const x = fi.next(); if (!/^image\//.test(x.getMimeType())) continue; n++; const e = props.getProperty('RVAIERR_' + x.getId()); if (e) errs.push(x.getName() + ':' + e); }
+    const why = '사진 ' + n + '장, 대기열 ' + (q.indexOf(sid) >= 0 ? '있음' : '없음') + ', 한 시간 확인 ' + (at[sid] ? Utilities.formatDate(new Date(Number(at[sid])), CONFIG.TIMEZONE, 'MM-dd HH:mm') : '기록 없음') + ', 실패 ' + (errs.join(' ') || '없음') + ', 업체 전송 ' + (rvSentAny_(readRuns_().filter(function (y) { return String(y['시트ID']) === sid; })) ? '있음' : '없음');
+    const left = rvAiSort_({ img: img, parent: pa.hasNext() ? pa.next() : img }, sid, props);
+    const names = []; const it2 = img.getFolders(); while (it2.hasNext()) names.push(it2.next().getName());
+    props.setProperty('GRNAI1', ('✓ ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'MM-dd HH:mm') + ' [전] ' + why + ' → 남은 ' + left + '장 → ' + names.join(', ')).slice(0, 1200));
+  } catch (e) { props.setProperty('GRNAI1', '실패(' + (e && e.message || e) + ')'); }
 }
 function salad30_() {
   const props = PropertiesService.getScriptProperties(), st = String(props.getProperty('SALAD30') || '');
