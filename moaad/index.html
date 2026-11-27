@@ -46,14 +46,38 @@ h3{font-size:15.5px;margin:0;letter-spacing:-.3px}
 .sub{color:var(--sub);font-size:13px;margin:0 0 14px}
 label{display:block;font-size:12.5px;font-weight:700;color:#344054;margin:12px 0 5px}
 label .opt{font-weight:500;color:#98a2b3}
-input[type=text],input[type=tel],input[type=password],input[type=number],input[type=date],textarea,select{
-  width:100%;border:1px solid #d0d5dd;border-radius:11px;padding:11px 12px;background:#fff;outline:none;font-size:15px;
+input::placeholder,textarea::placeholder{color:#98a2b3;opacity:1}
+/* 입력칸 폭 정규화 — 아이폰 사파리에서 칸이 카드 밖으로 삐져나오지 않게 */
+input,select,textarea{width:100%;max-width:100%;min-width:0;box-sizing:border-box;display:block}
+input[type=text],input[type=tel],input[type=password],input[type=number],input[type=date],input[type=search],textarea,select,input:not([type]){
+  border:1px solid #d0d5dd;border-radius:11px;padding:11px 12px;background:#fff;outline:none;font-size:15px;
   transition:border-color .12s,box-shadow .12s;
 }
 input:focus,textarea:focus,select:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(255,90,54,.13)}
-textarea{min-height:64px;resize:vertical}
-.row{display:flex;gap:8px}
-.row>*{flex:1}
+textarea{min-height:64px;resize:vertical;line-height:1.5}
+/* 한 줄 칸은 높이를 똑같이 — select·date·text 가 섞여도 들쭉날쭉하지 않게 */
+input:not([type=file]),select{height:48px;line-height:1.2}
+input[type=date]{text-align:left}
+input[type=date]::-webkit-date-and-time-value{text-align:left}
+input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{margin:0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start}
+.row>*{flex:1 1 0;min-width:0}
+.cell46{flex:0 0 46%}
+
+/* 자주 쓰는 값 원터치 칩 */
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 0}
+.chips button{border:1px solid #e6e8ec;background:#f9fafb;color:#344054;border-radius:999px;padding:7px 11px;font-size:12.5px;font-weight:700;line-height:1.2;white-space:nowrap}
+.chips button.on{background:#fff3ef;border-color:#ffcabd;color:var(--brand-d)}
+.chips button:active{background:#fff3ef;border-color:#ffcabd;color:var(--brand-d)}
+/* 자동완성 */
+.aca{position:relative;min-width:0;flex:1 1 0}
+.aca .ac-list{position:absolute;left:0;right:0;top:100%;margin-top:4px;z-index:45;background:#fff;border:1px solid var(--line);border-radius:11px;box-shadow:0 10px 24px rgba(16,24,40,.16);display:none;max-height:224px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.aca .ac-list.on{display:block}
+.aca .ac-item{display:flex;width:100%;align-items:center;justify-content:space-between;gap:8px;padding:11px 12px;font-size:14px;font-weight:600;color:var(--ink);text-align:left;border-bottom:1px solid #f2f4f7;background:#fff}
+.aca .ac-item:last-child{border-bottom:0}
+.aca .ac-item.on{background:#fff3ef}
+.aca .ac-item em{font-style:normal;font-weight:800;color:var(--brand-d)}
+.aca .ac-item small{font-size:11px;font-weight:700;color:#98a2b3}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:11px;padding:11px 14px;font-weight:700;font-size:14px;border:1px solid #d0d5dd;background:#fff;color:#344054;white-space:nowrap}
 .btn:active{transform:translateY(1px)}
 .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
@@ -171,7 +195,7 @@ details .db{padding:0 14px 14px}
 .sub-item .links{margin-top:7px;display:flex;gap:6px;flex-wrap:wrap}
 
 /* admin */
-.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:14px}
 .stat{background:#fff;border:1px solid var(--line);border-radius:13px;padding:12px 13px}
 .stat span{display:block;font-size:11.5px;color:var(--sub);font-weight:700;margin-bottom:3px}
 .stat b{font-size:19px;letter-spacing:-.6px}
@@ -199,6 +223,14 @@ table.tbl td a{font-weight:700}
 .cv-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 .cv-num{font-size:22px;font-weight:800;letter-spacing:-.6px}
 .cv-num em{font-size:13px;font-style:normal;color:var(--sub);font-weight:700;margin-left:3px}
+/* 아주 좁은 화면에서는 날짜 두 칸을 한 줄씩 — 날짜 글자가 잘리지 않게 */
+@media(max-width:359px){
+  .row.dates>*{flex:1 1 100%}
+}
+@media(max-width:480px){
+  /* 아이폰은 16px 미만 입력칸에서 화면을 확대하므로 16px로 고정 */
+  input[type=text],input[type=tel],input[type=password],input[type=number],input[type=date],textarea,select,input:not([type]){font-size:16px}
+}
 @media(min-width:720px){
   .wrap{max-width:860px}
   .hd-in{max-width:860px}
@@ -1078,13 +1110,150 @@ function renderAdminBody(){
   else if (state.tab === 'review') box.innerHTML = adminReview(d);
   else if (state.tab === 'settle') box.innerHTML = adminSettle(d);
   else box.innerHTML = adminAll(d);
+  acBindAll(box);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   입력 자동완성 — '쿠'만 쳐도 '쿠팡'이 뜨고, 엔터·탭 한 번에 채워진다.
+   iOS 사파리는 한글 조합 중에 datalist를 잘 못 띄우므로 직접 그린다.
+   ══════════════════════════════════════════════════════════════ */
+var AC_PLATFORMS = ['쿠팡', '네이버', '올리브영', '오늘의집', '11번가', 'G마켓', '카카오선물하기'];
+var AC_JAMO = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';
+
+function acPlatformChips(){
+  var seen = {}, out = [];
+  function add(v){ v = String(v == null ? '' : v).trim(); if (!v || seen[v]) return; seen[v] = 1; out.push(v); }
+  AC_PLATFORMS.forEach(add);
+  var d = state.admin;
+  if (d && d.campaigns) d.campaigns.slice().reverse().forEach(function(c){ if (out.length < 8) add(c.platform); });
+  return out.map(function(v){
+    return '<button type="button" data-act="ac" data-tgt="ncPlatform" data-val="' + esc(v) + '">' + esc(v) + '</button>';
+  }).join('');
+}
+
+/* 후보 목록: 기본 목록 → 기존 캠페인에 쓴 값(최근 것부터) */
+function acPool(kind){
+  var seen = {}, out = [];
+  function add(v){ v = String(v == null ? '' : v).trim(); if (!v || seen[v.toLowerCase()]) return; seen[v.toLowerCase()] = 1; out.push(v); }
+  var d = state.admin;
+  var list = (d && d.campaigns) ? d.campaigns.slice().reverse() : [];
+  if (kind === 'store') {
+    var plat = ($('ncPlatform') || {}).value || '';
+    /* 같은 플랫폼에서 썼던 스토어명을 먼저 */
+    if (plat) list.forEach(function(c){ if (String(c.platform || '').trim() === plat) add(c.store); });
+    list.forEach(function(c){ add(c.store); });
+    AC_PLATFORMS.forEach(add);
+  } else {
+    AC_PLATFORMS.forEach(add);
+    list.forEach(function(c){ add(c.platform); });
+  }
+  return out;
+}
+
+/* 앞에서부터 일치 > 중간 일치 > 초성만 일치('ㅋ'→'쿠팡') */
+function acScore(v, q){
+  if (!q) return { r: 2, i: -1 };
+  var lv = v.toLowerCase(), lq = q.toLowerCase();
+  var i = lv.indexOf(lq);
+  if (i === 0) return { r: 0, i: 0 };
+  if (i > 0) return { r: 1, i: i };
+  if (q.length === 1) {
+    var ji = AC_JAMO.indexOf(q), c0 = v.charCodeAt(0);
+    if (ji >= 0 && c0 >= 0xAC00 && c0 <= 0xD7A3 && Math.floor((c0 - 0xAC00) / 588) === ji) return { r: 0, i: -1 };
+  }
+  return null;
+}
+
+function acHl(v, q){
+  if (!q) return esc(v);
+  var i = v.toLowerCase().indexOf(q.toLowerCase());
+  if (i < 0) return esc(v);
+  return esc(v.substring(0, i)) + '<em>' + esc(v.substring(i, i + q.length)) + '</em>' + esc(v.substring(i + q.length));
+}
+
+function acChipSync(inputId, val){
+  var strip = document.querySelector('[data-chips="' + inputId + '"]');
+  if (!strip) return;
+  Array.prototype.forEach.call(strip.querySelectorAll('[data-val]'), function(b){
+    if (b.getAttribute('data-val') === val) b.classList.add('on'); else b.classList.remove('on');
+  });
+}
+
+function acInit(inp){
+  var kind = inp.getAttribute('data-ac');
+  var box = document.getElementById(inp.id + 'List');
+  if (!box) return;
+  var items = [], cur = -1;
+
+  function hide(){ box.classList.remove('on'); box.innerHTML = ''; items = []; cur = -1; }
+  function mark(){
+    Array.prototype.forEach.call(box.children, function(b, i){ if (i === cur) b.classList.add('on'); else b.classList.remove('on'); });
+  }
+  function fill(v){
+    if (v == null) return;
+    inp.value = v;
+    hide();
+    acChipSync(inp.id, v);
+  }
+  function render(){
+    var q = String(inp.value || '').trim();
+    acChipSync(inp.id, q);
+    var pool = acPool(kind), scored = [];
+    pool.forEach(function(v, o){
+      if (v.toLowerCase() === q.toLowerCase()) return;   /* 이미 같은 값이면 후보에서 뺱 */
+      var s = acScore(v, q);
+      if (s) scored.push({ v: v, r: s.r, i: s.i, o: o });
+    });
+    scored.sort(function(a, b){ return a.r - b.r || a.o - b.o; });
+    items = scored.slice(0, 6).map(function(x){ return x.v; });
+    cur = items.length ? 0 : -1;
+    if (!items.length) { hide(); return; }
+    box.innerHTML = items.map(function(v, i){
+      return '<button type="button" class="ac-item' + (i === 0 ? ' on' : '') + '" data-v="' + esc(v) + '">' +
+        '<span>' + acHl(v, q) + '</span></button>';
+    }).join('');
+    box.classList.add('on');
+  }
+
+  inp.addEventListener('focus', render);
+  inp.addEventListener('click', render);
+  inp.addEventListener('input', render);
+  inp.addEventListener('compositionend', function(){ setTimeout(render, 0); });
+  inp.addEventListener('keydown', function(e){
+    if (!items.length) return;
+    if (e.key === 'Enter') { e.preventDefault(); fill(items[cur < 0 ? 0 : cur]); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      cur = (cur + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      mark();
+    }
+    if (e.key === 'Escape') hide();
+  });
+  inp.addEventListener('blur', function(){ setTimeout(hide, 200); });
+  /* 아이폰은 탭하는 순간 입력칸이 blur돼 목록이 먼저 닫히므로 pointerdown에서 바로 채운다 */
+  box.addEventListener('pointerdown', function(e){
+    var b = e.target.closest('[data-v]');
+    if (!b) return;
+    e.preventDefault();
+    fill(b.getAttribute('data-v'));
+  });
+}
+
+function acBindAll(root){
+  Array.prototype.forEach.call((root || document).querySelectorAll('input[data-ac]'), function(inp){
+    if (inp.getAttribute('data-ac-bound') === '1') return;
+    inp.setAttribute('data-ac-bound', '1');
+    acInit(inp);
+  });
 }
 
 function adminCampaigns(d){
   var html = '<div class="ad-card"><div style="font-weight:800;margin-bottom:2px">새 캠페인</div>' +
     '<div class="tiny" style="margin-bottom:8px">필수는 상품명 · 모집인원입니다. 상품키를 넣으면 상중 검사가 정확해집니다.</div>' +
-    '<div class="row"><div><label>플랫폼</label><input id="ncPlatform" placeholder="쿠팡"></div>' +
-    '<div><label>스토어명</label><input id="ncStore" placeholder="쿠팡"></div></div>' +
+    '<div class="tiny" style="margin:10px 0 0">자주 쓰는 플랫폼 — 누르면 바로 채워집니다</div>' +
+    '<div class="chips" data-chips="ncPlatform">' + acPlatformChips() + '</div>' +
+    '<div class="row"><div class="aca"><label>플랫폼</label><input id="ncPlatform" data-ac="platform" placeholder="쿠팡" autocomplete="off" autocapitalize="off" spellcheck="false"><div class="ac-list" id="ncPlatformList"></div></div>' +
+    '<div class="aca"><label>스토어명</label><input id="ncStore" data-ac="store" placeholder="쿠팡" autocomplete="off" autocapitalize="off" spellcheck="false"><div class="ac-list" id="ncStoreList"></div></div></div>' +
     '<label>상품명</label><input id="ncProduct" placeholder="예: 겨울 방한모자 여성">' +
     '<label>상품키 <span class="opt">(상품ID/옵션ID)</span></label><input id="ncKey" placeholder="예: 8123456789">' +
     '<div class="row"><div><label>모집인원</label><input id="ncQuota" type="number" inputmode="numeric" placeholder="10"></div>' +
@@ -1094,7 +1263,7 @@ function adminCampaigns(d){
     '<div class="row"><div><label>세금계산서</label><select id="ncTax"><option value="">-</option><option value="발행">발행</option><option value="미발행">미발행</option></select></div>' +
     '<div><label>입금확인</label><input id="ncDeposit" placeholder="미확인"></div></div>' +
     '<p class="hint" style="margin:6px 0 0">총입금예정(모집인원×(페이백+리뷰비+수수료))은 시트 수식이 자동 계산합니다.</p>' +
-    '<div class="row"><div><label>시작일</label><input id="ncStart" type="date"></div>' +
+    '<div class="row dates"><div><label>시작일</label><input id="ncStart" type="date"></div>' +
     '<div><label>마감일</label><input id="ncEnd" type="date"></div></div>' +
     '<label>구매링크</label><input id="ncLink" placeholder="https://">' +
     '<label>가이드 / 키워드</label><textarea id="ncGuide" placeholder="구매 후 해야 할 일, 필수 키워드, 리뷰 조건"></textarea>' +
@@ -1155,8 +1324,8 @@ function adminReview(d){
 function adminSettle(d){
   var html = '<div class="ad-card"><div style="font-weight:800;margin-bottom:2px">정산 만들기</div>' +
     '<div class="tiny" style="margin-bottom:8px">승인됐고 아직 정산에 안 들어간 건을 사람별로 묶습니다.</div>' +
-    '<div class="row" style="align-items:flex-end"><div><label>정산 기준일</label><input id="stDate" type="date" value="' + todayISO() + '"></div>' +
-    '<div style="flex:0 0 46%"><button class="btn primary wide" data-act="createSettlement">정산 생성</button></div></div>' +
+    '<div class="row dates" style="align-items:flex-end"><div><label>정산 기준일</label><input id="stDate" type="date" value="' + todayISO() + '"></div>' +
+    '<div class="cell46"><button class="btn primary wide" data-act="createSettlement">정산 생성</button></div></div>' +
     '<div id="stMsg"></div></div>';
 
   if (!d.settlements.length) return html + '<div class="empty">정산 내역이 없습니다.</div>';
@@ -1198,6 +1367,16 @@ document.addEventListener('click', function(e){
   var act = el.getAttribute('data-act');
 
   if (act === 'close') { closeSheet(); return; }
+  if (act === 'ac') {
+    var acT = $(el.getAttribute('data-tgt') || ''), acV = el.getAttribute('data-val') || '';
+    if (acT) {
+      acT.value = acV;
+      acChipSync(acT.id, acV);
+      var acL = document.getElementById(acT.id + 'List');
+      if (acL) { acL.classList.remove('on'); acL.innerHTML = ''; }
+    }
+    return;
+  }
   if (act === 'logout') { logout(); return; }
   if (act === 'copy') { copyText(el.getAttribute('data-text') || ''); return; }
   if (act === 'detail') { openDetail(el.getAttribute('data-id')); return; }
