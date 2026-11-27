@@ -86,7 +86,7 @@ function oriCacheGet_(cache) {
     }
   }
   const len = Number(cache.get('ori_src_len') || 0);
-  if (len && s.length !== len) return '';
+  if (!len || s.length !== len) return '';   // 길이 기록이 없거나(예전 90KB 글자 조각) 잘렸으면 못 씀 → 새 형식으로 다시 담음
   return s.indexOf('/** ORI-MAIN') === 0 ? s : '';
 }
 

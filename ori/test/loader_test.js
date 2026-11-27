@@ -107,6 +107,10 @@ G1('oriCachePut_') && vm.runInContext('oriCachePut_(CacheService.getScriptCache(
 ok(e1.cache.get('ori_src_n') === String(parts.length), 'ori_src_n = 조각 수 ' + e1.cache.get('ori_src_n'));
 const back = G1('oriCacheGet_(CacheService.getScriptCache())');
 ok(back === SRC, '캐시에서 꺼낸 코드가 원본과 같음 (' + (back ? back.length : 0) + '자)');
+// 예전 형식(길이 기록 없음)이면 못 씀 → 새 형식으로 다시 담게
+e1.cache.remove('ori_src_len');
+ok(G1('oriCacheGet_(CacheService.getScriptCache())') === '', '길이 기록 없는 옛 캐시는 안 씀');
+G1('oriCachePut_(CacheService.getScriptCache(), __SRC)');
 // 한 칸 지우면 '' → GitHub에서 다시 받음 (깨진 코드를 eval 하지 않음)
 e1.cache.remove('ori_src_3');
 const broken = G1('oriCacheGet_(CacheService.getScriptCache())');
