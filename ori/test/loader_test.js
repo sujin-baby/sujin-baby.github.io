@@ -123,7 +123,7 @@ ok(e2.cache.get('ori_src_n'), '캐시에 담김');
 ok(e2.drive().writes === 1 && e2.drive().files === 0, '드라이브 백업은 바뀔 때만 씀 ' + JSON.stringify(e2.drive()));
 ok(e2.env.__ORI_LOADED === true, 'eval 되어 로드 표시');
 const load1 = JSON.parse(e2.cache.get('ORI_LOAD') || '{}');
-ok(load1.how === '새로받음' && typeof load1.ms === 'number', 'ORI_LOAD 기록 ' + JSON.stringify(load1));
+ok(load1.how === '새로받음' && typeof load1.ms === 'number' && load1.cacheOk === true, 'ORI_LOAD 기록(캐시에 담긴 것 확인) ' + JSON.stringify(load1));
 // 두 번째 실행(같은 실행 안) → 아무것도 안 함
 vm.runInContext('ori_()', e2.env);
 ok(e2.net.calls === 1, '같은 실행에서 또 부르면 아무것도 안 함');

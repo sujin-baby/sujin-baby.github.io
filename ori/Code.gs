@@ -22,7 +22,7 @@ function ori_() {
   const t0 = Date.now(), tf0 = Date.now();
   const cache = CacheService.getScriptCache();
   const props = PropertiesService.getScriptProperties();
-  let src = '', msFetch = 0, msDrive = 0, how = '';
+  let src = '', msFetch = 0, msDrive = 0, how = '', cacheOk = null;
   try { src = oriCacheGet_(cache); } catch (e) { src = ''; }
   const checkedAt = Number(cache.get('ori_src_chk') || 0);
   if (!src || Date.now() - checkedAt > ORI_KEEP.chk * 1000) {
@@ -42,6 +42,7 @@ function ori_() {
       if (text !== src) {                                  // 바뀐 게 있을 때만 캐시·백업을 새로 씀
         src = text; how = '새로받음';
         try { oriCachePut_(cache, src); } catch (e) {}
+        try { cacheOk = oriCacheGet_(cache).length === src.length; } catch (e) { cacheOk = false; }   // 담은 게 정말 꺼내지는지 (안 되면 diag load에 보임)
         const td = Date.now();
         try {
           const id = props.getProperty('ORI_BACKUP_ID');
@@ -65,7 +66,7 @@ function ori_() {
   (0, eval)(src);
   globalThis.__ORI_LOADED = true;
   try {
-    cache.put('ORI_LOAD', JSON.stringify({ at: Utilities.formatDate(new Date(), CONFIG.TIMEZONE || 'Asia/Seoul', 'MM-dd HH:mm:ss'), ms: Date.now() - t0, how: how, fetch: msFetch, drive: msDrive, kb: Math.round(src.length / 1000) }), 21600);
+    cache.put('ORI_LOAD', JSON.stringify({ at: Utilities.formatDate(new Date(), CONFIG.TIMEZONE || 'Asia/Seoul', 'MM-dd HH:mm:ss'), ms: Date.now() - t0, how: how, fetch: msFetch, drive: msDrive, kb: Math.round(src.length / 1000), cacheOk: cacheOk }), 21600);
   } catch (e) {}
 }
 
