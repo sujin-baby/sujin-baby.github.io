@@ -44,7 +44,7 @@ ok(/carry\.forEach\(function \(t\) \{ if \(pe\[t\]\) prevErr\[t\] = pe\[t\]; \}\
   let c = run();
   ok(['F가', 'F나', 'F다'].every(x => c.indexOf(x) >= 0), '처음엔 다 셈 ' + c.join(','));
   // 시험에선 폼을 못 열어 '실패'라 기억 안 함 → 기억은 직접 넣어 둠 (성공했다고 치고)
-  const sig = t => G2(`(function(){ const r = readRuns_().filter(function (x) { return x['폼ID'] === 'F${t}'; })[0]; return [Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd'), r['폼ID'], r['시트ID'], r['목표인원'], r['인원'], '', r['진행 상태'], r['진행일'].getTime()].join('|'); })()`);
+  const sig = t => G2(`(function(){ const r = readRuns_().filter(function (x) { return x['폼ID'] === 'F${t}'; })[0]; return cfHash_([Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd'), r['폼ID'], r['시트ID'], r['목표인원'], r['인원'], '', r['진행 상태'], r['진행일'].getTime()].join('|')).slice(0, 16); })()`);
   const fc = {}; ['가', '나', '다'].forEach(t => { fc['#11.25 ' + t + ' 10'] = { s: sig(t), t: G2('__NOW') - 1000 }; });
   e2.__props.set('CF_FCHK', JSON.stringify(fc));
   e2.__props.set('RUN_ERRORS', JSON.stringify({ '#11.25 다 10': '옛 표시 다' }));

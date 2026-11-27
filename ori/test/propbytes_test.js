@@ -19,5 +19,19 @@ ok(has('OPEN_F1_' + d8(1)) && !has('OPEN_F1_' + d8(5)), '폼 열기 표시는 3�
 ok(has('RVDAYREQ_#새진행2(뽀짝오리)') && has('RVROOMDONE_#새진행2') && has('RVDAYREQ_INIT_' + S), '60일 안 진행의 취완·리뷰비 표시는 남김');
 ok(!has('RVDAYREQ_#옛진행2(뽀짝오리)') && !has('RVROOMDONE_#옛진행2') && !has('RVDAYREQ_INIT_' + O) && !has('RVROOMDONE_INIT_' + O), '60일 넘은 진행 표시는 지움');
 ok(has('RVDONE_' + O), '의뢰 다 끝남 표시(RVDONE_)는 안 건드림');
+// 옛 MSGV_SIG, 마감 3일 지난 진행의 가이드 넣음 표시, 10일 지난 2시 이후 구매 표시
+{
+  const e2 = H.makeEnv({ main: process.argv[2] }); const G2 = k => vm.runInContext(k, e2);
+  const L2 = G2('LIST_HEADER'), m2 = o => L2.map(h => o[h] !== undefined ? o[h] : '');
+  e2.__ss.sheets['진행목록'] = new H.Sheet('진행목록', [L2.slice(),
+    m2({ '진행일': ago(1), '명단 제목': '#새 2 (뽀짝오리)', '시트ID': S, '마감 시각': ago(1), '진행 상태': '진행중' }),
+    m2({ '진행일': ago(20), '명단 제목': '#옛 2 (뽀짝오리)', '시트ID': O, '마감 시각': ago(20), '진행 상태': '진행중' })]);
+  [['MSGV_SIG', 'x'], ['MSGV_SIG_list', 'h'], ['RVMSG2_#새2(뽀짝오리)', '1'], ['RVMSG_#옛2(뽀짝오리)', '1'], ['RVMSG2_#옛2(뽀짝오리)', '1'], ['TAKLATE_#옛2(뽀짝오리)', '1'], ['TAKLATE_#새2(뽀짝오리)', '1'], ['TAKCUT_#옛2', '1']].forEach(([k, v]) => e2.__props.set(k, v));
+  G2('propsCleanup_(null, true)');
+  const h2 = k => e2.__props.get(k) != null;
+  ok(!h2('MSGV_SIG') && h2('MSGV_SIG_list'), '옛 MSGV_SIG만 지움');
+  ok(h2('RVMSG2_#새2(뽀짝오리)') && !h2('RVMSG_#옛2(뽀짝오리)') && !h2('RVMSG2_#옛2(뽀짝오리)'), '마감 3일 지난 가이드 표시 지움');
+  ok(h2('TAKLATE_#새2(뽀짝오리)') && !h2('TAKLATE_#옛2(뽀짝오리)') && h2('TAKCUT_#옛2'), '10일 지난 2시 이후 구매 표시만 지움(택배시트 마감 시각은 그대로)');
+}
 console.log(fails.length ? 'XX 저장 공간 시험 실패:\n- ' + fails.join('\n- ') : '✓ 저장 공간: 바이트로 셈·안 쓰는 표시 지움 시험 통과');
 process.exit(fails.length ? 1 : 0);

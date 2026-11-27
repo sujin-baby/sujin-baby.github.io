@@ -3987,7 +3987,7 @@ function checkFullInner_() {
       //  진행 값(목표·인원·마감·상태·날짜)이 바뀌었거나, 날짜가 바뀌었거나, 직접 하신 일(CF_DIRTY_ALL)이 있으면 다시 셈
       let fchk = {}; try { fchk = JSON.parse(props.getProperty('CF_FCHK') || '{}') || {}; } catch (e) {}
       const dirtyAll = Number(props.getProperty('CF_DIRTY_ALL') || 0), dayK = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
-      const fsig = function (r) { return [dayK, r['폼ID'], r['시트ID'], r['목표인원'], r['인원'], r['마감 시각'] instanceof Date ? r['마감 시각'].getTime() : '', r['진행 상태'], r['진행일'] instanceof Date ? r['진행일'].getTime() : ''].join('|'); };
+      const fsig = function (r) { return cfHash_([dayK, r['폼ID'], r['시트ID'], r['목표인원'], r['인원'], r['마감 시각'] instanceof Date ? r['마감 시각'].getTime() : '', r['진행 상태'], r['진행일'] instanceof Date ? r['진행일'].getTime() : ''].join('|')).slice(0, 16); };   // 해시만 (11/27 저장 공간)
       let skipN = 0;
       order.forEach(function (r) {
         if (cut) return;
@@ -5632,13 +5632,15 @@ function propsCleanup_(runs, force, all0) {
   const props = PropertiesService.getScriptProperties(), tk = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyyMMdd');
   if (!force && props.getProperty('PROPCLEAN_15_DAY') === tk) return 0;
   try { props.deleteProperty('PROPCLEAN_DAY'); } catch (e) {}
-  const all = all0 || props.getProperties(), live = {}, last = {}, rvWin = {}, win60 = {}, keep60 = {}, cut15 = Date.now() - 15 * 86400000, cut40 = today_().getTime() - 40 * 86400000, cut60 = today_().getTime() - 60 * 86400000;
+  const all = all0 || props.getProperties(), live = {}, last = {}, rvWin = {}, win60 = {}, keep60 = {}, keepMsg = {}, keep10 = {}, cut15 = Date.now() - 15 * 86400000, cut40 = today_().getTime() - 40 * 86400000, cut60 = today_().getTime() - 60 * 86400000;
   (runs || readRuns_()).forEach(function (r) {
     const sid = String(r['시트ID'] || ''); if (!sid) return;
     if (!(r['진행 상태'] === '종료' && r['진행일'] instanceof Date && r['진행일'].getTime() < cut15)) live[sid] = 1;
     // 리뷰 확인(reviewDone_)이 보는 의뢰(진행일 40일 안, 종료여도)는 '이미 본 기록'을 남김 (11/25: 15일 지난 종료 의뢰 기록을 지우면 리뷰 확인이 매번 처음부터 다시 읽고
     //  정리가 또 지워서 43개 의뢰를 확인마다 다시 읽음 → 리뷰 확인이 한 바퀴를 못 끝내 '도돌이표')
     if (r['진행일'] instanceof Date && r['진행일'].getTime() >= cut40) rvWin[sid] = 1;
+    { const t0 = String(r['명단 제목']).replace(/\s+/g, ''); if (!(r['마감 시각'] instanceof Date) || r['마감 시각'].getTime() >= Date.now() - 3 * 86400000) keepMsg[t0] = 1;
+      if (r['진행일'] instanceof Date && r['진행일'].getTime() >= today_().getTime() - 10 * 86400000) { keep10[t0] = 1; keep10[bareTitle_(r['명단 제목']).replace(/\s+/g, '')] = 1; } }
     if (r['진행일'] instanceof Date && r['진행일'].getTime() >= cut60) {
       win60[sid] = 1;
       keep60[String(r['명단 제목']).replace(/\s+/g, '')] = 1;
@@ -5648,7 +5650,7 @@ function propsCleanup_(runs, force, all0) {
     if (r['진행일'] instanceof Date) last[sid] = Math.max(last[sid] || 0, r['진행일'].getTime());
   });
   // 리뷰 가이드 글 사본(RVTXT_/RVSIG_/RVPH_ RVMSGD_)은 마감 뒤 이틀까지만 다시 맞추므로 4일 지난 건 안 씀 (11/24: 15일 치가 쌓여 저장 공간이 차서 한눈에·명단·월급시트가 멈췄음)
-  const old4 = Utilities.formatDate(new Date(Date.now() - 3 * 86400000), CONFIG.TIMEZONE, 'yyyyMMdd'), old3o = old4, s2 = Date.now() - 2 * 86400000, cut10 = Date.now() - 10 * 86400000;   // 가이드 사본 4일 → 3일 (11/27 저장 공간)
+  const old4 = Utilities.formatDate(new Date(Date.now() - 2 * 86400000), CONFIG.TIMEZONE, 'yyyyMMdd'), old3o = Utilities.formatDate(new Date(Date.now() - 3 * 86400000), CONFIG.TIMEZONE, 'yyyyMMdd'), s2 = Date.now() - 2 * 86400000, cut10 = Date.now() - 10 * 86400000;   // 가이드 사본 4일 → 3일 (11/27 저장 공간)
   let n = 0, left = 0;
   const t0 = Date.now(), capN = force ? 900 : 150, capT = force ? 45000 : 20000;
   Object.keys(all).forEach(function (k) {
@@ -5659,6 +5661,9 @@ function propsCleanup_(runs, force, all0) {
     // (11/27 저장 공간 초과: 한글은 3바이트라 글자 수 48만인데 실제로는 한도 넘음) 다시 안 쓰는 것만 더 지움:
     //  폼 열기 표시(OPEN_폼ID_날짜)는 3일 지난 것, 취완·리뷰비 요청 중복 막기 표시는 진행일 60일 넘은 진행 것(리뷰 확인은 40일 안만 봄, 전체 취완 나누기는 60일 안)
     else if ((m = k.match(/^OPEN_.+_(\d{8})$/))) del = m[1] < old3o;
+    else if (k === 'MSGV_SIG') del = true;   // 옛 메시지 탭 서명 한 덩어리(16KB): 11/16부터 MSGV_SIG_<탭>을 써서 안 읽음
+    else if ((m = k.match(/^RVMSG2?_(.+)$/)) && !/^RVMSGD_/.test(k)) del = !keepMsg[m[1]];   // 리뷰 가이드 넣음 표시: 마감 뒤 이틀까지만 읽음 → 마감 3일 지난 진행 것
+    else if ((m = k.match(/^(?:TAKLATE_P_|TAKLATE_)(.+)$/))) del = !keep10[m[1]];   // 2시 이후 구매 표시: 진행 뒤 4일까지만 봄 → 진행일 10일 안 진행만 남김 (택배시트 마감 시각 TAKCUT_은 직접 고친 값이라 그대로)
     else if ((m = k.match(/^(?:RVDAYREQ_INIT_|RVROOMDONE_INIT_)([-\w]{25,})$/))) del = !live[m[1]] && !win60[m[1]];
     else if ((m = k.match(/^(?:RVDAYREQ_|RVROOMDONE_)(.+)$/))) del = !keep60[m[1]];
     else if ((m = k.match(/^(?:LISTK_|LISTH_|RVPRODW_)([-\w]{25,})$/))) del = !live[m[1]];
@@ -5676,7 +5681,8 @@ function propsCleanup_(runs, force, all0) {
 // 저장 공간(스크립트 속성)이 거의 차면 바로 정리 (15분 확인 맨 앞, 다른 단계가 쓰기 전에). 이름+값 글자 수 기준
 function propsSqueeze_() {
   const props = PropertiesService.getScriptProperties(), all = props.getProperties();
-  if (propsBytes_(all) < 430000) return 0;   // 바이트로 셈 (11/27: 글자 수로 세서 한글 3바이트를 놓쳐 '저장용량 한도 초과'가 다시 남)
+  let chars = 0; Object.keys(all).forEach(function (k) { chars += k.length + String(all[k]).length; });
+  if (chars < 430000 && propsBytes_(all) < 560000) return 0;   // 글자 수 43만 또는 바이트 56만 넘으면 (11/27: 48만 자에서 '저장용량 한도 초과')
   return propsCleanup_(null, true, all);
 }
 // 스크립트 속성 실제 크기(UTF-8 바이트, 이름+값). 구글 한도 약 500KB
