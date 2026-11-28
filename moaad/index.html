@@ -105,7 +105,7 @@ img,svg{max-width:100%}
 .login-btn:disabled{background:#3F3F46;cursor:not-allowed;transform:none}
 .login-btn .lb-ico{width:22px;height:22px;border-radius:8px;background:var(--brand);display:grid;place-items:center;flex:none}
 .login-btn .lb-ico svg{width:12px;height:12px;display:block}
-#loginCard .hint{text-align:center;margin:11px auto 0;font-size:11.5px;line-height:1.6;color:var(--sub);max-width:25em}
+#loginCard .hint{text-align:center;margin:11px auto 0;font-size:11.5px;line-height:1.6;color:var(--sub);white-space:pre-line;max-width:32em}
 /* 단계 안내: 카드 밖 3열 칩 */
 .steps{position:relative;z-index:1;list-style:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:11px 0 0;padding:0}
 .steps li{background:#fff;border:1px solid #E9EAEE;border-radius:14px;padding:10px 8px 9px;text-align:center;box-shadow:0 1px 2px rgba(15,23,42,.03)}
@@ -399,7 +399,8 @@ table.tbl td a{font-weight:700}
           </div>
         </div>
         <button id="lgBtn" class="login-btn"><span class="lb-tx">로그인</span><span class="lb-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 12h12M13 7l5 5-5 5" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>
-        <p id="lgMsg" class="hint">처음이면 그냥 로그인하세요. 제출할 때 배송지·계좌가 자동 저장돼요.</p>
+        <p id="lgMsg" class="hint">처음이면 그냥 로그인하세요.
+제출할 때 배송지·계좌가 자동 저장돼요.</p>
       </div>
       <ol class="steps" aria-label="진행 순서">
         <li><b>01</b><span>신청</span></li>
@@ -690,7 +691,7 @@ function doLogin(silent){
     }
     state.me = { name: name, pin: pin };
     try { localStorage.setItem('moa_me', JSON.stringify(state.me)); } catch (e) {}
-    setLoginMsg('처음이면 그냥 로그인하세요. 제출할 때 배송지·계좌가 자동 저장돼요.', false);
+    setLoginMsg('처음이면 그냥 로그인하세요.\n제출할 때 배송지·계좌가 자동 저장돼요.', false);
     state.profile = res.found ? res.profile : null;
     $('rvHero').classList.add('hidden');
     $('loginCard').classList.add('hidden');
@@ -719,7 +720,7 @@ function logout(){
   $('lgPin').value = '';
   $('lgBtn').disabled = false;
   setLoginBtn('로그인');
-  setLoginMsg('처음이면 그냥 로그인하세요. 제출할 때 배송지·계좌가 자동 저장돼요.', false);
+  setLoginMsg('처음이면 그냥 로그인하세요.\n제출할 때 배송지·계좌가 자동 저장돼요.', false);
 }
 
 function renderMe(){
